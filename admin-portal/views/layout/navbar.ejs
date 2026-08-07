@@ -1,0 +1,76 @@
+<nav class="top-navbar mb-4">
+    <div class="d-flex align-items-center">
+        <button type="button" id="sidebarCollapse" class="btn btn-light d-md-none me-3"><i class="fas fa-bars"></i></button>
+        <h5 class="mb-0 fw-semibold text-dark d-none d-md-block" id="pageTitle">Dashboard</h5>
+    </div>
+    <div class="dropdown">
+        <a href="#" class="d-flex align-items-center text-dark text-decoration-none dropdown-toggle" data-bs-toggle="dropdown">
+            <img src="https://ui-avatars.com/api/?name=Admin+User&background=4f46e5&color=fff" width="36" height="36" class="rounded-circle me-2">
+            <strong>Admin</strong>
+        </a>
+        <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+            <li><a class="dropdown-item" href="/profile"><i class="fas fa-user fa-sm me-2 text-muted"></i> Profile</a></li>
+            <li><a class="dropdown-item" href="/password"><i class="fas fa-cogs fa-sm me-2 text-muted"></i>Manage Password</a></li>
+            
+            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#adminLogsModal"><i class="fas fa-history fa-sm me-2 text-muted"></i> Admin Logs</a></li>
+            
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item text-danger" href="/login"><i class="fas fa-sign-out-alt fa-sm me-2"></i> Logout</a></li>
+        </ul>
+    </div>
+</nav>
+
+<div class="modal fade" id="adminLogsModal" tabindex="-1" aria-labelledby="adminLogsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-light border-bottom-0">
+                <h5 class="modal-title fw-bold text-dark" id="adminLogsModalLabel">
+                    <i class="fas fa-clipboard-list me-2" style="color: #4f46e5;"></i> Admin Access Logs
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Date</th>
+                                <th>Name</th>
+                                <th>Time In</th>
+                                <th>Time Out</th>
+                                <th class="pe-4">Hours</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="ps-4 text-muted"><small>May 08, 2026</small></td>
+                                <td><span class="fw-semibold">Admin User</span></td>
+                                <td><span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="fas fa-sign-in-alt me-1"></i> 08:00 AM</span></td>
+                                <td><span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25"><i class="fas fa-sign-out-alt me-1"></i> 05:00 PM</span></td>
+                                <td class="pe-4 fw-bold text-secondary">9h 00m</td>
+                            </tr>
+                            <tr>
+                                <td class="ps-4 text-muted"><small>May 07, 2026</small></td>
+                                <td><span class="fw-semibold">Admin User</span></td>
+                                <td><span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="fas fa-sign-in-alt me-1"></i> 08:15 AM</span></td>
+                                <td><span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25"><i class="fas fa-sign-out-alt me-1"></i> 04:45 PM</span></td>
+                                <td class="pe-4 fw-bold text-secondary">8h 30m</td>
+                            </tr>
+                            <tr>
+                                <td class="ps-4 text-muted"><small>May 06, 2026</small></td>
+                                <td><span class="fw-semibold">Admin User</span></td>
+                                <td><span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="fas fa-sign-in-alt me-1"></i> 07:50 AM</span></td>
+                                <td><span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25"><i class="fas fa-sign-out-alt me-1"></i> 05:10 PM</span></td>
+                                <td class="pe-4 fw-bold text-secondary">9h 20m</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top-0">
+                <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary px-4" style="background-color: #4f46e5; border: none;">Export Logs</button>
+            </div>
+        </div>
+    </div>
+</div>

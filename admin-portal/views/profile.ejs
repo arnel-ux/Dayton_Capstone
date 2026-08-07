@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <%- include('layout/header') %>
+    <style>
+        /* Custom styles for the profile page to make it pop */
+        .card-custom {
+            border: none;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            border-radius: 0.5rem;
+            height: 100%;
+        }
+        .profile-cover {
+            background: linear-gradient(135deg, #312e81 0%, #1e1b4b 100%); /* Green theme for CQA */
+            height: 120px;
+            border-radius: 0.5rem 0.5rem 0 0;
+        }
+        .profile-img-container {
+            margin-top: -60px;
+            text-align: center;
+        }
+        .profile-img {
+            width: 120px;
+            height: 120px;
+            border: 4px solid #ffffff;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            background-color: #ffffff;
+            object-fit: cover; /* Ensures uploaded image fits nicely */
+        }
+        /* Styling for inputs when they are read-only */
+        .form-control:read-only {
+            background-color: #f8f9fa;
+            opacity: 1;
+            border-color: #e9ecef;
+            color: #1e1b4b;
+            cursor: not-allowed;
+        }
+        /* Styling for inputs when editing */
+        .form-control:not(:read-only) {
+            background-color: #ffffff;
+            border-color: #86b7fe;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+        .section-title {
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+            color: #6c757d;
+            text-transform: uppercase;
+            border-bottom: 1px solid #e9ecef;
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+
+<div id="wrapper">
+    <%- include('layout/sidebar') %>
+
+    <div id="content">
+        <%- include('layout/navbar') %>
+
+        <div class="container-fluid p-4">
+            <script>document.getElementById('pageTitle').innerText = 'My Profile';</script>
+
+            <div class="row">
+                <div class="col-xl-4 col-lg-5 mb-4">
+                    <div class="card card-custom">
+                        <div class="profile-cover"></div>
+                        <div class="card-body text-center pb-4">
+                            <div class="profile-img-container mb-3">
+                                <img id="profilePreview" src="https://ui-avatars.com/api/?name=CQA+Admin&background=e0e7ff&color=198754&size=120" class="rounded-circle profile-img" alt="Profile Avatar">
+                            </div>
+                            <h4 class="fw-bold mb-1">Francis James Obis</h4>
+                            <p class="text-success fw-semibold mb-3">CQA Admin</p>
+                            
+                            <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+                            
+                            <button id="btnChangePhoto" class="btn btn-outline-success btn-sm px-4 mb-4 rounded-pill">
+                                <i class="fas fa-camera me-2"></i>Change Photo
+                            </button>
+                            
+                            <hr class="text-muted mb-4">
+                            
+                            <div class="text-start px-3">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="bg-light p-2 rounded me-3 text-success"><i class="fas fa-envelope fa-fw"></i></div>
+                                    <div>
+                                        <p class="mb-0 text-muted small">Email</p>
+                                        <p class="mb-0 fw-semibold">cqa.admin@cspc.edu.ph</p>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="bg-light p-2 rounded me-3 text-success"><i class="fas fa-phone fa-fw"></i></div>
+                                    <div>
+                                        <p class="mb-0 text-muted small">Contact</p>
+                                        <p class="mb-0 fw-semibold">+63 912 345 6789</p>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-light p-2 rounded me-3 text-success"><i class="fas fa-building fa-fw"></i></div>
+                                    <div>
+                                        <p class="mb-0 text-muted small">Office</p>
+                                        <p class="mb-0 fw-semibold">Center for Quality Assurance</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-xl-8 col-lg-7 mb-4">
+                    <div class="card card-custom">
+                        <div class="card-header bg-white border-0 pt-4 pb-0">
+                            <h5 class="fw-bold"><i class="fas fa-user-edit me-2 text-success"></i>Profile Information</h5>
+                        </div>
+                        <div class="card-body p-4">
+                            <form id="profileForm">
+                                <h6 class="fw-bold section-title mt-2">Personal Details</h6>
+                                <div class="row mb-3">
+                                    <div class="col-md-6 mb-3 mb-md-0">
+                                        <label class="form-label text-muted fw-semibold small">First Name</label>
+                                        <input type="text" class="form-control editable-field" value="Francis James" readonly>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label text-muted fw-semibold small">Last Name</label>
+                                        <input type="text" class="form-control editable-field" value="Obis" readonly>
+                                    </div>
+                                </div>
+                                <div class="row mb-4">
+                                    <div class="col-md-6 mb-3 mb-md-0">
+                                        <label class="form-label text-muted fw-semibold small">Birthdate</label>
+                                        <input type="date" class="form-control editable-field" value="2003-05-10" readonly>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label text-muted fw-semibold small">Gender</label>
+                                        <select class="form-select editable-field" disabled>
+                                            <option value="Male" selected>Male</option>
+                                            <option value="Female">Female</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <h6 class="fw-bold section-title mt-5">Work & Contact Information</h6>
+                                <div class="row mb-3">
+                                    <div class="col-md-6 mb-3 mb-md-0">
+                                        <label class="form-label text-muted fw-semibold small">Email Address</label>
+                                        <input type="email" class="form-control editable-field" value="cqa.admin@cspc.edu.ph" readonly>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label text-muted fw-semibold small">Contact Number</label>
+                                        <input type="text" class="form-control editable-field" value="+63 912 345 6789" readonly>
+                                    </div>
+                                </div>
+                                <div class="row mb-4">
+                                    <div class="col-md-12">
+                                        <label class="form-label text-muted fw-semibold small">Position / Role</label>
+                                        <input type="text" class="form-control editable-field" value="CQA Staff" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="text-end mt-4 pt-3 border-top">
+                                    <button type="button" id="btnEditProfile" class="btn btn-primary px-4 shadow-sm">
+                                        <i class="fas fa-edit me-2"></i>Edit Profile
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('layout/footer') %>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    
+    // --- 1. PHOTO UPLOAD LOGIC ---
+    const btnChangePhoto = document.getElementById('btnChangePhoto');
+    const imageUpload = document.getElementById('imageUpload');
+    const profilePreview = document.getElementById('profilePreview');
+
+    // Trigger hidden file input when button is clicked
+    btnChangePhoto.addEventListener('click', function() {
+        imageUpload.click();
+    });
+
+    // Update image preview when a file is selected
+    imageUpload.addEventListener('change', function(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                profilePreview.src = e.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+    });
+
+    // --- 2. EDIT PROFILE LOGIC ---
+    const btnEditProfile = document.getElementById('btnEditProfile');
+    const editableFields = document.querySelectorAll('.editable-field');
+    let isEditing = false;
+
+    btnEditProfile.addEventListener('click', function() {
+        isEditing = !isEditing;
+
+        if (isEditing) {
+            // Switch to Edit Mode
+            editableFields.forEach(field => {
+                if (field.tagName === 'SELECT') {
+                    field.removeAttribute('disabled');
+                } else {
+                    field.removeAttribute('readonly');
+                }
+            });
+            // Focus on first input
+            editableFields[0].focus();
+            
+            // Change button appearance to Save
+            btnEditProfile.innerHTML = '<i class="fas fa-save me-2"></i>Save Profile';
+            btnEditProfile.classList.replace('btn-primary', 'btn-success');
+        } else {
+            // Switch to Save Mode (Read-only)
+            editableFields.forEach(field => {
+                if (field.tagName === 'SELECT') {
+                    field.setAttribute('disabled', 'true');
+                } else {
+                    field.setAttribute('readonly', 'true');
+                }
+            });
+            
+            // Change button appearance back to Edit
+            btnEditProfile.innerHTML = '<i class="fas fa-edit me-2"></i>Edit Profile';
+            btnEditProfile.classList.replace('btn-success', 'btn-primary');
+            
+            // Simple alert to notify user (Pwede mo itong palitan ng SweetAlert kung mayroon ka)
+            alert("Profile successfully updated!");
+        }
+    });
+
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <%- include('layout/header') %>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    
+    <style>
+        :root { --primary-gradient: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); --glass-bg: #ffffff; --navy: #0f172a; }
+        body { background-color: #f1f5f9; font-family: 'Plus Jakarta Sans', sans-serif; color: var(--navy); overflow-x: hidden; }
+        @keyframes fadeInUp { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
+        .animated-intro { animation: fadeInUp 1s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .hero-header { text-align: center; padding: 1rem 1rem 0.5rem 1rem; }
+        .status-badge { display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(90deg, #10b981, #059669); color: white; padding: 6px 20px; border-radius: 50px; font-weight: bold; font-size: 0.9rem; }
+        .chart-card { background: white; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); padding: 25px; margin-top: 20px; }
+        .stats-container { display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap; }
+        .stat-box { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); min-width: 200px; text-align: center; border-bottom: 4px solid #2563eb; }
+        .stat-box h3 { font-size: 2rem; font-weight: 800; margin-bottom: 5px; color: #1e293b; }
+        .stat-box p { margin: 0; color: #64748b; font-size: 0.9rem; text-transform: uppercase; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div id="wrapper">
+        <%- include('layout/sidebar') %>
+        <div id="content">
+            <%- include('layout/navbar') %>
+
+            <div class="container-fluid px-4 py-4 animated-intro">
+                <div class="hero-header">
+                    <div class="status-badge">
+                        <i class="fas fa-check-circle"></i> Active Reporting
+                    </div>
+                    <h2 class="fw-bold mt-3 mb-1">Administration and Finance</h2>
+                    <p class="text-muted">Real-time satisfaction ratings and respondent volume per office.</p>
+                </div>
+
+                <div class="d-flex justify-content-end px-3 mt-3">
+                    <select id="periodSelect" class="form-select w-auto shadow-sm border-0 fw-bold text-primary">
+                        <option value="realtime">Real-time Data (Current)</option>
+                        <option value="q1">2026 - Q1 (Archived)</option>
+                    </select>
+                </div>
+
+                <div class="stats-container">
+                    <div class="stat-box" style="border-bottom-color: #7c3aed;">
+                        <h3 id="overallRating">0%</h3>
+                        <p>Average Rating</p>
+                    </div>
+                    <div class="stat-box" style="border-bottom-color: #2563eb;">
+                        <h3 id="totalResp">0</h3>
+                        <p>Total Respondents</p>
+                    </div>
+                    <div class="stat-box" style="border-bottom-color: #10b981;">
+                        <h3 id="totalOffices">0</h3>
+                        <p>Offices Evaluated</p>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h5 class="fw-bold mb-0">Office Ratings Distribution</h5>
+                    </div>
+                    <div style="height: 450px; position: relative;">
+                        <canvas id="clusterChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <%- include('layout/footer') %>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const dbData = <%- typeof data !== 'undefined' ? JSON.stringify(data) : '[]' %>;
+            const allPeriodData = { 'realtime': dbData, 'q1': [] };
+            let currentData = dbData; 
+            
+            Chart.register(ChartDataLabels);
+            const ctx = document.getElementById('clusterChart').getContext('2d');
+            let chartInstance;
+
+            function updateDashboardUI(dataArray) {
+                let totalResp = 0, sumRating = 0, validOffices = 0;
+                dataArray.forEach(d => {
+                    totalResp += parseInt(d.resp) || 0;
+                    let r = parseFloat(d.rating) || 0;
+                    if(r > 0) { sumRating += r; validOffices++; }
+                });
+                
+                document.getElementById('totalResp').innerText = totalResp.toLocaleString();
+                document.getElementById('overallRating').innerText = (validOffices > 0 ? (sumRating / validOffices).toFixed(2) : 0.00) + '%';
+                document.getElementById('totalOffices').innerText = dataArray.length;
+            }
+
+            function renderChart(dataArray) {
+                if (chartInstance) chartInstance.destroy();
+                chartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: dataArray.map(d => d.label),
+                        datasets: [
+                            {
+                                label: 'Total Respondents',
+                                data: dataArray.map(d => parseInt(d.resp) || 0),
+                                backgroundColor: 'rgba(59, 130, 246, 0.85)', // Blue
+                                borderColor: '#3b82f6',
+                                borderWidth: 1,
+                                borderRadius: 6,
+                                yAxisID: 'y'
+                            },
+                            {
+                                label: 'Satisfaction Rating (%)',
+                                data: dataArray.map(d => parseFloat(d.rating) || 0),
+                                backgroundColor: 'rgba(16, 185, 129, 0.85)', // Emerald
+                                borderColor: '#10b981',
+                                borderWidth: 1,
+                                borderRadius: 6,
+                                yAxisID: 'y1'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: true, position: 'top' },
+                            datalabels: { 
+                                anchor: 'end', align: 'end', color: '#1e293b', 
+                                font: { weight: '800', size: 11 },
+                                formatter: function(value, context) {
+                                    if(context.datasetIndex === 1) return value + '%';
+                                    if(value === 0) return '';
+                                    return value; 
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: '#0f172a', padding: 12, displayColors: false,
+                                callbacks: {
+                                    title: (item) => `🏢 Office: ${dataArray[item[0].dataIndex].fullName}`
+                                }
+                            }
+                        },
+                        scales: {
+                            y: { 
+                                type: 'linear', position: 'left', beginAtZero: true,
+                                title: { display: true, text: 'Number of Respondents', font: {weight: 'bold'} },
+                                grid: { borderDash: [4, 4] }
+                            },
+                            y1: { 
+                                type: 'linear', position: 'right', beginAtZero: true, max: 110,
+                                title: { display: true, text: 'Satisfaction %', font: {weight: 'bold'} },
+                                grid: { drawOnChartArea: false },
+                                ticks: { display: false }
+                            },
+                            x: { grid: { display: false }, ticks: { font: { weight: '700' } } }
+                        }
+                    }
+                });
+            }
+
+            updateDashboardUI(currentData);
+            renderChart(currentData);
+
+            document.getElementById('periodSelect')?.addEventListener('change', function(e) {
+                currentData = allPeriodData[e.target.value] || [];
+                updateDashboardUI(currentData);
+                renderChart(currentData);
+            });
+        });
+    </script>
+</body>
+</html>

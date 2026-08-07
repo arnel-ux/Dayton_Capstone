@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <%- include('layout/header') %>
+    <style>
+        /* Reset and Base Styles */
+        html, body {
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Para walang lumabas na scrollbar */
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        /* 1. The Blurred Background Image */
+        .bg-blurred {
+            position: fixed; 
+            top: -5%; left: -5%; right: -5%; bottom: -5%; 
+            background-image: url('https://spims.cspc.edu.ph/assets/img/background.jpg'); 
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            filter: blur(1px);
+            z-index: -1;
+        }
+
+        /* 2. The Dark Overlay */
+        .bg-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(15, 23, 42, 0.6); /* Dark navy tint */
+            z-index: -1;
+        }
+
+        /* 3. Perfect Centering Wrapper */
+        .login-wrapper {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column; /* Para magpatong ang titles at card */
+            align-items: center;    /* Centers vertically/horizontally */
+            justify-content: center;   
+            z-index: 1;
+            padding: 1rem;
+        }
+
+        /* --- BAGONG DAGDAG NA HEADER STYLES & ANIMATIONS --- */
+        
+        /* Keyframes para sa Fade & Slide Up Animation */
+        @keyframes fadeSlideUp {
+            0% {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header-container {
+            text-align: center;
+            margin-bottom: 2rem;
+            max-width: 800px; /* Para hindi masyadong humaba sa malaking screen */
+        }
+
+        .main-title {
+            color: #ffffff;
+            font-weight: 800;
+            font-size: 2rem;
+            text-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+            margin-bottom: 0.5rem;
+            letter-spacing: 0.5px;
+            
+            /* Apply animation (Mauuna) */
+            opacity: 0;
+            animation: fadeSlideUp 0.8s ease-out forwards;
+        }
+
+        .sub-title {
+            color: #f8fafc;
+            font-weight: 400;
+            font-style: italic; /* Ibang style as requested */
+            font-size: 1.1rem;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+            margin-bottom: 1.2rem;
+            
+            /* Apply animation (Pangalawa, may delay na 0.3s) */
+            opacity: 0;
+            animation: fadeSlideUp 0.8s ease-out 0.3s forwards;
+        }
+
+        .portal-text {
+            color: #ffff; /* Distinct gold/yellow color para sa Admin Portal */
+            font-weight: 700;
+            font-size: 1.25rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            margin-bottom: 0;
+            
+            /* Apply animation (Pangatlo, may delay na 0.6s) */
+            opacity: 0;
+            animation: fadeSlideUp 0.8s ease-out 0.6s forwards;
+        }
+
+        /* Responsive para sa Titles */
+        @media (max-width: 600px) {
+            .main-title {
+                font-size: 1.4rem;
+            }
+            .sub-title {
+                font-size: 0.9rem;
+                margin-bottom: 1rem;
+            }
+            .portal-text {
+                font-size: 1.1rem;
+            }
+        }
+        /* -------------------------------------- */
+
+        /* 4. Card Styling (Square at mas maliit - walang binago) */
+        .card-custom {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 1.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            
+            /* Dito natin ginawang Square */
+            width: 380px; 
+            height: 380px; 
+            
+            /* Para mag-center ang content sa loob ng square */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 1.5rem 2rem; 
+        }
+
+        /* Responsive para sa mobile card */
+        @media (max-width: 400px) {
+            .card-custom {
+                width: 90vw;
+                height: 90vw; /* Keep it square on mobile */
+                padding: 1.5rem;
+            }
+        }
+
+        /* Google Button Styling */
+        .btn-google {
+            background-color: #ffffff;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-weight: 600;
+            font-size: 0.9rem; 
+            transition: all 0.3s ease;
+        }
+
+        .btn-google:hover {
+            background-color: #f8fafc;
+            border-color: #94a3b8;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-google img {
+            width: 18px; 
+            height: 18px;
+        }
+
+        /* Form Inputs Focus Effect */
+        .form-control:focus {
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 0.25rem rgba(79, 70, 229, 0.25);
+        }
+
+        /* Extra small text helper */
+        .text-xsmall {
+            font-size: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-blurred"></div>
+    <div class="bg-overlay"></div>
+
+    <div class="login-wrapper">
+        
+        <div class="header-container">
+            <h1 class="main-title">Office Of Center For Quality Assurance (CQA)</h1>
+            <p class="sub-title">Digital Client Satisfaction Survey of Camarines Sur Polytechnic Colleges</p>
+            <h2 class="portal-text">Admin Portal</h2>
+        </div>
+
+        <div class="card-custom">
+            
+            <div class="text-center mb-3">
+                <img src="https://cspc.edu.ph/wp-content/uploads/2022/03/Camarines_Sur_Polytechnic_Colleges_Logo.png" alt="CSPC Logo" style="width: 55px; height: auto; background-color: white; border-radius: 50%; padding: 3px;" class="mb-2 shadow-sm">
+                <h4 class="fw-bold text-dark mb-0">Admin Login</h4>
+                <p class="text-muted text-xsmall mb-0">Sign in to your CQA Dashboard</p>
+            </div>
+            
+            <form action="/dashboard" method="GET">
+                <div class="mb-2">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light border-end-0"><i class="fas fa-user text-muted"></i></span>
+                        <input type="text" class="form-control bg-light border-start-0 ps-0" placeholder="Username" required>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-end mb-1">
+                        <a href="#" class="text-decoration-none fw-semibold text-xsmall" style="color: #4f46e5;">Forgot Password?</a>
+                    </div>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light border-end-0"><i class="fas fa-lock text-muted"></i></span>
+                        <input type="password" class="form-control bg-light border-start-0 ps-0" placeholder="Password" required>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold py-2" style="background-color: #4f46e5; border-color: #4f46e5;">
+                    <i class="fas fa-sign-in-alt me-2"></i> Login
+                </button>
+            </form>
+
+            <div class="d-flex align-items-center my-2">
+                <hr class="flex-grow-1 text-muted opacity-25 m-0">
+                <span class="mx-2 text-muted text-xsmall fw-bold">OR</span>
+                <hr class="flex-grow-1 text-muted opacity-25 m-0">
+            </div>
+
+            <button type="button" class="btn btn-google btn-sm w-100 py-2">
+                <img src="https://www.freepnglogos.com/uploads/google-logo-png/google-logo-png-google-icon-logo-png-transparent-svg-vector-bie-supply-14.png" alt="Google Logo">
+                Sign in with Google
+            </button>
+            
+        </div>
+    </div>
+
+</body>
+</html>

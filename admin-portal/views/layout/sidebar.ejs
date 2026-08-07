@@ -1,0 +1,125 @@
+<nav id="sidebar">
+    <div class="sidebar-header d-flex flex-column align-items-center text-center pt-4 pb-3 border-bottom border-secondary">
+        <img src="https://cspc.edu.ph/wp-content/uploads/2022/03/Camarines_Sur_Polytechnic_Colleges_Logo.png" style="width: 70px; height: auto; background-color: white; border-radius: 50%; padding: 3px;" class="mb-2 shadow-sm">
+        <div>
+            <h4 class="m-0 fw-bold text-white">CQA PORTAL</h4>
+            <small style="color: rgba(255, 255, 255, 0.7);">Admin System</small>
+        </div>
+    </div>
+    
+    <ul class="list-unstyled components mt-3">
+        <li class="nav-item">
+            <a href="/dashboard" class="d-flex align-items-center">
+                <i class="fas fa-th-large me-3"></i> 
+                <span>Dashboard</span>
+            </a>
+        </li>
+
+        <li class="nav-item">
+            <a href="#statisticsSubmenu" data-bs-toggle="collapse" aria-expanded="false" class="dropdown-toggle d-flex align-items-center">
+                <i class="fas fa-chart-pie me-3"></i> 
+                <span>All Cluster</span>
+                <i class="fas fa-chevron-down ms-auto rotate-icon"></i>
+            </a>
+            <ul class="collapse list-unstyled submenu-bg" id="statisticsSubmenu">
+                <li>
+                    <a href="/cluster/office-of-the-president" class="d-flex align-items-center">
+                        <i class="fas fa-building submenu-icon"></i> 
+                        <span>Office of the President</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/cluster/admin-finance" class="d-flex align-items-center">
+                        <i class="fas fa-money-check-alt submenu-icon"></i> 
+                        <span>Admin & Finance</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/cluster/research-innovation" class="d-flex align-items-center">
+                        <i class="fas fa-lightbulb submenu-icon"></i> 
+                        <span>Research & Innovation</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/cluster/academic" class="d-flex align-items-center">
+                        <i class="fas fa-graduation-cap submenu-icon"></i> 
+                        <span>Academic Cluster</span>
+                    </a>
+                </li>
+            </ul>
+        </li>
+
+        <li class="nav-item">
+            <a href="/profile" class="d-flex align-items-center"><i class="fas fa-user-circle me-3"></i> Profile</a>
+        </li>
+        <li class="nav-item">
+            <a href="/password" class="d-flex align-items-center"><i class="fas fa-key me-3"></i> Manage Password</a>
+        </li>
+        <li class="nav-item">
+            <a href="/survey" class="d-flex align-items-center"><i class="fas fa-clipboard-list me-3"></i> Survey Management</a>
+        </li>
+        <li class="nav-item">
+            <a href="/offices" class="d-flex align-items-center"><i class="fas fa-building me-3"></i> Manage Offices</a>
+        </li>
+        <li class="nav-item">
+            <a href="/report" class="d-flex align-items-center"><i class="fas fa-file-export me-3"></i> Generate Report</a>
+        </li>
+    </ul>
+</nav>
+
+<style>
+    /* Main Sidebar Links Alignment */
+    #sidebar ul li a {
+        padding: 12px 20px;
+        display: flex;
+        align-items: center;
+        text-decoration: none;
+        color: #fff;
+        transition: all 0.3s;
+    }
+
+    /* Chevron Animation */
+    .rotate-icon {
+        font-size: 0.8rem;
+        transition: transform 0.3s ease;
+    }
+    #sidebar ul li a[aria-expanded="true"] .rotate-icon {
+        transform: rotate(180deg);
+    }
+
+    /* Submenu Styling */
+    .submenu-bg {
+        background: rgba(0, 0, 0, 0.2); 
+    }
+
+    #statisticsSubmenu li a {
+        padding: 10px 10px 10px 45px !important; 
+        font-size: 0.85rem;
+        background: transparent;
+        border: none;
+    }
+
+    /* Icon width alignment para pantay ang text */
+    .submenu-icon {
+        width: 20px; 
+        margin-right: 12px;
+        text-align: center;
+        color: rgba(255, 255, 255, 0.7);
+    }
+
+    #statisticsSubmenu li a:hover {
+        background: rgba(255, 255, 255, 0.1) !important;
+        padding-left: 50px !important; 
+    }
+
+    /* Standardized Icon sizing for main items */
+    .nav-item i {
+        width: 20px;
+        text-align: center;
+    }
+
+    /* Active State Highlight (Optional) */
+    .nav-item a:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+</style>

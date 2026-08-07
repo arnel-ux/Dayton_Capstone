@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSM Survey - CSPC</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            scroll-behavior: smooth;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            transition: color 0.3s ease-in-out;
+        }
+
+        #sqd-body td {
+            padding-top: 1.25rem;
+            padding-bottom: 1.25rem;
+        }
+
+        .bg-blurred {
+            position: fixed; 
+            top: -5%; left: -5%; right: -5%; bottom: -5%; 
+            background-image: url('https://spims.cspc.edu.ph/assets/img/background.jpg'); 
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            filter: blur(1px); 
+            z-index: -1;
+        }
+
+        .bg-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(15, 23, 42, 0.75); 
+            z-index: -1;
+        }
+
+        .page { display: none; }
+        .active { display: block; animation: fadeIn .4s ease; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .radio-custom {
+            width: 20px;
+            height: 20px;
+            accent-color: #0d6efd;
+            cursor: pointer;
+        }
+
+        .survey-card {
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.95) !important;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            max-width: 850px;
+            margin: 0 auto;
+            transition: background 0.3s ease-in-out, border-color 0.3s ease-in-out;
+        }
+
+        .section-title {
+            border-left: 5px solid #0d6efd;
+            padding-left: 12px;
+        }
+
+        .option-card {
+            border: 1px solid #dee2e6;
+            border-radius: 12px;
+            padding: 14px;
+            transition: .2s;
+            cursor: pointer;
+            background: white;
+        }
+
+        .option-card:hover {
+            background: #eff6ff;
+            border-color: #0d6efd;
+        }
+
+        .table td, .table th { vertical-align: middle; }
+        textarea { resize: none; }
+
+        /* --- DARK MODE STYLES --- */
+        [data-bs-theme="dark"] body { color: #f8f9fa; }
+        [data-bs-theme="dark"] .survey-card { background: rgba(33, 37, 41, 0.85) !important; border-color: rgba(255, 255, 255, 0.1); }
+        [data-bs-theme="dark"] .text-dark { color: #f8f9fa !important; }
+        [data-bs-theme="dark"] .bg-light { background-color: #2b3035 !important; border-color: #495057 !important; }
+        [data-bs-theme="dark"] .bg-white { background-color: #212529 !important; }
+        [data-bs-theme="dark"] .option-card { background: #2b3035; border-color: #495057; color: #f8f9fa; }
+        [data-bs-theme="dark"] .option-card:hover { background: #343a40; border-color: #0d6efd; }
+        [data-bs-theme="dark"] .bg-primary-subtle { background-color: rgba(13, 110, 253, 0.2) !important; }
+        [data-bs-theme="dark"] .form-select, [data-bs-theme="dark"] .form-control { background-color: #2b3035; color: #f8f9fa; border-color: #495057; }
+        [data-bs-theme="dark"] .table { --bs-table-bg: transparent; --bs-table-color: #f8f9fa; border-color: #495057; }
+        [data-bs-theme="dark"] .text-secondary { color: #adb5bd !important; }
+        [data-bs-theme="dark"] #terms-box { background-color: #2b3035 !important; border-color: #495057 !important; }
+
+        summary { list-style: none; outline: none; }
+        summary::-webkit-details-marker { display: none; }
+    </style>
+</head>
+
+<body class="py-3 py-md-5">
+
+<div class="bg-blurred"></div>
+<div class="bg-overlay"></div>
+
+<div class="container">
+    <div class="card shadow-lg border-0 survey-card">
+        <div class="card-body p-3 p-md-5 position-relative">
+
+            <div class="position-absolute top-0 start-0 m-3 z-3">
+                <button id="btn-theme" type="button" onclick="toggleTheme()" class="btn bg-transparent border-0 text-body shadow-none fw-bold d-flex align-items-center gap-1">
+                    🌙 Dark
+                </button>
+            </div>
+
+            <div class="position-absolute top-0 end-0 m-3 d-flex gap-2 z-3">
+                <button id="btn-en" type="button" onclick="setLanguage('en')" class="btn btn-primary btn-sm fw-bold shadow-sm">English</button>
+                <button id="btn-tl" type="button" onclick="setLanguage('tl')" class="btn bg-transparent border btn-sm fw-bold shadow-sm text-body">Tagalog</button>
+            </div>
+
+            <div class="text-center border-bottom pb-4 mb-5 pt-5 pt-md-4">
+                <div class="mb-3">
+                    <img src="https://cspc.edu.ph/wp-content/uploads/2022/03/Camarines_Sur_Polytechnic_Colleges_Logo.png" alt="CSPC Logo" style="width: 100px; height: auto; background-color: white; border-radius: 50%; padding: 3px;" class="mb-2 shadow-sm">
+                </div>
+                <p class="small text-muted text-uppercase mb-1" data-i18n="gov_rep">Republic of the Philippines</p>
+                <h3 class="fw-bold text-uppercase mb-0 text-dark">Camarines Sur Polytechnic Colleges</h3>
+                <p class="text-muted fst-italic">Nabua, Camarines Sur</p>
+
+                <div class="bg-primary-subtle border rounded-4 p-3 mt-4">
+                    <h4 class="fw-bold text-primary text-uppercase mb-0" data-i18n="form_title">Client Satisfaction Measurement (CSM) Survey</h4>
+                </div>
+            </div>
+
+            <form id="surveyForm">
+
+                <div id="stage1" class="page active">
+                    <div class="bg-light border rounded-4 p-4 text-center mb-4">
+                        <h4 class="fw-bold text-primary mb-3" data-i18n="s1_head">Help us serve you better!</h4>
+                        <p class="text-secondary mb-0" data-i18n="s1_desc"></p>
+                    </div>
+
+                    <details id="terms-box" class="mb-4 bg-white border border-secondary-subtle rounded-4 p-3 shadow-sm" style="cursor: pointer;">
+                        <summary class="fw-bold text-primary d-flex justify-content-between align-items-center m-0 p-1">
+                            <span data-i18n="terms_title">Terms and Conditions</span>
+                            <span style="font-size: 0.8rem;">▼</span>
+                        </summary>
+                        <div class="mt-3 text-secondary small pt-3 border-top" style="max-height: 250px; overflow-y: auto; text-align: justify; line-height: 1.6; cursor: auto;">
+                           <p id="terms-content"></p>
+                        </div>
+                    </details>
+
+                    <button type="button" onclick="navigate(2)" class="btn btn-primary w-100 py-3 fw-bold shadow-sm">
+                        <span data-i18n="btn_start"></span>
+                    </button>
+                </div>
+
+                <div id="stage2" class="page">
+                    <div class="section-title mb-4">
+                        <h4 class="fw-bold text-primary text-uppercase mb-0" data-i18n="client_prof">Client Profile</h4>
+                    </div>
+
+                    <div class="row g-4">
+                        <!-- IDINAGDAG: Pangalan -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-dark">Name / Pangalan (Optional)</label>
+                            <input type="text" name="respondent_name" class="form-control border-secondary-subtle" placeholder="e.g. Juan Dela Cruz">
+                        </div>
+
+                        <!-- IDINAGDAG: Email -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-dark">Email Address (Optional)</label>
+                            <input type="email" name="email" class="form-control border-secondary-subtle" placeholder="e.g. juan@gmail.com">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-dark" data-i18n="lbl_client_type"></label>
+                            <!-- IDINAGDAG ANG name="client_type" AT value="" -->
+                            <select name="client_type" class="form-select border-secondary-subtle">
+                                <option value="Citizen" data-i18n="opt_citizen"></option>
+                                <option value="Business" data-i18n="opt_business"></option>
+                                <option value="Government" data-i18n="opt_gov"></option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-dark" data-i18n="lbl_sex"></label>
+                            <div class="d-flex flex-wrap gap-4 pt-2">
+                                <label class="d-flex align-items-center gap-2 text-dark">
+                                    <!-- PINALITAN ANG name="sex" NG name="gender" AT NAGDAGDAG NG value="Male" -->
+                                    <input type="radio" name="gender" value="Male" class="radio-custom">
+                                    <span data-i18n="lbl_male"></span>
+                                </label>
+                                <label class="d-flex align-items-center gap-2 text-dark">
+                                    <!-- PINALITAN ANG name="sex" NG name="gender" AT NAGDAGDAG NG value="Female" -->
+                                    <input type="radio" name="gender" value="Female" class="radio-custom">
+                                    <span data-i18n="lbl_female"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-dark" data-i18n="lbl_age"></label>
+                            <!-- IDINAGDAG ANG name="age" AT value="" SA MGA OPTIONS -->
+                            <select name="age" class="form-select border-secondary-subtle">
+                                <option value="" selected disabled data-i18n="opt_sel_age"></option>
+                                <option value="18 and below" data-i18n="opt_18_below"></option>
+                                <option value="19-24">19-24</option>
+                                <option value="25-39">25-39</option>
+                                <option value="40-59">40-59</option>
+                                <option value="60 and above" data-i18n="opt_60_above"></option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-dark" data-i18n="lbl_date"></label>
+                            <input type="date" id="surveyDate" name="survey_date" class="form-control border-secondary-subtle">
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold text-dark" data-i18n="lbl_region"></label>
+                            <!-- IDINAGDAG ANG name="region" AT value="" SA MGA OPTIONS -->
+                            <select name="region" class="form-select border-secondary-subtle">
+                                <option value="" disabled selected data-i18n="opt_select_region"></option>
+                                <option value="NCR - National Capital Region">NCR - National Capital Region</option>
+                                <option value="CAR - Cordillera Administrative Region">CAR - Cordillera Administrative Region</option>
+                                <option value="Region I - Ilocos Region">Region I - Ilocos Region</option>
+                                <option value="Region II - Cagayan Valley">Region II - Cagayan Valley</option>
+                                <option value="Region III - Central Luzon">Region III - Central Luzon</option>
+                                <option value="Region IV-A - CALABARZON">Region IV-A - CALABARZON</option>
+                                <option value="MIMAROPA Region">MIMAROPA Region</option>
+                                <option value="Region V - Bicol Region">Region V - Bicol Region</option>
+                                <option value="Region VI - Western Visayas">Region VI - Western Visayas</option>
+                                <option value="Region VII - Central Visayas">Region VII - Central Visayas</option>
+                                <option value="Region VIII - Eastern Visayas">Region VIII - Eastern Visayas</option>
+                                <option value="Region IX - Zamboanga Peninsula">Region IX - Zamboanga Peninsula</option>
+                                <option value="Region X - Northern Mindanao">Region X - Northern Mindanao</option>
+                                <option value="Region XI - Davao Region">Region XI - Davao Region</option>
+                                <option value="Region XII - SOCCSKSARGEN">Region XII - SOCCSKSARGEN</option>
+                                <option value="Region XIII - Caraga">Region XIII - Caraga</option>
+                                <option value="BARMM - Bangsamoro">BARMM - Bangsamoro Autonomous Region in Muslim Mindanao</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold text-dark" data-i18n="lbl_office"></label>
+                            <select name="office_id" class="form-select form-select-lg" required>
+                                <option value="" selected disabled data-i18n="s1_ph">Select Office...</option>
+                                <% if (typeof offices !== 'undefined') { %>
+                                    <% offices.forEach(office => { %>
+                                        <option value="<%= office.id %>"><%= office.office_name %> (<%= office.cluster_name %>)</option>
+                                    <% }); %>
+                                <% } %>
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold text-dark" data-i18n="lbl_service"></label>
+                            <input type="text" name="service_availed" class="form-control border-secondary-subtle">
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between border-top pt-4 mt-5">
+                        <button type="button" onclick="navigate(1)" class="btn btn-outline-secondary fw-bold" data-i18n="btn_back"></button>
+                        <button type="button" onclick="navigate(3)" class="btn btn-primary fw-bold px-5 shadow-sm" data-i18n="btn_next"></button>
+                    </div>
+                </div>
+
+                <div id="stage3" class="page">
+                    <div class="section-title mb-4">
+                        <h4 class="fw-bold text-primary text-uppercase mb-0" data-i18n="cc_title"></h4>
+                        <p class="text-secondary mt-2 mb-2" data-i18n="cc_desc"></p>
+                    </div>
+
+                    <div class="bg-light border rounded-4 p-4 mb-4">
+                        <p class="fw-bold text-dark" data-i18n="cc1_q"></p>
+                        <div class="d-grid gap-3">
+                            <label class="option-card d-flex gap-3 text-dark">
+                                <input type="radio" name="cc1" value="I know what a CC is and I saw this office's CC." class="radio-custom mt-1">
+                                <span data-i18n="cc1_1"></span>
+                            </label>
+                            <label class="option-card d-flex gap-3 text-dark">
+                                <input type="radio" name="cc1" value="I know what a CC is but I did not see this office's CC." class="radio-custom mt-1">
+                                <span data-i18n="cc1_2"></span>
+                            </label>
+                            <label class="option-card d-flex gap-3 text-dark">
+                                <input type="radio" name="cc1" value="I learned of the CC only when I saw this office's CC." class="radio-custom mt-1">
+                                <span data-i18n="cc1_3"></span>
+                            </label>
+                            <label class="option-card d-flex gap-3 text-dark">
+                                <input type="radio" name="cc1" value="I do not know what a CC is and I did not see one in this office" class="radio-custom mt-1">
+                                <span data-i18n="cc1_4"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="bg-light border rounded-4 p-4 mb-4">
+                        <p class="fw-bold text-dark" data-i18n="cc2_q"></p>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="option-card d-flex gap-3 align-items-center text-dark">
+                                    <input type="radio" name="cc2" value="Easy to see" class="radio-custom">
+                                    <span data-i18n="cc2_1"></span>
+                                </label>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="option-card d-flex gap-3 align-items-center text-dark">
+                                    <input type="radio" name="cc2" value="Somewhat easy to see" class="radio-custom">
+                                    <span data-i18n="cc2_2"></span>
+                                </label>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="option-card d-flex gap-3 align-items-center text-dark">
+                                    <input type="radio" name="cc2" value="Difficult to see" class="radio-custom">
+                                    <span data-i18n="cc2_3"></span>
+                                </label>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="option-card d-flex gap-3 align-items-center text-dark">
+                                    <input type="radio" name="cc2" value="Not visible at all" class="radio-custom">
+                                    <span data-i18n="cc2_4"></span>
+                                </label>
+                            </div>
+                            <div class="col-12">
+                                <label class="option-card d-flex gap-3 align-items-center text-dark">
+                                    <input type="radio" name="cc2" value="N/A" class="radio-custom">
+                                    <span data-i18n="cc2_5"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-light border rounded-4 p-4">
+                        <p class="fw-bold text-dark" data-i18n="cc3_q"></p>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="option-card d-flex gap-3 align-items-center text-dark">
+                                    <input type="radio" name="cc3" value="Helped very much" class="radio-custom">
+                                    <span data-i18n="cc3_1"></span>
+                                </label>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="option-card d-flex gap-3 align-items-center text-dark">
+                                    <input type="radio" name="cc3" value="Did not help" class="radio-custom">
+                                    <span data-i18n="cc3_2"></span>
+                                </label>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="option-card d-flex gap-3 align-items-center text-dark">
+                                    <input type="radio" name="cc3" value="Somewhat helped" class="radio-custom">
+                                    <span data-i18n="cc3_3"></span>
+                                </label>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="option-card d-flex gap-3 align-items-center text-dark">
+                                    <input type="radio" name="cc3" value="N/A" class="radio-custom">
+                                    <span data-i18n="cc3_4"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between border-top pt-4 mt-5">
+                        <button type="button" onclick="navigate(2)" class="btn btn-outline-secondary fw-bold" data-i18n="btn_back"></button>
+                        <button type="button" onclick="navigate(4)" class="btn btn-primary fw-bold px-5 shadow-sm" data-i18n="btn_next"></button>
+                    </div>
+                </div>
+
+                <div id="stage4" class="page">
+                    <div class="section-title mb-4">
+                        <h4 class="fw-bold text-primary text-uppercase mb-0" data-i18n="sqd_title"></h4>
+                        <p class="text-secondary mt-2 mb-0" data-i18n="sqd_desc"></p>
+                    </div>
+
+                    <div class="table-responsive border rounded-4 bg-white">
+                        <table class="table table-bordered align-middle mb-0">
+                            <thead class="table-dark text-center">
+                            <tr>
+                                <th class="text-start" data-i18n="th_statement"></th>
+                                <th>🤩 5<br><small data-i18n="th_sa"></small></th>
+                                <th>😊 4<br><small data-i18n="th_a"></small></th>
+                                <th>😐 3<br><small data-i18n="th_n"></small></th>
+                                <th>☹️ 2<br><small data-i18n="th_d"></small></th>
+                                <th>😡 1<br><small data-i18n="th_sd"></small></th>
+                                <th>N/A</th>
+                            </tr>
+                            </thead>
+                            <tbody id="sqd-body"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="mt-4">
+                        <label class="form-label fw-semibold fst-italic text-dark" data-i18n="lbl_sugg"></label>
+                        <textarea name="comments" class="form-control border-secondary-subtle" rows="5"></textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-between border-top pt-4 mt-5">
+                        <button type="button" onclick="navigate(3)" class="btn btn-outline-secondary fw-bold" data-i18n="btn_back"></button>
+                        <button type="button" onclick="submitAll(event)" class="btn btn-primary fw-bold px-5 shadow-sm" data-i18n="btn_submit"></button>
+                    </div>
+                </div>
+
+            </form>
+            <div id="thank-you-page" class="page text-center py-5">
+                <div class="bg-success-subtle rounded-circle d-inline-flex align-items-center justify-content-center mb-4" style="width:100px;height:100px;">
+                    <span class="fs-1 text-success">✔</span>
+                </div>
+                <h1 class="fw-bold mb-3 text-dark" data-i18n="ty_title"></h1>
+                <p class="text-secondary">
+                    <span data-i18n="ty_desc"></span> <strong class="text-primary">CSPC</strong>
+                </p>
+                <button onclick="location.reload()" class="btn btn-outline-primary px-5 py-3 fw-bold mt-4" data-i18n="btn_again"></button>
+                <div class="mt-3">
+                    <button type="button" onclick="logout()" class="btn btn-outline-danger px-5 py-3 fw-bold">🚪 Logout</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('surveyDate').valueAsDate = new Date();
+let currentLang = 'en';
+
+// Theme Toggle Function 
+function toggleTheme() {
+    const htmlElement = document.documentElement;
+    const currentTheme = htmlElement.getAttribute('data-bs-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    htmlElement.setAttribute('data-bs-theme', newTheme);
+
+    const themeBtn = document.getElementById('btn-theme');
+    if (newTheme === 'dark') {
+        themeBtn.innerHTML = '☀️ Light';
+    } else {
+        themeBtn.innerHTML = '🌙 Dark';
+    }
+}
+
+// Navigation Function
+function navigate(stage) {
+    document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+    document.getElementById('stage' + stage).classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Diksyonaryo para sa Multilingual System at SQD Items
+const i18n = {
+    en: {
+        gov_rep: "Republic of the Philippines",
+        form_title: "Client Satisfaction Measurement (CSM) Survey",
+        s1_head: "Help us serve you better!",
+        s1_desc: "This Client Satisfaction Measurement (CSM) tracks the customer experience of government offices. Your feedback on your recently concluded transaction will help this office provide a better service. Personal information shared will be kept confidential and you always have the option to not answer this form.",
+        btn_start: "START SURVEY",
+        terms_title: "Terms and Conditions",
+        terms_content: `These Terms and Conditions govern your participation in the Client Satisfaction Survey. The Survey is conducted by CQA to gather feedback on your experience with our services. Participation in the Survey is voluntary. By completing the survey, you agree to these Terms.`,
+        client_prof: "Client Profile",
+        lbl_client_type: "Client Type:",
+        opt_citizen: "Citizen",
+        opt_business: "Business",
+        opt_gov: "Government (Employee or another agency)",
+        lbl_sex: "Sex:",
+        lbl_male: "Male",
+        lbl_female: "Female",
+        lbl_age: "Age:",
+        opt_sel_age: "Select Age...",
+        opt_18_below: "18 and below",
+        opt_60_above: "60 and above",
+        lbl_date: "Date:",
+        lbl_region: "Region of residence:",
+        lbl_office: "Office Visited:",
+        lbl_service: "Service Availed:",
+        opt_select_region: "Select Region...",
+        btn_back: "Back",
+        btn_next: "Next",
+        cc_title: "Citizen's Charter (CC)",
+        cc_desc:"INSTRUCTIONS : Check mark (✓) your answer to the Citizen's Charter (CC) questions. The Citizen's Charter is an official document that reflects the services of a government agency/office including its requirements, fees, and processing times among others.",
+        cc1_q: "Which of the following best describes your awareness of a CC?",
+        cc1_1: "I know what a CC is and I saw this office's CC.",
+        cc1_2: "I know what a CC is but I did not see this office's CC.",
+        cc1_3: "I learned of the CC only when I saw this office's CC.",
+        cc1_4: "I do not know what a CC is and I did not see one in this office (Answer N/A on CC2 and CC3)",
+        cc2_q: "CC2. If aware of CC (answered 1-3 in CC1), would you say that the CC of this office was...?",
+        cc2_1: "Easy to see",
+        cc2_2: "Somewhat easy to see",
+        cc2_3: "Difficult to see",
+        cc2_4: "Not visible at all",
+        cc2_5: "N/A",
+        cc3_q: "CC3. If aware of CC (answered codes 1-3 in CC1), how much did the CC help you in your transaction?",
+        cc3_1: "Helped very much",
+        cc3_2: "Did not help",
+        cc3_3: "Somewhat helped",
+        cc3_4: "N/A",
+        sqd_title: "Service Quality Dimensions (SQD)",
+        sqd_desc: "For SQD 0-8, please put a check mark (✓) on the column that best corresponds to your answer.",
+        th_statement: "Service Quality Dimensions",
+        th_sa: "Strongly Agree",
+        th_a: "Agree",
+        th_n: "Neutral",
+        th_d: "Disagree",
+        th_sd: "Strongly Disagree",
+        lbl_sugg: "Suggestions on how we can further improve our services (optional):",
+        btn_submit: "Submit Survey",
+        ty_title: "THANK YOU!",
+        ty_desc: "Your response has been sent successfully. Your feedback is valuable to",
+        btn_again: "Submit Again",
+        sqd_items: [
+            "SQD0. I am satisfied with the service that I availed.",
+            "SQD1. I spent a reasonable amount of time for my transaction.",
+            "SQD2. The office followed the transaction's requirements and steps based on the information provided.",
+            "SQD3. The steps (including payment) I needed to do for my transaction were easy and simple.",
+            "SQD4. I easily found information about my transaction from the office or its website.",
+            "SQD5. I paid a reasonable amount of fees for my transaction.",
+            "SQD6. I feel the office was fair to everyone, or 'walang palakasan', during my transaction.",
+            "SQD7. I was treated courteously by the staff.",
+            "SQD8. I got what I needed from the government office."
+        ]
+    },
+    tl: {
+        gov_rep: "Republika ng Pilipinas",
+        form_title: "Sarbey ng Pagsusukat ng Kasiyahan ng Kliyente",
+        s1_head: "Tulungan kaming mas mapaglingkuran kayo!",
+        s1_desc: "Ang Client Satisfaction Measurement (CSM) ay naglalayong masubaybayan ang karanasan ng taumbayan...",
+        btn_start: "SIMULAN ANG SARBEY",
+        terms_title: "Mga Tuntunin at Kundisyon",
+        terms_content: `Ang mga tuntunin at kundisyong ito ay namamahala sa iyong pakikilahok...`,
+        client_prof: "Pagkakakilanlan ng Kliyente",
+        lbl_client_type: "Uri ng Kliyente:",
+        opt_citizen: "Mamamayan",
+        opt_business: "Negosyo",
+        opt_gov: "Gobyerno",
+        lbl_sex: "Kasarian:",
+        lbl_male: "Lalaki",
+        lbl_female: "Babae",
+        lbl_age: "Edad:",
+        opt_sel_age: "Pumili ng Edad...",
+        opt_18_below: "18 pababa",
+        opt_60_above: "60 pataas",
+        lbl_date: "Petsa:",
+        lbl_region: "Rehiyon ng Paninirahan:",
+        lbl_office: "Pinuntahang Tanggapan:",
+        lbl_service: "Serbisyong Ginamit:",
+        opt_select_region: "Pumili ng Rehiyon...",
+        btn_back: "Bumalik",
+        btn_next: "Susunod",
+        cc_title: "Citizen's Charter (CC)",
+        cc_desc: "PANUTO: Lagyan ng tsek (✓) ang iyong sagot sa mga sumusunod...",
+        cc1_q: "Alin sa mga sumusunod ang naglalarawan sa iyong kaalaman sa CC?",
+        cc1_1: "Alam ko ang CC at nakita ko ito sa napuntahang opisina",
+        cc1_2: "Alam ko ang CC pero hindi ko ito nakita sa napuntahang opisina",
+        cc1_3: "Nalaman ko ang CC nang makita ko ito sa napuntahang opisina",
+        cc1_4: "Hindi ko alam kung ano ang CC at wala akong nakita...",
+        cc2_q: "Kung alam ang CC, masasabi mo ba na ang CC nang napuntahang opisina ay...",
+        cc2_1: "Madaling makita",
+        cc2_2: "Medyo madaling makita",
+        cc2_3: "Mahirap makita",
+        cc2_4: "Hindi makita",
+        cc2_5: "N/A",
+        cc3_q: "Kung alam ang CC, gaano nakatulong ang CC sa transaksyon mo?",
+        cc3_1: "Sobrang nakatulong",
+        cc3_2: "Hindi nakatulong",
+        cc3_3: "Nakatulong naman",
+        cc3_4: "N/A",
+        sqd_title: "Mga Dimensyon ng Kalidad ng Serbisyo",
+        sqd_desc: "Para sa SQD 0-8, lagyan ng tsek (✓) ang hanay na pinakaangkop...",
+        th_statement: "Pahayag",
+        th_sa: "Labis na Sumasang-ayon",
+        th_a: "Sumasang-ayon",
+        th_n: "Walang kinikilingan",
+        th_d: "Hindi Sumasang-ayon",
+        th_sd: "Lubos na Hindi Sumasang-ayon",
+        lbl_sugg: "Mge suhestiyon kung paano pa mapapabuti pa ang aming mga serbisyo:",
+        btn_submit: "Isumite",
+        ty_title: "MARAMING SALAMAT!",
+        ty_desc: "Matagumpay na naipadala ang iyong tugon.",
+        btn_again: "Magsumite Muli",
+        sqd_items: [
+            "SQD0. Nasiyahan ako sa serbisyo na aking natanggap sa napuntahan na tanggapan",
+            "SQD1. Makatwiran ang oras na aking ginugol para sa pagproseso ng aking transaksyon.",
+            "SQD2. Ang opisina ay sumusunod sa mga kinakailangang dokumento at mga hakbang...",
+            "SQD3. Ang mga hakbang sa pagproseso, kasama na ang pagbayad ay madali at simple lamang.",
+            "SQD4. Mabilis at madali akong nakahanap ng impormasyon...",
+            "SQD5. Nagbayad ako ng makatwirang halaga para sa aking transaksyon.",
+            "SQD6. Pakiramdam ko ay patas ang opisina sa lahat...",
+            "SQD7. Magalang at matulungin ang mga kawani.",
+            "SQD8. Nakuha ko ang aking kinakailangan mula sa opisina ng gobyerno."
+        ]
+    }
+};
+
+// I-render ang SQD Table na may tamang value (5, 4, 3, 2, 1, 0) para sa Database
+function renderSQD() {
+    const tbody = document.getElementById('sqd-body');
+    tbody.innerHTML = '';
+    
+    i18n[currentLang].sqd_items.forEach((item, index) => {
+        tbody.innerHTML += `
+            <tr>
+                <td class="text-start">${item}</td>
+                <td class="text-center"><input type="radio" name="sqd${index}" value="5" class="radio-custom"></td>
+                <td class="text-center"><input type="radio" name="sqd${index}" value="4" class="radio-custom"></td>
+                <td class="text-center"><input type="radio" name="sqd${index}" value="3" class="radio-custom"></td>
+                <td class="text-center"><input type="radio" name="sqd${index}" value="2" class="radio-custom"></td>
+                <td class="text-center"><input type="radio" name="sqd${index}" value="1" class="radio-custom"></td>
+                <td class="text-center"><input type="radio" name="sqd${index}" value="0" class="radio-custom"></td>
+            </tr>
+        `;
+    });
+}
+
+function updateTranslations() {
+    document.querySelectorAll("[data-i18n]").forEach(el => {
+        const key = el.getAttribute("data-i18n");
+        if (i18n[currentLang][key]) {
+            el.innerHTML = i18n[currentLang][key];
+        }
+    });
+    
+    const termsEl = document.getElementById("terms-content");
+    if(termsEl) termsEl.innerText = i18n[currentLang].terms_content;
+}
+
+function setLanguage(lang) {
+    currentLang = lang;
+    document.getElementById('btn-en').className = lang === 'en' ? 'btn btn-primary btn-sm fw-bold shadow-sm' : 'btn bg-transparent border btn-sm fw-bold shadow-sm text-body';
+    document.getElementById('btn-tl').className = lang === 'tl' ? 'btn btn-primary btn-sm fw-bold shadow-sm' : 'btn bg-transparent border btn-sm fw-bold shadow-sm text-body';
+    updateTranslations();
+    renderSQD();
+}
+
+// =====================================
+// FORM SUBMISSION PAPUNTA SA SERVER.JS
+// =====================================
+function submitAll(event) {
+    if (event) event.preventDefault();
+
+    const formElement = document.getElementById('surveyForm');
+    const formData = new FormData(formElement);
+    const data = Object.fromEntries(formData.entries());
+
+    // 1. Siguraduhing may office_id na pinili bago i-submit
+    if (!data.office_id) {
+        alert("Paki-pili ang Office (Stage 2) na ire-rate bago mag-submit.");
+        navigate(2);
+        return;
+    }
+
+    // 2. Magbigay ng default value kung blangko ang tinype o hindi sinagutan ang dropdown
+    data.respondent_name = data.respondent_name?.trim() || 'Anonymous';
+    data.email = data.email?.trim() || 'Not Specified';
+    data.client_type = data.client_type || 'Citizen';
+    data.age = data.age || 'Not Specified';
+    data.gender = data.gender || 'Not Specified';
+    data.region = data.region || 'Not Specified';
+    data.topic = 'General'; 
+
+    data.cc1 = data.cc1 || '';
+    data.cc2 = data.cc2 || '';
+    data.cc3 = data.cc3 || '';
+
+    // Siguraduhing may default number kapag walang nai-check sa table
+    for(let i=0; i<=8; i++) {
+        data[`sqd${i}`] = parseInt(data[`sqd${i}`] || 5);
+    }
+
+    // 3. IPAPASA ANG MGA SAGOT DIREKTA SA API
+    fetch('/submit-survey', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(resData => {
+        if (resData.success) {
+            // Confetti Animation kapag tagumpay
+            const duration = 3000;
+            const animationEnd = Date.now() + duration;
+            const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+            const interval = setInterval(function(){
+                const timeLeft = animationEnd - Date.now();
+                if(timeLeft <= 0) return clearInterval(interval);
+                const particleCount = 50 * (timeLeft / duration);
+                confetti({ ...defaults, particleCount, origin: { x: Math.random() * 0.3, y: Math.random() - 0.2 } });
+                confetti({ ...defaults, particleCount, origin: { x: 0.7 + Math.random() * 0.3, y: Math.random() - 0.2 } });
+            }, 250);
+
+            // Itago ang form at ipakita ang Thank You Page
+            document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+            document.getElementById('thank-you-page').classList.add('active');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+            alert("Nagkaroon ng problema: " + (resData.message || 'Database error'));
+        }
+    })
+    .catch(err => {
+        console.error("Error submitting survey:", err);
+        alert("May problema sa server. Subukang i-refresh ang pahina.");
+    });
+}
+
+function logout(){
+    if(confirm("Are you sure you want to logout?")){
+        window.location.href = '/login';
+    }
+}
+
+// Initial Load Setup
+setLanguage('en');
+
+</script>
+</body>
+</html>

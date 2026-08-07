@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <%- include('layout/header') %>
+    <style>
+        /* Custom Styles for Survey Management */
+        .header-banner {
+            background-color: #2c4b5f; /* Dark teal matched from image */
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            align-items: center;
+        }
+        .header-banner h5 {
+            margin: 0;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+        .sub-banner {
+            background-color: #3b607a;
+            color: white;
+            padding: 8px 20px;
+            display: inline-block;
+            border-radius: 0 0 8px 8px;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        .back-btn {
+            background: none;
+            border: 1px solid white;
+            color: white;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            cursor: pointer;
+            transition: 0.3s;
+            text-decoration: none;
+        }
+        .back-btn:hover {
+            background-color: white;
+            color: #2c4b5f;
+        }
+        
+        .content-card {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+        }
+        .card-header-title {
+            background-color: #f1f5f9;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e2e8f0;
+            font-weight: 700;
+            color: #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .table {
+            margin-bottom: 0;
+        }
+        .table thead th {
+            background-color: #f8fafc;
+            color: #64748b;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        .table tbody tr:hover {
+            background-color: #f1f5f9;
+        }
+        .table td {
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+
+<div id="wrapper">
+    <%- include('layout/sidebar') %>
+
+    <div id="content">
+        <%- include('layout/navbar') %>
+
+        <div class="container-fluid px-4 py-4">
+            
+            <div class="header-banner">
+                <a href="/dashboard" class="back-btn"><i class="fas fa-chevron-left"></i></a>
+                <h5>Survey Form Management</h5>
+            </div>
+            <div class="sub-banner">
+                <i class="fas fa-info-circle me-2"></i> Configure the contents and options displayed in the public survey form.
+            </div>
+
+            <div class="content-card">
+                <div class="card-header-title">
+                    <span><i class="fas fa-list-ol me-2"></i> Service Quality Dimensions (SQD) Statements</span>
+                    <button class="btn btn-sm btn-primary" onclick="openModal('add', null, 'sqd')"><i class="fas fa-plus me-1"></i> Add Statement</button>
+                </div>
+                <div class="p-4">
+                    <table class="table table-bordered table-hover">
+                        <thead>
+                            <tr>
+                                <th style="width:15%">Statement #</th>
+                                <th style="width:65%">Statement Description</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-sqd-statements">
+                            <% if(typeof settings !== 'undefined' && settings.sqd && settings.sqd.length > 0) { %>
+                                <% settings.sqd.forEach((item, index) => { %>
+                                    <tr data-id="<%= item.id %>">
+                                        <td class="px-4 py-3 text-muted fw-bold">SQD<%= index %></td>
+                                        <td class="px-4 py-3 item-text"><%= item.content %></td>
+                                        <td class="px-4 text-end">
+                                            <button class="btn btn-sm btn-light text-primary me-1" onclick="openModal('edit', this, 'sqd', <%= item.id %>)"><i class="fas fa-edit"></i></button>
+                                            <button class="btn btn-sm btn-light text-danger me-1" onclick="deleteItem(this, <%= item.id %>)"><i class="fas fa-trash"></i></button>
+                                            <button class="btn btn-sm btn-outline-secondary" onclick="alert('Needs new view mapping.')">View</button>
+                                        </td>
+                                    </tr>
+                                <% }) %>
+                            <% } %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="content-card">
+                <div class="card-header-title">
+                    <span><i class="fas fa-question-circle me-2"></i> Citizen's Charter (CC) Questions</span>
+                    <button class="btn btn-sm btn-primary" onclick="openModal('add', null, 'cc')"><i class="fas fa-plus me-1"></i> Add Question</button>
+                </div>
+                <div class="p-4">
+                    <table class="table table-bordered table-hover">
+                        <thead>
+                            <tr>
+                                <th style="width:15%">Question #</th>
+                                <th style="width:65%">Question Description</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-cc">
+                            <% if(typeof settings !== 'undefined' && settings.cc && settings.cc.length > 0) { %>
+                                <% settings.cc.forEach((item, index) => { %>
+                                    <tr data-id="<%= item.id %>">
+                                        <td class="px-4 py-3 text-muted fw-bold">CC<%= index + 1 %></td>
+                                        <td class="px-4 py-3 item-text"><%= item.content %></td>
+                                        <td class="px-4 text-end">
+                                            <button class="btn btn-sm btn-light text-primary me-1" onclick="openModal('edit', this, 'cc', <%= item.id %>)"><i class="fas fa-edit"></i></button>
+                                            <button class="btn btn-sm btn-light text-danger me-1" onclick="deleteItem(this, <%= item.id %>)"><i class="fas fa-trash"></i></button>
+                                            <button class="btn btn-sm btn-outline-secondary" onclick="alert('Needs new view mapping.')">View</button>
+                                        </td>
+                                    </tr>
+                                <% }) %>
+                            <% } %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="itemModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Manage Item</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label text-muted">Content / Description</label>
+                    <textarea id="itemText" class="form-control" rows="3" placeholder="Enter text here..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary px-4" onclick="saveItem()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('layout/footer') %>
+
+<script>
+    let myModal;
+    let currentMode = 'add';
+    let currentCategory = '';
+    let currentDbId = null;
+    let currentBtn = null;
+
+    document.addEventListener("DOMContentLoaded", function() {
+        myModal = new bootstrap.Modal(document.getElementById('itemModal'));
+    });
+
+    function openModal(mode, btn, category, dbId = null) {
+        currentMode = mode;
+        currentCategory = category;
+        currentDbId = dbId;
+        currentBtn = btn;
+        
+        let titleLabel = category === 'sqd' ? 'SQD Statement' : 'CC Question';
+        document.getElementById('modalTitle').innerText = mode === 'add' ? `Add New ${titleLabel}` : `Edit ${titleLabel}`;
+        
+        if (mode === 'edit' && btn) {
+            let tr = btn.closest('tr');
+            document.getElementById('itemText').value = tr.querySelector('.item-text').innerText;
+        } else {
+            document.getElementById('itemText').value = '';
+        }
+        myModal.show();
+    }
+
+    // FUNCTION PARA SA DATABASE ADD AT EDIT (FETCH API)
+    async function saveItem() {
+        const textVal = document.getElementById('itemText').value.trim();
+        if (!textVal) return alert('Hindi pwedeng walang laman ang text field!');
+
+        const payload = { category: currentCategory, content: textVal };
+        let endpoint = currentMode === 'edit' ? '/settings/edit' : '/settings/add';
+        if (currentMode === 'edit') payload.id = currentDbId;
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                window.location.reload(); // I-refresh ang page para mai-render ang binago mula sa DB safely
+            } else {
+                alert("Nagkaproblema sa pag-save sa database.");
+            }
+        } catch(err) {
+            console.error(err);
+            alert("Database Error.");
+        }
+    }
+
+    // FUNCTION PARA SA DATABASE DELETE (FETCH API)
+    async function deleteItem(btn, dbId) {
+        if (!confirm('Sigurado ka bang gusto mong burahin ang item na ito sa database?')) return;
+
+        try {
+            const response = await fetch('/settings/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: dbId })
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                let tr = btn.closest('tr');
+                let tbody = tr.parentNode;
+                tr.remove();
+                reindexTable(tbody); // Awtomatikong itatama ang numbering (SQD0, SQD1, CC1, etc.)
+            } else {
+                alert("Hindi nabura ang item sa database.");
+            }
+        } catch(err) {
+            console.error(err);
+            alert("Database Error.");
+        }
+    }
+
+    // AUTO UPDATE ROW NUMBERS AT LABELS
+    function reindexTable(tbody) {
+        let colCount = tbody.closest('table').querySelectorAll('th').length;
+        if (colCount === 3) {
+            let rows = tbody.querySelectorAll('tr');
+            let isZeroStart = tbody.id === 'tbody-sqd-statements';
+
+            rows.forEach((row, index) => {
+                let numCell = row.querySelector('td:first-child');
+                if (numCell) {
+                    if (isZeroStart) {
+                        numCell.innerText = 'SQD' + index;
+                    } else if (tbody.id === 'tbody-cc') {
+                        numCell.innerText = 'CC' + (index + 1);
+                    } else {
+                        numCell.innerText = index + 1;
+                    }
+                }
+            });
+        }
+    }
+</script>
+
+</body>
+</html>

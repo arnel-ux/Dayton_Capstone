@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <%- include('layout/header') %>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <style>
+        /* Custom Styles for Print-like Report */
+        .report-container {
+            background: #fff;
+            padding: 40px;
+            color: #000;
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            border: 1px solid #ccc;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #6c9bd2; /* Blue line */
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .report-header-center {
+            text-align: center;
+            flex-grow: 1;
+        }
+        .report-header-center p {
+            margin: 0;
+            font-size: 14px;
+        }
+        .report-header-center .inst-name {
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .doc-code {
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .report-title {
+            text-align: center;
+            font-weight: bold;
+            font-size: 16px;
+            margin: 20px 0;
+        }
+        .office-title {
+            text-align: center;
+            font-weight: bold;
+            text-decoration: underline;
+            text-transform: uppercase;
+            font-size: 16px;
+            margin-bottom: 0;
+        }
+        .sub-title {
+            text-align: center;
+            font-style: italic;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        .meta-info {
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .meta-info span {
+            display: inline-block;
+            width: 200px;
+        }
+        /* Table Styles */
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .report-table th, .report-table td {
+            border: 1px solid #000;
+            padding: 5px 8px;
+        }
+        .report-table th {
+            text-align: center;
+            font-weight: bold;
+        }
+        .header-blue {
+            background-color: #8faadc !important; /* Blue header */
+            -webkit-print-color-adjust: exact;
+        }
+        .text-center { text-align: center; }
+        .fw-bold { font-weight: bold; }
+        
+        .interpretation-box {
+            font-size: 14px;
+            margin-left: 50%;
+            margin-bottom: 40px;
+        }
+        .interpretation-box table { border: none; }
+        .interpretation-box td { padding: 2px 10px; border: none; }
+        
+        /* Signatures */
+        .signature-section {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 40px;
+            font-size: 14px;
+        }
+        .sig-block {
+            width: 45%;
+        }
+        .sig-name {
+            font-weight: bold;
+            margin-top: 30px;
+            margin-bottom: 0;
+        }
+        .sig-title {
+            margin: 0;
+        }
+        .page-footer {
+            margin-top: 50px;
+            font-size: 12px;
+            font-weight: bold;
+            border-top: 2px solid #6c9bd2;
+            padding-top: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        /* Page break for printing */
+        @media print {
+            .no-print { display: none !important; }
+            .report-container { border: none; box-shadow: none; max-width: 100%; padding: 0; display: block; page-break-after: always; }
+            .page-break { page-break-before: always; }
+        }
+    </style>
+</head>
+<body>
+<div id="wrapper">
+    <%- include('layout/sidebar') %>
+    <div id="content">
+        <%- include('layout/navbar') %>
+        <div class="container-fluid p-0">
+            
+            <div class="card card-custom mb-4 no-print">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold mb-3">Report Parameters</h6>
+                    <form class="row g-3" id="reportForm">
+                        <div class="col-md-3">
+                            <label class="form-label text-muted">Quarter</label>
+                            <select class="form-select bg-light" id="selectQuarter">
+                                <option value="1st Quarter">1st Quarter</option>
+                                <option value="2nd Quarter">2nd Quarter</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label text-muted">Period Covered</label>
+                            <select class="form-select bg-light" id="selectPeriod">
+                                <option value="January - June 2025">January - June 2025</option>
+                                <option value="July - December 2025">July - December 2025</option>
+                                <option value="January - June 2026">January - June 2026</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-muted">Filter by Office</label>
+                            <select class="form-select bg-light" id="selectOffice">
+                                <option value="ALL OFFICES">All Offices</option>
+                                <% if (typeof offices !== 'undefined' && offices.length > 0) { %>
+                                    <% offices.forEach(function(office) { %>
+                                        <option value="<%= office.office_name %>"><%= office.office_name %></option>
+                                    <% }); %>
+                                <% } %>
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="button" class="btn btn-primary w-100" onclick="generateReport()"><i class="fas fa-sync-alt me-2"></i> Generate</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card card-custom" id="emptyState">
+                <div class="card-body p-5 text-center text-muted">
+                    <i class="fas fa-chart-bar fa-3x mb-3 text-light"></i>
+                    <h5>No Report Generated Yet</h5>
+                    <p>Select your parameters above and click generate to view data.</p>
+                </div>
+            </div>
+
+            <div id="generatedReportWrapper" style="display: none;">
+                <div class="d-flex justify-content-end gap-2 mb-3 px-4 no-print">
+                    <button class="btn btn-danger" onclick="downloadPDF()"><i class="fas fa-file-pdf me-2"></i> Download PDF</button>
+                    <button class="btn btn-success" onclick="downloadCSV()"><i class="fas fa-file-csv me-2"></i> Download CSV</button>
+                    <button class="btn btn-outline-secondary" onclick="window.print()"><i class="fas fa-print me-2"></i> Print</button>
+                </div>
+
+                <div id="reportContentToExport">
+                    <div class="report-container" style="display: block; margin-bottom: 30px;">
+                        <div class="report-header">
+                            <div>
+                                <div style="width: 60px; height: 60px; border-radius: 50%; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #999;">LOGO</div>
+                            </div>
+                            <div class="report-header-center">
+                                <p>Republic of the Philippines</p>
+                                <p class="inst-name">CAMARINES SUR POLYTECHNIC COLLEGES</p>
+                                <p>Nabua, Camarines Sur</p>
+                            </div>
+                            <div class="doc-code">CSPC-F-CQA-06</div>
+                        </div>
+
+                        <div class="report-title">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
+                        <p class="office-title" id="displayOfficeName1">HUMAN RESOURCE MANAGEMENT AND DEVELOPMENT OFFICE</p>
+                        <p class="sub-title">Applying for Job in the College</p>
+
+                        <div class="meta-info">
+                            <div><span>Period Covered:</span> <strong id="displayPeriod1">July - December 2025</strong></div>
+                            <div><span>Number of Respondents:</span> <strong id="totalRespondents1">0</strong></div>
+                        </div>
+
+                        <table class="report-table" id="tableData1">
+                            <thead>
+                                <tr class="header-blue">
+                                    <th rowspan="2" style="width: 60%;">SERVICE QUALITY DIMENSIONS<br><span style="font-weight: normal;">(Mga Dimensyon sa Kalidad na Serbisyo)</span></th>
+                                    <th colspan="2">COMPUTATION</th>
+                                </tr>
+                                <tr class="header-blue">
+                                    <th style="width: 20%;">PERCENTAGE</th>
+                                    <th style="width: 20%;">RATING</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>1. Responsiveness (Pagtugon)/(Pagsimbag)</td>
+                                    <td class="text-center" id="sqd1_score">0.00%</td>
+                                    <td class="text-center" id="sqd1_interp">Poor</td>
+                                </tr>
+                                <tr>
+                                    <td>2. Reliability (Quality)/Mapagkakatiwalaan</td>
+                                    <td class="text-center" id="sqd2_score">0.00%</td>
+                                    <td class="text-center" id="sqd2_interp">Poor</td>
+                                </tr>
+                                <tr>
+                                    <td>3. Access & Facilities/Akses/Gamit at Pasilidad</td>
+                                    <td class="text-center" id="sqd3_score">0.00%</td>
+                                    <td class="text-center" id="sqd3_interp">Poor</td>
+                                </tr>
+                                <tr>
+                                    <td>4. Communication/Komunikasyon</td>
+                                    <td class="text-center" id="sqd4_score">0.00%</td>
+                                    <td class="text-center" id="sqd4_interp">Poor</td>
+                                </tr>
+                                <tr>
+                                    <td>5. Costs (Gastos)/ Kantidad</td>
+                                    <td class="text-center" id="sqd5_score">0.00%</td>
+                                    <td class="text-center" id="sqd5_interp">Poor</td>
+                                </tr>
+                                <tr>
+                                    <td>6. Integrity/(Integredad)</td>
+                                    <td class="text-center" id="sqd6_score">0.00%</td>
+                                    <td class="text-center" id="sqd6_interp">Poor</td>
+                                </tr>
+                                <tr>
+                                    <td>7. Assurance (Kasiguruhan)</td>
+                                    <td class="text-center" id="sqd7_score">0.00%</td>
+                                    <td class="text-center" id="sqd7_interp">Poor</td>
+                                </tr>
+                                <tr>
+                                    <td>8. Outcome (Resulta)</td>
+                                    <td class="text-center" id="sqd8_score">0.00%</td>
+                                    <td class="text-center" id="sqd8_interp">Poor</td>
+                                </tr>
+                                <tr class="header-blue fw-bold">
+                                    <td class="text-end" style="padding-right: 20px;">OVERALL SCORE</td>
+                                    <td class="text-center" id="overall_score">0.00%</td>
+                                    <td class="text-center" id="overall_interp">POOR</td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <div class="interpretation-box">
+                            <div class="fw-bold mb-1">INTERPRETATION OF RESULTS</div>
+                            <table>
+                                <tr><td>95.0% to 100%</td><td>Outstanding</td></tr>
+                                <tr><td>90.0 % to 94.9%</td><td>Very Satisfactory</td></tr>
+                                <tr><td>80.0% to 89.9%</td><td>Satisfactory</td></tr>
+                                <tr><td>60.0% to 79.9%</td><td>Fair</td></tr>
+                                <tr><td>Below 60.0%</td><td>Poor</td></tr>
+                            </table>
+                        </div>
+
+                        <div class="signature-section">
+                            <div class="sig-block">
+                                <div>Prepared by:</div>
+                                <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
+                                <p class="sig-title">AOV-CQA</p>
+                                
+                                <div style="margin-top: 30px;">Noted by:</div>
+                                <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
+                                <p class="sig-title">SUC President III</p>
+                            </div>
+                            <div class="sig-block">
+                                <div>Reviewed by:</div>
+                                <p class="sig-name">JOCELYN O. JINTALAN, DBA</p>
+                                <p class="sig-title">ISO Chair</p>
+                            </div>
+                        </div>
+
+                        <div class="page-footer">
+                            <div>Effectivity: June 2024</div>
+                            <div>Rev. 4</div>
+                        </div>
+                    </div>
+
+                    <!-- PANGALAWANG PAHINA (WRITTEN COMMENTS) -->
+                    <div class="report-container page-break" style="display: block;">
+                        <div class="report-header">
+                            <div>
+                                <div style="width: 60px; height: 60px; border-radius: 50%; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #999;">LOGO</div>
+                            </div>
+                            <div class="report-header-center">
+                                <p>Republic of the Philippines</p>
+                                <p class="inst-name">CAMARINES SUR POLYTECHNIC COLLEGES</p>
+                                <p>Nabua, Camarines Sur</p>
+                            </div>
+                            <div class="doc-code">CSPC-F-CQA-06</div>
+                        </div>
+
+                        <div class="report-title">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
+                        <p class="office-title" id="displayOfficeName2">HUMAN RESOURCE MANAGEMENT AND DEVELOPMENT OFFICE</p>
+                        <p class="sub-title">Applying for Job in the College</p>
+
+                        <div class="meta-info">
+                            <div><span>Period Covered:</span> <strong id="displayPeriod2">July - December 2025</strong></div>
+                            <div><span>Number of Respondents:</span> <strong id="totalRespondents2">0</strong></div>
+                        </div>
+
+                        <table class="report-table" style="margin-bottom: 50px;">
+                            <thead>
+                                <tr class="header-blue">
+                                    <th style="width: 30%;">Instrument No.</th>
+                                    <th style="width: 70%;">WRITTEN COMMENTS/SUGGESTIONS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="commentsBody">
+                                <!-- Dinamikong ipapasok dito ng JS ang mga komento -->
+                            </tbody>
+                        </table>
+
+                        <div class="signature-section">
+                            <div class="sig-block">
+                                <div>Prepared by:</div>
+                                <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
+                                <p class="sig-title">AOV-CQA</p>
+                                
+                                <div style="margin-top: 30px;">Noted by:</div>
+                                <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
+                                <p class="sig-title">SUC President III</p>
+                            </div>
+                            <div class="sig-block">
+                                <div>Reviewed by:</div>
+                                <p class="sig-name">JOCELYN O. JINTALAN, DBA</p>
+                                <p class="sig-title">ISO Chair</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<%- include('layout/footer') %>
+
+<script>
+    async function generateReport() {
+        const selectedOffice = document.getElementById('selectOffice').value;
+        const selectedQuarter = document.getElementById('selectQuarter').value;
+        const selectedPeriod = document.getElementById('selectPeriod').value;
+        const displayPeriodText = `${selectedQuarter}, ${selectedPeriod}`;
+
+        // I-set ang UI text names
+        document.getElementById('displayOfficeName1').innerText = selectedOffice;
+        document.getElementById('displayPeriod1').innerText = displayPeriodText;
+        document.getElementById('displayOfficeName2').innerText = selectedOffice;
+        document.getElementById('displayPeriod2').innerText = displayPeriodText;
+
+        try {
+            // Pag-fetch ng data sa backend
+            const response = await fetch('/api/report-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ office: selectedOffice, quarter: selectedQuarter, period: selectedPeriod })
+            });
+            const data = await response.json();
+            
+            // Ipasok ang na-compute na data sa Table at sa Comments
+            updateReportTable(data.stats);
+            updateCommentsTable(data.comments);
+            
+            // I-reveal ang document
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('generatedReportWrapper').style.display = 'block';
+
+        } catch (err) {
+            console.error("Error generating report:", err);
+            alert("Failed to fetch report data.");
+        }
+    }
+
+    // Helper function para malaman kung Outstanding, Very Satisfactory, etc.
+    function getInterpretation(score) {
+        if (score >= 95) return "Outstanding";
+        if (score >= 90) return "Very Satisfactory";
+        if (score >= 80) return "Satisfactory";
+        if (score >= 60) return "Fair";
+        return "Poor";
+    }
+
+    // I-populate ang unang table gamit ang mga scores
+    function updateReportTable(stats) {
+        const totalResp = stats.total_respondents || 0;
+        document.getElementById('totalRespondents1').innerText = totalResp;
+        document.getElementById('totalRespondents2').innerText = totalResp;
+        
+        for(let i=1; i<=8; i++) {
+            const score = parseFloat(stats[`sqd${i}`] || 0);
+            document.getElementById(`sqd${i}_score`).innerText = score.toFixed(2) + '%';
+            document.getElementById(`sqd${i}_interp`).innerText = getInterpretation(score);
+        }
+        
+        const overall = parseFloat(stats.overall_score || 0);
+        document.getElementById('overall_score').innerText = overall.toFixed(2) + '%';
+        document.getElementById('overall_interp').innerText = getInterpretation(overall).toUpperCase();
+    }
+
+    // I-populate ang pangalawang table para sa comments
+    function updateCommentsTable(comments) {
+        const tbody = document.getElementById('commentsBody');
+        tbody.innerHTML = '';
+        if (!comments || comments.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="2" class="text-center py-4 text-muted">NO WRITTEN COMMENTS AND SUGGESTIONS REFLECTED IN ANY OF THE INSTRUMENTS</td></tr>`;
+        } else {
+            comments.forEach((c, index) => {
+                tbody.innerHTML += `<tr>
+                    <td class="text-center">${index + 1}</td>
+                    <td>${c.comments}</td>
+                </tr>`;
+            });
+        }
+    }
+
+    // Function to download PDF exactly as formatted
+    function downloadPDF() {
+        const element = document.getElementById('reportContentToExport');
+        const opt = {
+            margin:       0.2,
+            filename:     'CSM_Report.pdf',
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+        };
+        html2pdf().set(opt).from(element).save();
+    }
+
+    // Function to export table data to CSV
+    function downloadCSV() {
+        let csv = [];
+        const rows = document.querySelectorAll("#tableData1 tr");
+        
+        for (let i = 0; i < rows.length; i++) {
+            let row = [], cols = rows[i].querySelectorAll("td, th");
+            
+            for (let j = 0; j < cols.length; j++) {
+                let data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, " ").replace(/(\s\s)/gm, " ");
+                data = data.replace(/"/g, '""'); 
+                row.push('"' + data + '"');
+            }
+            csv.push(row.join(","));
+        }
+
+        const csvFile = new Blob([csv.join("\n")], {type: "text/csv"});
+        const downloadLink = document.createElement("a");
+        downloadLink.download = "CSM_Data.csv";
+        downloadLink.href = window.URL.createObjectURL(csvFile);
+        downloadLink.style.display = "none";
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+    }
+</script>
+</body>
+</html>

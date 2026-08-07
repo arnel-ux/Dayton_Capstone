@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CQA - Public Transparency Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* --- GENERAL LAYOUT --- */
+        body, html {
+            height: 100vh; margin: 0; padding: 0; font-family: 'Inter', sans-serif; color: #1e293b;
+            overflow: hidden;
+        }
+
+        .bg-image {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background:url('https://spims.cspc.edu.ph/assets/img/background.jpg'); 
+            background-size: cover; background-position: center; z-index: -2;
+        }
+
+        .bg-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(15, 23, 42, 0.75); z-index: -1; transition: background 0.3s ease;
+        }
+
+        body.dark-mode .bg-overlay { background: rgba(10, 15, 28, 0.85); }
+        .main-wrapper { display: flex; flex-direction: column; height: 100vh; width: 100%; }
+
+        /* --- STICKY HEADER --- */
+        .sticky-top-section {
+            z-index: 1000; flex-shrink: 0;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 25px rgba(0,0,0,0.5);
+            padding: 0.8rem 2rem;
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
+        }
+
+        body.dark-mode .sticky-top-section { background: rgba(10, 15, 28, 0.95); border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+
+        .nav-left { display: flex; align-items: center; }
+        .nav-left img { width: 45px; margin-right: 15px; border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.3); background: white; padding: 2px; }
+        .header-text-container { display: flex; flex-direction: column; }
+        .header-title { font-size: 1.1rem; font-weight: 800; color: #ffffff; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; text-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        .header-subtitle { font-size: 0.85rem; color: #60a5fa; font-weight: 600; margin: 0; letter-spacing: 1px; }
+
+        .nav-right { display: flex; align-items: center; gap: 15px; }
+        .period-select {
+            padding: 6px 14px; border-radius: 50px; border: 1px solid rgba(255,255,255,0.4);
+            background: rgba(255, 255, 255, 0.1); color: white; font-weight: 600; font-size: 0.9rem;
+            outline: none; cursor: pointer; transition: all 0.3s ease;
+        }
+        .period-select:hover { border-color: #60a5fa; background: rgba(255, 255, 255, 0.2); }
+        .period-select option { background: #1e293b; color: white; }
+
+        .auth-buttons .btn { border-radius: 50px; font-weight: 600; padding: 0.4rem 1.2rem; font-size: 0.85rem; transition: all 0.3s ease; }
+        .btn-client { background: rgba(255, 255, 255, 0.15); color: white; border: 1px solid rgba(255, 255, 255, 0.4); }
+        .btn-client:hover { background: rgba(255, 255, 255, 0.3); color: white; }
+        .btn-admin { background: #4f46e5; color: white; border: none; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.4); }
+        .btn-admin:hover { background: #4338ca; color: white; transform: translateY(-2px); }
+
+        /* --- HORIZONTAL DASHBOARD TRACK --- */
+        .dashboard-container { flex-grow: 1; display: flex; align-items: center; width: 100%; position: relative; overflow: hidden; }
+        
+        .charts-track { 
+            display: flex; gap: 2rem; padding: 2rem; width: 100%; height: 100%; align-items: center;
+            overflow-x: auto; scroll-behavior: auto;
+        }
+        .charts-track::-webkit-scrollbar { display: none; }
+        .charts-track { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .chart-card {
+            background: #ffffff; border: none; border-radius: 1.2rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: flex; flex-direction: column; height: 75vh; min-width: 45vw; flex-shrink: 0;
+            opacity: 0; transform: translateY(100px);
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out, box-shadow 0.2s ease;
+        }
+        .chart-card.visible { opacity: 1; transform: translateY(0); }
+        .chart-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3); }
+
+        body.dark-mode .chart-card { background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(10px); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7); }
+
+        .card-header-custom { padding: 1.2rem 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        body.dark-mode .card-header-custom { border-bottom: 1px solid rgba(255,255,255,0.05); }
+
+        .chart-title { font-size: 1.1rem; font-weight: 800; text-transform: uppercase; color: #334155; margin: 0; }
+        body.dark-mode .chart-title { color: #f8fafc; }
+
+        .btn-back-custom { font-size: 0.8rem; font-weight: 600; padding: 0.4rem 0.8rem; border-radius: 0.5rem; transition: all 0.2s ease; }
+        .canvas-container { position: relative; flex-grow: 1; padding: 1.5rem; display: flex; justify-content: center; align-items: center; }
+        .hint-text { font-size: 0.85rem; color: #94a3b8; margin-top: 0.3rem; font-weight: 500; }
+
+        #theme-toggle {
+            position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 1050; border-radius: 50px; padding: 12px 24px; font-weight: 600; font-size: 0.9rem; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.2); transition: all 0.3s ease;
+        }
+        #theme-toggle:hover { transform: scale(1.05); }
+
+        @media (max-width: 992px) { 
+            .chart-card { min-width: 80vw; height: 65vh; } 
+            .sticky-top-section { flex-direction: column; align-items: flex-start; } 
+            .nav-right { width: 100%; justify-content: space-between; } 
+        }
+        @media (max-width: 576px) { 
+            .header-text-container { display: none; } 
+            .chart-card { min-width: 90vw; height: 65vh; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-image"></div>
+    <div class="bg-overlay"></div>
+
+    <div class="main-wrapper">
+        <div class="sticky-top-section">
+            <div class="nav-left">
+                <img src="https://cspc.edu.ph/wp-content/uploads/2022/03/Camarines_Sur_Polytechnic_Colleges_Logo.png" alt="CSPC Logo">
+                <div class="header-text-container">
+                    <h1 class="header-title">Office Of Center For Quality Assurance (CQA)</h1>
+                    <p class="header-subtitle">Public Transparency Portal • Satisfaction Survey</p>
+                </div>
+            </div>
+            
+            <div class="nav-right">
+                <!-- DROPDOWN UPDATE: Removed 2024 & 2025, Keeps the 6-Month 2026 Archive Periods -->
+                <select id="periodSelect" class="period-select" onchange="changePeriod()">
+                    <option value="p1">Jan - Jun 2026</option>
+                    <option value="p2">Jul - Dec 2026</option>
+                </select>
+                <div class="auth-buttons d-flex gap-2">
+                    <a href="/client-login" class="btn btn-client"><i class="fas fa-user me-1 d-none d-sm-inline"></i> Client</a>
+                    <a href="/login" class="btn btn-admin"><i class="fas fa-lock me-1 d-none d-sm-inline"></i> Admin</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-container">
+            <div class="charts-track" id="chartsTrack">
+                
+                <div class="chart-card" id="card-c1">
+                    <div class="card-header-custom">
+                        <div>
+                            <h3 id="c1-title" class="chart-title" data-main="Overall Ratings" data-drill="Total Overall Rating">Overall Ratings</h3>
+                            <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
+                        </div>
+                        <button id="c1-back" onclick="goBack('c1')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
+                    </div>
+                    <div class="canvas-container"><canvas id="c1" style="cursor: pointer;"></canvas></div>
+                </div>
+
+                <div class="chart-card" id="card-c2">
+                    <div class="card-header-custom">
+                        <div>
+                            <h3 id="c2-title" class="chart-title" data-main="Satisfaction by Cluster" data-drill="Cluster Rating">Satisfaction by Cluster</h3>
+                            <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
+                        </div>
+                        <button id="c2-back" onclick="goBack('c2')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
+                    </div>
+                    <div class="canvas-container"><canvas id="c2" style="cursor: pointer;"></canvas></div>
+                </div>
+
+                <div class="chart-card" id="card-c3">
+                    <div class="card-header-custom">
+                        <div>
+                            <h3 id="c3-title" class="chart-title" data-main="Satisfaction By Office" data-drill="Office Rating">Satisfaction By Office</h3>
+                            <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
+                        </div>
+                        <button id="c3-back" onclick="goBack('c3')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
+                    </div>
+                    <div class="canvas-container"><canvas id="c3" style="cursor: pointer;"></canvas></div>
+                </div>
+
+                <div class="chart-card" id="card-c4">
+                    <div class="card-header-custom">
+                        <div>
+                            <h3 id="c4-title" class="chart-title" data-main="CC Awareness" data-drill="CC Awareness Breakdown">CC Awareness</h3>
+                            <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Click chart for details</div>
+                        </div>
+                        <button id="c4-back" onclick="goBack('c4')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
+                    </div>
+                    <div class="canvas-container"><canvas id="c4" style="cursor: pointer;"></canvas></div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <button id="theme-toggle" class="btn btn-dark" onclick="toggleTheme()"><i class="fas fa-moon me-2"></i>Dark Mode</button>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        Chart.register({
+            id: 'centerText',
+            beforeDraw: function(chart) {
+                if (chart.config.type !== 'doughnut' || !chart.config.options.elements.center) return;
+                var width = chart.width, height = chart.height, ctx = chart.ctx;
+                ctx.restore();
+                
+                var isDark = document.body.classList.contains('dark-mode');
+                var fontSize = (height / 200).toFixed(2);
+                ctx.textBaseline = "middle";
+                
+                var centerConfig = chart.config.options.elements.center;
+                var targetText = centerConfig.text;
+                var targetNumber = parseFloat(targetText); 
+                
+                if (chart.centerAnim === undefined) { chart.centerAnim = { start: performance.now() }; }
+                
+                var elapsed = performance.now() - chart.centerAnim.start;
+                var duration = chart.config.options.animation.duration || 8000;
+                var progress = Math.min(elapsed / duration, 1);
+                var ease = 1 - Math.pow(1 - progress, 4); 
+                
+                var displayPercent;
+                if (progress >= 1) { displayPercent = targetText; } 
+                else {
+                    var currentNumber = Math.floor(targetNumber * ease);
+                    displayPercent = currentNumber + '%';
+                    requestAnimationFrame(() => chart.draw()); 
+                }
+                
+                ctx.font = "800 " + fontSize + "em Inter";
+                ctx.fillStyle = isDark ? '#f8fafc' : '#1e293b';
+                var textX = Math.round((width - ctx.measureText(displayPercent).width) / 2),
+                    textY = height / 2 - (height * 0.08);
+                ctx.fillText(displayPercent, textX, textY);
+                
+                var subText = centerConfig.subText;
+                if(subText) {
+                    ctx.font = "600 " + (fontSize/3).toFixed(2) + "em Inter";
+                    ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+                    var subX = Math.round((width - ctx.measureText(subText).width) / 2);
+                    ctx.fillText(subText, subX, textY + (height*0.15));
+                }
+
+                var subText2 = centerConfig.subText2;
+                if(subText2) {
+                    ctx.font = "700 " + (fontSize/3.5).toFixed(2) + "em Inter";
+                    ctx.fillStyle = isDark ? '#10b981' : '#059669'; 
+                    var subX2 = Math.round((width - ctx.measureText(subText2).width) / 2);
+                    ctx.fillText(subText2, subX2, textY + (height*0.25));
+                }
+                ctx.save();
+            }
+        });
+
+        // =========================================================================
+        // DYNAMIC DATABASE MULA SA BACKEND (API FETCH)
+        // =========================================================================
+        let datasets = <%- typeof chartData !== 'undefined' ? JSON.stringify(chartData) : JSON.stringify({
+            p1: { overall: [0, 0], clusterSat: [0, 0, 0, 0], clusterResp: [0, 0, 0, 0], officeSat: [0, 0, 0, 0, 0, 0, 0], officeResp: [0, 0, 0, 0, 0, 0, 0], ccAware: [0, 0, 0], ccOffice: [0, 0, 0, 0, 0, 0, 0] },
+            p2: { overall: [0, 0], clusterSat: [0, 0, 0, 0], clusterResp: [0, 0, 0, 0], officeSat: [0, 0, 0, 0, 0, 0, 0], officeResp: [0, 0, 0, 0, 0, 0, 0], ccAware: [0, 0, 0], ccOffice: [0, 0, 0, 0, 0, 0, 0] }
+        }) %>;
+
+        let clusterLabels = <%- typeof clusterList !== 'undefined' ? JSON.stringify(clusterList) : JSON.stringify(['OP Cluster', 'Admin & Finance', 'RIC Cluster', 'Academic Cluster']) %>;
+        let officeLabels = <%- typeof officeList !== 'undefined' ? JSON.stringify(officeList) : JSON.stringify(['Admin', 'CCS', 'CEA', 'CHS', 'CTHBM', 'CTDE', 'CAS']) %>;
+
+        async function fetchDynamicDashboardData() {
+            try {
+                const response = await fetch('/api/public-dashboard');
+                if (response.ok) {
+                    const dynamicData = await response.json();
+                    
+                    if (dynamicData.clusterList && dynamicData.clusterList.length > 0) {
+                        clusterLabels = dynamicData.clusterList;
+                    }
+                    if (dynamicData.officeList && dynamicData.officeList.length > 0) {
+                        officeLabels = dynamicData.officeList;
+                    }
+                    if (dynamicData.chartData) {
+                        datasets = dynamicData.chartData;
+                    }
+                    
+                    changePeriod();
+                }
+            } catch (error) {
+                console.error("Error fetching dynamic database data:", error);
+            }
+        }
+
+        fetchDynamicDashboardData();
+
+        let activePeriod = 'p1';
+        let activeCharts = {};
+        let chartState = {};
+
+        function getChartConfig(rawId, view, index) {
+            const isDark = document.body.classList.contains('dark-mode');
+            const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+            const textColor = isDark ? '#cbd5e1' : '#475569';
+            const dataP = datasets[activePeriod] || datasets['p1']; 
+            
+            const id = rawId.replace('_clone', '');
+            
+            let baseOptions = {
+                responsive: true, maintainAspectRatio: false,
+                animation: { duration: 8000, easing: 'easeOutExpo' },
+                plugins: {
+                    legend: { labels: { color: textColor, font: { family: 'Inter', weight: '600', size: 13 }, usePointStyle: true }, position: 'bottom', display: id === 'c2' || id === 'c3' ? false : true },
+                    tooltip: { 
+                        backgroundColor: isDark ? 'rgba(15,23,42,0.95)' : 'rgba(255,255,255,0.95)', 
+                        titleColor: isDark ? '#fff' : '#000', bodyColor: isDark ? '#cbd5e1' : '#475569', 
+                        borderColor: isDark ? '#334155' : '#e2e8f0', borderWidth: 1, padding: 12, displayColors: false,
+                        callbacks: {
+                            label: function(context) {
+                                let pData = datasets[activePeriod];
+                                let val = context.raw;
+                                let chartId = context.chart.canvas.id.replace('_clone', '');
+                                
+                                if (chartId === 'c1') {
+                                    let total = pData.overall[0] + pData.overall[1];
+                                    let pct = Math.round((val / total) * 100) || 0;
+                                    return [`${context.label}: ${pct}%`, `Respondents: ${val}`];
+                                }
+                                
+                                if ((chartId === 'c2' || chartId === 'c3') && context.dataset.label && context.dataset.label.includes('Satisfaction')) {
+                                    let totalResp = chartId === 'c2' ? pData.clusterResp[context.dataIndex] : pData.officeResp[context.dataIndex];
+                                    let satResp = Math.round((val / 100) * totalResp) || 0;
+                                    return [`Satisfaction: ${val}%`, `Respondents: ${satResp}`];
+                                }
+                                
+                                let label = context.dataset.label || context.label || '';
+                                return `${label}: ${val}` + (chartId === 'c4' && context.dataset.label ? '%' : '');
+                            }
+                        }
+                    }
+                }
+            };
+
+            if (id === 'c1') {
+                let sat = dataP.overall[0] || 0, dissat = dataP.overall[1] || 0, total = sat + dissat;
+                let percent = total === 0 ? 0 : Math.round((sat / total) * 100);
+                if (view === 'main') {
+                    return { type: 'pie', data: { labels: ['Satisfied', 'Dissatisfied'], datasets: [{ data: dataP.overall, backgroundColor: ['#10b981', '#ef4444'], borderWidth: 3, borderColor: isDark ? '#1e293b' : '#ffffff', hoverOffset: 15 }] }, options: baseOptions }
+                } else {
+                    return { type: 'doughnut', data: { labels: ['Satisfied', 'Dissatisfied'], datasets: [{ data: [sat, dissat], backgroundColor: ['#10b981', isDark ? '#334155' : '#e2e8f0'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: percent + '%', subText: 'Total Overall Rating', subText2: `${sat} / ${total} Satisfied` } } } };
+                }
+            }
+
+            if (id === 'c2') {
+                if (view === 'main') { return { type: 'bar', data: { labels: clusterLabels, datasets: [{ label: 'Satisfaction (%)', data: dataP.clusterSat, backgroundColor: '#3b82f6', borderRadius: 6 }] }, options: { ...baseOptions, scales: { x: { grid: { display: false }, ticks: { color: textColor, font: {family: 'Inter', weight: '600'} } }, y: { min: 0, max: 100, grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + '%' } } } } };
+                } else {
+                    let percent = dataP.clusterSat[index] || 0, totalResp = dataP.clusterResp[index] || 0, satResp = Math.round((percent / 100) * totalResp) || 0;
+                    return { type: 'doughnut', data: { labels: ['Satisfied', 'Needs Improvement'], datasets: [{ data: [satResp, totalResp - satResp], backgroundColor: ['#10b981', isDark ? '#334155' : '#e2e8f0'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: percent + '%', subText: 'Cluster Rating', subText2: `${satResp} / ${totalResp} Satisfied` } } } };
+                }
+            }
+
+            if (id === 'c3') {
+                if (view === 'main') { return { type: 'bar', data: { labels: officeLabels, datasets: [{ label: 'Satisfaction (%)', data: dataP.officeSat, backgroundColor: '#3b82f6', borderRadius: 6 }] }, options: { ...baseOptions, scales: { x: { grid: { display: false }, ticks: { color: textColor, font: {family: 'Inter', weight: '600'} } }, y: { min: 0, max: 100, grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + '%' } } } } };
+                } else {
+                    let percent = dataP.officeSat[index] || 0, totalResp = dataP.officeResp[index] || 0, satResp = Math.round((percent / 100) * totalResp) || 0;
+                    return { type: 'doughnut', data: { labels: ['Satisfied', 'Needs Improvement'], datasets: [{ data: [satResp, totalResp - satResp], backgroundColor: ['#10b981', isDark ? '#334155' : '#e2e8f0'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: percent + '%', subText: 'Office Rating', subText2: `${satResp} / ${totalResp} Satisfied` } } } };
+                }
+            }
+
+            if (id === 'c4') {
+                 if (view === 'main') { 
+                     return { 
+                         type: 'pie', 
+                         data: { 
+                             labels: ['Aware', 'Not Aware', 'Saw CC'], 
+                             datasets: [{ data: dataP.ccAware, backgroundColor: ['#0ea5e9', '#64748b', '#f59e0b'], borderWidth: 3, borderColor: isDark ? '#1e293b' : '#ffffff', hoverOffset: 15 }] 
+                         }, 
+                         options: baseOptions 
+                     }
+                 } else { 
+                     return { 
+                         type: 'bar', 
+                         data: { 
+                             labels: officeLabels, 
+                             datasets: [{ label: '% Aware', data: dataP.ccOffice, backgroundColor: '#0ea5e9', borderRadius: 6 }] 
+                         }, 
+                         options: { ...baseOptions, scales: { x: { grid: { display: false }, ticks: { color: textColor, font: {family: 'Inter', weight: '600'} } }, y: { min: 0, max: 100, grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + '%' } } } } 
+                     } 
+                 }
+            }
+        }
+
+        function loadChart(rawId, view, index = null) {
+            chartState[rawId] = { view, index };
+            const titleElem = document.getElementById(rawId + '-title');
+            const id = rawId.replace('_clone', '');
+            
+            if (titleElem) {
+                if (view === 'main') titleElem.innerText = titleElem.getAttribute('data-main');
+                else {
+                    let dTitle = titleElem.getAttribute('data-drill');
+                    if (id === 'c2') dTitle = clusterLabels[index] + " Rating";
+                    if (id === 'c3') dTitle = officeLabels[index] + " Rating";
+                    titleElem.innerText = dTitle;
+                }
+            }
+
+            const ctx = document.getElementById(rawId).getContext('2d');
+            const config = getChartConfig(rawId, view, index);
+
+            config.options.onClick = (e, elements) => {
+                if (view === 'main' && elements.length > 0) {
+                    const clickedIndex = elements[0].index;
+                    const baseId = rawId.replace('_clone', '');
+                    const cloneId = baseId + '_clone';
+                    
+                    loadChart(baseId, 'drill', clickedIndex);
+                    if(document.getElementById(cloneId)) loadChart(cloneId, 'drill', clickedIndex);
+                    
+                    document.getElementById(baseId + '-back').classList.remove('d-none');
+                    const cloneBack = document.getElementById(cloneId + '-back');
+                    if(cloneBack) cloneBack.classList.remove('d-none');
+                }
+            };
+
+            if (activeCharts[rawId]) activeCharts[rawId].destroy();
+            activeCharts[rawId] = new Chart(ctx, config);
+        }
+
+        function changePeriod() {
+            activePeriod = document.getElementById('periodSelect').value;
+            Object.keys(activeCharts).forEach(rawId => {
+                const state = chartState[rawId];
+                const newConfig = getChartConfig(rawId, state.view, state.index);
+                delete activeCharts[rawId].centerAnim;
+                activeCharts[rawId].data = newConfig.data;
+                if(newConfig.options.elements && newConfig.options.elements.center) {
+                    activeCharts[rawId].config.options.elements.center = newConfig.options.elements.center;
+                }
+                activeCharts[rawId].update(); 
+            });
+        }
+
+        function goBack(rawId) {
+            const baseId = rawId.replace('_clone', '');
+            const cloneId = baseId + '_clone';
+
+            delete activeCharts[baseId]?.centerAnim;
+            delete activeCharts[cloneId]?.centerAnim;
+            
+            loadChart(baseId, 'main');
+            if(document.getElementById(cloneId)) loadChart(cloneId, 'main');
+            
+            document.getElementById(baseId + '-back').classList.add('d-none');
+            const cloneBack = document.getElementById(cloneId + '-back');
+            if(cloneBack) cloneBack.classList.add('d-none');
+        }
+
+        function toggleTheme() {
+            document.body.classList.toggle('dark-mode');
+            const btn = document.getElementById('theme-toggle');
+            if (document.body.classList.contains('dark-mode')) {
+                btn.innerHTML = '<i class="fas fa-sun me-2"></i>Light Mode';
+                btn.classList.replace('btn-dark', 'btn-light');
+            } else {
+                btn.innerHTML = '<i class="fas fa-moon me-2"></i>Dark Mode';
+                btn.classList.replace('btn-light', 'btn-dark');
+            }
+            Object.keys(activeCharts).forEach(rawId => {
+                const state = chartState[rawId];
+                loadChart(rawId, state.view, state.index);
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const track = document.getElementById('chartsTrack');
+            const originalCards = Array.from(track.querySelectorAll('.chart-card'));
+            
+            originalCards.forEach((card, index) => {
+                const canvasId = card.querySelector('canvas').id;
+                if (!activeCharts[canvasId]) loadChart(canvasId, 'main');
+            });
+
+            let resetPoint = 0;
+            
+            setTimeout(() => {
+                originalCards.forEach(card => {
+                    const clone = card.cloneNode(true);
+                    const baseCardId = card.id;
+                    clone.id = baseCardId + '_clone';
+                    
+                    const originalCanvas = clone.querySelector('canvas');
+                    const baseId = originalCanvas.id;
+                    originalCanvas.id = baseId + '_clone';
+                    
+                    const backBtn = clone.querySelector('.btn-back-custom');
+                    if(backBtn) {
+                        backBtn.id = baseId + '_clone-back';
+                        backBtn.setAttribute('onclick', `goBack('${baseId}_clone')`);
+                    }
+
+                    const title = clone.querySelector('.chart-title');
+                    if(title) title.id = baseId + '_clone-title';
+
+                    track.appendChild(clone);
+                    loadChart(originalCanvas.id, 'main');
+                });
+                
+                const firstCard = originalCards[0];
+                const firstClone = document.getElementById(firstCard.id + '_clone');
+                resetPoint = firstClone.offsetLeft - firstCard.offsetLeft;
+
+                let isInteracting = false;
+                let scrollPos = 0;
+                let speed = 1.6;
+
+                track.addEventListener('mouseenter', () => isInteracting = true);
+                track.addEventListener('mouseleave', () => isInteracting = false);
+                track.addEventListener('touchstart', () => isInteracting = true);
+                track.addEventListener('touchend', () => setTimeout(() => isInteracting = false, 2000));
+
+                track.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    isInteracting = true;
+                    scrollPos += e.deltaY;
+                    
+                    if (scrollPos >= resetPoint) scrollPos -= resetPoint;
+                    if (scrollPos < 0) scrollPos += resetPoint;
+                    
+                    track.scrollLeft = scrollPos;
+                    clearTimeout(track.interactionTimeout);
+                    track.interactionTimeout = setTimeout(() => isInteracting = false, 1500);
+                });
+                
+                function autoScrollTrack() {
+                    if (!isInteracting) {
+                        scrollPos += speed;
+                        track.scrollLeft = scrollPos;
+                    } else {
+                        scrollPos = track.scrollLeft;
+                    }
+                    
+                    if (scrollPos >= resetPoint) {
+                        scrollPos -= resetPoint;
+                        track.scrollLeft = scrollPos;
+                    } else if (scrollPos <= 0) {
+                        scrollPos += resetPoint;
+                        track.scrollLeft = scrollPos;
+                    }
+                    requestAnimationFrame(autoScrollTrack);
+                }
+                
+                autoScrollTrack();
+                
+                const cardObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        const card = entry.target;
+                        const canvas = card.querySelector('canvas');
+                        
+                        if (entry.isIntersecting) {
+                            if (!card.classList.contains('visible')) {
+                                card.classList.add('visible');
+                                if (canvas && activeCharts[canvas.id]) {
+                                    const chart = activeCharts[canvas.id];
+                                    delete chart.centerAnim; 
+                                    chart.reset();
+                                    chart.update(); 
+                                }
+                            }
+                        } else {
+                            card.classList.remove('visible');
+                        }
+                    });
+                }, { root: track, threshold: 0.1 }); 
+                
+                document.querySelectorAll('.chart-card').forEach(card => {
+                    cardObserver.observe(card);
+                });
+
+            }, 200); 
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <%- include('layout/header') %>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            --bg-body: #f1f5f9;
+        }
+
+        body { background-color: var(--bg-body); font-family: 'Plus Jakarta Sans', sans-serif; }
+
+        .overall-header-card {
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+            color: white;
+            border-radius: 20px;
+            position: relative;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        .stat-card {
+            background: white;
+            border: 1px solid rgba(0,0,0,0.05);
+            border-radius: 18px;
+            transition: all 0.3s ease;
+            height: 100%;
+            text-decoration: none !important;
+            display: flex;
+            flex-direction: column;
+            color: inherit;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+        }
+
+        .cluster-mini-card {
+            background: white;
+            border-left: 5px solid #4f46e5;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+            height: 100%;
+        }
+
+        .chart-container-main {
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+        }
+
+        .count-up { font-size: 2.5rem; font-weight: 800; }
+
+        /* PRINT STYLING - Hidden by default */
+        #print-area { display: none; }
+
+        @media print {
+            #wrapper { display: none !important; } /* Tago ang dashboard */
+            #print-area { 
+                display: block !important; 
+                background-color: white;
+            }
+            body { background-color: white !important; }
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            @page { size: A4 portrait; margin: 10mm 15mm; }
+        }
+
+        /* Iyong Report Styles */
+        .header-container { display: flex; align-items: center; margin-bottom: 5px; }
+        .logo-img { width: 70px; height: auto; margin-right: 15px; }
+        .header-text { line-height: 1.2; }
+        .republic { font-size: 14px; margin: 0; }
+        .college-name { font-size: 18px; font-weight: bold; margin: 0; text-transform: uppercase; }
+        .address { font-size: 13px; margin: 0; }
+        .header-line { border-bottom: 2px solid #5B9BD5; margin-top: 5px; margin-bottom: 20px; display: flex; justify-content: flex-end; }
+        .form-code { font-size: 11px; font-weight: bold; padding-top: 2px; }
+        .print-title { text-align: center; font-weight: bold; font-size: 16px; margin-bottom: 5px; }
+        .print-period { text-align: center; font-size: 14px; font-weight: bold; margin-bottom: 20px; }
+        .print-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .print-table th { background-color: #5B9BD5 !important; color: white !important; border: 1px solid black; padding: 8px; text-align: center; text-transform: uppercase; }
+        .print-table td { border: 1px solid black; padding: 4px 8px; }
+        .cluster-row { background-color: #D9D9D9 !important; font-weight: bold; }
+        .num-col { text-align: center; width: 30px; }
+        .score-col { text-align: center; width: 100px; }
+        .inter-col { text-align: center; width: 120px; }
+        .print-footer { margin-top: 30px; display: flex; justify-content: space-between; }
+        .sign-block { width: 45%; }
+        .sign-name { font-weight: bold; text-decoration: underline; margin-top: 25px; margin-bottom: 0; text-transform: uppercase; }
+        .sign-title { margin-top: 0; font-size: 13px; }
+        .legend-area { font-size: 11px; margin-top: 30px; }
+        .legend-table { border-collapse: collapse; margin-top: 5px; }
+        .legend-table td { padding: 1px 5px; border: none; }
+        .range { font-weight: normal; font-style: italic; }
+        .desc { font-weight: normal; padding-left: 10px; }
+    </style>
+</head>
+<body>
+
+<div id="wrapper">
+    <%- include('layout/sidebar') %>
+
+    <div id="content">
+        <%- include('layout/navbar') %>
+
+        <div class="container-fluid px-4 py-4">
+            
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="fw-bold mb-0">Analytics Dashboard</h4>
+                <button onclick="window.print()" class="btn btn-primary px-4 rounded-pill shadow-sm">
+                    <i class="fas fa-print me-2"></i> Print Report
+                </button>
+            </div>
+
+            <div class="row g-4 mb-4">
+                <div class="col-xl-8 col-lg-7">
+                    <div class="overall-header-card p-4 h-100">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <h6 class="text-uppercase text-indigo-300 fw-bold mb-2 small" style="letter-spacing: 2px;">Overall Institutional Rating</h6>
+                                <div class="d-flex align-items-baseline">
+                                    <h1 class="display-3 fw-bold mb-0">99.85</h1>
+                                    <span class="fs-2 ms-2 opacity-50">%</span>
+                                </div>
+                                <div class="mt-3">
+                                    <span class="badge bg-success bg-opacity-25 text-success border border-success px-3 py-2 rounded-pill">
+                                        <i class="fas fa-certificate me-1"></i> LEVEL 4 OUTSTANDING
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="col-md-4 text-md-end mt-4 mt-md-0">
+                                <div class="p-3 bg-white bg-opacity-10 rounded-4">
+                                    <small class="opacity-75 d-block mb-1">Current Data Year</small>
+                                    <h6 class="mb-0 fw-bold"><i class="far fa-calendar-check me-2"></i>A.Y. 2025-2026</h6>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-xl-4 col-lg-5">
+                    <a href="/survey-records" class="stat-card p-4 shadow-sm border-0">
+                        <div class="d-flex align-items-center mb-2">
+                            <div class="p-3 bg-primary bg-opacity-10 rounded-3 text-primary me-3">
+                                <i class="fas fa-clipboard-check fa-xl"></i>
+                            </div>
+                            <div>
+                                <h6 class="text-muted fw-bold mb-0 small text-uppercase">Total Completed Surveys</h6>
+                                <small class="text-primary small fw-bold">View Details <i class="fas fa-external-link-alt ms-1"></i></small>
+                            </div>
+                        </div>
+                        <h2 class="count-up mb-0 text-dark">1245</h2>
+                        <div class="progress mt-3" style="height: 6px;">
+                            <div class="progress-bar bg-primary" style="width: 83%"></div>
+                        </div>
+                        <p class="text-muted small mt-2 mb-0">Aggregate data from <strong>4 main clusters</strong></p>
+                    </a>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="chart-container-main">
+                        <div class="d-md-flex justify-content-between align-items-center mb-4">
+                            <div>
+                                <h5 class="fw-bold text-dark mb-1">Cluster Performance Analytics</h5>
+                                <p class="text-muted small">Comparison of volume (Respondents) vs Quality (Satisfaction Rate)</p>
+                            </div>
+                            <div class="d-flex gap-3 small fw-bold">
+                                <div><i class="fas fa-square text-primary me-1"></i> Respondents</div>
+                                <div><i class="fas fa-line text-success me-1"></i> Satisfaction %</div>
+                            </div>
+                        </div>
+                        <div style="height: 380px;">
+                            <canvas id="clusterAnalyticsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h6 class="fw-bold text-dark text-uppercase mb-3 small" style="letter-spacing: 1px;">Cluster Summary Breakdown</h6>
+            <div class="row g-4">
+                <div class="col-xl-3 col-md-6">
+                    <div class="cluster-mini-card" style="border-left-color: #4f46e5;">
+                        <h6 class="text-muted small fw-bold text-uppercase mb-2">Office of the President</h6>
+                        <div class="d-flex justify-content-between align-items-end">
+                            <h3 class="fw-bold mb-0">99.92%</h3>
+                            <div class="text-end">
+                                <span class="badge bg-light text-primary border border-primary-subtle">150 Res.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-3 col-md-6">
+                    <div class="cluster-mini-card" style="border-left-color: #10b981;">
+                        <h6 class="text-muted small fw-bold text-uppercase mb-2">Admin & Finance</h6>
+                        <div class="d-flex justify-content-between align-items-end">
+                            <h3 class="fw-bold mb-0">99.75%</h3>
+                            <div class="text-end">
+                                <span class="badge bg-light text-success border border-success-subtle">320 Res.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-3 col-md-6">
+                    <div class="cluster-mini-card" style="border-left-color: #f59e0b;">
+                        <h6 class="text-muted small fw-bold text-uppercase mb-2">Research & Innovation</h6>
+                        <div class="d-flex justify-content-between align-items-end">
+                            <h3 class="fw-bold mb-0">99.80%</h3>
+                            <div class="text-end">
+                                <span class="badge bg-light text-warning border border-warning-subtle">180 Res.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-3 col-md-6">
+                    <div class="cluster-mini-card" style="border-left-color: #8b5cf6;">
+                        <h6 class="text-muted small fw-bold text-uppercase mb-2">Academic Cluster</h6>
+                        <div class="d-flex justify-content-between align-items-end">
+                            <h3 class="fw-bold mb-0">99.88%</h3>
+                            <div class="text-end">
+                                <span class="badge bg-light text-purple border border-purple-subtle" style="color: #8b5cf6;">595 Res.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div id="print-area">
+    <div class="header-container">
+        <img src="/admin-portal/cspc-logo.png" class="logo-img">
+        <div class="header-text">
+            <p class="republic">Republic of the Philippines</p>
+            <p class="college-name">CAMARINES SUR POLYTECHNIC COLLEGES</p>
+            <p class="address">Nabua, Camarines Sur</p>
+        </div>
+    </div>
+    <div class="header-line">
+        <span class="form-code">CSPC-F-CQA-06</span>
+    </div>
+
+    <p class="print-title">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT<br>PER CLUSTER</p>
+    <p class="print-period">Period covered : July - December 2025</p>
+
+    <table class="print-table">
+        <thead>
+            <tr>
+                <th colspan="2">NAME OF OFFICE</th>
+                <th>OVERALL SCORE</th>
+                <th>INTERPRETATION</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="cluster-row"><td colspan="4">Office of the President Cluster</td></tr>
+            <tr><td class="num-col">1</td><td>OFFICE OF THE PRESIDENT</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">2</td><td>VICE PRESIDENT FOR ACADEMIC AFFAIRS OFFICE</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">3</td><td>VICE PRESIDENT FOR ADMINISTRATION AND FINANCE OFFICE</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">4</td><td>VICE PRESIDENT FOR RESEARCH, INNOVATION AND COLLABORATION OFFICE</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">5</td><td>CENTER FOR INTERNATIONAL RELATIONS AND LINKAGES</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">6</td><td>INSTITUTIONAL PLANNING AND DEVELOPMENT OFFICE</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">7</td><td>INTERNAL AUDIT UNIT</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+
+            <tr class="cluster-row"><td colspan="4">Administrative and Finance Cluster</td></tr>
+            <tr><td class="num-col">1</td><td>HUMAN RESOURCE MANAGEMENT AND DEVELOPMENT OFFICE</td><td class="score-col">99.43%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">2</td><td>RECORDS AND FREEDOM OF INFORMATION OFFICE</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">3</td><td>HEALTH SERVICES UNIT</td><td class="score-col">99.96%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">4</td><td>GENERAL SERVICES UNIT</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">5</td><td>SUPPLY AND PROPERTY MANAGEMENT UNIT</td><td class="score-col">99.87%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">6</td><td>PROJECT MANAGEMENT UNIT</td><td class="score-col">99%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">7</td><td>INFORMATION AND COMMUNICATIONS TECHNOLOGY UNIT</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">8</td><td>ACCOUNTING UNIT</td><td class="score-col">100.00%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">9</td><td>BUDGET UNIT</td><td class="score-col">100.00%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">10</td><td>CASH UNIT</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">11</td><td>PROCUREMENT UNIT</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+
+            <tr class="cluster-row"><td colspan="4">Research, Innovation and Collaboration Cluster</td></tr>
+            <tr><td class="num-col">1</td><td>RESEARCH AND DEVELOPMENT SERVICES OFFICE</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">2</td><td>CENTER FOR EXTENSION AND COMMUNITY SERVICES</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">3</td><td>PRODUCTION AND AUXILLIARY SERVICES</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">4</td><td>CENTER FOR RINCONADA CULTURE AND ARTS</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+
+            <tr class="cluster-row"><td colspan="4">Academic Cluster</td></tr>
+            <tr><td class="num-col">1</td><td>COLLEGE OF ARTS AND SCIENCES</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">2</td><td>COLLEGE OF COMPUTER STUDIES</td><td class="score-col">99.56%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">3</td><td>COLLEGE OF ENGINEERING AND ARCHITECTURE</td><td class="score-col">100.00%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">4</td><td>COLLEGE OF HEALTH SCIENCES</td><td class="score-col">100.00%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">5</td><td>COLLEGE OF TECHNOLOGICAL AND DEVELOPMENT EDUCATION</td><td class="score-col">100.00%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">6</td><td>COLLEGE OF TOURISM, HOSPITALITY, AND BUSINESS MANAGEMENT</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">7</td><td>GRADUATE SCHOOL</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">8</td><td>BUHI CAMPUS</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">9</td><td>INFORMATION AND ALUMNI AFFAIRS UNIT AND BROADCAST CENTER</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">10</td><td>CENTER FOR HUMAN RIGHTS EDUCATION</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">11</td><td>CENTER FOR QUALITY ASSURANCE</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">12</td><td>CENTER FOR GENDER AND DEVELOPMENT</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">13</td><td>STUDENT REGISTRATION AND RECORDS</td><td class="score-col">99.99%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">14</td><td>STUDENT TESTING AND ADMISSION</td><td class="score-col">100.00%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">15</td><td>LEARNING RESOURCES DEVELOPMENT UNIT</td><td class="score-col">96.40%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">16</td><td>ACADEMIC CENTER FOR CONTINUING ENCHANCEMENT SERVICES FOR STUDENTS</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">17</td><td>NATIONAL SERVICES TRAINING PROGRAM</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">18</td><td>STUDENTS AFFAIRS AND SERVICES</td><td class="score-col">100.00%</td><td class="inter-col">Outstanding</td></tr>
+            <tr><td class="num-col">19</td><td>GUIDANCE AND COUNSELING</td><td class="score-col">100.00%</td><td class="inter-col">Outstanding</td></tr>
+
+            <tr class="cluster-row"><td colspan="4">Other Offices</td></tr>
+            <tr><td class="num-col">1</td><td>TESDA AND ASSESSMENT CENTER OFFICE</td><td class="score-col">100%</td><td class="inter-col">Outstanding</td></tr>
+            
+            <tr style="background-color: #eee !important;">
+                <td colspan="2" style="text-align: right; font-weight: bold;">OVERALL RATING</td>
+                <td class="score-col" style="font-weight: bold;">99.85%</td>
+                <td class="inter-col" style="font-weight: bold; text-transform: uppercase;">Outstanding</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="print-footer">
+        <div class="sign-block">
+            <p>Prepared by:</p>
+            <p class="sign-name">JUVY M. BUSTAMANTE, JD</p>
+            <p class="sign-title">AOV-CQA</p>
+            <br><br>
+            <p>Noted by:</p>
+            <p class="sign-name">AMADO A. OLIVA JR., PhD</p>
+            <p class="sign-title">SUC President III</p>
+        </div>
+        
+        <div class="sign-block">
+            <p>Reviewed by:</p>
+            <p class="sign-name">JOCELYN O. JINTALAN, DBA</p>
+            <p class="sign-title">ISO Chair</p>
+            
+            <div class="legend-area">
+                <strong>INTERPRETATION OF RESULTS</strong>
+                <table class="legend-table">
+                    <tr><td class="range">95.0% to 100%</td><td class="desc">Outstanding</td></tr>
+                    <tr><td class="range">90.0% to 94.9%</td><td class="desc">Very Satisfactory</td></tr>
+                    <tr><td class="range">80.0% to 89.9%</td><td class="desc">Satisfactory</td></tr>
+                    <tr><td class="range">60.0% to 79.9%</td><td class="desc">Fair</td></tr>
+                    <tr><td class="range">Below 60.0%</td><td class="desc">Poor</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('layout/footer') %>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
+    
+    const ctx = document.getElementById('clusterAnalyticsChart').getContext('2d');
+    const barGradient = ctx.createLinearGradient(0, 0, 0, 400);
+    barGradient.addColorStop(0, '#4f46e5');
+    barGradient.addColorStop(1, '#818cf8');
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Office of the President', 'Admin & Finance', 'Research & Innovation', 'Academic Cluster'],
+            datasets: [
+                {
+                    label: 'Respondent Volume',
+                    data: [150, 320, 180, 595],
+                    backgroundColor: barGradient,
+                    borderRadius: 10,
+                    barThickness: 50,
+                    yAxisID: 'y',
+                    order: 2
+                },
+                {
+                    label: 'Satisfaction Rating (%)',
+                    data: [99.92, 99.75, 99.80, 99.88],
+                    type: 'line',
+                    borderColor: '#10b981',
+                    borderWidth: 4,
+                    pointBackgroundColor: '#ffffff',
+                    pointBorderColor: '#10b981',
+                    pointBorderWidth: 3,
+                    pointRadius: 6,
+                    tension: 0.4,
+                    yAxisID: 'y1',
+                    order: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, position: 'left' },
+                y1: { position: 'right', min: 99.0, max: 100 }
+            }
+        }
+    });
+
+    // Count-up animation
+    document.querySelectorAll('.count-up').forEach(el => {
+        const target = +el.innerText;
+        let curr = 0;
+        const up = () => {
+            curr += (target / 40);
+            if(curr < target) {
+                el.innerText = Math.ceil(curr).toLocaleString();
+                setTimeout(up, 25);
+            } else { el.innerText = target.toLocaleString(); }
+        };
+        up();
+    });
+});
+</script>
+
+</body>
+</html>
