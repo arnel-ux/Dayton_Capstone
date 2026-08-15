@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const mysql = require('mysql2'); 
 const app = express();
-const port = 3000;
+const port = 3000; 
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -17,7 +17,7 @@ app.use(express.json());
 const db = mysql.createConnection({
     host: 'localhost',
     user: 'root',      
-    password: 'arnelmarquina123',      
+    password: '',      
     database: 'cqa_db' 
 });
 
