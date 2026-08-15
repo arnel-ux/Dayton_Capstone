@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const mysql = require('mysql2'); 
+const { spawn } = require('child_process'); // 🔥 ADDED THIS LINE
 const app = express();
 const port = 3000; 
 
@@ -59,10 +60,11 @@ CREATE TABLE IF NOT EXISTS survey_responses (
     office_id INT NOT NULL,
     respondent_name VARCHAR(255) DEFAULT 'Anonymous',
     topic VARCHAR(100) DEFAULT 'General',
+    sentiment VARCHAR(50) DEFAULT 'Neutral',
     region VARCHAR(100) NULL,
-    cc1 VARCHAR(50) NULL, 
-    cc2 VARCHAR(50) NULL, 
-    cc3 VARCHAR(50) NULL,
+    cc1 VARCHAR(100) NULL, 
+    cc2 VARCHAR(100) NULL, 
+    cc3 VARCHAR(100) NULL,
     sqd0 INT NULL, sqd1 INT NULL, sqd2 INT NULL, sqd3 INT NULL, 
     sqd4 INT NULL, sqd5 INT NULL, sqd6 INT NULL, sqd7 INT NULL, sqd8 INT NULL,
     comments TEXT NULL,
@@ -248,7 +250,40 @@ app.post('/submit-survey', (req, res) => {
 
         db.query(insertProfileQuery, profileValues, (profileErr) => {
             if (profileErr) console.error("❌ [Client Profile] Error inserting profile:", profileErr);
+            
+            // 1. Instantly respond to the frontend so the client sees "Thank You" without waiting
             res.json({ success: true, message: "Survey recorded successfully!" });
+
+            // 2. 🔥 BACKGROUND AI PROCESS START 🔥
+            // Check if there is an actual comment to analyze
+            if (comments && comments.trim() !== "") {
+                
+                // Point to your new analyze.py script
+                const pythonScriptPath = path.join(__dirname, 'ai_scripts', 'analyze.py');
+                const pythonProcess = spawn('python', [pythonScriptPath, comments]);
+
+                let aiOutput = '';
+
+                // Read the output from the Python script
+                pythonProcess.stdout.on('data', (chunk) => { 
+                    aiOutput += chunk.toString(); 
+                });
+
+                // When Python finishes, update the database
+                pythonProcess.on('close', (code) => {
+                    try {
+                        const aiResult = JSON.parse(aiOutput.trim());
+                        
+                        if (aiResult.sentiment && aiResult.topic) {
+                            const updateQuery = 'UPDATE survey_responses SET sentiment = ?, topic = ? WHERE id = ?';
+                            db.query(updateQuery, [aiResult.sentiment, aiResult.topic, surveyResponseId]);
+                            console.log(`✅ [AI Success] ID: ${surveyResponseId} | Sentiment: ${aiResult.sentiment} | Topic: ${aiResult.topic}`);
+                        }
+                    } catch (e) {
+                        console.error("❌ [AI Parsing Error]:", e.message, "\nRaw Python Output:", aiOutput);
+                    }
+                });
+            }
         });
     });
 });
@@ -400,7 +435,7 @@ app.post('/api/report-data', (req, res) => {
     db.query(query, queryParams, (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         
-        let commentsQuery = `SELECT s.comments FROM survey_responses s LEFT JOIN offices o ON s.office_id = o.id WHERE s.comments IS NOT NULL AND TRIM(s.comments) != ''`;
+        let commentsQuery = `SELECT s.comments, s.sentiment, s.topic FROM survey_responses s LEFT JOIN offices o ON s.office_id = o.id WHERE s.comments IS NOT NULL AND TRIM(s.comments) != ''`;
         if (office !== 'ALL OFFICES') {
             commentsQuery += ` AND o.office_name = ?`;
         }

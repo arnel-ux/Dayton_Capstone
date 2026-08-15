@@ -20,7 +20,7 @@
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            border-bottom: 2px solid #6c9bd2; /* Blue line */
+            border-bottom: 2px solid #6c9bd2; 
             padding-bottom: 10px;
             margin-bottom: 20px;
         }
@@ -28,103 +28,53 @@
             text-align: center;
             flex-grow: 1;
         }
-        .report-header-center p {
-            margin: 0;
-            font-size: 14px;
-        }
-        .report-header-center .inst-name {
-            font-weight: bold;
-            font-size: 16px;
-        }
-        .doc-code {
-            font-size: 12px;
-            font-weight: bold;
-        }
-        .report-title {
-            text-align: center;
-            font-weight: bold;
-            font-size: 16px;
-            margin: 20px 0;
-        }
-        .office-title {
-            text-align: center;
-            font-weight: bold;
-            text-decoration: underline;
-            text-transform: uppercase;
-            font-size: 16px;
-            margin-bottom: 0;
-        }
-        .sub-title {
-            text-align: center;
-            font-style: italic;
-            font-size: 14px;
-            margin-bottom: 20px;
-        }
-        .meta-info {
-            font-size: 14px;
-            margin-bottom: 10px;
-        }
-        .meta-info span {
-            display: inline-block;
-            width: 200px;
-        }
+        .report-header-center p { margin: 0; font-size: 14px; }
+        .report-header-center .inst-name { font-weight: bold; font-size: 16px; }
+        .doc-code { font-size: 12px; font-weight: bold; }
+        
+        .report-title { text-align: center; font-weight: bold; font-size: 16px; margin: 20px 0; }
+        .office-title { text-align: center; font-weight: bold; text-decoration: underline; text-transform: uppercase; font-size: 16px; margin-bottom: 0; }
+        .sub-title { text-align: center; font-style: italic; font-size: 14px; margin-bottom: 20px; }
+        
+        .meta-info { font-size: 14px; margin-bottom: 10px; }
+        .meta-info span { display: inline-block; width: 200px; }
+        
         /* Table Styles */
-        .report-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-            font-size: 14px;
-        }
-        .report-table th, .report-table td {
-            border: 1px solid #000;
-            padding: 5px 8px;
-        }
-        .report-table th {
-            text-align: center;
-            font-weight: bold;
-        }
-        .header-blue {
-            background-color: #8faadc !important; /* Blue header */
+        .report-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px; }
+        .report-table th, .report-table td { border: 1px solid #000; padding: 5px 8px; }
+        .report-table th { text-align: center; font-weight: bold; }
+        .header-blue { background-color: #8faadc !important; -webkit-print-color-adjust: exact; }
+        
+        /* AI Analytics Styles */
+        .ai-summary-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #6c9bd2;
+            padding: 12px;
+            margin-bottom: 15px;
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
             -webkit-print-color-adjust: exact;
         }
+        .badge-sentiment { padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; text-transform: uppercase; }
+        .bg-pos { background-color: #dcfce7 !important; color: #166534 !important; -webkit-print-color-adjust: exact; }
+        .bg-neg { background-color: #fee2e2 !important; color: #991b1b !important; -webkit-print-color-adjust: exact; }
+        .bg-neu { background-color: #f1f5f9 !important; color: #334155 !important; -webkit-print-color-adjust: exact; }
+        .topic-pill { background-color: #e8f0fe !important; color: #0056b3 !important; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; -webkit-print-color-adjust: exact; }
+
         .text-center { text-align: center; }
         .fw-bold { font-weight: bold; }
         
-        .interpretation-box {
-            font-size: 14px;
-            margin-left: 50%;
-            margin-bottom: 40px;
-        }
+        .interpretation-box { font-size: 14px; margin-left: 50%; margin-bottom: 40px; }
         .interpretation-box table { border: none; }
         .interpretation-box td { padding: 2px 10px; border: none; }
         
         /* Signatures */
-        .signature-section {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 40px;
-            font-size: 14px;
-        }
-        .sig-block {
-            width: 45%;
-        }
-        .sig-name {
-            font-weight: bold;
-            margin-top: 30px;
-            margin-bottom: 0;
-        }
-        .sig-title {
-            margin: 0;
-        }
-        .page-footer {
-            margin-top: 50px;
-            font-size: 12px;
-            font-weight: bold;
-            border-top: 2px solid #6c9bd2;
-            padding-top: 5px;
-            display: flex;
-            justify-content: space-between;
-        }
+        .signature-section { display: flex; justify-content: space-between; margin-top: 40px; font-size: 14px; }
+        .sig-block { width: 45%; }
+        .sig-name { font-weight: bold; margin-top: 30px; margin-bottom: 0; }
+        .sig-title { margin: 0; }
+        .page-footer { margin-top: 50px; font-size: 12px; font-weight: bold; border-top: 2px solid #6c9bd2; padding-top: 5px; display: flex; justify-content: space-between; }
         
         /* Page break for printing */
         @media print {
@@ -155,9 +105,8 @@
                         <div class="col-md-3">
                             <label class="form-label text-muted">Period Covered</label>
                             <select class="form-select bg-light" id="selectPeriod">
-                                <option value="January - June 2025">January - June 2025</option>
-                                <option value="July - December 2025">July - December 2025</option>
                                 <option value="January - June 2026">January - June 2026</option>
+                                <option value="July - December 2026">July - December 2026</option>
                             </select>
                         </div>
                         <div class="col-md-4">
@@ -194,10 +143,12 @@
                 </div>
 
                 <div id="reportContentToExport">
+                    
+                    <!-- PANG-UNANG PAHINA (NUMERICAL SUMMARY) -->
                     <div class="report-container" style="display: block; margin-bottom: 30px;">
                         <div class="report-header">
                             <div>
-                                <div style="width: 60px; height: 60px; border-radius: 50%; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #999;">LOGO</div>
+                                <img src="/cspc-logo.png" alt="CSPC Logo" style="width: 60px; height: 60px;">
                             </div>
                             <div class="report-header-center">
                                 <p>Republic of the Philippines</p>
@@ -208,11 +159,10 @@
                         </div>
 
                         <div class="report-title">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
-                        <p class="office-title" id="displayOfficeName1">HUMAN RESOURCE MANAGEMENT AND DEVELOPMENT OFFICE</p>
-                        <p class="sub-title">Applying for Job in the College</p>
+                        <p class="office-title" id="displayOfficeName1"></p>
 
-                        <div class="meta-info">
-                            <div><span>Period Covered:</span> <strong id="displayPeriod1">July - December 2025</strong></div>
+                        <div class="meta-info mt-4">
+                            <div><span>Period Covered:</span> <strong id="displayPeriod1"></strong></div>
                             <div><span>Number of Respondents:</span> <strong id="totalRespondents1">0</strong></div>
                         </div>
 
@@ -310,11 +260,11 @@
                         </div>
                     </div>
 
-                    <!-- PANGALAWANG PAHINA (WRITTEN COMMENTS) -->
+                    <!-- PANGALAWANG PAHINA (WRITTEN COMMENTS & AI ANALYTICS) -->
                     <div class="report-container page-break" style="display: block;">
                         <div class="report-header">
                             <div>
-                                <div style="width: 60px; height: 60px; border-radius: 50%; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #999;">LOGO</div>
+                                <img src="/cspc-logo.png" alt="CSPC Logo" style="width: 60px; height: 60px;">
                             </div>
                             <div class="report-header-center">
                                 <p>Republic of the Philippines</p>
@@ -324,20 +274,30 @@
                             <div class="doc-code">CSPC-F-CQA-06</div>
                         </div>
 
-                        <div class="report-title">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
-                        <p class="office-title" id="displayOfficeName2">HUMAN RESOURCE MANAGEMENT AND DEVELOPMENT OFFICE</p>
-                        <p class="sub-title">Applying for Job in the College</p>
+                        <div class="report-title">AI FEEDBACK SENTIMENT & TOPIC ANALYTICS</div>
+                        <p class="office-title" id="displayOfficeName2"></p>
 
-                        <div class="meta-info">
-                            <div><span>Period Covered:</span> <strong id="displayPeriod2">July - December 2025</strong></div>
-                            <div><span>Number of Respondents:</span> <strong id="totalRespondents2">0</strong></div>
+                        <div class="meta-info mt-4">
+                            <div><span>Period Covered:</span> <strong id="displayPeriod2"></strong></div>
+                            <div><span>Analyzed Feedbacks:</span> <strong id="totalRespondents2">0</strong></div>
+                        </div>
+
+                        <!-- AI Summary Box -->
+                        <div class="ai-summary-box mt-3">
+                            <div><strong>AI Sentiment Breakdown:</strong></div>
+                            <div>Positive: <span id="aiPos" class="fw-bold" style="color: #166534;">0</span></div>
+                            <div>Neutral: <span id="aiNeu" class="fw-bold" style="color: #334155;">0</span></div>
+                            <div>Negative: <span id="aiNeg" class="fw-bold" style="color: #991b1b;">0</span></div>
+                            <div>| &nbsp; Dominant Topic: <span id="aiDomTopic" class="fw-bold" style="color: #0056b3;">N/A</span></div>
                         </div>
 
                         <table class="report-table" style="margin-bottom: 50px;">
                             <thead>
                                 <tr class="header-blue">
-                                    <th style="width: 30%;">Instrument No.</th>
-                                    <th style="width: 70%;">WRITTEN COMMENTS/SUGGESTIONS</th>
+                                    <th style="width: 10%;">NO.</th>
+                                    <th style="width: 50%;">WRITTEN COMMENTS/SUGGESTIONS</th>
+                                    <th style="width: 20%;">AI MODELED TOPIC</th>
+                                    <th style="width: 20%;">AI SENTIMENT</th>
                                 </tr>
                             </thead>
                             <tbody id="commentsBody">
@@ -376,14 +336,12 @@
         const selectedPeriod = document.getElementById('selectPeriod').value;
         const displayPeriodText = `${selectedQuarter}, ${selectedPeriod}`;
 
-        // I-set ang UI text names
         document.getElementById('displayOfficeName1').innerText = selectedOffice;
         document.getElementById('displayPeriod1').innerText = displayPeriodText;
         document.getElementById('displayOfficeName2').innerText = selectedOffice;
         document.getElementById('displayPeriod2').innerText = displayPeriodText;
 
         try {
-            // Pag-fetch ng data sa backend
             const response = await fetch('/api/report-data', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -391,11 +349,9 @@
             });
             const data = await response.json();
             
-            // Ipasok ang na-compute na data sa Table at sa Comments
             updateReportTable(data.stats);
             updateCommentsTable(data.comments);
             
-            // I-reveal ang document
             document.getElementById('emptyState').style.display = 'none';
             document.getElementById('generatedReportWrapper').style.display = 'block';
 
@@ -405,7 +361,6 @@
         }
     }
 
-    // Helper function para malaman kung Outstanding, Very Satisfactory, etc.
     function getInterpretation(score) {
         if (score >= 95) return "Outstanding";
         if (score >= 90) return "Very Satisfactory";
@@ -414,7 +369,6 @@
         return "Poor";
     }
 
-    // I-populate ang unang table gamit ang mga scores
     function updateReportTable(stats) {
         const totalResp = stats.total_respondents || 0;
         document.getElementById('totalRespondents1').innerText = totalResp;
@@ -431,23 +385,58 @@
         document.getElementById('overall_interp').innerText = getInterpretation(overall).toUpperCase();
     }
 
-    // I-populate ang pangalawang table para sa comments
     function updateCommentsTable(comments) {
         const tbody = document.getElementById('commentsBody');
         tbody.innerHTML = '';
+        
+        let pos = 0, neu = 0, neg = 0;
+        let topics = {};
+
         if (!comments || comments.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="2" class="text-center py-4 text-muted">NO WRITTEN COMMENTS AND SUGGESTIONS REFLECTED IN ANY OF THE INSTRUMENTS</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-muted">NO WRITTEN COMMENTS AND SUGGESTIONS REFLECTED IN ANY OF THE INSTRUMENTS</td></tr>`;
+            document.getElementById('aiPos').innerText = '0';
+            document.getElementById('aiNeu').innerText = '0';
+            document.getElementById('aiNeg').innerText = '0';
+            document.getElementById('aiDomTopic').innerText = 'N/A';
         } else {
             comments.forEach((c, index) => {
+                // Tally AI Analytics
+                let aiSentiment = c.sentiment || 'Neutral';
+                if (aiSentiment === 'Positive') pos++;
+                else if (aiSentiment === 'Negative') neg++;
+                else neu++;
+
+                let aiTopic = c.topic || 'General';
+                topics[aiTopic] = (topics[aiTopic] || 0) + 1;
+
+                // Set Badge Colors
+                let badgeClass = 'bg-neu';
+                if (aiSentiment === 'Positive') badgeClass = 'bg-pos';
+                if (aiSentiment === 'Negative') badgeClass = 'bg-neg';
+
                 tbody.innerHTML += `<tr>
                     <td class="text-center">${index + 1}</td>
                     <td>${c.comments}</td>
+                    <td class="text-center"><span class="topic-pill">${aiTopic}</span></td>
+                    <td class="text-center"><span class="badge-sentiment ${badgeClass}">${aiSentiment}</span></td>
                 </tr>`;
             });
+
+            // Update AI Analytics Box
+            document.getElementById('aiPos').innerText = pos;
+            document.getElementById('aiNeu').innerText = neu;
+            document.getElementById('aiNeg').innerText = neg;
+
+            // Find Dominant Topic
+            let domTopic = 'N/A';
+            let maxCount = 0;
+            for (const [key, value] of Object.entries(topics)) {
+                if (value > maxCount) { maxCount = value; domTopic = key; }
+            }
+            document.getElementById('aiDomTopic').innerText = domTopic;
         }
     }
 
-    // Function to download PDF exactly as formatted
     function downloadPDF() {
         const element = document.getElementById('reportContentToExport');
         const opt = {
@@ -460,14 +449,12 @@
         html2pdf().set(opt).from(element).save();
     }
 
-    // Function to export table data to CSV
     function downloadCSV() {
         let csv = [];
-        const rows = document.querySelectorAll("#tableData1 tr");
+        const rows = document.querySelectorAll(".report-table tr");
         
         for (let i = 0; i < rows.length; i++) {
             let row = [], cols = rows[i].querySelectorAll("td, th");
-            
             for (let j = 0; j < cols.length; j++) {
                 let data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, " ").replace(/(\s\s)/gm, " ");
                 data = data.replace(/"/g, '""'); 
