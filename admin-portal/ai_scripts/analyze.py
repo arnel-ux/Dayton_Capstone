@@ -1,69 +1,57 @@
 import sys
 import json
+import re
+import warnings
+from collections import Counter
+
+warnings.filterwarnings('ignore')
+
 from transformers import pipeline
 
-# 1. Catch the comment sent by Node.js server.js
-if len(sys.argv) > 1:
-    client_comment = sys.argv[1]
-else:
-    client_comment = ""
+# Read the comment securely
+client_comment = sys.stdin.read().strip()
 
-# 2. Load the specific Models (matching your prototype)
+# WARNING: This line will trigger a 1.1GB download the very first time it runs on a new PC!
 sentiment_analyzer = pipeline("sentiment-analysis", model="cardiffnlp/twitter-xlm-roberta-base-sentiment")
-topic_analyzer = pipeline("zero-shot-classification", model="symanto/xlm-roberta-base-snli-mnli-anli-xnli")
 
-# 3. Define the Candidate Labels based on your `offices` table
-office_labels = [
-    "Office of the President",
-    "Academic Affairs",
-    "Administration and Finance",
-    "Research, Innovation and Collaboration",
-    "International Relations and Linkages",
-    "Institutional Planning and Development",
-    "Internal Audit",
-    "Human Resource Management and Development",
-    "Records and Freedom of Information",
-    "Health Services",
-    "General Services",
-    "Supply and Property Management",
-    "Project Management",
-    "Information and Communications Technology",
-    "Accounting",
-    "Budget",
-    "Cash",
-    "Production and Auxiliary Services",
-    "Center for Rinconada Culture and Arts",
-    "College of Engineering and Architecture",
-    "College of Health Sciences",
-    "Buhi Campus",
-    "Information and Alumni Affairs and Broadcast Center",
-    "Research and Development Services",
-    "Center for Extension and Community Services",
-    "CCS",
-    "Admission Offices"
-]
+STOPWORDS = set([
+    "the", "and", "is", "in", "it", "of", "for", "to", "that", "was", "on", "with", "as", "at", "by",
+    "this", "but", "are", "not", "have", "be", "from", "or", "an", "they", "which", "you", "we", "can",
+    "sa", "ng", "na", "ang", "mga", "ay", "po", "opo", "ko", "mo", "niya", "nila", "namin", "natin",
+    "kay", "kung", "ba", "pa", "rin", "din", "naman", "lang", "eh", "kasi", "yung", "ako", "siya",
+    "sila", "kami", "tayo", "ni", "pang", "para", "dahil", "daw", "raw", "nga", "yung", "ung",
+    "may", "wala", "very", "so", "much", "too", "really", "just", "do", "did", "does", "all", "ano"
+])
+
+def extract_important_keywords(text):
+    clean_text = re.sub(r'[^\w\s]', '', text.lower())
+    words = clean_text.split()
+    meaningful_words = [w for w in words if w not in STOPWORDS and len(w) > 2]
+    
+    if not meaningful_words:
+        return "General Feedback"
+        
+    word_counts = Counter(meaningful_words)
+    top_words = [word for word, count in word_counts.most_common(2)]
+    return " ".join(top_words).title()
 
 try:
-    if client_comment.strip() == "":
+    if client_comment == "":
         final_sentiment = "Neutral"
-        final_topic = "General"
+        final_topic = "General Feedback"
     else:
-        # Run Sentiment Analysis
         sent_res = sentiment_analyzer(client_comment, truncation=True, max_length=512)[0]
-        raw_label = sent_res['label']
+        raw_label = str(sent_res['label']).lower()
         
-        # Map model output to clean labels
-        sentiment_map = {
-            'LABEL_0': 'Negative', 'LABEL_1': 'Neutral', 'LABEL_2': 'Positive',
-            'negative': 'Negative', 'neutral': 'Neutral', 'positive': 'Positive'
-        }
-        final_sentiment = sentiment_map.get(raw_label, 'Neutral')
+        if '0' in raw_label or 'negative' in raw_label:
+            final_sentiment = "Negative"
+        elif '2' in raw_label or 'positive' in raw_label:
+            final_sentiment = "Positive"
+        else:
+            final_sentiment = "Neutral"
 
-        # Run Topic/Office Modeling
-        topic_res = topic_analyzer(client_comment, office_labels, truncation=True, max_length=512)
-        final_topic = topic_res['labels'][0] # Grabs the highest matching office
+        final_topic = extract_important_keywords(client_comment)
 
-    # 4. Print the output as a JSON string for Node.js to capture
     print(json.dumps({
         "sentiment": final_sentiment,
         "topic": final_topic

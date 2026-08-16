@@ -255,32 +255,47 @@ app.post('/submit-survey', (req, res) => {
             res.json({ success: true, message: "Survey recorded successfully!" });
 
             // 2. 🔥 BACKGROUND AI PROCESS START 🔥
-            // Check if there is an actual comment to analyze
             if (comments && comments.trim() !== "") {
-                
-                // Point to your new analyze.py script
                 const pythonScriptPath = path.join(__dirname, 'ai_scripts', 'analyze.py');
-                const pythonProcess = spawn('python', [pythonScriptPath, comments]);
+                const pythonProcess = spawn('python', [pythonScriptPath]);
+
+                // 🔥 Catch if Python is missing from Windows Environment Variables
+                pythonProcess.on('error', (err) => {
+                    console.error("❌ [CRITICAL ERROR]: Could not start Python. Is it installed?", err);
+                });
+
+                pythonProcess.stdin.write(comments);
+                pythonProcess.stdin.end();
 
                 let aiOutput = '';
+                let aiError = '';
 
-                // Read the output from the Python script
                 pythonProcess.stdout.on('data', (chunk) => { 
                     aiOutput += chunk.toString(); 
                 });
+                
+                // 🔥 SHOW PYTHON LOGS & DOWNLOAD BARS IN REAL-TIME
+                pythonProcess.stderr.on('data', (chunk) => { 
+                    process.stdout.write(chunk.toString()); 
+                    aiError += chunk.toString(); 
+                });
 
-                // When Python finishes, update the database
                 pythonProcess.on('close', (code) => {
                     try {
-                        const aiResult = JSON.parse(aiOutput.trim());
-                        
-                        if (aiResult.sentiment && aiResult.topic) {
-                            const updateQuery = 'UPDATE survey_responses SET sentiment = ?, topic = ? WHERE id = ?';
-                            db.query(updateQuery, [aiResult.sentiment, aiResult.topic, surveyResponseId]);
-                            console.log(`✅ [AI Success] ID: ${surveyResponseId} | Sentiment: ${aiResult.sentiment} | Topic: ${aiResult.topic}`);
+                        const jsonMatch = aiOutput.match(/\{[\s\S]*\}/);
+                        if (jsonMatch) {
+                            const aiResult = JSON.parse(jsonMatch[0]);
+                            
+                            if (aiResult.sentiment && aiResult.topic) {
+                                const updateQuery = 'UPDATE survey_responses SET sentiment = ?, topic = ? WHERE id = ?';
+                                db.query(updateQuery, [aiResult.sentiment, aiResult.topic, surveyResponseId]);
+                                console.log(`✅ [AI Success] ID: ${surveyResponseId} | Sentiment: ${aiResult.sentiment} | Topic: ${aiResult.topic}`);
+                            }
+                        } else {
+                            console.error("❌ [AI Parsing Error]: Could not find JSON.\nRaw Output:", aiOutput);
                         }
                     } catch (e) {
-                        console.error("❌ [AI Parsing Error]:", e.message, "\nRaw Python Output:", aiOutput);
+                        console.error("❌ [AI Execution Error]:", e.message);
                     }
                 });
             }
