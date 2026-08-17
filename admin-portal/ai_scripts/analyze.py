@@ -1,45 +1,40 @@
 import sys
 import json
-import re
+import os
 import warnings
-from collections import Counter
 
 warnings.filterwarnings('ignore')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TRANSFORMERS_VERBOSITY'] = 'error'
 
 from transformers import pipeline
 
 # Read the comment securely
 client_comment = sys.stdin.read().strip()
 
-# WARNING: This line will trigger a 1.1GB download the very first time it runs on a new PC!
-sentiment_analyzer = pipeline("sentiment-analysis", model="cardiffnlp/twitter-xlm-roberta-base-sentiment")
+# 1. LOAD SENTIMENT AI
+sentiment_analyzer = pipeline("sentiment-analysis", model="cardiffnlp/twitter-xlm-roberta-base-sentiment", framework="pt")
 
-STOPWORDS = set([
-    "the", "and", "is", "in", "it", "of", "for", "to", "that", "was", "on", "with", "as", "at", "by",
-    "this", "but", "are", "not", "have", "be", "from", "or", "an", "they", "which", "you", "we", "can",
-    "sa", "ng", "na", "ang", "mga", "ay", "po", "opo", "ko", "mo", "niya", "nila", "namin", "natin",
-    "kay", "kung", "ba", "pa", "rin", "din", "naman", "lang", "eh", "kasi", "yung", "ako", "siya",
-    "sila", "kami", "tayo", "ni", "pang", "para", "dahil", "daw", "raw", "nga", "yung", "ung",
-    "may", "wala", "very", "so", "much", "too", "really", "just", "do", "did", "does", "all", "ano"
-])
+# 2. LOAD TRUE AI TOPIC MODELER (Zero-Shot Classification)
+topic_modeler = pipeline("zero-shot-classification", model="symanto/xlm-roberta-base-snli-mnli-anli-xnli", framework="pt")
 
-def extract_important_keywords(text):
-    clean_text = re.sub(r'[^\w\s]', '', text.lower())
-    words = clean_text.split()
-    meaningful_words = [w for w in words if w not in STOPWORDS and len(w) > 2]
-    
-    if not meaningful_words:
-        return "General Feedback"
-        
-    word_counts = Counter(meaningful_words)
-    top_words = [word for word, count in word_counts.most_common(2)]
-    return " ".join(top_words).title()
+# 3. YOUR DYNAMIC DASHBOARD CATEGORIES
+# The AI will read the feedback and mathematically assign it to one of these exact phrases.
+# You can change these to match whatever you want to show on your Admin Dashboard!
+candidate_topics = [
+    "Queueing and Waiting Time", 
+    "Internet Connection", 
+    "Office Facilities", 
+    "Customer Service", 
+    "General Feedback"
+]
 
 try:
     if client_comment == "":
         final_sentiment = "Neutral"
         final_topic = "General Feedback"
     else:
+        # A. Process Sentiment
         sent_res = sentiment_analyzer(client_comment, truncation=True, max_length=512)[0]
         raw_label = str(sent_res['label']).lower()
         
@@ -50,7 +45,12 @@ try:
         else:
             final_sentiment = "Neutral"
 
-        final_topic = extract_important_keywords(client_comment)
+        # B. Process True AI Topic
+        # The AI predicts the best matching category based on semantic context
+        topic_res = topic_modeler(client_comment, candidate_topics)
+        
+        # Extract the highest probability topic (e.g., "Queueing and Waiting Time")
+        final_topic = topic_res['labels'][0]
 
     print(json.dumps({
         "sentiment": final_sentiment,
