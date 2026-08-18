@@ -651,11 +651,36 @@ app.get('/report', (req, res) => {
     });
 });
 
+// Powers both the institution-wide /report page (sends `office` by name) and the
+// per-cluster "Select Office" drill-down (sends `cluster` + `officeId`, so "All
+// Offices" on a cluster page still scopes to that cluster instead of the whole
+// institution). `semester` narrows further to one period_year_quarter.
 app.post('/api/report-data', (req, res) => {
-    const { office, quarter, period } = req.body;
-    
-    let query = `
-        SELECT 
+    const { office, officeId, cluster, semester } = req.body;
+
+    const conditions = [];
+    const queryParams = [];
+
+    if (cluster) {
+        conditions.push('o.cluster_name = ?');
+        queryParams.push(cluster);
+    }
+    if (officeId) {
+        conditions.push('o.id = ?');
+        queryParams.push(officeId);
+    } else if (office && office !== 'ALL OFFICES') {
+        conditions.push('o.office_name = ?');
+        queryParams.push(office);
+    }
+    if (semester) {
+        conditions.push('s.period_year_quarter = ?');
+        queryParams.push(semester);
+    }
+
+    const whereClause = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
+
+    const query = `
+        SELECT
             COUNT(s.id) as total_respondents,
             IFNULL(ROUND(AVG(s.sqd1) * 20, 2), 0) as sqd1,
             IFNULL(ROUND(AVG(s.sqd2) * 20, 2), 0) as sqd2,
@@ -667,22 +692,16 @@ app.post('/api/report-data', (req, res) => {
             IFNULL(ROUND(AVG(s.sqd8) * 20, 2), 0) as sqd8,
             IFNULL(ROUND(AVG((IFNULL(s.sqd1,0) + IFNULL(s.sqd2,0) + IFNULL(s.sqd3,0) + IFNULL(s.sqd4,0) + IFNULL(s.sqd5,0) + IFNULL(s.sqd6,0) + IFNULL(s.sqd7,0) + IFNULL(s.sqd8,0)) / 8) * 20, 2), 0) as overall_score
         FROM survey_responses s
-        LEFT JOIN offices o ON s.office_id = o.id
+        LEFT JOIN offices o ON s.office_id = o.id${whereClause}
     `;
-    
-    let queryParams = [];
-    if (office !== 'ALL OFFICES') {
-        query += ` WHERE o.office_name = ?`;
-        queryParams.push(office);
-    }
 
     db.query(query, queryParams, (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
-        
-        let commentsQuery = `SELECT s.comments, s.sentiment, s.topic FROM survey_responses s LEFT JOIN offices o ON s.office_id = o.id WHERE s.comments IS NOT NULL AND TRIM(s.comments) != ''`;
-        if (office !== 'ALL OFFICES') {
-            commentsQuery += ` AND o.office_name = ?`;
-        }
+
+        const commentsWhere = conditions.length
+            ? ` AND ${conditions.join(' AND ')}`
+            : '';
+        const commentsQuery = `SELECT s.comments, s.sentiment, s.topic FROM survey_responses s LEFT JOIN offices o ON s.office_id = o.id WHERE s.comments IS NOT NULL AND TRIM(s.comments) != ''${commentsWhere}`;
 
         db.query(commentsQuery, queryParams, (err, commentsResult) => {
             res.json({
@@ -906,69 +925,6 @@ app.get('/cluster/admin-finance', renderClusterPage('cluster-admin-finance', 'Ad
 app.get('/cluster/research-innovation', renderClusterPage('cluster-research', 'Research, Innovation and Collaboration Cluster'));
 app.get('/cluster/academic', renderClusterPage('cluster-academic', 'Academic Cluster'));
 app.get('/cluster/other-offices', renderClusterPage('cluster-other', 'Other Offices Cluster'));
-
-// ==========================================
-// Cluster Respondents API (office/semester drill-down for cluster pages)
-// ==========================================
-// Backs the "Select Office" dropdown on each cluster page: returns individual
-// survey responses (taker + their SQD results) for a cluster, optionally
-// narrowed to one office and/or one semester.
-app.get('/api/cluster-respondents', (req, res) => {
-    const { cluster, office, semester } = req.query;
-    if (!cluster) return res.status(400).json({ success: false, message: 'cluster is required' });
-
-    const conditions = ['o.cluster_name = ?'];
-    const params = [cluster];
-
-    if (office) {
-        conditions.push('o.id = ?');
-        params.push(office);
-    }
-    if (semester) {
-        conditions.push('s.period_year_quarter = ?');
-        params.push(semester);
-    }
-
-    const query = `
-        SELECT
-            s.id, s.respondent_name, o.office_name,
-            s.period_year_quarter, s.created_at,
-            ROUND(((IFNULL(s.sqd1,0) + IFNULL(s.sqd2,0) + IFNULL(s.sqd3,0) +
-                    IFNULL(s.sqd4,0) + IFNULL(s.sqd5,0) + IFNULL(s.sqd6,0) +
-                    IFNULL(s.sqd7,0) + IFNULL(s.sqd8,0)) / 8) * 20, 2) AS rating
-        FROM survey_responses s
-        JOIN offices o ON s.office_id = o.id
-        WHERE ${conditions.join(' AND ')}
-        ORDER BY s.created_at DESC
-    `;
-
-    db.query(query, params, (err, rows) => {
-        if (err) return res.status(500).json({ success: false, message: err.message });
-
-        const interpretationFor = (score) => {
-            if (score >= 95) return 'OUTSTANDING';
-            if (score >= 85) return 'VERY SATISFACTORY';
-            if (score >= 75) return 'SATISFACTORY';
-            if (score >= 60) return 'FAIR';
-            return 'POOR';
-        };
-
-        const results = rows.map(row => {
-            const rating = parseFloat(row.rating || 0);
-            return {
-                id: row.id,
-                respondentName: row.respondent_name || 'Anonymous',
-                officeName: row.office_name,
-                period: row.period_year_quarter,
-                submittedAt: row.created_at,
-                rating: rating,
-                interpretation: interpretationFor(rating)
-            };
-        });
-
-        res.json({ success: true, results: results });
-    });
-});
 
 // ==========================================
 // DYNAMIC PUBLIC DASHBOARD API
