@@ -127,7 +127,7 @@
                                                                 </button>
                                                             </form>
                                                         <% } else { %>
-                                                            <form action="/offices/delete/<%= office.id %>" method="POST" style="display:inline;" onsubmit="return confirm('Sigurado ka ba na gusto mong i-archive ang office na ito?');">
+                                                            <form action="/offices/delete/<%= office.id %>" method="POST" style="display:inline;" class="archive-office-form">
                                                                 <button type="submit" class="btn btn-sm btn-outline-danger" title="Archive this office">
                                                                     <i class="fas fa-box-archive"></i> Archive
                                                                 </button>
@@ -278,6 +278,18 @@
         // Archived offices ay tinatago by default; naka-toggle lang para makita.
         const archivedRows = document.querySelectorAll('.office-row-archived');
         archivedRows.forEach(row => row.style.display = 'none');
+
+        // Confirm before archiving an office (modern modal instead of window.confirm)
+        document.querySelectorAll('.archive-office-form').forEach(form => {
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                const confirmed = await AppAlert.confirm('Sigurado ka ba na gusto mong i-archive ang office na ito?', {
+                    title: 'Archive this office?',
+                    confirmText: 'Yes, archive it!'
+                });
+                if (confirmed) form.submit();
+            });
+        });
 
         const showArchivedToggle = document.getElementById('showArchivedToggle');
         if (showArchivedToggle) {

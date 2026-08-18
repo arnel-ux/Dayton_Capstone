@@ -273,6 +273,9 @@ app.post('/auth-login', (req, res) => {
     if (username === 'admin' && password === 'admin123') {
         req.session.user = { username: 'admin', role: 'admin' };
         return res.redirect('/dashboard');
+    } else if (username === 'admin') {
+        // Wrong admin password — clients must use the "Sign in with Google" button instead
+        return res.redirect('/login?error=' + encodeURIComponent('Invalid admin credentials!'));
     }
 
     const emailInput = String(username || '').trim().toLowerCase();
@@ -867,6 +870,15 @@ function getClusterPerformanceData(clusterName, semester, callback) {
     });
 }
 
+// Offices belonging to one cluster, for the "Select Office" filter dropdown.
+function getOfficesForCluster(clusterName, callback) {
+    db.query(
+        'SELECT id, office_name FROM offices WHERE cluster_name = ? AND is_archived = 0 ORDER BY office_name',
+        [clusterName],
+        (err, rows) => callback(err ? [] : rows)
+    );
+}
+
 // ==========================================
 // 6. Cluster Routes
 // ==========================================
@@ -875,7 +887,15 @@ function renderClusterPage(view, clusterName) {
         const semester = req.query.semester || '';
         getClusterPerformanceData(clusterName, semester, (err, data) => {
             getSemesterOptions((semesterOptions) => {
-                res.render(view, { data: data || [], semesterOptions: semesterOptions, selectedSemester: semester });
+                getOfficesForCluster(clusterName, (officesInCluster) => {
+                    res.render(view, {
+                        data: data || [],
+                        semesterOptions: semesterOptions,
+                        selectedSemester: semester,
+                        officesInCluster: officesInCluster,
+                        clusterName: clusterName
+                    });
+                });
             });
         });
     };
@@ -886,6 +906,69 @@ app.get('/cluster/admin-finance', renderClusterPage('cluster-admin-finance', 'Ad
 app.get('/cluster/research-innovation', renderClusterPage('cluster-research', 'Research, Innovation and Collaboration Cluster'));
 app.get('/cluster/academic', renderClusterPage('cluster-academic', 'Academic Cluster'));
 app.get('/cluster/other-offices', renderClusterPage('cluster-other', 'Other Offices Cluster'));
+
+// ==========================================
+// Cluster Respondents API (office/semester drill-down for cluster pages)
+// ==========================================
+// Backs the "Select Office" dropdown on each cluster page: returns individual
+// survey responses (taker + their SQD results) for a cluster, optionally
+// narrowed to one office and/or one semester.
+app.get('/api/cluster-respondents', (req, res) => {
+    const { cluster, office, semester } = req.query;
+    if (!cluster) return res.status(400).json({ success: false, message: 'cluster is required' });
+
+    const conditions = ['o.cluster_name = ?'];
+    const params = [cluster];
+
+    if (office) {
+        conditions.push('o.id = ?');
+        params.push(office);
+    }
+    if (semester) {
+        conditions.push('s.period_year_quarter = ?');
+        params.push(semester);
+    }
+
+    const query = `
+        SELECT
+            s.id, s.respondent_name, o.office_name,
+            s.period_year_quarter, s.created_at,
+            ROUND(((IFNULL(s.sqd1,0) + IFNULL(s.sqd2,0) + IFNULL(s.sqd3,0) +
+                    IFNULL(s.sqd4,0) + IFNULL(s.sqd5,0) + IFNULL(s.sqd6,0) +
+                    IFNULL(s.sqd7,0) + IFNULL(s.sqd8,0)) / 8) * 20, 2) AS rating
+        FROM survey_responses s
+        JOIN offices o ON s.office_id = o.id
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY s.created_at DESC
+    `;
+
+    db.query(query, params, (err, rows) => {
+        if (err) return res.status(500).json({ success: false, message: err.message });
+
+        const interpretationFor = (score) => {
+            if (score >= 95) return 'OUTSTANDING';
+            if (score >= 85) return 'VERY SATISFACTORY';
+            if (score >= 75) return 'SATISFACTORY';
+            if (score >= 60) return 'FAIR';
+            return 'POOR';
+        };
+
+        const results = rows.map(row => {
+            const rating = parseFloat(row.rating || 0);
+            return {
+                id: row.id,
+                respondentName: row.respondent_name || 'Anonymous',
+                officeName: row.office_name,
+                period: row.period_year_quarter,
+                submittedAt: row.created_at,
+                rating: rating,
+                interpretation: interpretationFor(rating)
+            };
+        });
+
+        res.json({ success: true, results: results });
+    });
+});
 
 // ==========================================
 // DYNAMIC PUBLIC DASHBOARD API
