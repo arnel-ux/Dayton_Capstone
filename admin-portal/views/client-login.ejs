@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
     <%- include('layout/header') %>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#2554c7">
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icons/icon.svg">
     <style>
         /* Reset and Base Styles */
         html, body {
@@ -219,5 +223,28 @@
         </div>
     </div>
 
+    <script>
+        // Offline session bypass: if a survey was already opened once while
+        // signed in, its session is cached in localStorage (see
+        // client-survey.ejs). Reopening the app with no connection skips the
+        // Google sign-in (which needs the network) and goes straight back to
+        // the survey — served from the service worker's cache.
+        (function () {
+            if (navigator.onLine) return;
+            try {
+                const cached = JSON.parse(localStorage.getItem('cspc_client_session') || 'null');
+                if (cached && cached.email) {
+                    window.location.href = '/client-survey';
+                }
+            } catch (e) { /* no cached session — fall through to the normal Google sign-in */ }
+        })();
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .catch((err) => console.error('[PWA] Service worker registration failed:', err));
+            });
+        }
+    </script>
 </body>
 </html>

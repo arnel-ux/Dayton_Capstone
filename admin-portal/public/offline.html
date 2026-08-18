@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline - CSM Survey</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #eef1f6;
+            color: #0f172a;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            text-align: center;
+            padding: 1.5rem;
+        }
+        .box {
+            max-width: 420px;
+        }
+        .icon { font-size: 3rem; margin-bottom: 1rem; }
+        h1 { font-size: 1.4rem; margin-bottom: .5rem; }
+        p { color: #475569; margin-bottom: 1.5rem; }
+        button {
+            background: #2554c7;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: .7rem 1.5rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <div class="icon">📡</div>
+        <h1>You're offline</h1>
+        <p>This page hasn't been loaded before, so it isn't available offline yet. Please sign in at least once while connected, then this app will work without internet.</p>
+        <button onclick="location.reload()">Try Again</button>
+    </div>
+</body>
+</html>

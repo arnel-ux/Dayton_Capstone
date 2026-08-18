@@ -1,0 +1,19 @@
+{
+  "name": "CSPC Client Satisfaction Survey",
+  "short_name": "CSM Survey",
+  "description": "Camarines Sur Polytechnic Colleges Client Satisfaction Measurement Survey. Works offline and syncs automatically when your connection returns.",
+  "start_url": "/client-survey",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#eef1f6",
+  "theme_color": "#2554c7",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

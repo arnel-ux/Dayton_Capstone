@@ -4,6 +4,7 @@ const express = require('express');
 const path = require('path');
 const mysql = require('mysql2');
 const { spawn } = require('child_process'); // 🔥 ADDED THIS LINE
+const { promisify } = require('util');
 const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
@@ -90,6 +91,69 @@ db.connect((err) => {
     }
     console.log('✅ Connected to cqa_db database successfully!');
 });
+
+// Promise wrapper around db.query — used by the offline-sync route so it can
+// `await` each step (duplicate check → AI analysis → insert) in sequence.
+const dbQuery = promisify(db.query).bind(db);
+
+// Runs a comment through ai_scripts/analyze.py and resolves with
+// { sentiment, topic }. Used by both the live /submit-survey route (fire-and-forget,
+// applied via an UPDATE after the fact) and the /sync-surveys batch route
+// (awaited before the row is even inserted). Never rejects — a missing/blank
+// comment resolves with nulls (so DB defaults apply), and any script failure
+// resolves with the "Neutral" / "General Feedback" fallback instead of
+// throwing, so one bad comment can never crash a batch sync.
+function analyzeComment(comment) {
+    return new Promise((resolve) => {
+        if (!comment || !String(comment).trim()) {
+            return resolve({ sentiment: null, topic: null });
+        }
+
+        let settled = false;
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            resolve(result);
+        };
+
+        try {
+            const pythonScriptPath = path.join(__dirname, 'ai_scripts', 'analyze.py');
+            const pythonProcess = spawn('python', [pythonScriptPath]);
+
+            pythonProcess.on('error', (err) => {
+                console.error("❌ [AI] Could not start Python. Is it installed?", err);
+                finish({ sentiment: 'Neutral', topic: 'General Feedback' });
+            });
+
+            pythonProcess.stdin.write(String(comment));
+            pythonProcess.stdin.end();
+
+            let aiOutput = '';
+            pythonProcess.stdout.on('data', (chunk) => { aiOutput += chunk.toString(); });
+            pythonProcess.stderr.on('data', (chunk) => { process.stdout.write(chunk.toString()); });
+
+            pythonProcess.on('close', () => {
+                try {
+                    const jsonMatch = aiOutput.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        const aiResult = JSON.parse(jsonMatch[0]);
+                        if (aiResult.sentiment && aiResult.topic) {
+                            return finish({ sentiment: aiResult.sentiment, topic: aiResult.topic });
+                        }
+                    }
+                    console.error("❌ [AI Parsing Error]: Could not find JSON.\nRaw Output:", aiOutput);
+                    finish({ sentiment: 'Neutral', topic: 'General Feedback' });
+                } catch (e) {
+                    console.error("❌ [AI Execution Error]:", e.message);
+                    finish({ sentiment: 'Neutral', topic: 'General Feedback' });
+                }
+            });
+        } catch (err) {
+            console.error("❌ [AI] Unexpected error launching analysis:", err);
+            finish({ sentiment: 'Neutral', topic: 'General Feedback' });
+        }
+    });
+}
 
 // ==========================================
 // AUTO-CREATE TABLES & AUTO-UPDATE
@@ -547,47 +611,14 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
             res.json({ success: true, message: "Survey recorded successfully!" });
 
             // 2. 🔥 BACKGROUND AI PROCESS START 🔥
+            // Fire-and-forget: the client already has its response, so this just
+            // patches sentiment/topic onto the row once analyze.py finishes.
             if (comments && comments.trim() !== "") {
-                const pythonScriptPath = path.join(__dirname, 'ai_scripts', 'analyze.py');
-                const pythonProcess = spawn('python', [pythonScriptPath]);
-
-                // 🔥 Catch if Python is missing from Windows Environment Variables
-                pythonProcess.on('error', (err) => {
-                    console.error("❌ [CRITICAL ERROR]: Could not start Python. Is it installed?", err);
-                });
-
-                pythonProcess.stdin.write(comments);
-                pythonProcess.stdin.end();
-
-                let aiOutput = '';
-                let aiError = '';
-
-                pythonProcess.stdout.on('data', (chunk) => { 
-                    aiOutput += chunk.toString(); 
-                });
-                
-                // 🔥 SHOW PYTHON LOGS & DOWNLOAD BARS IN REAL-TIME
-                pythonProcess.stderr.on('data', (chunk) => { 
-                    process.stdout.write(chunk.toString()); 
-                    aiError += chunk.toString(); 
-                });
-
-                pythonProcess.on('close', (code) => {
-                    try {
-                        const jsonMatch = aiOutput.match(/\{[\s\S]*\}/);
-                        if (jsonMatch) {
-                            const aiResult = JSON.parse(jsonMatch[0]);
-                            
-                            if (aiResult.sentiment && aiResult.topic) {
-                                const updateQuery = 'UPDATE survey_responses SET sentiment = ?, topic = ? WHERE id = ?';
-                                db.query(updateQuery, [aiResult.sentiment, aiResult.topic, surveyResponseId]);
-                                console.log(`✅ [AI Success] ID: ${surveyResponseId} | Sentiment: ${aiResult.sentiment} | Topic: ${aiResult.topic}`);
-                            }
-                        } else {
-                            console.error("❌ [AI Parsing Error]: Could not find JSON.\nRaw Output:", aiOutput);
-                        }
-                    } catch (e) {
-                        console.error("❌ [AI Execution Error]:", e.message);
+                analyzeComment(comments).then(({ sentiment, topic }) => {
+                    if (sentiment && topic) {
+                        const updateQuery = 'UPDATE survey_responses SET sentiment = ?, topic = ? WHERE id = ?';
+                        db.query(updateQuery, [sentiment, topic, surveyResponseId]);
+                        console.log(`✅ [AI Success] ID: ${surveyResponseId} | Sentiment: ${sentiment} | Topic: ${topic}`);
                     }
                 });
             }
@@ -596,6 +627,165 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
     }
     });
 });
+
+// ==========================================
+// OFFLINE SYNC — receives the queued surveys from the client's IndexedDB
+// outbox once the Service Worker (or the page-side 'online' fallback)
+// detects the connection is back. Unlike /submit-survey, this route AWAITS
+// the AI analysis for each survey before inserting it, and only answers
+// 200 OK once every survey in the batch has been analyzed (or safely
+// defaulted) and written to the database — that response is exactly what
+// tells the Service Worker it's safe to delete those records from
+// IndexedDB, so nothing is dropped and nothing skips analysis.
+// ==========================================
+app.post('/sync-surveys', ensureClientAuth, async (req, res) => {
+    const googleEmail = req.clientEmail;
+    const rawSurveys = Array.isArray(req.body.surveys) ? req.body.surveys : (Array.isArray(req.body) ? req.body : []);
+
+    if (!rawSurveys.length) {
+        return res.status(400).json({ success: false, message: "No surveys provided to sync." });
+    }
+
+    const results = [];
+
+    // Sequential on purpose: each iteration needs its own fresh duplicate-check
+    // against rows inserted by the *previous* iteration, and it avoids spawning
+    // a pile of concurrent Python interpreters for a large batch.
+    for (const item of rawSurveys) {
+        const localId = item && item.localId;
+        const payload = (item && item.payload) || item || {};
+        try {
+            const result = await syncOneSurvey(googleEmail, payload);
+            results.push({ localId, ...result });
+        } catch (err) {
+            console.error("❌ [Sync] Unexpected error syncing survey:", err);
+            results.push({ localId, success: false, message: "Unexpected server error while syncing this survey." });
+        }
+    }
+
+    res.status(200).json({ success: true, results });
+});
+
+async function syncOneSurvey(googleEmail, body) {
+    const cleanInt = (val) => (val !== undefined && val !== "" && val !== null && !isNaN(val)) ? parseInt(val, 10) : null;
+    const cleanStr = (val) => (val !== undefined && val !== null && String(val).trim() !== "") ? String(val).trim() : null;
+
+    const { office_id, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments } = body;
+
+    const finalOfficeId = cleanInt(office_id);
+    if (!finalOfficeId) {
+        return { success: false, message: "Missing selected office ID." };
+    }
+
+    const respondent_name = body.respondent_name || body.respondentName || body.client_name || body.name;
+    const client_type = body.client_type || body.clientType || body.client_role;
+
+    let savedProfile = null;
+    try {
+        const profileRows = await dbQuery('SELECT region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [googleEmail]);
+        savedProfile = (profileRows && profileRows.length > 0) ? profileRows[0] : null;
+    } catch (err) {
+        console.error("❌ [Sync] Profile lookup error:", err);
+    }
+
+    const region = (savedProfile && savedProfile.region) || body.region;
+    const age = (savedProfile && savedProfile.age) || body.age || body.clientAge || body.client_age;
+    const gender = (savedProfile && savedProfile.gender) || body.gender || body.clientGender || body.client_gender;
+
+    const finalName = cleanStr(respondent_name) || 'Anonymous';
+    const finalClientType = cleanStr(client_type) || 'Citizen';
+    const finalAge = cleanStr(age) || 'Not Specified';
+    const finalGender = cleanStr(gender) || 'Not Specified';
+    const finalRegion = cleanStr(region) || 'Not Specified';
+
+    try {
+        const existing = await dbQuery(
+            'SELECT id FROM survey_responses WHERE office_id = ? AND google_email = ? LIMIT 1',
+            [finalOfficeId, googleEmail]
+        );
+        if (existing && existing.length > 0) {
+            return { success: false, message: "You have already evaluated this office. You cannot submit again." };
+        }
+    } catch (err) {
+        console.error("❌ [Sync] Duplicate-check error:", err);
+        return { success: false, message: "Database error while checking previous submissions." };
+    }
+
+    // Await the AI analysis BEFORE inserting — analyzeComment() never throws,
+    // so a failed/unreachable analyze.py just yields the Neutral/General
+    // Feedback fallback here instead of aborting this survey's sync.
+    let sentiment = null;
+    let topic = null;
+    try {
+        const aiResult = await analyzeComment(comments);
+        sentiment = aiResult.sentiment;
+        topic = aiResult.topic;
+    } catch (err) {
+        console.error("❌ [Sync] AI analysis threw unexpectedly, defaulting:", err);
+        sentiment = 'Neutral';
+        topic = 'General Feedback';
+    }
+
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth();
+    const currentPeriod = currentMonth < 6 ? `Jan - Jun ${currentYear}` : `Jul - Dec ${currentYear}`;
+
+    let insertResult;
+    try {
+        insertResult = await dbQuery(
+            `INSERT INTO survey_responses
+             (office_id, respondent_name, topic, sentiment, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                finalOfficeId, finalName, topic || 'General', sentiment || 'Neutral', finalRegion,
+                cleanStr(cc1), cleanStr(cc2), cleanStr(cc3),
+                cleanInt(sqd0), cleanInt(sqd1), cleanInt(sqd2), cleanInt(sqd3),
+                cleanInt(sqd4), cleanInt(sqd5), cleanInt(sqd6), cleanInt(sqd7), cleanInt(sqd8),
+                cleanStr(comments) || 'N/A', currentPeriod, googleEmail
+            ]
+        );
+    } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') {
+            return { success: false, message: "You have already evaluated this office. You cannot submit again." };
+        }
+        console.error("❌ [Sync] Database insertion error:", err);
+        return { success: false, message: "Database insertion error: " + err.message };
+    }
+
+    const surveyResponseId = insertResult.insertId;
+
+    try {
+        await dbQuery(
+            `INSERT INTO client_profiles (survey_response_id, respondent_name, client_type, age, gender, region, email)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [surveyResponseId, finalName, finalClientType, finalAge, finalGender, finalRegion, googleEmail]
+        );
+    } catch (profileErr) {
+        console.error("❌ [Sync][Client Profile] Error inserting profile:", profileErr);
+    }
+
+    try {
+        await dbQuery(
+            `INSERT INTO client_accounts (email, respondent_name, region, age, gender)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE respondent_name = VALUES(respondent_name)`,
+            [googleEmail, finalName, finalRegion, finalAge, finalGender]
+        );
+    } catch (acctErr) {
+        console.error("❌ [Sync][Client Account] Error upserting locked profile:", acctErr);
+    }
+
+    console.log(`✅ [Sync Success] ID: ${surveyResponseId} | Sentiment: ${sentiment || 'Neutral'} | Topic: ${topic || 'General'}`);
+
+    return {
+        success: true,
+        message: "Survey synced and analyzed successfully!",
+        surveyResponseId,
+        sentiment: sentiment || 'Neutral',
+        topic: topic || 'General'
+    };
+}
 
 // ==========================================
 // SEMESTER FILTER HELPERS
