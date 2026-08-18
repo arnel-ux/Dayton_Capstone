@@ -146,20 +146,32 @@
                 <div id="stage1" class="page active">
                     <div class="bg-light border rounded-4 p-4 text-center mb-4">
                         <h4 class="fw-bold text-primary mb-3" data-i18n="s1_head">Help us serve you better!</h4>
-                        <p class="text-secondary mb-0" data-i18n="s1_desc"></p>
+                        <p class="text-secondary mb-0 fs-6" data-i18n="s1_desc"></p>
                     </div>
 
-                    <details id="terms-box" class="mb-4 bg-white border border-secondary-subtle rounded-4 p-3 shadow-sm" style="cursor: pointer;">
-                        <summary class="fw-bold text-primary d-flex justify-content-between align-items-center m-0 p-1">
-                            <span data-i18n="terms_title">Terms and Conditions</span>
-                            <span style="font-size: 0.8rem;">▼</span>
-                        </summary>
-                        <div class="mt-3 text-secondary small pt-3 border-top" style="max-height: 250px; overflow-y: auto; text-align: justify; line-height: 1.6; cursor: auto;">
-                           <p id="terms-content"></p>
+                    <div id="terms-box" class="mb-4 bg-white border border-secondary-subtle rounded-4 p-4 shadow-sm">
+                        <div class="text-center mb-3">
+                            <span class="fw-bold text-primary fs-5" data-i18n="terms_title">Terms and Conditions</span>
+                            <p class="text-secondary small mb-0 mt-2" data-i18n="terms_summary"></p>
                         </div>
-                    </details>
 
-                    <button type="button" onclick="navigate(2)" class="btn btn-primary w-100 py-3 fw-bold shadow-sm">
+                        <ul id="terms-points-list" class="text-secondary small mb-3 ps-4"></ul>
+
+                        <div class="text-center mb-3">
+                            <button type="button" class="btn btn-outline-primary btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#termsModal" title="Read the full Terms and Conditions / Privacy Policy">
+                                <span data-i18n="terms_read_btn"></span>
+                            </button>
+                        </div>
+
+                        <div class="form-check d-flex align-items-start gap-2 justify-content-center border-top pt-3">
+                            <input class="form-check-input mt-1" type="checkbox" id="agreeTermsStage1">
+                            <label class="form-check-label text-dark fs-6" for="agreeTermsStage1">
+                                <span data-i18n="terms_checkbox">I Agree to the Terms &amp; Conditions and Privacy Policy</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <button type="button" id="btnStartSurvey" onclick="navigate(2)" class="btn btn-primary w-100 py-3 fw-bold shadow-sm" disabled>
                         <span data-i18n="btn_start"></span>
                     </button>
                 </div>
@@ -172,18 +184,18 @@
                     <div class="row g-4">
                         <!-- IDINAGDAG: Pangalan -->
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold text-dark">Name / Pangalan (Optional)</label>
+                            <label class="form-label fw-semibold text-dark fs-6">Name / Pangalan (Optional)</label>
                             <input type="text" name="respondent_name" class="form-control border-secondary-subtle" placeholder="e.g. Juan Dela Cruz">
                         </div>
 
-                        <!-- IDINAGDAG: Email -->
+                        <!-- Signed-in Google account (used to enforce 1 survey per office) -->
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold text-dark">Email Address (Optional)</label>
-                            <input type="email" name="email" class="form-control border-secondary-subtle" placeholder="e.g. juan@gmail.com">
+                            <label class="form-label fw-semibold text-dark fs-6">Google Account</label>
+                            <input type="email" name="email" class="form-control border-secondary-subtle" value="<%= typeof clientEmail !== 'undefined' ? clientEmail : '' %>" readonly>
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold text-dark" data-i18n="lbl_client_type"></label>
+                            <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_client_type"></label>
                             <!-- IDINAGDAG ANG name="client_type" AT value="" -->
                             <select name="client_type" class="form-select border-secondary-subtle">
                                 <option value="Citizen" data-i18n="opt_citizen"></option>
@@ -193,7 +205,7 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold text-dark" data-i18n="lbl_sex"></label>
+                            <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_sex"></label>
                             <div class="d-flex flex-wrap gap-4 pt-2">
                                 <label class="d-flex align-items-center gap-2 text-dark">
                                     <!-- PINALITAN ANG name="sex" NG name="gender" AT NAGDAGDAG NG value="Male" -->
@@ -209,7 +221,7 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold text-dark" data-i18n="lbl_age"></label>
+                            <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_age"></label>
                             <!-- IDINAGDAG ANG name="age" AT value="" SA MGA OPTIONS -->
                             <select name="age" class="form-select border-secondary-subtle">
                                 <option value="" selected disabled data-i18n="opt_sel_age"></option>
@@ -222,12 +234,12 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold text-dark" data-i18n="lbl_date"></label>
+                            <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_date"></label>
                             <input type="date" id="surveyDate" name="survey_date" class="form-control border-secondary-subtle">
                         </div>
 
                         <div class="col-12">
-                            <label class="form-label fw-semibold text-dark" data-i18n="lbl_region"></label>
+                            <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_region"></label>
                             <!-- IDINAGDAG ANG name="region" AT value="" SA MGA OPTIONS -->
                             <select name="region" class="form-select border-secondary-subtle">
                                 <option value="" disabled selected data-i18n="opt_select_region"></option>
@@ -252,19 +264,21 @@
                         </div>
 
                         <div class="col-12">
-                            <label class="form-label fw-semibold text-dark" data-i18n="lbl_office"></label>
-                            <select name="office_id" class="form-select form-select-lg" required>
+                            <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_office"></label>
+                            <select name="office_id" class="form-select fs-6" required>
                                 <option value="" selected disabled data-i18n="s1_ph">Select Office...</option>
                                 <% if (typeof offices !== 'undefined') { %>
+                                    <% const taken = typeof takenOfficeIds !== 'undefined' ? takenOfficeIds : []; %>
                                     <% offices.forEach(office => { %>
-                                        <option value="<%= office.id %>"><%= office.office_name %> (<%= office.cluster_name %>)</option>
+                                        <% const isTaken = taken.includes(office.id); %>
+                                        <option value="<%= office.id %>" <%= isTaken ? 'disabled' : '' %>><%= office.office_name %> (<%= office.cluster_name %>)<%= isTaken ? ' (Already Completed)' : '' %></option>
                                     <% }); %>
                                 <% } %>
                             </select>
                         </div>
 
                         <div class="col-12">
-                            <label class="form-label fw-semibold text-dark" data-i18n="lbl_service"></label>
+                            <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_service"></label>
                             <input type="text" name="service_availed" class="form-control border-secondary-subtle">
                         </div>
                     </div>
@@ -428,6 +442,52 @@
     </div>
 </div>
 
+<!-- Terms & Conditions / Privacy Policy Modal -->
+<div class="modal fade" id="termsModal" tabindex="-1" aria-labelledby="termsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="termsModalLabel">Terms &amp; Conditions / Privacy Policy</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" title="Close"></button>
+            </div>
+            <div class="modal-body" style="max-height: 60vh; overflow-y: auto; font-size: 0.85rem; line-height: 1.6;">
+                <h6 class="fw-bold">Privacy Policy</h6>
+                <p>This privacy statement discloses the privacy practices of the Unified Information System (UnIS) and its sub-modules.</p>
+
+                <h6 class="fw-bold mt-3">Information Collection and Use</h6>
+                <p>UnIS is the sole owner of the information collected on this site. We will not sell, share, or rent this information to others in ways different from what is disclosed in this statement. UnIS collects information from our users at several different points on our Web application.</p>
+                <p>In order to use some features of this web application, users must first complete the profiling form. During registration, users are required to give their personal and contact information (name and e-mail address), family background, and demographics. This information is used for academic purposes only.</p>
+
+                <h6 class="fw-bold mt-3">Cookies</h6>
+                <p>UnIS may use cookies to remember if users have logged in while on our site. This allows web site users to avoid logging in more than once, thereby saving time. Users have the option of disabling or not accepting cookies by changing the preferences on their browsers. If users opt to disable cookies, they will still be able to use our Web site. However, they will not be able to use some functionality or post to the message boards. No personally identifiable information (e-mail address, name, etc.) is collected with the cookies that we set. Accepting cookies while on the UnIS site will not put the user at risk for marketing to other sites.</p>
+
+                <h6 class="fw-bold mt-3">Web Statistics</h6>
+                <p>We use IP addresses to analyze trends, administer the site, track user movement, and gather broad demographic information for aggregate use for reporting purposes. IP addresses are not linked to personally identifiable information.</p>
+
+                <h6 class="fw-bold mt-3">Sharing</h6>
+                <p>We will not share any information to external organization except for government organization, administration and institutional researcher which is requirement for reporting and analytics purposes. This is not linked to any personal information that can identify any individual person. Data are shared to other institutional information system through a secured and authenticated API.</p>
+
+                <h6 class="fw-bold mt-3">Security</h6>
+                <p>This Web site takes every precaution to protect our users' information, and we have security measures in place to protect the loss, misuse, and alteration of the information under our control.</p>
+
+                <h6 class="fw-bold mt-3">Updates</h6>
+                <p>We may also send the user site and service announcement updates.</p>
+
+                <h6 class="fw-bold mt-3">Data Privacy</h6>
+                <p>All provisions of laws, administrative orders, circular, regulations, and other issuances inconsistent with this policy are hereby repealed or modified accordingly.</p>
+
+                <h6 class="fw-bold mt-3">Notification of Changes</h6>
+                <p>If we decide to change our privacy policy, we will post those changes on our home page so our users are always aware of what information we collect, how we use it, and under what circumstances, if any, we disclose it. If at any point we decide to use personally identifiable information in a manner different from that stated at the time it was collected, we will notify users by e-mail. Users will have a choice as to whether or not we use their information in this different manner. We will use information in accordance with the privacy policy under which the information was collected.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary px-4" data-bs-dismiss="modal" title="Close this dialog">I Understand</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
 document.getElementById('surveyDate').valueAsDate = new Date();
 let currentLang = 'en';
@@ -447,8 +507,92 @@ function toggleTheme() {
     }
 }
 
-// Navigation Function
+// Validation messages per language
+const validationMessages = {
+    en: {
+        terms: "Please check the box to agree to the Terms & Conditions and Privacy Policy before proceeding.",
+        profile: "Please complete all required fields: Client Type, Sex, Age, Date, Region, Office Visited, and Service Availed.",
+        cc: "Please answer all Citizen's Charter questions (CC1, CC2, and CC3) before proceeding.",
+        sqd: "Please rate all Service Quality Dimensions (SQD0 to SQD8) before submitting."
+    },
+    tl: {
+        terms: "Paki-check ang kahon para sumang-ayon sa Terms & Conditions at Privacy Policy bago magpatuloy.",
+        profile: "Paki-kumpleto ang lahat ng kinakailangang detalye: Uri ng Kliyente, Kasarian, Edad, Petsa, Rehiyon, Pinuntahang Tanggapan, at Serbisyong Ginamit.",
+        cc: "Paki-sagot ang lahat ng tanong sa Citizen's Charter (CC1, CC2, at CC3) bago magpatuloy.",
+        sqd: "Paki-rate ang lahat ng Service Quality Dimensions (SQD0 hanggang SQD8) bago mag-submit."
+    }
+};
+
+// Validates the fields belonging to a given stage. Returns true if the stage is complete.
+function validateStage(stageNum) {
+    const t = validationMessages[currentLang] || validationMessages.en;
+
+    if (stageNum === 1) {
+        const terms = document.getElementById('agreeTermsStage1');
+        if (!terms || !terms.checked) {
+            alert(t.terms);
+            terms && terms.focus();
+            return false;
+        }
+        return true;
+    }
+
+    if (stageNum === 2) {
+        const requiredSelectors = [
+            'select[name="client_type"]',
+            'select[name="age"]',
+            'input[name="survey_date"]',
+            'select[name="region"]',
+            'select[name="office_id"]',
+            'input[name="service_availed"]'
+        ];
+        for (const sel of requiredSelectors) {
+            const el = document.querySelector(sel);
+            if (!el || !el.value || !el.value.trim()) {
+                alert(t.profile);
+                if (el) el.focus();
+                return false;
+            }
+        }
+        if (!document.querySelector('input[name="gender"]:checked')) {
+            alert(t.profile);
+            return false;
+        }
+        return true;
+    }
+
+    if (stageNum === 3) {
+        for (const name of ['cc1', 'cc2', 'cc3']) {
+            if (!document.querySelector(`input[name="${name}"]:checked`)) {
+                alert(t.cc);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    if (stageNum === 4) {
+        for (let i = 0; i <= 8; i++) {
+            if (!document.querySelector(`input[name="sqd${i}"]:checked`)) {
+                alert(t.sqd);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    return true;
+}
+
+// Navigation Function — validates the current stage before allowing forward movement
 function navigate(stage) {
+    const activePage = document.querySelector('#surveyForm .page.active');
+    const currentStage = activePage ? parseInt(activePage.id.replace('stage', ''), 10) : null;
+
+    if (currentStage && stage > currentStage) {
+        if (!validateStage(currentStage)) return;
+    }
+
     document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
     document.getElementById('stage' + stage).classList.add('active');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -463,7 +607,16 @@ const i18n = {
         s1_desc: "This Client Satisfaction Measurement (CSM) tracks the customer experience of government offices. Your feedback on your recently concluded transaction will help this office provide a better service. Personal information shared will be kept confidential and you always have the option to not answer this form.",
         btn_start: "START SURVEY",
         terms_title: "Terms and Conditions",
-        terms_content: `These Terms and Conditions govern your participation in the Client Satisfaction Survey. The Survey is conducted by CQA to gather feedback on your experience with our services. Participation in the Survey is voluntary. By completing the survey, you agree to these Terms.`,
+        terms_summary: "Before you begin, please review how your information will be collected and used for this survey.",
+        terms_read_btn: "Read Full Terms and Conditions",
+        terms_agree_pre: "I agree to the",
+        terms_checkbox: "I Agree to the Terms & Conditions and Privacy Policy",
+        terms_points: [
+            "We collect your name, email, demographic details, and your feedback solely to measure and improve the quality of service of CSPC offices.",
+            "Your responses are used strictly for institutional evaluation, reporting, and analytics. A single Google account may submit only one survey per office.",
+            "Your personal information will be kept confidential and will never be sold, rented, or shared outside CSPC and its authorized government reporting partners.",
+            "You may read the full Terms and Conditions / Privacy Policy at any time using the button below before agreeing."
+        ],
         client_prof: "Client Profile",
         lbl_client_type: "Client Type:",
         opt_citizen: "Citizen",
@@ -533,7 +686,16 @@ const i18n = {
         s1_desc: "Ang Client Satisfaction Measurement (CSM) ay naglalayong masubaybayan ang karanasan ng taumbayan...",
         btn_start: "SIMULAN ANG SARBEY",
         terms_title: "Mga Tuntunin at Kundisyon",
-        terms_content: `Ang mga tuntunin at kundisyong ito ay namamahala sa iyong pakikilahok...`,
+        terms_summary: "Bago magsimula, pakibasa kung paano kokolektahin at gagamitin ang iyong impormasyon para sa sarbey na ito.",
+        terms_read_btn: "Basahin ang Buong Tuntunin at Kundisyon",
+        terms_agree_pre: "Sumasang-ayon ako sa",
+        terms_checkbox: "Sumasang-ayon Ako sa Mga Tuntunin at Kundisyon at Patakaran sa Privacy",
+        terms_points: [
+            "Kinukolekta namin ang iyong pangalan, email, impormasyong demograpiko, at puna upang masukat at mapabuti lamang ang kalidad ng serbisyo ng mga tanggapan ng CSPC.",
+            "Ang iyong mga sagot ay ginagamit lamang para sa institusyonal na pagsusuri, pag-uulat, at analytics. Isang beses lang maaaring magsumite ang isang Google account bawat opisina.",
+            "Ang iyong personal na impormasyon ay mananatiling kompidensyal at hindi ibebenta, ipaparenta, o ibabahagi sa labas ng CSPC at mga awtorisadong kasosyo nito sa pag-uulat.",
+            "Maaari mong basahin ang buong Tuntunin at Kundisyon / Patakaran sa Privacy anumang oras gamit ang buton sa ibaba bago sumang-ayon."
+        ],
         client_prof: "Pagkakakilanlan ng Kliyente",
         lbl_client_type: "Uri ng Kliyente:",
         opt_citizen: "Mamamayan",
@@ -618,6 +780,18 @@ function renderSQD() {
     });
 }
 
+// Renders the bulleted Terms & Conditions summary points for the current language
+function renderTermsPoints() {
+    const list = document.getElementById('terms-points-list');
+    if (!list) return;
+    list.innerHTML = '';
+    (i18n[currentLang].terms_points || []).forEach(point => {
+        const li = document.createElement('li');
+        li.textContent = point;
+        list.appendChild(li);
+    });
+}
+
 function updateTranslations() {
     document.querySelectorAll("[data-i18n]").forEach(el => {
         const key = el.getAttribute("data-i18n");
@@ -625,9 +799,6 @@ function updateTranslations() {
             el.innerHTML = i18n[currentLang][key];
         }
     });
-    
-    const termsEl = document.getElementById("terms-content");
-    if(termsEl) termsEl.innerText = i18n[currentLang].terms_content;
 }
 
 function setLanguage(lang) {
@@ -636,6 +807,7 @@ function setLanguage(lang) {
     document.getElementById('btn-tl').className = lang === 'tl' ? 'btn btn-primary btn-sm fw-bold shadow-sm' : 'btn bg-transparent border btn-sm fw-bold shadow-sm text-body';
     updateTranslations();
     renderSQD();
+    renderTermsPoints();
 }
 
 // =====================================
@@ -644,16 +816,17 @@ function setLanguage(lang) {
 function submitAll(event) {
     if (event) event.preventDefault();
 
+    // Re-validate every stage (Terms, Profile, CC, SQD) before allowing submission
+    for (let stage = 1; stage <= 4; stage++) {
+        if (!validateStage(stage)) {
+            navigate(stage);
+            return;
+        }
+    }
+
     const formElement = document.getElementById('surveyForm');
     const formData = new FormData(formElement);
     const data = Object.fromEntries(formData.entries());
-
-    // 1. Siguraduhing may office_id na pinili bago i-submit
-    if (!data.office_id) {
-        alert("Paki-pili ang Office (Stage 2) na ire-rate bago mag-submit.");
-        navigate(2);
-        return;
-    }
 
     // 2. Magbigay ng default value kung blangko ang tinype o hindi sinagutan ang dropdown
     data.respondent_name = data.respondent_name?.trim() || 'Anonymous';
@@ -713,6 +886,11 @@ function logout(){
         window.location.href = '/login';
     }
 }
+
+// Toggle the Start Survey button based on the Stage 1 Terms & Conditions checkbox
+document.getElementById('agreeTermsStage1').addEventListener('change', function () {
+    document.getElementById('btnStartSurvey').disabled = !this.checked;
+});
 
 // Initial Load Setup
 setLanguage('en');

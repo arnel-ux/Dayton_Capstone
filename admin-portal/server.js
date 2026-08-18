@@ -1,9 +1,14 @@
+require('dotenv').config();
+
 const express = require('express');
 const path = require('path');
-const mysql = require('mysql2'); 
+const mysql = require('mysql2');
 const { spawn } = require('child_process'); // 🔥 ADDED THIS LINE
+const session = require('express-session');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const app = express();
-const port = 3000; 
+const port = 3000;
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -11,6 +16,41 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+
+// ==========================================
+// SESSION & PASSPORT (Google OAuth for clients)
+// ==========================================
+app.use(session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: { maxAge: 1000 * 60 * 60 * 8 } // 8 hours
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((user, done) => done(null, user));
+
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: process.env.GOOGLE_CALLBACK_URL
+}, (accessToken, refreshToken, profile, done) => {
+    const email = profile.emails && profile.emails[0] ? profile.emails[0].value : null;
+    if (!email) return done(null, false);
+    return done(null, { email, name: profile.displayName });
+}));
+
+// Ensures only Google-authenticated clients can view/submit the survey
+function ensureClientAuth(req, res, next) {
+    if (req.isAuthenticated() && req.user && req.user.email) return next();
+    if (req.is('application/json') || req.xhr) {
+        return res.status(401).json({ success: false, message: "Please sign in with Google before submitting the survey." });
+    }
+    return res.redirect('/login');
+}
 
 // ==========================================
 // DATABASE CONNECTION (MySQL)
@@ -130,7 +170,11 @@ db.query(createClustersTableQuery, (err) => {
                         db.query("ALTER TABLE survey_responses ADD COLUMN respondent_name VARCHAR(255) DEFAULT 'Anonymous'", () => {});
                         db.query("ALTER TABLE survey_responses ADD COLUMN topic VARCHAR(100) DEFAULT 'General'", () => {});
                         db.query("ALTER TABLE survey_responses ADD COLUMN region VARCHAR(100) NULL", () => {});
-                        
+                        db.query("ALTER TABLE survey_responses ADD COLUMN google_email VARCHAR(255) NULL", () => {
+                            // 1 Google account = 1 survey per office, enforced at the DB level too
+                            db.query("ALTER TABLE survey_responses ADD UNIQUE KEY unique_office_google_email (office_id, google_email)", () => {});
+                        });
+
                         // Pinakahuli ang Client Profiles
                         db.query(createClientProfilesTableQuery, (err) => {
                             if (err) console.error("❌ Error creating client_profiles table:", err);
@@ -179,35 +223,52 @@ app.get('/login', (req, res) => res.render('login'));
 // 🔥 DINAGDAG: ROUTE PARA SA ADMIN LOGIN AUTHENTICATION
 app.post('/auth-login', (req, res) => {
     const { username, password } = req.body;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (username === 'admin' && password === 'admin123') {
         // Admin Condition
         res.redirect('/dashboard');
-    } else if (emailRegex.test(username)) {
-        // Client Condition
-        res.redirect('/client-survey');
     } else {
-        // Error Condition
-        res.send("<script>alert('Invalid credentials or email format!'); window.location.href='/login';</script>");
+        // Error Condition — clients must use the "Sign in with Google" button instead
+        res.send("<script>alert('Invalid admin credentials!'); window.location.href='/login';</script>");
     }
 });
 
 app.get('/client-login', (req, res) => res.render('client-login'));
 app.get('/gmail-login', (req, res) => res.render('gmail-login'));
 
-app.get('/client-survey', (req, res) => {
+// ==========================================
+// GOOGLE OAUTH ROUTES (Client login)
+// ==========================================
+app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+app.get('/auth/google/callback',
+    passport.authenticate('google', { failureRedirect: '/login' }),
+    (req, res) => res.redirect('/client-survey')
+);
+
+app.get('/logout', (req, res) => {
+    req.logout(() => res.redirect('/login'));
+});
+
+app.get('/client-survey', ensureClientAuth, (req, res) => {
     db.query('SELECT * FROM offices ORDER BY office_name ASC', (err, offices) => {
-        if (err) return res.render('client-survey', { offices: [] });
-        res.render('client-survey', { offices: offices });
+        if (err) return res.render('client-survey', { offices: [], clientEmail: req.user.email, takenOfficeIds: [] });
+
+        // Offices this Google account has already submitted a survey for — disabled in the dropdown
+        db.query('SELECT office_id FROM survey_responses WHERE google_email = ?', [req.user.email], (err2, rows) => {
+            const takenOfficeIds = err2 ? [] : rows.map(r => r.office_id);
+            res.render('client-survey', { offices: offices, clientEmail: req.user.email, takenOfficeIds: takenOfficeIds });
+        });
     });
 });
 
-app.post('/submit-survey', (req, res) => {
+app.post('/submit-survey', ensureClientAuth, (req, res) => {
     console.log("📥 [Survey Payload Dumating]:", req.body);
 
-    const { 
-        office_id, region, topic, cc1, cc2, cc3, 
+    const googleEmail = req.user.email;
+
+    const {
+        office_id, region, topic, cc1, cc2, cc3,
         sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments
     } = req.body;
 
@@ -215,7 +276,6 @@ app.post('/submit-survey', (req, res) => {
     const client_type = req.body.client_type || req.body.clientType || req.body.client_role;
     const age = req.body.age || req.body.clientAge || req.body.client_age;
     const gender = req.body.gender || req.body.clientGender || req.body.client_gender;
-    const email = req.body.email || req.body.clientEmail || req.body.client_email;
 
     if (!office_id) {
         return res.status(400).json({ success: false, message: "Missing selected office ID." });
@@ -229,8 +289,27 @@ app.post('/submit-survey', (req, res) => {
     const finalAge = cleanStr(age) || 'Not Specified';
     const finalGender = cleanStr(gender) || 'Not Specified';
     const finalRegion = cleanStr(region) || 'Not Specified';
-    const finalEmail = cleanStr(email) || 'Not Specified';
+    const finalOfficeId = cleanInt(office_id);
 
+    // 1 Google account can only submit ONE survey per office
+    db.query(
+        'SELECT id FROM survey_responses WHERE office_id = ? AND google_email = ? LIMIT 1',
+        [finalOfficeId, googleEmail],
+        (checkErr, existing) => {
+            if (checkErr) {
+                console.error("❌ [Survey] Duplicate-check error:", checkErr);
+                return res.status(500).json({ success: false, message: "Database error while checking previous submissions." });
+            }
+
+            if (existing && existing.length > 0) {
+                return res.status(409).json({ success: false, message: "You have already evaluated this office. You cannot submit again." });
+            }
+
+            submitSurveyResponse();
+        }
+    );
+
+    function submitSurveyResponse() {
     // DYNAMIC 6-MONTH PERIOD LOGIC (BASED ON CURRENT DATE OF SUBMISSION)
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
@@ -238,25 +317,28 @@ app.post('/submit-survey', (req, res) => {
     const currentPeriod = currentMonth < 6 ? `Jan - Jun ${currentYear}` : `Jul - Dec ${currentYear}`;
 
     const insertQuery = `
-        INSERT INTO survey_responses 
-        (office_id, respondent_name, topic, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO survey_responses
+        (office_id, respondent_name, topic, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const values = [
-        cleanInt(office_id), finalName, cleanStr(topic) || 'General', finalRegion, 
-        cleanStr(cc1), cleanStr(cc2), cleanStr(cc3), 
-        cleanInt(sqd0), cleanInt(sqd1), cleanInt(sqd2), cleanInt(sqd3), 
+        finalOfficeId, finalName, cleanStr(topic) || 'General', finalRegion,
+        cleanStr(cc1), cleanStr(cc2), cleanStr(cc3),
+        cleanInt(sqd0), cleanInt(sqd1), cleanInt(sqd2), cleanInt(sqd3),
         cleanInt(sqd4), cleanInt(sqd5), cleanInt(sqd6), cleanInt(sqd7), cleanInt(sqd8),
-        cleanStr(comments) || 'N/A', currentPeriod
+        cleanStr(comments) || 'N/A', currentPeriod, googleEmail
     ];
 
     db.query(insertQuery, values, (err, result) => {
         if (err) {
+            if (err.code === 'ER_DUP_ENTRY') {
+                return res.status(409).json({ success: false, message: "You have already evaluated this office. You cannot submit again." });
+            }
             console.error("❌ [Survey] Database insertion error:", err);
             return res.status(500).json({ success: false, message: "Database insertion error: " + err.message });
         }
-        
+
         const surveyResponseId = result.insertId;
         
         const insertProfileQuery = `
@@ -265,7 +347,7 @@ app.post('/submit-survey', (req, res) => {
         `;
         
         const profileValues = [
-            surveyResponseId, finalName, finalClientType, finalAge, finalGender, finalRegion, finalEmail
+            surveyResponseId, finalName, finalClientType, finalAge, finalGender, finalRegion, googleEmail
         ];
 
         db.query(insertProfileQuery, profileValues, (profileErr) => {
@@ -321,6 +403,7 @@ app.post('/submit-survey', (req, res) => {
             }
         });
     });
+    }
 });
 
 // ==========================================
