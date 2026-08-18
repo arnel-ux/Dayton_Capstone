@@ -787,6 +787,9 @@ app.get('/api/public-dashboard', (req, res) => {
         JOIN offices o ON s.office_id = o.id
     `;
 
+
+
+    
     db.query(query, (err, results) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
 
