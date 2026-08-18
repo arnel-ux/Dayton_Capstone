@@ -224,7 +224,7 @@
     // FUNCTION PARA SA DATABASE ADD AT EDIT (FETCH API)
     async function saveItem() {
         const textVal = document.getElementById('itemText').value.trim();
-        if (!textVal) return alert('Hindi pwedeng walang laman ang text field!');
+        if (!textVal) return AppAlert.warning('Hindi pwedeng walang laman ang text field!');
 
         const payload = { category: currentCategory, content: textVal };
         let endpoint = currentMode === 'edit' ? '/settings/edit' : '/settings/add';
@@ -237,21 +237,25 @@
                 body: JSON.stringify(payload)
             });
             const data = await response.json();
-            
+
             if (data.success) {
                 window.location.reload(); // I-refresh ang page para mai-render ang binago mula sa DB safely
             } else {
-                alert("Nagkaproblema sa pag-save sa database.");
+                await AppAlert.error("Nagkaproblema sa pag-save sa database.");
             }
         } catch(err) {
             console.error(err);
-            alert("Database Error.");
+            await AppAlert.error("Database Error.");
         }
     }
 
     // FUNCTION PARA SA DATABASE DELETE (FETCH API)
     async function deleteItem(btn, dbId) {
-        if (!confirm('Sigurado ka bang gusto mong burahin ang item na ito sa database?')) return;
+        const confirmed = await AppAlert.confirm('Sigurado ka bang gusto mong burahin ang item na ito sa database?', {
+            title: 'Delete this item?',
+            confirmText: 'Yes, delete it!'
+        });
+        if (!confirmed) return;
 
         try {
             const response = await fetch('/settings/delete', {
@@ -260,18 +264,19 @@
                 body: JSON.stringify({ id: dbId })
             });
             const data = await response.json();
-            
+
             if (data.success) {
                 let tr = btn.closest('tr');
                 let tbody = tr.parentNode;
                 tr.remove();
                 reindexTable(tbody); // Awtomatikong itatama ang numbering (SQD0, SQD1, CC1, etc.)
+                AppAlert.success('Item deleted successfully.');
             } else {
-                alert("Hindi nabura ang item sa database.");
+                await AppAlert.error("Hindi nabura ang item sa database.");
             }
         } catch(err) {
             console.error(err);
-            alert("Database Error.");
+            await AppAlert.error("Database Error.");
         }
     }
 

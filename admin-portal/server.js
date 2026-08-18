@@ -229,7 +229,7 @@ app.post('/auth-login', (req, res) => {
         res.redirect('/dashboard');
     } else {
         // Error Condition — clients must use the "Sign in with Google" button instead
-        res.send("<script>alert('Invalid admin credentials!'); window.location.href='/login';</script>");
+        res.redirect('/login?error=' + encodeURIComponent('Invalid admin credentials!'));
     }
 });
 

@@ -273,5 +273,14 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="/js/alerts.js"></script>
+    <script>
+        const loginErrorMsg = new URLSearchParams(window.location.search).get('error');
+        if (loginErrorMsg) {
+            AppAlert.error(loginErrorMsg, 'Login Failed');
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    </script>
 </body>
 </html>
