@@ -7,6 +7,7 @@ const { spawn } = require('child_process'); // 🔥 ADDED THIS LINE
 const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const bcrypt = require('bcryptjs');
 const app = express();
 const port = 3000;
 
@@ -163,6 +164,7 @@ const createClientAccountsTableQuery = `
 CREATE TABLE IF NOT EXISTS client_accounts (
     email VARCHAR(255) PRIMARY KEY,
     respondent_name VARCHAR(255) NULL,
+    password VARCHAR(255) NULL,
     region VARCHAR(100) NULL,
     age VARCHAR(50) NULL,
     gender VARCHAR(50) NULL,
@@ -220,6 +222,10 @@ db.query(createClustersTableQuery, (err) => {
                         db.query(createClientAccountsTableQuery, (err) => {
                             if (err) console.error("❌ Error creating client_accounts table:", err);
                             else console.log('✅ client_accounts table verified/created successfully!');
+                            // Older deployments created this table before the `password` column
+                            // existed (Google sign-in used to log clients in directly, no local
+                            // password) — add it now so existing rows can be upgraded in place.
+                            db.query("ALTER TABLE client_accounts ADD COLUMN password VARCHAR(255) NULL", () => {});
                         });
                     }
                 });
@@ -281,31 +287,124 @@ app.post('/auth-login', (req, res) => {
     }
 
     const emailInput = String(username || '').trim().toLowerCase();
-    if (!emailInput) {
-        return res.send("<script>alert('Invalid credentials!'); window.location.href='/login';</script>");
+    if (!emailInput || !password) {
+        return res.redirect('/login?error=' + encodeURIComponent('Please enter both your email and password.'));
     }
 
-    db.query('SELECT email FROM client_accounts WHERE email = ? LIMIT 1', [emailInput], (err, rows) => {
-        if (!err && rows && rows.length > 0) {
-            req.session.clientEmail = rows[0].email;
-            return res.redirect('/client-survey');
+    db.query('SELECT email, password FROM client_accounts WHERE email = ? LIMIT 1', [emailInput], async (err, rows) => {
+        if (err) {
+            return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
         }
-        res.send("<script>alert('Invalid credentials! Registered clients must first sign in once with Google before using this form.'); window.location.href='/login';</script>");
+        if (!rows || rows.length === 0) {
+            return res.redirect('/login?error=' + encodeURIComponent('No account found for that email. Please register using the "Sign in with Google" button first.'));
+        }
+
+        const account = rows[0];
+        if (!account.password) {
+            return res.redirect('/login?error=' + encodeURIComponent('This account has no password set yet. Please sign in with Google once to create one.'));
+        }
+
+        const passwordMatches = await bcrypt.compare(password, account.password);
+        if (!passwordMatches) {
+            return res.redirect('/login?error=' + encodeURIComponent('Invalid email or password.'));
+        }
+
+        req.session.clientEmail = account.email;
+        return res.redirect('/client-survey');
     });
 });
 
 app.get('/client-login', (req, res) => res.render('client-login'));
-app.get('/gmail-login', (req, res) => res.render('gmail-login'));
 
 // ==========================================
 // GOOGLE OAUTH ROUTES (Client login)
 // ==========================================
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+// `prompt: 'select_account'` forces Google's account chooser on every click instead of
+// silently re-authenticating whichever Google account is already signed in on this device.
+app.get('/auth/google', passport.authenticate('google', {
+    scope: ['profile', 'email'],
+    prompt: 'select_account'
+}));
 
+// Google is only used as a quick REGISTRATION helper, not a recurring login method:
+//   - New email  -> stash the Google name/email in session and send them to set a local
+//                   password (they are NOT logged in yet).
+//   - Existing email with a password already set -> do NOT log them in here; send them
+//     back to /login with a flag so it can explain they should use email + password.
+//   - Existing email with no password (legacy accounts created before this flow existed)
+//     -> treat like a new user and have them set a password to finish the upgrade.
 app.get('/auth/google/callback',
     passport.authenticate('google', { failureRedirect: '/login' }),
-    (req, res) => res.redirect('/client-survey')
+    (req, res) => {
+        const email = req.user && req.user.email;
+        const name = req.user && req.user.name;
+
+        if (!email) {
+            return req.logout(() => res.redirect('/login?error=' + encodeURIComponent('Google sign-in failed. Please try again.')));
+        }
+
+        db.query('SELECT email, password FROM client_accounts WHERE email = ? LIMIT 1', [email], (err, rows) => {
+            // Passport's Google strategy logs the user into the session by default — we only
+            // want that to persist once a local password has actually been set (or already exists).
+            req.logout(() => {
+                if (err) {
+                    return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
+                }
+
+                const existingAccount = rows && rows.length > 0 ? rows[0] : null;
+                if (existingAccount && existingAccount.password) {
+                    return res.redirect('/login?googleExists=1&email=' + encodeURIComponent(email));
+                }
+
+                req.session.pendingGoogleUser = { email, name };
+                return res.redirect('/complete-google-registration');
+            });
+        });
+    }
 );
+
+app.get('/complete-google-registration', (req, res) => {
+    const pending = req.session.pendingGoogleUser;
+    if (!pending) return res.redirect('/login');
+    res.render('complete-google-registration', {
+        name: pending.name || '',
+        email: pending.email
+    });
+});
+
+app.post('/complete-google-registration', async (req, res) => {
+    const pending = req.session.pendingGoogleUser;
+    if (!pending) return res.redirect('/login');
+
+    const { password, confirmPassword } = req.body;
+
+    if (!password || password.length < 8) {
+        return res.redirect('/complete-google-registration?error=' + encodeURIComponent('Password must be at least 8 characters long.'));
+    }
+    if (password !== confirmPassword) {
+        return res.redirect('/complete-google-registration?error=' + encodeURIComponent('Passwords do not match.'));
+    }
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        db.query(
+            `INSERT INTO client_accounts (email, respondent_name, password)
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE respondent_name = VALUES(respondent_name), password = VALUES(password)`,
+            [pending.email, pending.name || null, hashedPassword],
+            (err) => {
+                if (err) {
+                    return res.redirect('/complete-google-registration?error=' + encodeURIComponent('Could not save your account. Please try again.'));
+                }
+                req.session.clientEmail = pending.email;
+                delete req.session.pendingGoogleUser;
+                return res.redirect('/client-survey');
+            }
+        );
+    } catch (e) {
+        return res.redirect('/complete-google-registration?error=' + encodeURIComponent('Server error. Please try again.'));
+    }
+});
 
 app.get('/logout', (req, res) => {
     req.session.clientEmail = null;
