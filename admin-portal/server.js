@@ -17,6 +17,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
+// Exposes the current request path to every EJS view so layout partials
+// (e.g. the sidebar) can highlight/expand based on where the admin is.
+app.use((req, res, next) => {
+    res.locals.currentPath = req.path;
+    next();
+});
+
 // ==========================================
 // SESSION & PASSPORT (Google OAuth for clients)
 // ==========================================
@@ -43,11 +50,24 @@ passport.use(new GoogleStrategy({
     return done(null, { email, name: profile.displayName });
 }));
 
-// Ensures only Google-authenticated clients can view/submit the survey
+// Resolves the signed-in client's email from either Google OAuth (passport) or the
+// unified email/password login form (req.session.clientEmail) — the two ways a
+// registered client can end up authenticated.
+function getClientEmail(req) {
+    if (req.isAuthenticated && req.isAuthenticated() && req.user && req.user.email) return req.user.email;
+    if (req.session && req.session.clientEmail) return req.session.clientEmail;
+    return null;
+}
+
+// Ensures only an authenticated client (Google OR unified login) can view/submit the survey
 function ensureClientAuth(req, res, next) {
-    if (req.isAuthenticated() && req.user && req.user.email) return next();
+    const email = getClientEmail(req);
+    if (email) {
+        req.clientEmail = email;
+        return next();
+    }
     if (req.is('application/json') || req.xhr) {
-        return res.status(401).json({ success: false, message: "Please sign in with Google before submitting the survey." });
+        return res.status(401).json({ success: false, message: "Please sign in before submitting the survey." });
     }
     return res.redirect('/login');
 }
@@ -136,6 +156,20 @@ CREATE TABLE IF NOT EXISTS client_profiles (
     FOREIGN KEY (survey_response_id) REFERENCES survey_responses(id) ON DELETE CASCADE
 );`;
 
+// One row per Google/registered-client account. Holds the demographic details
+// (region, age, gender) locked-in from that account's FIRST survey submission,
+// plus lets registered clients log in via the regular /login form.
+const createClientAccountsTableQuery = `
+CREATE TABLE IF NOT EXISTS client_accounts (
+    email VARCHAR(255) PRIMARY KEY,
+    respondent_name VARCHAR(255) NULL,
+    region VARCHAR(100) NULL,
+    age VARCHAR(50) NULL,
+    gender VARCHAR(50) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);`;
+
 // SINKRONISADONG PAGGAWA NG MGA TABLE (Para maiwasan ang Foreign Key Errors)
 db.query(createClustersTableQuery, (err) => {
     if (err) {
@@ -180,6 +214,12 @@ db.query(createClustersTableQuery, (err) => {
                             if (err) console.error("❌ Error creating client_profiles table:", err);
                             else console.log('✅ client_profiles table verified/created successfully!');
                         });
+
+                        // Client accounts (locked demographics + unified login lookup)
+                        db.query(createClientAccountsTableQuery, (err) => {
+                            if (err) console.error("❌ Error creating client_accounts table:", err);
+                            else console.log('✅ client_accounts table verified/created successfully!');
+                        });
                     }
                 });
             }
@@ -220,17 +260,33 @@ db.query(createSettingsTableQuery, (err) => {
 app.get('/', (req, res) => res.render('index'));
 app.get('/login', (req, res) => res.render('login'));
 
-// 🔥 DINAGDAG: ROUTE PARA SA ADMIN LOGIN AUTHENTICATION
+// ==========================================
+// UNIFIED LOGIN (Admin OR registered Client)
+// ==========================================
+// The main /login form posts here. Admin credentials still work as before;
+// additionally, any email already known in client_accounts (i.e. someone who has
+// signed in with Google and submitted at least one survey) can log back in from
+// this same form instead of clicking "Sign in with Google" again.
 app.post('/auth-login', (req, res) => {
     const { username, password } = req.body;
 
     if (username === 'admin' && password === 'admin123') {
-        // Admin Condition
-        res.redirect('/dashboard');
-    } else {
-        // Error Condition — clients must use the "Sign in with Google" button instead
-        res.send("<script>alert('Invalid admin credentials!'); window.location.href='/login';</script>");
+        req.session.user = { username: 'admin', role: 'admin' };
+        return res.redirect('/dashboard');
     }
+
+    const emailInput = String(username || '').trim().toLowerCase();
+    if (!emailInput) {
+        return res.send("<script>alert('Invalid credentials!'); window.location.href='/login';</script>");
+    }
+
+    db.query('SELECT email FROM client_accounts WHERE email = ? LIMIT 1', [emailInput], (err, rows) => {
+        if (!err && rows && rows.length > 0) {
+            req.session.clientEmail = rows[0].email;
+            return res.redirect('/client-survey');
+        }
+        res.send("<script>alert('Invalid credentials! Registered clients must first sign in once with Google before using this form.'); window.location.href='/login';</script>");
+    });
 });
 
 app.get('/client-login', (req, res) => res.render('client-login'));
@@ -247,17 +303,25 @@ app.get('/auth/google/callback',
 );
 
 app.get('/logout', (req, res) => {
+    req.session.clientEmail = null;
     req.logout(() => res.redirect('/login'));
 });
 
 app.get('/client-survey', ensureClientAuth, (req, res) => {
-    db.query('SELECT * FROM offices ORDER BY office_name ASC', (err, offices) => {
-        if (err) return res.render('client-survey', { offices: [], clientEmail: req.user.email, takenOfficeIds: [] });
+    const clientEmail = req.clientEmail;
 
-        // Offices this Google account has already submitted a survey for — disabled in the dropdown
-        db.query('SELECT office_id FROM survey_responses WHERE google_email = ?', [req.user.email], (err2, rows) => {
+    db.query('SELECT * FROM offices ORDER BY office_name ASC', (err, offices) => {
+        if (err) return res.render('client-survey', { offices: [], clientEmail, takenOfficeIds: [], clientProfile: null });
+
+        // Offices this account has already submitted a survey for — disabled in the dropdown
+        db.query('SELECT office_id FROM survey_responses WHERE google_email = ?', [clientEmail], (err2, rows) => {
             const takenOfficeIds = err2 ? [] : rows.map(r => r.office_id);
-            res.render('client-survey', { offices: offices, clientEmail: req.user.email, takenOfficeIds: takenOfficeIds });
+
+            // Saved/locked demographics from this account's first-ever submission (if any)
+            db.query('SELECT region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [clientEmail], (err3, profileRows) => {
+                const clientProfile = (!err3 && profileRows && profileRows.length > 0) ? profileRows[0] : null;
+                res.render('client-survey', { offices, clientEmail, takenOfficeIds, clientProfile });
+            });
         });
     });
 });
@@ -265,49 +329,60 @@ app.get('/client-survey', ensureClientAuth, (req, res) => {
 app.post('/submit-survey', ensureClientAuth, (req, res) => {
     console.log("📥 [Survey Payload Dumating]:", req.body);
 
-    const googleEmail = req.user.email;
+    const googleEmail = req.clientEmail;
 
-    const {
-        office_id, region, topic, cc1, cc2, cc3,
-        sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments
-    } = req.body;
+    // Region/Age/Sex are locked per account after the first-ever submission. Standard
+    // HTML forms don't submit values for disabled fields, so req.body may simply be
+    // missing region/age/gender on repeat visits — fetch the saved profile first and
+    // let it win over (or fill in for) whatever the client actually posted.
+    db.query('SELECT region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [googleEmail], (profileLookupErr, profileLookupRows) => {
+        const savedProfile = (!profileLookupErr && profileLookupRows && profileLookupRows.length > 0) ? profileLookupRows[0] : null;
 
-    const respondent_name = req.body.respondent_name || req.body.respondentName || req.body.client_name || req.body.name;
-    const client_type = req.body.client_type || req.body.clientType || req.body.client_role;
-    const age = req.body.age || req.body.clientAge || req.body.client_age;
-    const gender = req.body.gender || req.body.clientGender || req.body.client_gender;
+        const {
+            office_id, topic, cc1, cc2, cc3,
+            sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments
+        } = req.body;
 
-    if (!office_id) {
-        return res.status(400).json({ success: false, message: "Missing selected office ID." });
-    }
+        const respondent_name = req.body.respondent_name || req.body.respondentName || req.body.client_name || req.body.name;
+        const client_type = req.body.client_type || req.body.clientType || req.body.client_role;
 
-    const cleanInt = (val) => (val !== undefined && val !== "" && val !== null && !isNaN(val)) ? parseInt(val, 10) : null;
-    const cleanStr = (val) => (val !== undefined && val !== null && String(val).trim() !== "") ? String(val).trim() : null;
+        // Saved DB value always wins once it exists — this is what makes the fields
+        // truly locked server-side, not just visually disabled in the browser.
+        const region = (savedProfile && savedProfile.region) || req.body.region;
+        const age = (savedProfile && savedProfile.age) || req.body.age || req.body.clientAge || req.body.client_age;
+        const gender = (savedProfile && savedProfile.gender) || req.body.gender || req.body.clientGender || req.body.client_gender;
 
-    const finalName = cleanStr(respondent_name) || 'Anonymous';
-    const finalClientType = cleanStr(client_type) || 'Citizen';
-    const finalAge = cleanStr(age) || 'Not Specified';
-    const finalGender = cleanStr(gender) || 'Not Specified';
-    const finalRegion = cleanStr(region) || 'Not Specified';
-    const finalOfficeId = cleanInt(office_id);
-
-    // 1 Google account can only submit ONE survey per office
-    db.query(
-        'SELECT id FROM survey_responses WHERE office_id = ? AND google_email = ? LIMIT 1',
-        [finalOfficeId, googleEmail],
-        (checkErr, existing) => {
-            if (checkErr) {
-                console.error("❌ [Survey] Duplicate-check error:", checkErr);
-                return res.status(500).json({ success: false, message: "Database error while checking previous submissions." });
-            }
-
-            if (existing && existing.length > 0) {
-                return res.status(409).json({ success: false, message: "You have already evaluated this office. You cannot submit again." });
-            }
-
-            submitSurveyResponse();
+        if (!office_id) {
+            return res.status(400).json({ success: false, message: "Missing selected office ID." });
         }
-    );
+
+        const cleanInt = (val) => (val !== undefined && val !== "" && val !== null && !isNaN(val)) ? parseInt(val, 10) : null;
+        const cleanStr = (val) => (val !== undefined && val !== null && String(val).trim() !== "") ? String(val).trim() : null;
+
+        const finalName = cleanStr(respondent_name) || 'Anonymous';
+        const finalClientType = cleanStr(client_type) || 'Citizen';
+        const finalAge = cleanStr(age) || 'Not Specified';
+        const finalGender = cleanStr(gender) || 'Not Specified';
+        const finalRegion = cleanStr(region) || 'Not Specified';
+        const finalOfficeId = cleanInt(office_id);
+
+        // 1 account can only submit ONE survey per office
+        db.query(
+            'SELECT id FROM survey_responses WHERE office_id = ? AND google_email = ? LIMIT 1',
+            [finalOfficeId, googleEmail],
+            (checkErr, existing) => {
+                if (checkErr) {
+                    console.error("❌ [Survey] Duplicate-check error:", checkErr);
+                    return res.status(500).json({ success: false, message: "Database error while checking previous submissions." });
+                }
+
+                if (existing && existing.length > 0) {
+                    return res.status(409).json({ success: false, message: "You have already evaluated this office. You cannot submit again." });
+                }
+
+                submitSurveyResponse();
+            }
+        );
 
     function submitSurveyResponse() {
     // DYNAMIC 6-MONTH PERIOD LOGIC (BASED ON CURRENT DATE OF SUBMISSION)
@@ -352,7 +427,18 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
 
         db.query(insertProfileQuery, profileValues, (profileErr) => {
             if (profileErr) console.error("❌ [Client Profile] Error inserting profile:", profileErr);
-            
+
+            // Lock in this account's demographics on its first-ever submission. Region/age/gender
+            // are deliberately left out of the UPDATE clause — once set, they never change again.
+            const upsertAccountQuery = `
+                INSERT INTO client_accounts (email, respondent_name, region, age, gender)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE respondent_name = VALUES(respondent_name)
+            `;
+            db.query(upsertAccountQuery, [googleEmail, finalName, finalRegion, finalAge, finalGender], (acctErr) => {
+                if (acctErr) console.error("❌ [Client Account] Error upserting locked profile:", acctErr);
+            });
+
             // 1. Instantly respond to the frontend so the client sees "Thank You" without waiting
             res.json({ success: true, message: "Survey recorded successfully!" });
 
@@ -404,20 +490,43 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
         });
     });
     }
+    });
 });
+
+// ==========================================
+// SEMESTER FILTER HELPERS
+// ==========================================
+// Survey submissions are auto-tagged with a period string like "Jan - Jun 2026"
+// or "Jul - Dec 2026" (see submitSurveyResponse). These map 1:1 onto academic
+// semesters, so we surface them as a single "Semester" dropdown everywhere
+// instead of separate Start Date / End Date / Quarter pickers.
+function periodToSemesterLabel(period) {
+    const match = /^(Jan - Jun|Jul - Dec) (\d{4})$/.exec(period || '');
+    if (!match) return period;
+    const semester = match[1] === 'Jan - Jun' ? '1st Semester' : '2nd Semester';
+    return `${semester}, A.Y. ${match[2]}`;
+}
+
+function getSemesterOptions(callback) {
+    db.query(
+        'SELECT DISTINCT period_year_quarter FROM survey_responses WHERE period_year_quarter IS NOT NULL ORDER BY period_year_quarter DESC',
+        (err, rows) => {
+            if (err || !rows) return callback([]);
+            callback(rows.map(r => ({ value: r.period_year_quarter, label: periodToSemesterLabel(r.period_year_quarter) })));
+        }
+    );
+}
 
 // ==========================================
 // 2. Admin Dashboard Routes
 // ==========================================
 app.get('/dashboard', (req, res) => {
-    const { startDate, endDate } = req.query;
-    const hasDateFilter = startDate && endDate;
+    const { semester } = req.query;
+    const hasSemesterFilter = !!semester;
 
-    // Ang mga sumusunod na WHERE clause fragments ay dinadagdag sa mga query
-    // kung may pinili ang admin na Start Date at End Date sa dashboard filter.
-    const dateWhere = hasDateFilter ? ' WHERE DATE(s.created_at) BETWEEN ? AND ? ' : '';
-    const dateWhereAnd = hasDateFilter ? ' AND DATE(s.created_at) BETWEEN ? AND ? ' : '';
-    const dateParams = hasDateFilter ? [startDate, endDate] : [];
+    const dateWhere = hasSemesterFilter ? ' WHERE s.period_year_quarter = ? ' : '';
+    const dateWhereAnd = hasSemesterFilter ? ' AND s.period_year_quarter = ? ' : '';
+    const dateParams = hasSemesterFilter ? [semester] : [];
 
     db.query(`SELECT COUNT(*) AS total FROM survey_responses s${dateWhere}`, dateParams, (err, totalRes) => {
         const totalRespondents = (totalRes && totalRes[0]) ? totalRes[0].total : 0;
@@ -511,11 +620,13 @@ app.get('/dashboard', (req, res) => {
                             });
                         }
 
-                        res.render('dashboard', {
-                            dashboardData: { overallRating: overallAvgScore, overallLevel: interpretation, academicYear: "A.Y. 2026-2027" },
-                            chartData: chartData, clusterCards: clusterCards, satisfactionRate: overallAvgScore,
-                            totalRespondents: totalRespondents, totalOffices: totalOffices, reportData: reportData,
-                            filterStartDate: startDate || '', filterEndDate: endDate || ''
+                        getSemesterOptions((semesterOptions) => {
+                            res.render('dashboard', {
+                                dashboardData: { overallRating: overallAvgScore, overallLevel: interpretation, academicYear: "A.Y. 2026-2027" },
+                                chartData: chartData, clusterCards: clusterCards, satisfactionRate: overallAvgScore,
+                                totalRespondents: totalRespondents, totalOffices: totalOffices, reportData: reportData,
+                                semesterOptions: semesterOptions, selectedSemester: semester || ''
+                            });
                         });
                     });
                 });
@@ -715,28 +826,30 @@ app.post('/settings/delete', (req, res) => {
 // ==========================================
 // 5. Helper Function para sa Cluster Queries
 // ==========================================
-function getClusterPerformanceData(clusterName, callback) {
+function getClusterPerformanceData(clusterName, semester, callback) {
+    const semesterJoinFilter = semester ? ' AND s.period_year_quarter = ?' : '';
     const clusterQuery = `
-        SELECT 
+        SELECT
             o.id,
             o.office_name AS fullName,
-            IF(LOCATE(' ', o.office_name) > 0, 
-               REPLACE(REPLACE(REPLACE(UPPER(o.office_name), 'OFFICE OF THE ', ''), 'OFFICE OF ', ''), 'VICE PRESIDENT FOR ', ''), 
+            IF(LOCATE(' ', o.office_name) > 0,
+               REPLACE(REPLACE(REPLACE(UPPER(o.office_name), 'OFFICE OF THE ', ''), 'OFFICE OF ', ''), 'VICE PRESIDENT FOR ', ''),
                SUBSTRING(UPPER(o.office_name), 1, 4)
             ) AS label,
             COUNT(s.id) AS resp,
             ROUND(IFNULL(AVG((
-                IFNULL(s.sqd1,0) + IFNULL(s.sqd2,0) + IFNULL(s.sqd3,0) + 
-                IFNULL(s.sqd4,0) + IFNULL(s.sqd5,0) + IFNULL(s.sqd6,0) + 
+                IFNULL(s.sqd1,0) + IFNULL(s.sqd2,0) + IFNULL(s.sqd3,0) +
+                IFNULL(s.sqd4,0) + IFNULL(s.sqd5,0) + IFNULL(s.sqd6,0) +
                 IFNULL(s.sqd7,0) + IFNULL(s.sqd8,0)
             ) / 8) * 20, 0), 1) AS rating
         FROM offices o
-        LEFT JOIN survey_responses s ON o.id = s.office_id
+        LEFT JOIN survey_responses s ON o.id = s.office_id${semesterJoinFilter}
         WHERE o.cluster_name = ?
         GROUP BY o.id, o.office_name
     `;
+    const queryParams = semester ? [semester, clusterName] : [clusterName];
 
-    db.query(clusterQuery, [clusterName], (err, results) => {
+    db.query(clusterQuery, queryParams, (err, results) => {
         if (err) return callback(err, null);
         
         const formattedResults = results.map(row => {
@@ -757,21 +870,22 @@ function getClusterPerformanceData(clusterName, callback) {
 // ==========================================
 // 6. Cluster Routes
 // ==========================================
-app.get('/cluster/office-of-the-president', (req, res) => { 
-    getClusterPerformanceData('Office of the President Cluster', (err, data) => { res.render('cluster-op', { data: data || [] }); }); 
-});
-app.get('/cluster/admin-finance', (req, res) => { 
-    getClusterPerformanceData('Administrative and Finance Cluster', (err, data) => { res.render('cluster-admin-finance', { data: data || [] }); }); 
-});
-app.get('/cluster/research-innovation', (req, res) => { 
-    getClusterPerformanceData('Research, Innovation and Collaboration Cluster', (err, data) => { res.render('cluster-research', { data: data || [] }); }); 
-});
-app.get('/cluster/academic', (req, res) => { 
-    getClusterPerformanceData('Academic Cluster', (err, data) => { res.render('cluster-academic', { data: data || [] }); }); 
-});
-app.get('/cluster/other-offices', (req, res) => { 
-    getClusterPerformanceData('Other Offices Cluster', (err, data) => { res.render('cluster-other', { data: data || [] }); }); 
-});
+function renderClusterPage(view, clusterName) {
+    return (req, res) => {
+        const semester = req.query.semester || '';
+        getClusterPerformanceData(clusterName, semester, (err, data) => {
+            getSemesterOptions((semesterOptions) => {
+                res.render(view, { data: data || [], semesterOptions: semesterOptions, selectedSemester: semester });
+            });
+        });
+    };
+}
+
+app.get('/cluster/office-of-the-president', renderClusterPage('cluster-op', 'Office of the President Cluster'));
+app.get('/cluster/admin-finance', renderClusterPage('cluster-admin-finance', 'Administrative and Finance Cluster'));
+app.get('/cluster/research-innovation', renderClusterPage('cluster-research', 'Research, Innovation and Collaboration Cluster'));
+app.get('/cluster/academic', renderClusterPage('cluster-academic', 'Academic Cluster'));
+app.get('/cluster/other-offices', renderClusterPage('cluster-other', 'Other Offices Cluster'));
 
 // ==========================================
 // DYNAMIC PUBLIC DASHBOARD API

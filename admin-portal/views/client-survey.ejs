@@ -206,6 +206,7 @@
 
                         <div class="col-md-6">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_sex"></label>
+                            <span id="gender-lock-note" class="badge text-bg-secondary d-none ms-1" title="This was saved from your first survey and can no longer be changed">🔒 Locked</span>
                             <div class="d-flex flex-wrap gap-4 pt-2">
                                 <label class="d-flex align-items-center gap-2 text-dark">
                                     <!-- PINALITAN ANG name="sex" NG name="gender" AT NAGDAGDAG NG value="Male" -->
@@ -222,6 +223,7 @@
 
                         <div class="col-md-6">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_age"></label>
+                            <span id="age-lock-note" class="badge text-bg-secondary d-none ms-1" title="This was saved from your first survey and can no longer be changed">🔒 Locked</span>
                             <!-- IDINAGDAG ANG name="age" AT value="" SA MGA OPTIONS -->
                             <select name="age" class="form-select border-secondary-subtle">
                                 <option value="" selected disabled data-i18n="opt_sel_age"></option>
@@ -240,6 +242,7 @@
 
                         <div class="col-12">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_region"></label>
+                            <span id="region-lock-note" class="badge text-bg-secondary d-none ms-1" title="This was saved from your first survey and can no longer be changed">🔒 Locked</span>
                             <!-- IDINAGDAG ANG name="region" AT value="" SA MGA OPTIONS -->
                             <select name="region" class="form-select border-secondary-subtle">
                                 <option value="" disabled selected data-i18n="opt_select_region"></option>
@@ -491,6 +494,43 @@
 <script>
 document.getElementById('surveyDate').valueAsDate = new Date();
 let currentLang = 'en';
+
+// Demographics saved from this account's FIRST-EVER survey submission (Region, Age, Sex).
+// Once set, these are pre-filled and locked so the client can never change them again.
+const savedClientProfile = <%- JSON.stringify(typeof clientProfile !== 'undefined' && clientProfile ? clientProfile : null) %>;
+
+function applyLockedProfile() {
+    if (!savedClientProfile) return;
+
+    if (savedClientProfile.region) {
+        const regionSelect = document.querySelector('select[name="region"]');
+        if (regionSelect) {
+            regionSelect.value = savedClientProfile.region;
+            regionSelect.disabled = true;
+        }
+        const note = document.getElementById('region-lock-note');
+        if (note) note.classList.remove('d-none');
+    }
+
+    if (savedClientProfile.age) {
+        const ageSelect = document.querySelector('select[name="age"]');
+        if (ageSelect) {
+            ageSelect.value = savedClientProfile.age;
+            ageSelect.disabled = true;
+        }
+        const note = document.getElementById('age-lock-note');
+        if (note) note.classList.remove('d-none');
+    }
+
+    if (savedClientProfile.gender) {
+        document.querySelectorAll('input[name="gender"]').forEach(radio => {
+            radio.disabled = true;
+            if (radio.value === savedClientProfile.gender) radio.checked = true;
+        });
+        const note = document.getElementById('gender-lock-note');
+        if (note) note.classList.remove('d-none');
+    }
+}
 
 // Theme Toggle Function 
 function toggleTheme() {
@@ -894,6 +934,7 @@ document.getElementById('agreeTermsStage1').addEventListener('change', function 
 
 // Initial Load Setup
 setLanguage('en');
+applyLockedProfile();
 
 </script>
 </body>

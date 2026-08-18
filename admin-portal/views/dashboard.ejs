@@ -101,25 +101,30 @@
         <div class="container-fluid px-4 py-4">
             
             <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
-                <h4 class="fw-bold text-dark mb-0">Dashboard Overview</h4>
-                <button onclick="openReportModal()" class="btn btn-primary shadow-sm px-4 rounded-pill" title="Generate a printable institutional report">
+                <div>
+                    <h4 class="fw-bold text-dark mb-0">Dashboard Overview</h4>
+                    <p class="text-muted small mb-0">Institution-wide client satisfaction summary</p>
+                </div>
+                <button onclick="openReportModal()" class="btn btn-primary shadow-sm px-4" title="Generate a printable institutional report">
                     <i class="fas fa-file-invoice me-2"></i> Generate Report
                 </button>
             </div>
 
             <form action="/dashboard" method="GET" class="d-flex flex-wrap align-items-end gap-3 mb-4 p-3 bg-white rounded-4 shadow-sm">
                 <div>
-                    <label for="startDate" class="form-label small fw-bold text-muted text-uppercase mb-1">Start Date</label>
-                    <input type="date" id="startDate" name="startDate" class="form-control form-control-sm" title="Filter records from this date" value="<%= typeof filterStartDate !== 'undefined' ? filterStartDate : '' %>">
+                    <label for="semester" class="form-label small fw-bold text-muted text-uppercase mb-1">Semester</label>
+                    <select id="semester" name="semester" class="form-select form-select-sm" title="Filter records by semester" onchange="this.form.submit()">
+                        <option value="">All Semesters</option>
+                        <% if (typeof semesterOptions !== 'undefined') { %>
+                            <% semesterOptions.forEach(opt => { %>
+                                <option value="<%= opt.value %>" <%= selectedSemester === opt.value ? 'selected' : '' %>><%= opt.label %></option>
+                            <% }) %>
+                        <% } %>
+                    </select>
                 </div>
-                <div>
-                    <label for="endDate" class="form-label small fw-bold text-muted text-uppercase mb-1">End Date</label>
-                    <input type="date" id="endDate" name="endDate" class="form-control form-control-sm" title="Filter records up to this date" value="<%= typeof filterEndDate !== 'undefined' ? filterEndDate : '' %>">
-                </div>
-                <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-primary btn-sm px-3" title="Apply the selected date range"><i class="fas fa-filter me-1"></i> Apply Filter</button>
-                    <a href="/dashboard" class="btn btn-outline-secondary btn-sm px-3" title="Clear the date filter"><i class="fas fa-times me-1"></i> Clear</a>
-                </div>
+                <% if (typeof selectedSemester !== 'undefined' && selectedSemester) { %>
+                    <a href="/dashboard" class="btn btn-outline-secondary btn-sm px-3" title="Clear the semester filter"><i class="fas fa-times me-1"></i> Clear</a>
+                <% } %>
             </form>
 
             <div class="row g-4 mb-4">
@@ -197,7 +202,7 @@
                                 <h6 class="text-muted fw-bold small text-uppercase mb-1"><%= card.name %></h6>
                                 <div class="d-flex justify-content-between align-items-center">
                                     <h3 class="fw-bold mb-0 text-dark"><span class="count-up"><%= card.rating %></span><span class="fs-6 opacity-50">%</span></h3>
-                                    <span class="badge bg-light text-secondary border rounded-pill small">👥 <%= card.respondents %></span>
+                                    <span class="badge bg-light text-secondary border rounded-pill small"><i class="fas fa-users me-1"></i><%= card.respondents %></span>
                                 </div>
                             </div>
                         </div>
@@ -366,9 +371,9 @@ document.addEventListener("DOMContentLoaded", function() {
                     callbacks: {
                         label: function(context) {
                             if (context.dataset.type === 'line') {
-                                return `⭐ Satisfaction: ${context.raw}%`;
+                                return `Satisfaction: ${context.raw}%`;
                             }
-                            return `👥 Respondents: ${context.raw.toLocaleString()}`;
+                            return `Respondents: ${context.raw.toLocaleString()}`;
                         }
                     }
                 }

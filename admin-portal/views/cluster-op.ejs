@@ -43,45 +43,22 @@
                     <p class="text-muted">Real-time satisfaction ratings and respondent volume per office.</p>
                 </div>
 
-                <div class="filter-bar">
+                <form class="filter-bar" method="GET" action="/cluster/office-of-the-president">
                     <div class="filter-group">
-                        <label for="quarterFilter">Quarter</label>
-                        <select id="quarterFilter" class="form-select form-select-sm" title="Filter by quarter">
-                            <option value="">All Quarters</option>
-                            <option value="Q1">Q1</option>
-                            <option value="Q2">Q2</option>
-                            <option value="Q3">Q3</option>
-                            <option value="Q4">Q4</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label for="periodStart">Period Covered</label>
-                        <div class="d-flex gap-2">
-                            <input type="date" id="periodStart" class="form-control form-control-sm" title="Period start date">
-                            <input type="date" id="periodEnd" class="form-control form-control-sm" title="Period end date">
-                        </div>
-                    </div>
-                    <div class="filter-group">
-                        <label for="semesterFilter">Semester / Academic Year</label>
-                        <select id="semesterFilter" class="form-select form-select-sm" title="Filter by semester and academic year">
+                        <label for="semester">Semester</label>
+                        <select id="semester" name="semester" class="form-select form-select-sm" title="Filter by semester" onchange="this.form.submit()">
                             <option value="">All Semesters</option>
-                            <option value="1st Sem 2025-2026">1st Sem / 2025-2026</option>
-                            <option value="2nd Sem 2025-2026">2nd Sem / 2025-2026</option>
-                            <option value="1st Sem 2026-2027">1st Sem / 2026-2027</option>
-                            <option value="2nd Sem 2026-2027">2nd Sem / 2026-2027</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label for="periodSelect">Data View</label>
-                        <select id="periodSelect" class="form-select form-select-sm fw-bold text-primary" title="Switch between real-time and archived data">
-                            <option value="realtime">Real-time Data (Current)</option>
-                            <option value="q1">2026 - Q1 (Archived)</option>
+                            <% if (typeof semesterOptions !== 'undefined') { %>
+                                <% semesterOptions.forEach(opt => { %>
+                                    <option value="<%= opt.value %>" <%= selectedSemester === opt.value ? 'selected' : '' %>><%= opt.label %></option>
+                                <% }) %>
+                            <% } %>
                         </select>
                     </div>
                     <button type="button" class="btn btn-primary btn-generate" onclick="generateClusterReport('Office of the President Cluster')" title="Generate a report based on the selected filters">
                         <i class="fas fa-file-invoice me-2"></i> Generate Report
                     </button>
-                </div>
+                </form>
 
                 <div class="stats-container">
                     <div class="stat-box" style="border-bottom-color: #7c3aed;">
@@ -114,10 +91,8 @@
 
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            // Tumatanggap ng real-time query mula sa server.js tuwing niloload ang page
-            const dbData = <%- typeof data !== 'undefined' ? JSON.stringify(data) : '[]' %>;
-            const allPeriodData = { 'realtime': dbData, 'q1': [] };
-            let currentData = dbData; 
+            // Tumatanggap ng real-time query mula sa server.js tuwing niloload ang page (already semester-filtered server-side)
+            const currentData = <%- typeof data !== 'undefined' ? JSON.stringify(data) : '[]' %>;
             
             Chart.register(ChartDataLabels);
             const ctx = document.getElementById('clusterChart').getContext('2d');
@@ -208,19 +183,13 @@
 
             updateDashboardUI(currentData);
             renderChart(currentData);
-
-            document.getElementById('periodSelect')?.addEventListener('change', function(e) {
-                currentData = allPeriodData[e.target.value] || [];
-                updateDashboardUI(currentData);
-                renderChart(currentData);
-            });
         });
 
         function generateClusterReport(clusterTitle) {
-            const quarter = document.getElementById('quarterFilter').value || 'All Quarters';
-            const start = document.getElementById('periodStart').value || 'N/A';
-            const end = document.getElementById('periodEnd').value || 'N/A';
-            const semester = document.getElementById('semesterFilter').value || 'All Semesters';
+            const semesterSelect = document.getElementById('semester');
+            const semester = (semesterSelect && semesterSelect.selectedIndex >= 0)
+                ? semesterSelect.options[semesterSelect.selectedIndex].text
+                : 'All Semesters';
             const overallRating = document.getElementById('overallRating').innerText;
             const totalResp = document.getElementById('totalResp').innerText;
             const totalOffices = document.getElementById('totalOffices').innerText;
@@ -242,9 +211,7 @@
                     <h2>${clusterTitle}</h2>
                     <p>Generated on ${new Date().toLocaleString()}</p>
                     <table>
-                        <tr><th>Quarter</th><td>${quarter}</td></tr>
-                        <tr><th>Period Covered</th><td>${start} to ${end}</td></tr>
-                        <tr><th>Semester / Academic Year</th><td>${semester}</td></tr>
+                        <tr><th>Semester</th><td>${semester}</td></tr>
                         <tr><th>Average Rating</th><td>${overallRating}</td></tr>
                         <tr><th>Total Respondents</th><td>${totalResp}</td></tr>
                         <tr><th>Offices Evaluated</th><td>${totalOffices}</td></tr>

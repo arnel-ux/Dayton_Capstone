@@ -1,125 +1,143 @@
+<%
+    // currentPath is set globally in server.js via res.locals.currentPath
+    const _path = typeof currentPath !== 'undefined' ? currentPath : '';
+    const isClusterPage = _path.startsWith('/cluster');
+    const clusterLinks = [
+        { href: '/cluster/office-of-the-president', icon: 'fa-building', label: 'Office of the President' },
+        { href: '/cluster/admin-finance', icon: 'fa-money-check-alt', label: 'Admin & Finance' },
+        { href: '/cluster/research-innovation', icon: 'fa-lightbulb', label: 'Research & Innovation' },
+        { href: '/cluster/academic', icon: 'fa-graduation-cap', label: 'Academic Cluster' }
+    ];
+    const mainLinks = [
+        { href: '/dashboard', icon: 'fa-th-large', label: 'Dashboard' },
+        { href: '/profile', icon: 'fa-user-circle', label: 'Profile' },
+        { href: '/password', icon: 'fa-key', label: 'Manage Password' },
+        { href: '/survey', icon: 'fa-clipboard-list', label: 'Survey Management' },
+        { href: '/offices', icon: 'fa-building', label: 'Manage Offices' },
+        { href: '/report', icon: 'fa-file-export', label: 'Generate Report' }
+    ];
+%>
 <nav id="sidebar">
     <div class="sidebar-header d-flex flex-column align-items-center text-center pt-4 pb-3 border-bottom border-secondary">
-        <img src="https://cspc.edu.ph/wp-content/uploads/2022/03/Camarines_Sur_Polytechnic_Colleges_Logo.png" style="width: 70px; height: auto; background-color: white; border-radius: 50%; padding: 3px;" class="mb-2 shadow-sm">
+        <img src="https://cspc.edu.ph/wp-content/uploads/2022/03/Camarines_Sur_Polytechnic_Colleges_Logo.png" class="sidebar-logo mb-2 shadow-sm">
         <div>
             <h4 class="m-0 fw-bold text-white">CQA PORTAL</h4>
-            <small style="color: rgba(255, 255, 255, 0.7);">Admin System</small>
+            <small class="sidebar-subtitle">Admin System</small>
         </div>
     </div>
-    
+
     <ul class="list-unstyled components mt-3">
         <li class="nav-item">
-            <a href="/dashboard" class="d-flex align-items-center">
-                <i class="fas fa-th-large me-3"></i> 
+            <a href="/dashboard" class="d-flex align-items-center<%= _path === '/dashboard' ? ' active' : '' %>">
+                <i class="fas fa-th-large me-3"></i>
                 <span>Dashboard</span>
             </a>
         </li>
 
         <li class="nav-item">
-            <a href="#statisticsSubmenu" data-bs-toggle="collapse" aria-expanded="false" class="dropdown-toggle d-flex align-items-center">
-                <i class="fas fa-chart-pie me-3"></i> 
+            <a href="#statisticsSubmenu" data-bs-toggle="collapse" aria-expanded="<%= isClusterPage ? 'true' : 'false' %>" class="dropdown-toggle d-flex align-items-center<%= isClusterPage ? ' active' : '' %>">
+                <i class="fas fa-chart-pie me-3"></i>
                 <span>All Cluster</span>
                 <i class="fas fa-chevron-down ms-auto rotate-icon"></i>
             </a>
-            <ul class="collapse list-unstyled submenu-bg" id="statisticsSubmenu">
-                <li>
-                    <a href="/cluster/office-of-the-president" class="d-flex align-items-center">
-                        <i class="fas fa-building submenu-icon"></i> 
-                        <span>Office of the President</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="/cluster/admin-finance" class="d-flex align-items-center">
-                        <i class="fas fa-money-check-alt submenu-icon"></i> 
-                        <span>Admin & Finance</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="/cluster/research-innovation" class="d-flex align-items-center">
-                        <i class="fas fa-lightbulb submenu-icon"></i> 
-                        <span>Research & Innovation</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="/cluster/academic" class="d-flex align-items-center">
-                        <i class="fas fa-graduation-cap submenu-icon"></i> 
-                        <span>Academic Cluster</span>
-                    </a>
-                </li>
+            <ul class="collapse list-unstyled submenu-bg<%= isClusterPage ? ' show' : '' %>" id="statisticsSubmenu">
+                <% clusterLinks.forEach(link => { %>
+                    <li>
+                        <a href="<%= link.href %>" class="d-flex align-items-center<%= _path === link.href ? ' active' : '' %>">
+                            <i class="fas <%= link.icon %> submenu-icon"></i>
+                            <span><%= link.label %></span>
+                        </a>
+                    </li>
+                <% }) %>
             </ul>
         </li>
 
-        <li class="nav-item">
-            <a href="/profile" class="d-flex align-items-center"><i class="fas fa-user-circle me-3"></i> Profile</a>
-        </li>
-        <li class="nav-item">
-            <a href="/password" class="d-flex align-items-center"><i class="fas fa-key me-3"></i> Manage Password</a>
-        </li>
-        <li class="nav-item">
-            <a href="/survey" class="d-flex align-items-center"><i class="fas fa-clipboard-list me-3"></i> Survey Management</a>
-        </li>
-        <li class="nav-item">
-            <a href="/offices" class="d-flex align-items-center"><i class="fas fa-building me-3"></i> Manage Offices</a>
-        </li>
-        <li class="nav-item">
-            <a href="/report" class="d-flex align-items-center"><i class="fas fa-file-export me-3"></i> Generate Report</a>
-        </li>
+        <% mainLinks.slice(1).forEach(link => { %>
+            <li class="nav-item">
+                <a href="<%= link.href %>" class="d-flex align-items-center<%= _path === link.href ? ' active' : '' %>">
+                    <i class="fas <%= link.icon %> me-3"></i> <span><%= link.label %></span>
+                </a>
+            </li>
+        <% }) %>
     </ul>
 </nav>
 
 <style>
-    /* Main Sidebar Links Alignment */
     #sidebar ul li a {
         padding: 12px 20px;
         display: flex;
         align-items: center;
         text-decoration: none;
-        color: #fff;
-        transition: all 0.3s;
+        color: rgba(255, 255, 255, 0.85);
+        font-size: 0.92rem;
+        font-weight: 500;
+        transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        border-left: 3px solid transparent;
     }
 
-    /* Chevron Animation */
+    .sidebar-logo {
+        width: 64px;
+        height: 64px;
+        background-color: #fff;
+        border-radius: 50%;
+        padding: 4px;
+        object-fit: contain;
+    }
+
+    .sidebar-subtitle {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.75rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+    }
+
     .rotate-icon {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         transition: transform 0.3s ease;
     }
     #sidebar ul li a[aria-expanded="true"] .rotate-icon {
         transform: rotate(180deg);
     }
 
-    /* Submenu Styling */
     .submenu-bg {
-        background: rgba(0, 0, 0, 0.2); 
+        background: rgba(0, 0, 0, 0.18);
     }
 
     #statisticsSubmenu li a {
-        padding: 10px 10px 10px 45px !important; 
+        padding: 9px 12px 9px 48px !important;
         font-size: 0.85rem;
         background: transparent;
-        border: none;
+        border-left: none;
     }
 
-    /* Icon width alignment para pantay ang text */
     .submenu-icon {
-        width: 20px; 
+        width: 18px;
         margin-right: 12px;
         text-align: center;
-        color: rgba(255, 255, 255, 0.7);
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.8rem;
     }
 
-    #statisticsSubmenu li a:hover {
-        background: rgba(255, 255, 255, 0.1) !important;
-        padding-left: 50px !important; 
-    }
-
-    /* Standardized Icon sizing for main items */
     .nav-item i {
-        width: 20px;
+        width: 18px;
         text-align: center;
+        font-size: 0.9rem;
     }
 
-    /* Active State Highlight (Optional) */
-    .nav-item a:hover {
+    #sidebar ul li a:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+    }
+
+    /* Active state: current page/cluster is clearly highlighted, not just on hover */
+    #sidebar ul li a.active {
+        background: rgba(255, 255, 255, 0.12);
+        color: #fff;
+        border-left-color: #818cf8;
+        font-weight: 600;
+    }
+    #statisticsSubmenu li a.active {
         background: rgba(255, 255, 255, 0.1);
+        color: #fff;
     }
 </style>
