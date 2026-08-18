@@ -104,7 +104,7 @@
             <div class="content-card">
                 <div class="card-header-title">
                     <span><i class="fas fa-list-ol me-2"></i> Service Quality Dimensions (SQD) Statements</span>
-                    <button class="btn btn-sm btn-primary" onclick="openModal('add', null, 'sqd')"><i class="fas fa-plus me-1"></i> Add Statement</button>
+                    <button class="btn btn-sm btn-primary" title="Add a new SQD statement" onclick="openModal('add', null, 'sqd')"><i class="fas fa-plus me-1"></i> Add Statement</button>
                 </div>
                 <div class="p-4">
                     <table class="table table-bordered table-hover">
@@ -122,9 +122,8 @@
                                         <td class="px-4 py-3 text-muted fw-bold">SQD<%= index %></td>
                                         <td class="px-4 py-3 item-text"><%= item.content %></td>
                                         <td class="px-4 text-end">
-                                            <button class="btn btn-sm btn-light text-primary me-1" onclick="openModal('edit', this, 'sqd', <%= item.id %>)"><i class="fas fa-edit"></i></button>
-                                            <button class="btn btn-sm btn-light text-danger me-1" onclick="deleteItem(this, <%= item.id %>)"><i class="fas fa-trash"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary" onclick="alert('Needs new view mapping.')">View</button>
+                                            <button class="btn btn-sm btn-light text-primary me-1" title="Edit this statement" onclick="openModal('edit', this, 'sqd', <%= item.id %>)"><i class="fas fa-edit"></i></button>
+                                            <button class="btn btn-sm btn-light text-danger me-1" title="Delete this statement" onclick="deleteItem(this, <%= item.id %>)"><i class="fas fa-trash"></i></button>
                                         </td>
                                     </tr>
                                 <% }) %>
@@ -137,7 +136,7 @@
             <div class="content-card">
                 <div class="card-header-title">
                     <span><i class="fas fa-question-circle me-2"></i> Citizen's Charter (CC) Questions</span>
-                    <button class="btn btn-sm btn-primary" onclick="openModal('add', null, 'cc')"><i class="fas fa-plus me-1"></i> Add Question</button>
+                    <button class="btn btn-sm btn-primary" title="Add a new CC question" onclick="openModal('add', null, 'cc')"><i class="fas fa-plus me-1"></i> Add Question</button>
                 </div>
                 <div class="p-4">
                     <table class="table table-bordered table-hover">
@@ -155,9 +154,8 @@
                                         <td class="px-4 py-3 text-muted fw-bold">CC<%= index + 1 %></td>
                                         <td class="px-4 py-3 item-text"><%= item.content %></td>
                                         <td class="px-4 text-end">
-                                            <button class="btn btn-sm btn-light text-primary me-1" onclick="openModal('edit', this, 'cc', <%= item.id %>)"><i class="fas fa-edit"></i></button>
-                                            <button class="btn btn-sm btn-light text-danger me-1" onclick="deleteItem(this, <%= item.id %>)"><i class="fas fa-trash"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary" onclick="alert('Needs new view mapping.')">View</button>
+                                            <button class="btn btn-sm btn-light text-primary me-1" title="Edit this question" onclick="openModal('edit', this, 'cc', <%= item.id %>)"><i class="fas fa-edit"></i></button>
+                                            <button class="btn btn-sm btn-light text-danger me-1" title="Delete this question" onclick="deleteItem(this, <%= item.id %>)"><i class="fas fa-trash"></i></button>
                                         </td>
                                     </tr>
                                 <% }) %>

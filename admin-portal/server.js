@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS offices (
     office_name VARCHAR(255) NOT NULL,
     head_director VARCHAR(255) DEFAULT 'Not Assigned',
     email_address VARCHAR(255) NOT NULL,
+    is_archived TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );`;
 
@@ -119,7 +120,8 @@ db.query(createClustersTableQuery, (err) => {
                 console.error("❌ Error creating offices table:", err);
             } else {
                 console.log('✅ offices table verified/created successfully!');
-                
+                db.query("ALTER TABLE offices ADD COLUMN is_archived TINYINT(1) NOT NULL DEFAULT 0", () => {});
+
                 // Isunod ang Survey Responses Table
                 db.query(createSurveyTableQuery, (err) => {
                     if (err) {
@@ -173,6 +175,24 @@ db.query(createSettingsTableQuery, (err) => {
 // ==========================================
 app.get('/', (req, res) => res.render('index'));
 app.get('/login', (req, res) => res.render('login'));
+
+// 🔥 DINAGDAG: ROUTE PARA SA ADMIN LOGIN AUTHENTICATION
+app.post('/auth-login', (req, res) => {
+    const { username, password } = req.body;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (username === 'admin' && password === 'admin123') {
+        // Admin Condition
+        res.redirect('/dashboard');
+    } else if (emailRegex.test(username)) {
+        // Client Condition
+        res.redirect('/client-survey');
+    } else {
+        // Error Condition
+        res.send("<script>alert('Invalid credentials or email format!'); window.location.href='/login';</script>");
+    }
+});
+
 app.get('/client-login', (req, res) => res.render('client-login'));
 app.get('/gmail-login', (req, res) => res.render('gmail-login'));
 
@@ -227,8 +247,8 @@ app.post('/submit-survey', (req, res) => {
         cleanInt(office_id), finalName, cleanStr(topic) || 'General', finalRegion, 
         cleanStr(cc1), cleanStr(cc2), cleanStr(cc3), 
         cleanInt(sqd0), cleanInt(sqd1), cleanInt(sqd2), cleanInt(sqd3), 
-        cleanInt(sqd4), cleanInt(sqd5), cleanInt(sqd6), cleanInt(sqd7), cleanInt(sqd8), 
-        cleanStr(comments), currentPeriod
+        cleanInt(sqd4), cleanInt(sqd5), cleanInt(sqd6), cleanInt(sqd7), cleanInt(sqd8),
+        cleanStr(comments) || 'N/A', currentPeriod
     ];
 
     db.query(insertQuery, values, (err, result) => {
@@ -307,14 +327,23 @@ app.post('/submit-survey', (req, res) => {
 // 2. Admin Dashboard Routes
 // ==========================================
 app.get('/dashboard', (req, res) => {
-    db.query('SELECT COUNT(*) AS total FROM survey_responses', (err, totalRes) => {
+    const { startDate, endDate } = req.query;
+    const hasDateFilter = startDate && endDate;
+
+    // Ang mga sumusunod na WHERE clause fragments ay dinadagdag sa mga query
+    // kung may pinili ang admin na Start Date at End Date sa dashboard filter.
+    const dateWhere = hasDateFilter ? ' WHERE DATE(s.created_at) BETWEEN ? AND ? ' : '';
+    const dateWhereAnd = hasDateFilter ? ' AND DATE(s.created_at) BETWEEN ? AND ? ' : '';
+    const dateParams = hasDateFilter ? [startDate, endDate] : [];
+
+    db.query(`SELECT COUNT(*) AS total FROM survey_responses s${dateWhere}`, dateParams, (err, totalRes) => {
         const totalRespondents = (totalRes && totalRes[0]) ? totalRes[0].total : 0;
 
         const avgQuery = `
-            SELECT AVG((IFNULL(sqd1,0) + IFNULL(sqd2,0) + IFNULL(sqd3,0) + IFNULL(sqd4,0) + IFNULL(sqd5,0) + IFNULL(sqd6,0) + IFNULL(sqd7,0) + IFNULL(sqd8,0)) / 8) AS overall_avg 
-            FROM survey_responses
+            SELECT AVG((IFNULL(sqd1,0) + IFNULL(sqd2,0) + IFNULL(sqd3,0) + IFNULL(sqd4,0) + IFNULL(sqd5,0) + IFNULL(sqd6,0) + IFNULL(sqd7,0) + IFNULL(sqd8,0)) / 8) AS overall_avg
+            FROM survey_responses s${dateWhere}
         `;
-        db.query(avgQuery, (err, avgRes) => {
+        db.query(avgQuery, dateParams, (err, avgRes) => {
             let overallAvgScore = 0;
             if (avgRes && avgRes[0] && avgRes[0].overall_avg) {
                 overallAvgScore = parseFloat(((avgRes[0].overall_avg / 5) * 100).toFixed(2));
@@ -326,30 +355,31 @@ app.get('/dashboard', (req, res) => {
             else if(overallAvgScore >= 75) interpretation = "SATISFACTORY";
             else if(overallAvgScore >= 60) interpretation = "FAIR";
 
-            db.query('SELECT COUNT(*) AS total_offices FROM offices', (err, officeCountRes) => {
+            db.query('SELECT COUNT(*) AS total_offices FROM offices WHERE is_archived = 0', (err, officeCountRes) => {
                 const totalOffices = (officeCountRes && officeCountRes[0]) ? officeCountRes[0].total_offices : 0;
 
                 const clusterAnalyticsQuery = `
-                    SELECT 
+                    SELECT
                         cluster_name,
                         COUNT(s.id) as cluster_volume,
                         IFNULL(ROUND(AVG((IFNULL(s.sqd1,0) + IFNULL(s.sqd2,0) + IFNULL(s.sqd3,0) + IFNULL(s.sqd4,0) + IFNULL(s.sqd5,0) + IFNULL(s.sqd6,0) + IFNULL(s.sqd7,0) + IFNULL(s.sqd8,0)) / 8) * 20, 2), 0) as cluster_rating
                     FROM offices o
-                    LEFT JOIN survey_responses s ON o.id = s.office_id
+                    LEFT JOIN survey_responses s ON o.id = s.office_id${dateWhereAnd}
+                    WHERE o.is_archived = 0
                     GROUP BY cluster_name
                 `;
 
-                db.query(clusterAnalyticsQuery, (err, clusterData) => {
+                db.query(clusterAnalyticsQuery, dateParams, (err, clusterData) => {
                     const chartData = { labels: [], respondents: [], ratings: [] };
                     const clusterCards = [];
                     const colors = ['#4f46e5', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
-                    
+
                     if (clusterData) {
                         clusterData.forEach((row, idx) => {
                             let shortName = row.cluster_name;
                             if (shortName.length > 20) shortName = shortName.split(' ')[0] + ' Cluster';
                             let safeRating = parseFloat(row.cluster_rating || 0);
-                            
+
                             chartData.labels.push(shortName);
                             chartData.respondents.push(row.cluster_volume);
                             chartData.ratings.push(safeRating);
@@ -364,20 +394,21 @@ app.get('/dashboard', (req, res) => {
                     }
 
                     const reportQuery = `
-                        SELECT 
+                        SELECT
                             o.cluster_name,
                             o.office_name,
                             IFNULL(ROUND(AVG((IFNULL(s.sqd1,0) + IFNULL(s.sqd2,0) + IFNULL(s.sqd3,0) + IFNULL(s.sqd4,0) + IFNULL(s.sqd5,0) + IFNULL(s.sqd6,0) + IFNULL(s.sqd7,0) + IFNULL(s.sqd8,0)) / 8) * 20, 2), 0) as office_score
                         FROM offices o
-                        LEFT JOIN survey_responses s ON o.id = s.office_id
+                        LEFT JOIN survey_responses s ON o.id = s.office_id${dateWhereAnd}
+                        WHERE o.is_archived = 0
                         GROUP BY o.id, o.cluster_name, o.office_name
                         ORDER BY o.cluster_name, o.office_name
                     `;
 
-                    db.query(reportQuery, (err, reportRows) => {
+                    db.query(reportQuery, dateParams, (err, reportRows) => {
                         const reportData = [];
                         const clustersMap = {};
-                        
+
                         if (reportRows) {
                             reportRows.forEach(row => {
                                 const cName = row.cluster_name || 'Unassigned Cluster';
@@ -385,14 +416,14 @@ app.get('/dashboard', (req, res) => {
                                     clustersMap[cName] = { clusterName: cName, offices: [] };
                                     reportData.push(clustersMap[cName]);
                                 }
-                                
+
                                 let score = parseFloat(row.office_score || 0);
                                 let interp = "POOR";
                                 if(score >= 95) interp = "OUTSTANDING";
                                 else if(score >= 85) interp = "VERY SATISFACTORY";
                                 else if(score >= 75) interp = "SATISFACTORY";
                                 else if(score >= 60) interp = "FAIR";
-                                
+
                                 clustersMap[cName].offices.push({ name: row.office_name, score: score.toFixed(2), interpretation: interp });
                             });
                         }
@@ -400,7 +431,8 @@ app.get('/dashboard', (req, res) => {
                         res.render('dashboard', {
                             dashboardData: { overallRating: overallAvgScore, overallLevel: interpretation, academicYear: "A.Y. 2026-2027" },
                             chartData: chartData, clusterCards: clusterCards, satisfactionRate: overallAvgScore,
-                            totalRespondents: totalRespondents, totalOffices: totalOffices, reportData: reportData
+                            totalRespondents: totalRespondents, totalOffices: totalOffices, reportData: reportData,
+                            filterStartDate: startDate || '', filterEndDate: endDate || ''
                         });
                     });
                 });
@@ -548,8 +580,14 @@ app.post('/offices/edit', (req, res) => {
     [cluster_name, office_name, head_director, email_address, id], (err, result) => { res.redirect('/offices'); });
 });
 
+// Soft delete / archive: hindi na tinatanggal ang record sa database (walang DELETE query),
+// binabago na lamang ang is_archived flag para maiwasan ang pagkawala ng historical survey data.
 app.post('/offices/delete/:id', (req, res) => {
-    db.query('DELETE FROM offices WHERE id = ?', [req.params.id], (err, result) => { res.redirect('/offices'); });
+    db.query('UPDATE offices SET is_archived = 1 WHERE id = ?', [req.params.id], (err, result) => { res.redirect('/offices'); });
+});
+
+app.post('/offices/restore/:id', (req, res) => {
+    db.query('UPDATE offices SET is_archived = 0 WHERE id = ?', [req.params.id], (err, result) => { res.redirect('/offices'); });
 });
 
 // ==========================================

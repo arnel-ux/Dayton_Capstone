@@ -17,6 +17,15 @@
         .stat-box { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); min-width: 200px; text-align: center; border-bottom: 4px solid #2563eb; }
         .stat-box h3 { font-size: 2rem; font-weight: 800; margin-bottom: 5px; color: #1e293b; }
         .stat-box p { margin: 0; color: #64748b; font-size: 0.9rem; text-transform: uppercase; font-weight: 600; }
+
+        .filter-bar {
+            display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px;
+            background: white; border-radius: 16px; padding: 18px 22px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.03); margin-top: 20px;
+        }
+        .filter-bar .filter-group { display: flex; flex-direction: column; gap: 4px; }
+        .filter-bar label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+        .filter-bar .btn-generate { margin-left: auto; }
     </style>
 </head>
 <body>
@@ -34,11 +43,44 @@
                     <p class="text-muted">Real-time satisfaction ratings and respondent volume per office.</p>
                 </div>
 
-                <div class="d-flex justify-content-end px-3 mt-3">
-                    <select id="periodSelect" class="form-select w-auto shadow-sm border-0 fw-bold text-primary">
-                        <option value="realtime">Real-time Data (Current)</option>
-                        <option value="q1">2026 - Q1 (Archived)</option>
-                    </select>
+                <div class="filter-bar">
+                    <div class="filter-group">
+                        <label for="quarterFilter">Quarter</label>
+                        <select id="quarterFilter" class="form-select form-select-sm" title="Filter by quarter">
+                            <option value="">All Quarters</option>
+                            <option value="Q1">Q1</option>
+                            <option value="Q2">Q2</option>
+                            <option value="Q3">Q3</option>
+                            <option value="Q4">Q4</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="periodStart">Period Covered</label>
+                        <div class="d-flex gap-2">
+                            <input type="date" id="periodStart" class="form-control form-control-sm" title="Period start date">
+                            <input type="date" id="periodEnd" class="form-control form-control-sm" title="Period end date">
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <label for="semesterFilter">Semester / Academic Year</label>
+                        <select id="semesterFilter" class="form-select form-select-sm" title="Filter by semester and academic year">
+                            <option value="">All Semesters</option>
+                            <option value="1st Sem 2025-2026">1st Sem / 2025-2026</option>
+                            <option value="2nd Sem 2025-2026">2nd Sem / 2025-2026</option>
+                            <option value="1st Sem 2026-2027">1st Sem / 2026-2027</option>
+                            <option value="2nd Sem 2026-2027">2nd Sem / 2026-2027</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="periodSelect">Data View</label>
+                        <select id="periodSelect" class="form-select form-select-sm fw-bold text-primary" title="Switch between real-time and archived data">
+                            <option value="realtime">Real-time Data (Current)</option>
+                            <option value="q1">2026 - Q1 (Archived)</option>
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-primary btn-generate" onclick="generateClusterReport('Academic Affairs Cluster')" title="Generate a report based on the selected filters">
+                        <i class="fas fa-file-invoice me-2"></i> Generate Report
+                    </button>
                 </div>
 
                 <div class="stats-container">
@@ -167,6 +209,47 @@
                 renderChart(currentData);
             });
         });
+
+        function generateClusterReport(clusterTitle) {
+            const quarter = document.getElementById('quarterFilter').value || 'All Quarters';
+            const start = document.getElementById('periodStart').value || 'N/A';
+            const end = document.getElementById('periodEnd').value || 'N/A';
+            const semester = document.getElementById('semesterFilter').value || 'All Semesters';
+            const overallRating = document.getElementById('overallRating').innerText;
+            const totalResp = document.getElementById('totalResp').innerText;
+            const totalOffices = document.getElementById('totalOffices').innerText;
+
+            const reportWindow = window.open('', '_blank', 'width=800,height=900');
+            reportWindow.document.write(`
+                <html>
+                <head>
+                    <title>${clusterTitle} Report</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 40px; color: #1e293b; }
+                        h2 { margin-bottom: 4px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                        th, td { border: 1px solid #94a3b8; padding: 8px 12px; text-align: left; }
+                        th { background: #e2e8f0; }
+                    </style>
+                </head>
+                <body>
+                    <h2>${clusterTitle}</h2>
+                    <p>Generated on ${new Date().toLocaleString()}</p>
+                    <table>
+                        <tr><th>Quarter</th><td>${quarter}</td></tr>
+                        <tr><th>Period Covered</th><td>${start} to ${end}</td></tr>
+                        <tr><th>Semester / Academic Year</th><td>${semester}</td></tr>
+                        <tr><th>Average Rating</th><td>${overallRating}</td></tr>
+                        <tr><th>Total Respondents</th><td>${totalResp}</td></tr>
+                        <tr><th>Offices Evaluated</th><td>${totalOffices}</td></tr>
+                    </table>
+                </body>
+                </html>
+            `);
+            reportWindow.document.close();
+            reportWindow.focus();
+            reportWindow.print();
+        }
     </script>
 </body>
 </html>

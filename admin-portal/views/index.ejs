@@ -60,8 +60,6 @@
         .period-select option { background: #1e293b; color: white; }
 
         .auth-buttons .btn { border-radius: 50px; font-weight: 600; padding: 0.4rem 1.2rem; font-size: 0.85rem; transition: all 0.3s ease; }
-        .btn-client { background: rgba(255, 255, 255, 0.15); color: white; border: 1px solid rgba(255, 255, 255, 0.4); }
-        .btn-client:hover { background: rgba(255, 255, 255, 0.3); color: white; }
         .btn-admin { background: #4f46e5; color: white; border: none; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.4); }
         .btn-admin:hover { background: #4338ca; color: white; transform: translateY(-2px); }
 
@@ -129,14 +127,13 @@
             </div>
             
             <div class="nav-right">
-                <!-- DROPDOWN UPDATE: Removed 2024 & 2025, Keeps the 6-Month 2026 Archive Periods -->
                 <select id="periodSelect" class="period-select" onchange="changePeriod()">
                     <option value="p1">Jan - Jun 2026</option>
                     <option value="p2">Jul - Dec 2026</option>
                 </select>
+                <!-- DINAGDAG: Isang Button na lang para sa Login Portal -->
                 <div class="auth-buttons d-flex gap-2">
-                    <a href="/client-login" class="btn btn-client"><i class="fas fa-user me-1 d-none d-sm-inline"></i> Client</a>
-                    <a href="/login" class="btn btn-admin"><i class="fas fa-lock me-1 d-none d-sm-inline"></i> Admin</a>
+                    <a href="/login" class="btn btn-admin"><i class="fas fa-sign-in-alt me-1 d-none d-sm-inline"></i> Login Portal</a>
                 </div>
             </div>
         </div>

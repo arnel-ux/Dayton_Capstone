@@ -237,3 +237,35 @@ body {
     border-radius: 0.75rem;
     box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
 }
+
+/* --- Global UI/UX Consistency (placeholders, spacing) --- */
+::placeholder {
+    color: #94a3b8;
+    opacity: 1;
+    font-weight: 400;
+    font-style: normal;
+}
+
+.form-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #374151;
+    margin-bottom: 0.35rem;
+}
+
+.form-control, .form-select {
+    border-radius: 0.5rem;
+}
+
+.container-fluid.px-4 {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+.card-custom, .content-card, .records-card {
+    margin-bottom: 1.5rem;
+}
+
+/* Archived record styling shared across management pages */
+.archived-row { opacity: 0.55; background-color: #f8fafc; }
+.badge-archived { background-color: #fee2e2; color: #b91c1c; font-weight: 600; font-size: 0.7rem; letter-spacing: 0.5px; }
