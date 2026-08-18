@@ -203,6 +203,7 @@ db.query(createClustersTableQuery, (err) => {
                     } else {
                         db.query("ALTER TABLE survey_responses ADD COLUMN respondent_name VARCHAR(255) DEFAULT 'Anonymous'", () => {});
                         db.query("ALTER TABLE survey_responses ADD COLUMN topic VARCHAR(100) DEFAULT 'General'", () => {});
+                        db.query("ALTER TABLE survey_responses ADD COLUMN sentiment VARCHAR(50) DEFAULT 'Neutral'", () => {});
                         db.query("ALTER TABLE survey_responses ADD COLUMN region VARCHAR(100) NULL", () => {});
                         db.query("ALTER TABLE survey_responses ADD COLUMN google_email VARCHAR(255) NULL", () => {
                             // 1 Google account = 1 survey per office, enforced at the DB level too
@@ -231,6 +232,7 @@ db.query(createSettingsTableQuery, (err) => {
     if (err) {
         console.error("❌ Error creating survey_settings table:", err);
     } else {
+        db.query("ALTER TABLE survey_settings ADD COLUMN is_archived TINYINT(1) NOT NULL DEFAULT 0", () => {});
         db.query("SELECT COUNT(*) AS count FROM survey_settings", (err, result) => {
             if (!err && result[0].count === 0) {
                 const defaultSeedData = `
@@ -730,7 +732,7 @@ app.get('/survey-records', (req, res) => {
         }
         
         const recordsQuery = `
-            SELECT s.respondent_name, s.topic, s.comments, DATE_FORMAT(s.created_at, '%M %d, %Y') as formatted_date, o.cluster_name
+            SELECT s.respondent_name, s.topic, s.sentiment, s.comments, DATE_FORMAT(s.created_at, '%M %d, %Y') as formatted_date, o.cluster_name
             FROM survey_responses s JOIN offices o ON s.office_id = o.id ORDER BY o.cluster_name, s.created_at DESC
         `;
         db.query(recordsQuery, (err, results) => {
@@ -739,14 +741,20 @@ app.get('/survey-records', (req, res) => {
                 results.forEach(row => {
                     const cluster = row.cluster_name || 'Other Offices';
                     if (!recordsByCluster[cluster]) recordsByCluster[cluster] = [];
-                    
+
                     let badgeClass = 'bg-general';
                     const topicLower = (row.topic || '').toLowerCase();
                     if (topicLower.includes('cr') || topicLower.includes('restroom')) badgeClass = 'bg-cr';
                     else if (topicLower.includes('aircon') || topicLower.includes('ac')) badgeClass = 'bg-aircon';
                     else if (topicLower.includes('facility') || topicLower.includes('equipment')) badgeClass = 'bg-facility';
-                    
-                    recordsByCluster[cluster].push({ name: row.respondent_name || 'Anonymous', topic: row.topic || 'General', topicClass: badgeClass, comments: row.comments || 'No comments provided.', date: row.formatted_date });
+
+                    const sentimentValue = row.sentiment || 'Neutral';
+                    const sentimentLower = sentimentValue.toLowerCase();
+                    let sentimentClass = 'bg-sentiment-neutral';
+                    if (sentimentLower.includes('positive')) sentimentClass = 'bg-sentiment-positive';
+                    else if (sentimentLower.includes('negative')) sentimentClass = 'bg-sentiment-negative';
+
+                    recordsByCluster[cluster].push({ name: row.respondent_name || 'Anonymous', topic: row.topic || 'General', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: row.comments || 'No comments provided.', date: row.formatted_date });
                 });
             }
             res.render('survey-records', { recordsByCluster, clusterRatings });
@@ -837,9 +845,19 @@ app.post('/settings/edit', (req, res) => {
     });
 });
 
+// Soft delete / archive: hindi na tinatanggal ang record sa database (walang DELETE query),
+// binabago na lamang ang is_archived flag para maiwasan ang pagkawala ng historical survey data.
 app.post('/settings/delete', (req, res) => {
     const { id } = req.body;
-    db.query('DELETE FROM survey_settings WHERE id = ?', [id], (err) => {
+    db.query('UPDATE survey_settings SET is_archived = 1 WHERE id = ?', [id], (err) => {
+        if (err) return res.json({ success: false });
+        res.json({ success: true });
+    });
+});
+
+app.post('/settings/restore', (req, res) => {
+    const { id } = req.body;
+    db.query('UPDATE survey_settings SET is_archived = 0 WHERE id = ?', [id], (err) => {
         if (err) return res.json({ success: false });
         res.json({ success: true });
     });

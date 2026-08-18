@@ -81,6 +81,17 @@
         .table td {
             vertical-align: middle;
         }
+        .archived-row {
+            opacity: 0.55;
+            background-color: #f8fafc;
+        }
+        .badge-archived {
+            background-color: #fee2e2;
+            color: #b91c1c;
+            font-weight: 600;
+            font-size: 0.7rem;
+            letter-spacing: 0.5px;
+        }
     </style>
 </head>
 <body>
@@ -97,8 +108,12 @@
                 <a href="/dashboard" class="back-btn"><i class="fas fa-chevron-left"></i></a>
                 <h5>Survey Form Management</h5>
             </div>
-            <div class="sub-banner">
-                <i class="fas fa-info-circle me-2"></i> Configure the contents and options displayed in the public survey form.
+            <div class="sub-banner d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span><i class="fas fa-info-circle me-2"></i> Configure the contents and options displayed in the public survey form.</span>
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="showArchivedToggle" title="Show or hide archived items">
+                    <label class="form-check-label small" for="showArchivedToggle">Show Archived</label>
+                </div>
             </div>
 
             <div class="content-card">
@@ -118,12 +133,27 @@
                         <tbody id="tbody-sqd-statements">
                             <% if(typeof settings !== 'undefined' && settings.sqd && settings.sqd.length > 0) { %>
                                 <% settings.sqd.forEach((item, index) => { %>
-                                    <tr data-id="<%= item.id %>">
+                                    <tr data-id="<%= item.id %>" class="<%= item.is_archived ? 'archived-row item-row-archived' : 'item-row-active' %>">
                                         <td class="px-4 py-3 text-muted fw-bold">SQD<%= index %></td>
-                                        <td class="px-4 py-3 item-text"><%= item.content %></td>
-                                        <td class="px-4 text-end">
-                                            <button class="btn btn-sm btn-light text-primary me-1" title="Edit this statement" onclick="openModal('edit', this, 'sqd', <%= item.id %>)"><i class="fas fa-edit"></i></button>
-                                            <button class="btn btn-sm btn-light text-danger me-1" title="Delete this statement" onclick="deleteItem(this, <%= item.id %>)"><i class="fas fa-trash"></i></button>
+                                        <td class="px-4 py-3 item-text">
+                                            <%= item.content %>
+                                            <% if (item.is_archived) { %>
+                                                <span class="badge badge-archived ms-2">ARCHIVED</span>
+                                            <% } %>
+                                        </td>
+                                        <td class="px-4 text-end text-nowrap">
+                                            <button class="btn btn-sm btn-outline-primary me-1" title="Edit this statement" onclick="openModal('edit', this, 'sqd', <%= item.id %>)">
+                                                <i class="fas fa-edit"></i> Edit
+                                            </button>
+                                            <% if (item.is_archived) { %>
+                                                <button type="button" class="btn btn-sm btn-outline-success" title="Restore this statement" onclick="restoreItem(<%= item.id %>)">
+                                                    <i class="fas fa-undo"></i> Restore
+                                                </button>
+                                            <% } else { %>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" title="Archive this statement" onclick="archiveItem(<%= item.id %>)">
+                                                    <i class="fas fa-box-archive"></i> Archive
+                                                </button>
+                                            <% } %>
                                         </td>
                                     </tr>
                                 <% }) %>
@@ -150,12 +180,27 @@
                         <tbody id="tbody-cc">
                             <% if(typeof settings !== 'undefined' && settings.cc && settings.cc.length > 0) { %>
                                 <% settings.cc.forEach((item, index) => { %>
-                                    <tr data-id="<%= item.id %>">
+                                    <tr data-id="<%= item.id %>" class="<%= item.is_archived ? 'archived-row item-row-archived' : 'item-row-active' %>">
                                         <td class="px-4 py-3 text-muted fw-bold">CC<%= index + 1 %></td>
-                                        <td class="px-4 py-3 item-text"><%= item.content %></td>
-                                        <td class="px-4 text-end">
-                                            <button class="btn btn-sm btn-light text-primary me-1" title="Edit this question" onclick="openModal('edit', this, 'cc', <%= item.id %>)"><i class="fas fa-edit"></i></button>
-                                            <button class="btn btn-sm btn-light text-danger me-1" title="Delete this question" onclick="deleteItem(this, <%= item.id %>)"><i class="fas fa-trash"></i></button>
+                                        <td class="px-4 py-3 item-text">
+                                            <%= item.content %>
+                                            <% if (item.is_archived) { %>
+                                                <span class="badge badge-archived ms-2">ARCHIVED</span>
+                                            <% } %>
+                                        </td>
+                                        <td class="px-4 text-end text-nowrap">
+                                            <button class="btn btn-sm btn-outline-primary me-1" title="Edit this question" onclick="openModal('edit', this, 'cc', <%= item.id %>)">
+                                                <i class="fas fa-edit"></i> Edit
+                                            </button>
+                                            <% if (item.is_archived) { %>
+                                                <button type="button" class="btn btn-sm btn-outline-success" title="Restore this question" onclick="restoreItem(<%= item.id %>)">
+                                                    <i class="fas fa-undo"></i> Restore
+                                                </button>
+                                            <% } else { %>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" title="Archive this question" onclick="archiveItem(<%= item.id %>)">
+                                                    <i class="fas fa-box-archive"></i> Archive
+                                                </button>
+                                            <% } %>
                                         </td>
                                     </tr>
                                 <% }) %>
@@ -201,6 +246,19 @@
 
     document.addEventListener("DOMContentLoaded", function() {
         myModal = new bootstrap.Modal(document.getElementById('itemModal'));
+
+        // Archived items ay tinatago by default; naka-toggle lang para makita.
+        const archivedRows = document.querySelectorAll('.item-row-archived');
+        archivedRows.forEach(row => row.style.display = 'none');
+
+        const showArchivedToggle = document.getElementById('showArchivedToggle');
+        if (showArchivedToggle) {
+            showArchivedToggle.addEventListener('change', function () {
+                archivedRows.forEach(row => {
+                    row.style.display = this.checked ? '' : 'none';
+                });
+            });
+        }
     });
 
     function openModal(mode, btn, category, dbId = null) {
@@ -249,11 +307,11 @@
         }
     }
 
-    // FUNCTION PARA SA DATABASE DELETE (FETCH API)
-    async function deleteItem(btn, dbId) {
-        const confirmed = await AppAlert.confirm('Sigurado ka bang gusto mong burahin ang item na ito sa database?', {
-            title: 'Delete this item?',
-            confirmText: 'Yes, delete it!'
+    // FUNCTION PARA SA DATABASE ARCHIVE (SOFT DELETE, FETCH API)
+    async function archiveItem(dbId) {
+        const confirmed = await AppAlert.confirm('Sigurado ka ba na gusto mong i-archive ang item na ito?', {
+            title: 'Archive this item?',
+            confirmText: 'Yes, archive it!'
         });
         if (!confirmed) return;
 
@@ -266,13 +324,9 @@
             const data = await response.json();
 
             if (data.success) {
-                let tr = btn.closest('tr');
-                let tbody = tr.parentNode;
-                tr.remove();
-                reindexTable(tbody); // Awtomatikong itatama ang numbering (SQD0, SQD1, CC1, etc.)
-                AppAlert.success('Item deleted successfully.');
+                window.location.reload();
             } else {
-                await AppAlert.error("Hindi nabura ang item sa database.");
+                await AppAlert.error("Hindi na-archive ang item sa database.");
             }
         } catch(err) {
             console.error(err);
@@ -280,25 +334,30 @@
         }
     }
 
-    // AUTO UPDATE ROW NUMBERS AT LABELS
-    function reindexTable(tbody) {
-        let colCount = tbody.closest('table').querySelectorAll('th').length;
-        if (colCount === 3) {
-            let rows = tbody.querySelectorAll('tr');
-            let isZeroStart = tbody.id === 'tbody-sqd-statements';
+    // FUNCTION PARA SA DATABASE RESTORE (FETCH API)
+    async function restoreItem(dbId) {
+        const confirmed = await AppAlert.confirm('Sigurado ka ba na gusto mong i-restore ang item na ito?', {
+            title: 'Restore this item?',
+            confirmText: 'Yes, restore it!'
+        });
+        if (!confirmed) return;
 
-            rows.forEach((row, index) => {
-                let numCell = row.querySelector('td:first-child');
-                if (numCell) {
-                    if (isZeroStart) {
-                        numCell.innerText = 'SQD' + index;
-                    } else if (tbody.id === 'tbody-cc') {
-                        numCell.innerText = 'CC' + (index + 1);
-                    } else {
-                        numCell.innerText = index + 1;
-                    }
-                }
+        try {
+            const response = await fetch('/settings/restore', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: dbId })
             });
+            const data = await response.json();
+
+            if (data.success) {
+                window.location.reload();
+            } else {
+                await AppAlert.error("Hindi na-restore ang item sa database.");
+            }
+        } catch(err) {
+            console.error(err);
+            await AppAlert.error("Database Error.");
         }
     }
 </script>

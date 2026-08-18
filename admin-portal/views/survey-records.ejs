@@ -88,6 +88,11 @@
         .bg-general { background-color: #f1f5f9; color: #64748b; }
         .bg-facility { background-color: #fef3c7; color: #d97706; }
 
+        .sentiment-badge { font-size: 0.65rem; padding: 4px 12px; border-radius: 999px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; display: inline-block; }
+        .bg-sentiment-positive { background-color: #dcfce7; color: #15803d; }
+        .bg-sentiment-negative { background-color: #fee2e2; color: #b91c1c; }
+        .bg-sentiment-neutral { background-color: #e2e8f0; color: #334155; }
+
         #noResults { display: none; padding: 60px; text-align: center; color: #94a3b8; }
 
         .btn-back {
@@ -148,9 +153,10 @@
                                 <table class="table">
                                     <thead>
                                         <tr>
-                                            <th style="width: 25%;">Name</th>
-                                            <th style="width: 50%;">Comments</th>
-                                            <th style="width: 25%;">Topic</th>
+                                            <th style="width: 20%;">Name</th>
+                                            <th style="width: 40%;">Comments</th>
+                                            <th style="width: 20%;">Topic</th>
+                                            <th style="width: 20%;">Sentiment</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -159,6 +165,7 @@
                                                 <td><span class="respondent-name"><%= record.name %></span></td>
                                                 <td class="text-muted small"><%= record.comments %></td>
                                                 <td><span class="topic-badge <%= record.topicClass %>"><%= record.topic %></span></td>
+                                                <td><span class="sentiment-badge <%= record.sentimentClass %>"><%= record.sentiment %></span></td>
                                             </tr>
                                         <% }) %>
                                     </tbody>

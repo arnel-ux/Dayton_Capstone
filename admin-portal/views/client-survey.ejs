@@ -6,6 +6,7 @@
     <title>CSM Survey - CSPC</title>
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -13,36 +14,37 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
     <style>
+        :root {
+            /* Brand + neutral palette — refined institutional blue on slate neutrals */
+            --bs-primary: #2554c7;
+            --bs-primary-rgb: 37, 84, 199;
+            --brand: #2554c7;
+            --brand-dark: #1c3f9c;
+            --ink-900: #0f172a;
+            --ink-800: #1e293b;
+            --ink-600: #475569;
+            --ink-400: #94a3b8;
+            --surface: #ffffff;
+            --page-bg: #eef1f6;
+            --line: #e2e8f0;
+            --line-soft: #edf1f7;
+            --ring: rgba(37, 84, 199, 0.15);
+        }
+
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             scroll-behavior: smooth;
             margin: 0;
             padding: 0;
             min-height: 100vh;
-            transition: color 0.3s ease-in-out;
+            background: var(--page-bg);
+            color: var(--ink-800);
+            transition: background 0.3s ease-in-out, color 0.3s ease-in-out;
         }
 
         #sqd-body td {
-            padding-top: 1.25rem;
-            padding-bottom: 1.25rem;
-        }
-
-        .bg-blurred {
-            position: fixed; 
-            top: -5%; left: -5%; right: -5%; bottom: -5%; 
-            background-image: url('https://spims.cspc.edu.ph/assets/img/background.jpg'); 
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            filter: blur(1px); 
-            z-index: -1;
-        }
-
-        .bg-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(15, 23, 42, 0.75); 
-            z-index: -1;
+            padding-top: 1.1rem;
+            padding-bottom: 1.1rem;
         }
 
         .page { display: none; }
@@ -53,58 +55,199 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        /* Subtle padlock icon shown next to labels of previously-answered, locked fields */
+        .lock-icon {
+            font-size: 0.85rem;
+            color: var(--ink-400);
+            cursor: help;
+            vertical-align: middle;
+        }
+
+        /* Dim disabled/locked inputs so it's obvious they can't be edited */
+        .form-control:disabled,
+        .form-select:disabled {
+            background-color: #f1f5f9;
+            opacity: 0.8;
+            cursor: not-allowed;
+        }
+
+        /* Grey out offices whose survey is already completed, and mark them
+           so the browser's native tooltip (title attr) makes the reason clear */
+        #officeSelect option:disabled {
+            color: #9ca3af;
+            font-style: italic;
+            background-color: #f1f5f9;
+        }
+
+        .locked-field {
+            opacity: 0.75;
+        }
+
+        .locked-field .radio-custom {
+            cursor: not-allowed;
+        }
+
         .radio-custom {
-            width: 20px;
-            height: 20px;
-            accent-color: #0d6efd;
+            width: 19px;
+            height: 19px;
+            accent-color: var(--brand);
             cursor: pointer;
         }
 
+        /* ---- Card shell ---- */
         .survey-card {
             border-radius: 20px;
-            background: rgba(255, 255, 255, 0.95) !important;
-            backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            max-width: 850px;
+            background: var(--surface) !important;
+            border: 1px solid var(--line-soft);
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 24px 48px -16px rgba(15, 23, 42, 0.14);
+            max-width: 880px;
             margin: 0 auto;
             transition: background 0.3s ease-in-out, border-color 0.3s ease-in-out;
         }
 
+        .text-heading { color: var(--ink-900) !important; }
+        .text-dark { color: var(--ink-800) !important; }
+        .text-secondary, .text-muted { color: var(--ink-600) !important; }
+
         .section-title {
-            border-left: 5px solid #0d6efd;
-            padding-left: 12px;
+            border-left: 4px solid var(--brand);
+            padding-left: 14px;
+        }
+
+        .section-title h4 { letter-spacing: .02em; }
+
+        /* ---- Soft question/info blocks (formerly bg-light) ---- */
+        .qa-block {
+            background: #f8fafc;
+            border: 1px solid var(--line) !important;
+            border-radius: 16px !important;
         }
 
         .option-card {
-            border: 1px solid #dee2e6;
-            border-radius: 12px;
-            padding: 14px;
-            transition: .2s;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 15px 16px;
+            transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
             cursor: pointer;
-            background: white;
+            background: var(--surface);
         }
 
         .option-card:hover {
-            background: #eff6ff;
-            border-color: #0d6efd;
+            background: #f5f8ff;
+            border-color: #b6c8f2;
         }
 
+        .option-card:has(input:checked) {
+            background: #eef3fe;
+            border-color: var(--brand);
+            box-shadow: 0 0 0 1px var(--brand) inset;
+        }
+
+        /* ---- Form controls ---- */
+        .form-control, .form-select {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: .65rem .9rem;
+            color: var(--ink-800);
+            background-color: var(--surface);
+            transition: border-color .15s ease, box-shadow .15s ease;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: var(--brand);
+            box-shadow: 0 0 0 4px var(--ring);
+            outline: none;
+        }
+
+        .form-check-input {
+            border: 1.5px solid var(--ink-400);
+            border-radius: 5px;
+        }
+
+        .form-check-input:focus {
+            box-shadow: 0 0 0 4px var(--ring);
+            border-color: var(--brand);
+        }
+
+        .form-check-input:checked {
+            background-color: var(--brand);
+            border-color: var(--brand);
+        }
+
+        .form-label { color: var(--ink-800); }
+
+        /* ---- Buttons ---- */
+        .btn {
+            border-radius: 8px;
+            transition: transform .12s ease, box-shadow .15s ease, background-color .15s ease, border-color .15s ease;
+        }
+
+        .btn-primary {
+            background: var(--brand);
+            border-color: var(--brand);
+        }
+
+        .btn-primary:hover, .btn-primary:focus {
+            background: var(--brand-dark);
+            border-color: var(--brand-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 20px -8px rgba(37, 84, 199, 0.55);
+        }
+
+        .btn-outline-primary, .btn-outline-secondary {
+            border-color: var(--line);
+            color: var(--ink-800);
+        }
+
+        .btn-outline-primary:hover, .btn-outline-secondary:hover {
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled { transform: none; }
+
+        /* ---- SQD table ---- */
         .table td, .table th { vertical-align: middle; }
         textarea { resize: none; }
 
+        #sqd-table-wrap {
+            border: 1px solid var(--line) !important;
+            border-radius: 16px !important;
+            overflow: hidden;
+        }
+
+        #sqd-table-wrap table { margin-bottom: 0; }
+
+        #sqd-table-wrap thead th {
+            background: var(--ink-900);
+            color: #f1f5f9;
+            font-weight: 600;
+            border-color: var(--ink-900);
+        }
+
         /* --- DARK MODE STYLES --- */
-        [data-bs-theme="dark"] body { color: #f8f9fa; }
-        [data-bs-theme="dark"] .survey-card { background: rgba(33, 37, 41, 0.85) !important; border-color: rgba(255, 255, 255, 0.1); }
-        [data-bs-theme="dark"] .text-dark { color: #f8f9fa !important; }
-        [data-bs-theme="dark"] .bg-light { background-color: #2b3035 !important; border-color: #495057 !important; }
-        [data-bs-theme="dark"] .bg-white { background-color: #212529 !important; }
-        [data-bs-theme="dark"] .option-card { background: #2b3035; border-color: #495057; color: #f8f9fa; }
-        [data-bs-theme="dark"] .option-card:hover { background: #343a40; border-color: #0d6efd; }
-        [data-bs-theme="dark"] .bg-primary-subtle { background-color: rgba(13, 110, 253, 0.2) !important; }
-        [data-bs-theme="dark"] .form-select, [data-bs-theme="dark"] .form-control { background-color: #2b3035; color: #f8f9fa; border-color: #495057; }
-        [data-bs-theme="dark"] .table { --bs-table-bg: transparent; --bs-table-color: #f8f9fa; border-color: #495057; }
-        [data-bs-theme="dark"] .text-secondary { color: #adb5bd !important; }
-        [data-bs-theme="dark"] #terms-box { background-color: #2b3035 !important; border-color: #495057 !important; }
+        [data-bs-theme="dark"] {
+            --page-bg: #0b1220;
+            --surface: #161f2e;
+            --line: #2a3444;
+            --line-soft: #22293a;
+            --ink-900: #f1f5f9;
+            --ink-800: #e2e8f0;
+            --ink-600: #94a3b8;
+            --ink-400: #64748b;
+            --ring: rgba(96, 141, 255, 0.25);
+        }
+        [data-bs-theme="dark"] body { color: var(--ink-800); }
+        [data-bs-theme="dark"] .survey-card { box-shadow: 0 24px 48px -16px rgba(0, 0, 0, 0.5); }
+        [data-bs-theme="dark"] .qa-block { background: #101827; }
+        [data-bs-theme="dark"] .bg-white { background-color: var(--surface) !important; }
+        [data-bs-theme="dark"] .option-card { background: #101827; color: var(--ink-800); }
+        [data-bs-theme="dark"] .option-card:hover { background: #17233a; border-color: var(--brand); }
+        [data-bs-theme="dark"] .option-card:has(input:checked) { background: #17233a; }
+        [data-bs-theme="dark"] .bg-primary-subtle { background-color: rgba(37, 84, 199, 0.18) !important; }
+        [data-bs-theme="dark"] .form-select, [data-bs-theme="dark"] .form-control { background-color: #101827; color: var(--ink-800); border-color: var(--line); }
+        [data-bs-theme="dark"] .table { --bs-table-bg: transparent; --bs-table-color: var(--ink-800); border-color: var(--line); }
+        [data-bs-theme="dark"] #sqd-table-wrap thead th { background: #050a13; }
+        [data-bs-theme="dark"] #terms-box { background-color: var(--surface) !important; border-color: var(--line) !important; }
 
         summary { list-style: none; outline: none; }
         summary::-webkit-details-marker { display: none; }
@@ -113,55 +256,52 @@
 
 <body class="py-3 py-md-5">
 
-<div class="bg-blurred"></div>
-<div class="bg-overlay"></div>
-
 <div class="container">
-    <div class="card shadow-lg border-0 survey-card">
-        <div class="card-body p-3 p-md-5 position-relative">
+    <div class="card border-0 survey-card">
+        <div class="card-body p-4 p-md-5 position-relative">
 
             <div class="position-absolute top-0 start-0 m-3 z-3">
-                <button id="btn-theme" type="button" onclick="toggleTheme()" class="btn bg-transparent border-0 text-body shadow-none fw-bold d-flex align-items-center gap-1">
+                <button id="btn-theme" type="button" onclick="toggleTheme()" class="btn bg-transparent border-0 text-body shadow-none fw-semibold d-flex align-items-center gap-1">
                     🌙 Dark
                 </button>
             </div>
 
             <div class="position-absolute top-0 end-0 m-3 d-flex gap-2 z-3">
-                <button id="btn-en" type="button" onclick="setLanguage('en')" class="btn btn-primary btn-sm fw-bold shadow-sm">English</button>
-                <button id="btn-tl" type="button" onclick="setLanguage('tl')" class="btn bg-transparent border btn-sm fw-bold shadow-sm text-body">Tagalog</button>
+                <button id="btn-en" type="button" onclick="setLanguage('en')" class="btn btn-primary btn-sm fw-semibold shadow-sm">English</button>
+                <button id="btn-tl" type="button" onclick="setLanguage('tl')" class="btn bg-transparent border btn-sm fw-semibold shadow-sm text-body">Tagalog</button>
             </div>
 
             <div class="text-center border-bottom pb-4 mb-5 pt-5 pt-md-4">
                 <div class="mb-3">
-                    <img src="https://cspc.edu.ph/wp-content/uploads/2022/03/Camarines_Sur_Polytechnic_Colleges_Logo.png" alt="CSPC Logo" style="width: 100px; height: auto; background-color: white; border-radius: 50%; padding: 3px;" class="mb-2 shadow-sm">
+                    <img src="https://cspc.edu.ph/wp-content/uploads/2022/03/Camarines_Sur_Polytechnic_Colleges_Logo.png" alt="CSPC Logo" style="width: 92px; height: auto; background-color: white; border-radius: 50%; padding: 3px;" class="mb-3 shadow-sm">
                 </div>
-                <p class="small text-muted text-uppercase mb-1" data-i18n="gov_rep">Republic of the Philippines</p>
-                <h3 class="fw-bold text-uppercase mb-0 text-dark">Camarines Sur Polytechnic Colleges</h3>
-                <p class="text-muted fst-italic">Nabua, Camarines Sur</p>
+                <p class="small text-secondary text-uppercase mb-1" style="letter-spacing:.08em;" data-i18n="gov_rep">Republic of the Philippines</p>
+                <h3 class="fw-semibold text-uppercase mb-0 text-heading">Camarines Sur Polytechnic Colleges</h3>
+                <p class="text-secondary fst-italic mb-0">Nabua, Camarines Sur</p>
 
-                <div class="bg-primary-subtle border rounded-4 p-3 mt-4">
-                    <h4 class="fw-bold text-primary text-uppercase mb-0" data-i18n="form_title">Client Satisfaction Measurement (CSM) Survey</h4>
+                <div class="bg-primary-subtle rounded-4 p-3 mt-4">
+                    <h4 class="fw-semibold text-heading text-uppercase mb-0" data-i18n="form_title">Client Satisfaction Measurement (CSM) Survey</h4>
                 </div>
             </div>
 
             <form id="surveyForm">
 
                 <div id="stage1" class="page active">
-                    <div class="bg-light border rounded-4 p-4 text-center mb-4">
-                        <h4 class="fw-bold text-primary mb-3" data-i18n="s1_head">Help us serve you better!</h4>
+                    <div class="qa-block p-4 text-center mb-4">
+                        <h4 class="fw-semibold text-heading mb-3" data-i18n="s1_head">Help us serve you better!</h4>
                         <p class="text-secondary mb-0 fs-6" data-i18n="s1_desc"></p>
                     </div>
 
-                    <div id="terms-box" class="mb-4 bg-white border border-secondary-subtle rounded-4 p-4 shadow-sm">
+                    <div id="terms-box" class="mb-4 bg-white border rounded-4 p-4">
                         <div class="text-center mb-3">
-                            <span class="fw-bold text-primary fs-5" data-i18n="terms_title">Terms and Conditions</span>
+                            <span class="fw-semibold text-heading fs-5" data-i18n="terms_title">Terms and Conditions</span>
                             <p class="text-secondary small mb-0 mt-2" data-i18n="terms_summary"></p>
                         </div>
 
                         <ul id="terms-points-list" class="text-secondary small mb-3 ps-4"></ul>
 
                         <div class="text-center mb-3">
-                            <button type="button" class="btn btn-outline-primary btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#termsModal" title="Read the full Terms and Conditions / Privacy Policy">
+                            <button type="button" class="btn btn-outline-primary btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#termsModal" title="Read the full Terms and Conditions / Privacy Policy">
                                 <span data-i18n="terms_read_btn"></span>
                             </button>
                         </div>
@@ -174,33 +314,33 @@
                         </div>
                     </div>
 
-                    <button type="button" id="btnStartSurvey" onclick="navigate(2)" class="btn btn-primary w-100 py-3 fw-bold shadow-sm" disabled>
+                    <button type="button" id="btnStartSurvey" onclick="navigate(2)" class="btn btn-primary w-100 py-3 fw-semibold" disabled>
                         <span data-i18n="btn_start"></span>
                     </button>
                 </div>
 
                 <div id="stage2" class="page">
                     <div class="section-title mb-4">
-                        <h4 class="fw-bold text-primary text-uppercase mb-0" data-i18n="client_prof">Client Profile</h4>
+                        <h4 class="fw-semibold text-heading text-uppercase mb-0" data-i18n="client_prof">Client Profile</h4>
                     </div>
 
                     <div class="row g-4">
                         <!-- IDINAGDAG: Pangalan -->
                         <div class="col-md-6">
                             <label class="form-label fw-semibold text-dark fs-6">Name / Pangalan (Optional)</label>
-                            <input type="text" name="respondent_name" class="form-control border-secondary-subtle" placeholder="e.g. Juan Dela Cruz">
+                            <input type="text" name="respondent_name" class="form-control" placeholder="e.g. Juan Dela Cruz">
                         </div>
 
                         <!-- Signed-in Google account (used to enforce 1 survey per office) -->
                         <div class="col-md-6">
                             <label class="form-label fw-semibold text-dark fs-6">Google Account</label>
-                            <input type="email" name="email" class="form-control border-secondary-subtle" value="<%= typeof clientEmail !== 'undefined' ? clientEmail : '' %>" readonly>
+                            <input type="email" name="email" class="form-control" value="<%= typeof clientEmail !== 'undefined' ? clientEmail : '' %>" readonly>
                         </div>
 
                         <div class="col-md-6">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_client_type"></label>
                             <!-- IDINAGDAG ANG name="client_type" AT value="" -->
-                            <select name="client_type" class="form-select border-secondary-subtle">
+                            <select name="client_type" class="form-select">
                                 <option value="Citizen" data-i18n="opt_citizen"></option>
                                 <option value="Business" data-i18n="opt_business"></option>
                                 <option value="Government" data-i18n="opt_gov"></option>
@@ -209,8 +349,8 @@
 
                         <div class="col-md-6">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_sex"></label>
-                            <span id="gender-lock-note" class="badge text-bg-secondary d-none ms-1" title="This was saved from your first survey and can no longer be changed">🔒 Locked</span>
-                            <div class="d-flex flex-wrap gap-4 pt-2">
+                            <i id="gender-lock-note" class="bi bi-lock-fill lock-icon d-none" data-bs-toggle="tooltip" data-bs-placement="top" title="You have already answered this section. It is now locked."></i>
+                            <div id="gender-field-group" class="d-flex flex-wrap gap-4 pt-2">
                                 <label class="d-flex align-items-center gap-2 text-dark">
                                     <!-- PINALITAN ANG name="sex" NG name="gender" AT NAGDAGDAG NG value="Male" -->
                                     <input type="radio" name="gender" value="Male" class="radio-custom">
@@ -226,9 +366,9 @@
 
                         <div class="col-md-6">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_age"></label>
-                            <span id="age-lock-note" class="badge text-bg-secondary d-none ms-1" title="This was saved from your first survey and can no longer be changed">🔒 Locked</span>
+                            <i id="age-lock-note" class="bi bi-lock-fill lock-icon d-none" data-bs-toggle="tooltip" data-bs-placement="top" title="You have already answered this section. It is now locked."></i>
                             <!-- IDINAGDAG ANG name="age" AT value="" SA MGA OPTIONS -->
-                            <select name="age" class="form-select border-secondary-subtle">
+                            <select name="age" class="form-select">
                                 <option value="" selected disabled data-i18n="opt_sel_age"></option>
                                 <option value="18 and below" data-i18n="opt_18_below"></option>
                                 <option value="19-24">19-24</option>
@@ -240,14 +380,14 @@
 
                         <div class="col-md-6">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_date"></label>
-                            <input type="date" id="surveyDate" name="survey_date" class="form-control border-secondary-subtle">
+                            <input type="date" id="surveyDate" name="survey_date" class="form-control">
                         </div>
 
                         <div class="col-12">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_region"></label>
-                            <span id="region-lock-note" class="badge text-bg-secondary d-none ms-1" title="This was saved from your first survey and can no longer be changed">🔒 Locked</span>
+                            <i id="region-lock-note" class="bi bi-lock-fill lock-icon d-none" data-bs-toggle="tooltip" data-bs-placement="top" title="You have already answered this section. It is now locked."></i>
                             <!-- IDINAGDAG ANG name="region" AT value="" SA MGA OPTIONS -->
-                            <select name="region" class="form-select border-secondary-subtle">
+                            <select name="region" class="form-select">
                                 <option value="" disabled selected data-i18n="opt_select_region"></option>
                                 <option value="NCR - National Capital Region">NCR - National Capital Region</option>
                                 <option value="CAR - Cordillera Administrative Region">CAR - Cordillera Administrative Region</option>
@@ -271,13 +411,16 @@
 
                         <div class="col-12">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_office"></label>
-                            <select name="office_id" class="form-select fs-6" required>
+                            <select id="officeSelect" name="office_id" class="form-select fs-6" required>
                                 <option value="" selected disabled data-i18n="s1_ph">Select Office...</option>
                                 <% if (typeof offices !== 'undefined') { %>
                                     <% const taken = typeof takenOfficeIds !== 'undefined' ? takenOfficeIds : []; %>
                                     <% offices.forEach(office => { %>
                                         <% const isTaken = taken.includes(office.id); %>
-                                        <option value="<%= office.id %>" <%= isTaken ? 'disabled' : '' %>><%= office.office_name %> (<%= office.cluster_name %>)<%= isTaken ? ' (Already Completed)' : '' %></option>
+                                        <option
+                                            value="<%= office.id %>"
+                                            <% if (isTaken) { %>disabled title="Survey already completed for this office"<% } %>
+                                        ><%= isTaken ? '✓ ' : '' %><%= office.office_name %> (<%= office.cluster_name %>)</option>
                                     <% }); %>
                                 <% } %>
                             </select>
@@ -285,24 +428,24 @@
 
                         <div class="col-12">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_service"></label>
-                            <input type="text" name="service_availed" class="form-control border-secondary-subtle">
+                            <input type="text" name="service_availed" class="form-control">
                         </div>
                     </div>
 
                     <div class="d-flex justify-content-between border-top pt-4 mt-5">
-                        <button type="button" onclick="navigate(1)" class="btn btn-outline-secondary fw-bold" data-i18n="btn_back"></button>
-                        <button type="button" onclick="navigate(3)" class="btn btn-primary fw-bold px-5 shadow-sm" data-i18n="btn_next"></button>
+                        <button type="button" onclick="navigate(1)" class="btn btn-outline-secondary fw-semibold" data-i18n="btn_back"></button>
+                        <button type="button" onclick="navigate(3)" class="btn btn-primary fw-semibold px-5" data-i18n="btn_next"></button>
                     </div>
                 </div>
 
                 <div id="stage3" class="page">
                     <div class="section-title mb-4">
-                        <h4 class="fw-bold text-primary text-uppercase mb-0" data-i18n="cc_title"></h4>
+                        <h4 class="fw-semibold text-heading text-uppercase mb-0" data-i18n="cc_title"></h4>
                         <p class="text-secondary mt-2 mb-2" data-i18n="cc_desc"></p>
                     </div>
 
-                    <div class="bg-light border rounded-4 p-4 mb-4">
-                        <p class="fw-bold text-dark" data-i18n="cc1_q"></p>
+                    <div class="qa-block p-4 mb-4">
+                        <p class="fw-semibold text-dark" data-i18n="cc1_q"></p>
                         <div class="d-grid gap-3">
                             <label class="option-card d-flex gap-3 text-dark">
                                 <input type="radio" name="cc1" value="I know what a CC is and I saw this office's CC." class="radio-custom mt-1">
@@ -323,8 +466,8 @@
                         </div>
                     </div>
 
-                    <div class="bg-light border rounded-4 p-4 mb-4">
-                        <p class="fw-bold text-dark" data-i18n="cc2_q"></p>
+                    <div class="qa-block p-4 mb-4">
+                        <p class="fw-semibold text-dark" data-i18n="cc2_q"></p>
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="option-card d-flex gap-3 align-items-center text-dark">
@@ -359,8 +502,8 @@
                         </div>
                     </div>
 
-                    <div class="bg-light border rounded-4 p-4">
-                        <p class="fw-bold text-dark" data-i18n="cc3_q"></p>
+                    <div class="qa-block p-4">
+                        <p class="fw-semibold text-dark" data-i18n="cc3_q"></p>
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="option-card d-flex gap-3 align-items-center text-dark">
@@ -390,20 +533,20 @@
                     </div>
 
                     <div class="d-flex justify-content-between border-top pt-4 mt-5">
-                        <button type="button" onclick="navigate(2)" class="btn btn-outline-secondary fw-bold" data-i18n="btn_back"></button>
-                        <button type="button" onclick="navigate(4)" class="btn btn-primary fw-bold px-5 shadow-sm" data-i18n="btn_next"></button>
+                        <button type="button" onclick="navigate(2)" class="btn btn-outline-secondary fw-semibold" data-i18n="btn_back"></button>
+                        <button type="button" onclick="navigate(4)" class="btn btn-primary fw-semibold px-5" data-i18n="btn_next"></button>
                     </div>
                 </div>
 
                 <div id="stage4" class="page">
                     <div class="section-title mb-4">
-                        <h4 class="fw-bold text-primary text-uppercase mb-0" data-i18n="sqd_title"></h4>
+                        <h4 class="fw-semibold text-heading text-uppercase mb-0" data-i18n="sqd_title"></h4>
                         <p class="text-secondary mt-2 mb-0" data-i18n="sqd_desc"></p>
                     </div>
 
-                    <div class="table-responsive border rounded-4 bg-white">
+                    <div id="sqd-table-wrap" class="table-responsive bg-white">
                         <table class="table table-bordered align-middle mb-0">
-                            <thead class="table-dark text-center">
+                            <thead class="text-center">
                             <tr>
                                 <th class="text-start" data-i18n="th_statement"></th>
                                 <th>🤩 5<br><small data-i18n="th_sa"></small></th>
@@ -420,12 +563,12 @@
 
                     <div class="mt-4">
                         <label class="form-label fw-semibold fst-italic text-dark" data-i18n="lbl_sugg"></label>
-                        <textarea name="comments" class="form-control border-secondary-subtle" rows="5"></textarea>
+                        <textarea name="comments" class="form-control" rows="5"></textarea>
                     </div>
 
                     <div class="d-flex justify-content-between border-top pt-4 mt-5">
-                        <button type="button" onclick="navigate(3)" class="btn btn-outline-secondary fw-bold" data-i18n="btn_back"></button>
-                        <button type="button" onclick="submitAll(event)" class="btn btn-primary fw-bold px-5 shadow-sm" data-i18n="btn_submit"></button>
+                        <button type="button" onclick="navigate(3)" class="btn btn-outline-secondary fw-semibold" data-i18n="btn_back"></button>
+                        <button type="button" onclick="submitAll(event)" class="btn btn-primary fw-semibold px-5" data-i18n="btn_submit"></button>
                     </div>
                 </div>
 
@@ -434,13 +577,13 @@
                 <div class="bg-success-subtle rounded-circle d-inline-flex align-items-center justify-content-center mb-4" style="width:100px;height:100px;">
                     <span class="fs-1 text-success">✔</span>
                 </div>
-                <h1 class="fw-bold mb-3 text-dark" data-i18n="ty_title"></h1>
+                <h1 class="fw-semibold mb-3 text-heading" data-i18n="ty_title"></h1>
                 <p class="text-secondary">
                     <span data-i18n="ty_desc"></span> <strong class="text-primary">CSPC</strong>
                 </p>
-                <button onclick="location.reload()" class="btn btn-outline-primary px-5 py-3 fw-bold mt-4" data-i18n="btn_again"></button>
+                <button onclick="location.reload()" class="btn btn-outline-primary px-5 py-3 fw-semibold mt-4" data-i18n="btn_again"></button>
                 <div class="mt-3">
-                    <button type="button" onclick="logout()" class="btn btn-outline-danger px-5 py-3 fw-bold">🚪 Logout</button>
+                    <button type="button" onclick="logout()" class="btn btn-outline-danger px-5 py-3 fw-semibold">🚪 Logout</button>
                 </div>
             </div>
 
@@ -532,7 +675,14 @@ function applyLockedProfile() {
         });
         const note = document.getElementById('gender-lock-note');
         if (note) note.classList.remove('d-none');
+        const group = document.getElementById('gender-field-group');
+        if (group) group.classList.add('locked-field');
     }
+
+    // Activate Bootstrap tooltips on any lock icons just revealed
+    document.querySelectorAll('.lock-icon:not(.d-none)').forEach(el => {
+        bootstrap.Tooltip.getOrCreateInstance(el);
+    });
 }
 
 // Theme Toggle Function 
@@ -846,8 +996,8 @@ function updateTranslations() {
 
 function setLanguage(lang) {
     currentLang = lang;
-    document.getElementById('btn-en').className = lang === 'en' ? 'btn btn-primary btn-sm fw-bold shadow-sm' : 'btn bg-transparent border btn-sm fw-bold shadow-sm text-body';
-    document.getElementById('btn-tl').className = lang === 'tl' ? 'btn btn-primary btn-sm fw-bold shadow-sm' : 'btn bg-transparent border btn-sm fw-bold shadow-sm text-body';
+    document.getElementById('btn-en').className = lang === 'en' ? 'btn btn-primary btn-sm fw-semibold shadow-sm' : 'btn bg-transparent border btn-sm fw-semibold shadow-sm text-body';
+    document.getElementById('btn-tl').className = lang === 'tl' ? 'btn btn-primary btn-sm fw-semibold shadow-sm' : 'btn bg-transparent border btn-sm fw-semibold shadow-sm text-body';
     updateTranslations();
     renderSQD();
     renderTermsPoints();
