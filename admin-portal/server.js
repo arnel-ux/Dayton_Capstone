@@ -103,7 +103,12 @@ const dbQuery = promisify(db.query).bind(db);
 // comment resolves with nulls (so DB defaults apply), and any script failure
 // resolves with the "Neutral" / "General Feedback" fallback instead of
 // throwing, so one bad comment can never crash a batch sync.
-function analyzeComment(comment) {
+//
+// `offline` should be true for comments coming from the /sync-surveys queue
+// (submitted while the client was offline, synced later in bulk) — analyze.py
+// takes a lightweight local heuristic fast path for those instead of loading
+// its transformer models, since nobody is waiting on a live response.
+function analyzeComment(comment, offline = false) {
     return new Promise((resolve) => {
         if (!comment || !String(comment).trim()) {
             return resolve({ sentiment: null, topic: null });
@@ -125,7 +130,7 @@ function analyzeComment(comment) {
                 finish({ sentiment: 'Neutral', topic: 'General Feedback' });
             });
 
-            pythonProcess.stdin.write(String(comment));
+            pythonProcess.stdin.write(JSON.stringify({ comment: String(comment), offline: !!offline }));
             pythonProcess.stdin.end();
 
             let aiOutput = '';
@@ -714,10 +719,12 @@ async function syncOneSurvey(googleEmail, body) {
     // Await the AI analysis BEFORE inserting — analyzeComment() never throws,
     // so a failed/unreachable analyze.py just yields the Neutral/General
     // Feedback fallback here instead of aborting this survey's sync.
+    // offline=true routes this through analyze.py's fast local heuristic
+    // path instead of loading the transformer models for every synced item.
     let sentiment = null;
     let topic = null;
     try {
-        const aiResult = await analyzeComment(comments);
+        const aiResult = await analyzeComment(comments, true);
         sentiment = aiResult.sentiment;
         topic = aiResult.topic;
     } catch (err) {
