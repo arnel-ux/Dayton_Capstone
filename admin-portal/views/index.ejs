@@ -5,50 +5,70 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CQA - Public Transparency Portal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+
     <style>
+        :root {
+            --navy-950: #060e21;
+            --navy-900: #0a1f44;
+            --navy-800: #0e2a5e;
+            --navy-700: #12305c;
+            --gold-500: #f4b400;
+            --gold-400: #ffc72c;
+            --gold-300: #ffdd7a;
+        }
+
         /* --- GENERAL LAYOUT --- */
         body, html {
-            height: 100vh; margin: 0; padding: 0; font-family: 'Inter', sans-serif; color: #1e293b;
-            overflow: hidden;
+            margin: 0; padding: 0; font-family: 'Inter', sans-serif; color: #1e293b;
+            scroll-behavior: smooth;
         }
 
         .bg-image {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background:url('https://spims.cspc.edu.ph/assets/img/background.jpg'); 
+            background:url('https://spims.cspc.edu.ph/assets/img/background.jpg');
             background-size: cover; background-position: center; z-index: -2;
         }
 
         .bg-overlay {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(15, 23, 42, 0.75); z-index: -1; transition: background 0.3s ease;
+            background: linear-gradient(180deg, rgba(6,14,33,0.92) 0%, rgba(10,31,68,0.85) 100%); z-index: -1; transition: background 0.3s ease;
         }
 
-        body.dark-mode .bg-overlay { background: rgba(10, 15, 28, 0.85); }
-        .main-wrapper { display: flex; flex-direction: column; height: 100vh; width: 100%; }
+        body.dark-mode .bg-overlay { background: linear-gradient(180deg, rgba(4,8,18,0.95) 0%, rgba(6,14,33,0.92) 100%); }
+        body:not(.dark-mode) .page-content { background: #f4f6fb; }
+        body.dark-mode .page-content { background: #0b1526; }
 
-        /* --- STICKY HEADER --- */
+        .page-content { position: relative; z-index: 1; }
+
+        /* --- SITE NAV LINKS --- */
+        .site-nav { display: flex; align-items: center; gap: 1.5rem; margin: 0 1rem; }
+        .site-nav a { color: rgba(255,255,255,0.85); text-decoration: none; font-weight: 600; font-size: 0.85rem; letter-spacing: 0.4px; text-transform: uppercase; position: relative; padding-bottom: 4px; transition: color 0.2s ease; }
+        .site-nav a::after { content: ''; position: absolute; left: 0; bottom: 0; width: 0; height: 2px; background: var(--gold-400); transition: width 0.25s ease; }
+        .site-nav a:hover { color: #fff; }
+        .site-nav a:hover::after { width: 100%; }
+
+        /* --- FIXED HEADER --- */
         .sticky-top-section {
-            z-index: 1000; flex-shrink: 0;
-            background: rgba(15, 23, 42, 0.85);
-            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 4px 25px rgba(0,0,0,0.5);
-            padding: 0.8rem 2rem;
+            position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+            background: rgba(10, 31, 68, 0.85);
+            backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%);
+            border-bottom: 1px solid rgba(244, 180, 0, 0.25);
+            box-shadow: 0 4px 25px rgba(0,0,0,0.35);
+            padding: 0.7rem 2rem;
             display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
         }
 
-        body.dark-mode .sticky-top-section { background: rgba(10, 15, 28, 0.95); border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+        body.dark-mode .sticky-top-section { background: rgba(4, 8, 18, 0.92); border-bottom: 1px solid rgba(244, 180, 0, 0.15); }
 
         .nav-left { display: flex; align-items: center; }
-        .nav-left img { width: 45px; margin-right: 15px; border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.3); background: white; padding: 2px; }
+        .nav-left img { width: 48px; height: 48px; object-fit: contain; margin-right: 15px; border-radius: 50%; box-shadow: 0 4px 12px rgba(244,180,0,0.35); background: white; padding: 3px; border: 2px solid var(--gold-400); }
         .header-text-container { display: flex; flex-direction: column; }
-        .header-title { font-size: 1.1rem; font-weight: 800; color: #ffffff; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; text-shadow: 0 2px 5px rgba(0,0,0,0.5); }
-        .header-subtitle { font-size: 0.85rem; color: #60a5fa; font-weight: 600; margin: 0; letter-spacing: 1px; }
+        .header-title { font-size: 1.05rem; font-weight: 800; color: #ffffff; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; text-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        .header-subtitle { font-size: 0.82rem; color: var(--gold-400); font-weight: 600; margin: 0; letter-spacing: 1px; }
 
         .nav-right { display: flex; align-items: center; gap: 15px; }
         .period-select {
@@ -56,43 +76,161 @@
             background: rgba(255, 255, 255, 0.1); color: white; font-weight: 600; font-size: 0.9rem;
             outline: none; cursor: pointer; transition: all 0.3s ease;
         }
-        .period-select:hover { border-color: #60a5fa; background: rgba(255, 255, 255, 0.2); }
-        .period-select option { background: #1e293b; color: white; }
+        .period-select:hover { border-color: var(--gold-400); background: rgba(255, 255, 255, 0.2); }
+        .period-select option { background: var(--navy-900); color: white; }
 
-        .auth-buttons .btn { border-radius: 50px; font-weight: 600; padding: 0.4rem 1.2rem; font-size: 0.85rem; transition: all 0.3s ease; }
-        .btn-admin { background: #4f46e5; color: white; border: none; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.4); }
-        .btn-admin:hover { background: #4338ca; color: white; transform: translateY(-2px); }
+        .auth-buttons .btn { border-radius: 50px; font-weight: 700; padding: 0.45rem 1.3rem; font-size: 0.85rem; transition: all 0.3s ease; }
+        .btn-admin { background: linear-gradient(135deg, var(--gold-500), var(--gold-400)); color: var(--navy-950); border: none; box-shadow: 0 4px 14px rgba(244, 180, 0, 0.45); }
+        .btn-admin:hover { filter: brightness(1.08); color: var(--navy-950); transform: translateY(-2px); }
 
-        /* --- HORIZONTAL DASHBOARD TRACK --- */
-        .dashboard-container { flex-grow: 1; display: flex; align-items: center; width: 100%; position: relative; overflow: hidden; }
-        
-        .charts-track { 
-            display: flex; gap: 2rem; padding: 2rem; width: 100%; height: 100%; align-items: center;
+        /* --- SPACER for fixed header --- */
+        #header-spacer { width: 100%; }
+
+        /* --- SECTION HEADING HELPER --- */
+        .section-eyebrow { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: var(--gold-500); margin-bottom: 0.5rem; }
+        .section-eyebrow::before { content: ''; width: 28px; height: 2px; background: var(--gold-500); display: inline-block; }
+        .section-title { font-family: 'Playfair Display', serif; font-weight: 800; font-size: clamp(1.8rem, 3.5vw, 2.6rem); color: var(--navy-900); margin-bottom: 1.5rem; }
+        body.dark-mode .section-title { color: #f8fafc; }
+
+        /* =========================================================
+           ABOUT / HERO SECTION
+        ========================================================= */
+        .about-section { padding: 5rem 2rem 5rem; scroll-margin-top: 100px; }
+        .about-grid { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 340px 1fr; gap: 3.5rem; align-items: center; }
+
+        .profile-card {
+            background: linear-gradient(160deg, var(--navy-900), var(--navy-700));
+            border-radius: 1.5rem; padding: 2rem 1.5rem 1.5rem; text-align: center;
+            box-shadow: 0 20px 45px rgba(10,31,68,0.35); border: 1px solid rgba(244,180,0,0.25);
+            position: relative; overflow: hidden;
+        }
+        .profile-card::before {
+            content: ''; position: absolute; top: -40%; right: -30%; width: 220px; height: 220px;
+            background: radial-gradient(circle, rgba(244,180,0,0.25), transparent 70%); border-radius: 50%;
+        }
+        .profile-avatar {
+            width: 140px; height: 140px; margin: 0 auto 1.2rem; border-radius: 50%;
+            background: linear-gradient(135deg, var(--gold-400), var(--gold-500));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 3.5rem; color: var(--navy-950); border: 4px solid rgba(255,255,255,0.85);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3); position: relative; z-index: 1;
+        }
+        .profile-name { color: #fff; font-weight: 800; font-size: 1.05rem; margin: 0; letter-spacing: 0.4px; position: relative; z-index: 1; }
+        .profile-role { color: var(--gold-300); font-weight: 600; font-size: 0.85rem; margin: 0.25rem 0 1rem; position: relative; z-index: 1; }
+        .profile-divider { width: 60px; height: 2px; background: rgba(244,180,0,0.5); margin: 0 auto 1rem; position: relative; z-index: 1; }
+        .profile-contact { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.82rem; color: rgba(255,255,255,0.85); position: relative; z-index: 1; }
+        .profile-contact a { color: var(--gold-300); text-decoration: none; }
+        .profile-contact a:hover { text-decoration: underline; }
+        .profile-contact i { width: 16px; color: var(--gold-400); margin-right: 4px; }
+
+        .about-text { color: #1e293b; }
+        body.dark-mode .about-text { color: #e2e8f0; }
+        .about-text p { font-size: 1.05rem; line-height: 1.85; font-weight: 400; }
+        .about-badges { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.5rem; }
+        .about-badge {
+            display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 50px;
+            background: rgba(10,31,68,0.06); border: 1px solid rgba(10,31,68,0.15); color: var(--navy-900);
+            font-weight: 700; font-size: 0.82rem;
+        }
+        body.dark-mode .about-badge { background: rgba(244,180,0,0.08); border-color: rgba(244,180,0,0.25); color: var(--gold-300); }
+        .about-badge i { color: var(--gold-500); }
+
+        @media (max-width: 860px) {
+            .about-grid { grid-template-columns: 1fr; text-align: center; }
+            .profile-card { max-width: 340px; margin: 0 auto; }
+            .about-badges { justify-content: center; }
+        }
+
+        /* =========================================================
+           ORGANIZATIONAL STRUCTURE SECTION
+        ========================================================= */
+        .org-section { padding: 3rem 2rem 5rem; scroll-margin-top: 100px; text-align: center; }
+        .org-wrap { max-width: 1200px; margin: 0 auto; }
+
+        .org-tree { display: flex; flex-direction: column; align-items: center; }
+        .org-node {
+            display: inline-flex; flex-direction: column; align-items: center; gap: 0.5rem;
+            background: #ffffff; border-radius: 1rem; padding: 1.1rem 1.4rem; width: 220px;
+            box-shadow: 0 10px 25px rgba(10,31,68,0.12); border: 1px solid rgba(10,31,68,0.08);
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+        .org-node:hover { transform: translateY(-4px); box-shadow: 0 16px 35px rgba(10,31,68,0.2); }
+        body.dark-mode .org-node { background: rgba(20, 33, 61, 0.95); border-color: rgba(244,180,0,0.12); }
+
+        .org-avatar {
+            width: 58px; height: 58px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, var(--navy-800), var(--navy-900)); color: var(--gold-400); font-size: 1.4rem;
+            border: 2px solid var(--gold-400);
+        }
+        .org-node.top .org-avatar { background: linear-gradient(135deg, var(--gold-400), var(--gold-500)); color: var(--navy-950); border-color: var(--navy-900); }
+        .org-name { font-weight: 800; font-size: 0.85rem; color: var(--navy-900); margin: 0; line-height: 1.3; }
+        body.dark-mode .org-name { color: #f8fafc; }
+        .org-role { font-size: 0.72rem; font-weight: 600; color: #64748b; margin: 0; line-height: 1.3; }
+        body.dark-mode .org-role { color: #94a3b8; }
+
+        .org-connector { width: 2px; height: 2.2rem; background: var(--gold-500); }
+
+        .org-team-box {
+            margin-top: 0; border: 2px dashed rgba(244,180,0,0.5); border-radius: 1.5rem; padding: 2.5rem 2rem 1.5rem;
+            width: 100%; position: relative;
+        }
+        .org-team-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem 1.5rem; justify-items: center; }
+        .org-team-row + .org-team-row { margin-top: 2rem; }
+        .org-student-aide {
+            margin-top: 2rem; display: inline-block; padding: 0.6rem 2rem; border-radius: 50px;
+            background: var(--navy-900); color: #fff; font-weight: 700; font-size: 0.85rem;
+            box-shadow: 0 8px 20px rgba(10,31,68,0.25);
+        }
+
+        @media (max-width: 860px) {
+            .org-team-grid { grid-template-columns: 1fr; gap: 1.5rem; }
+            .org-node { width: 100%; max-width: 260px; }
+        }
+
+        /* =========================================================
+           DASHBOARD SECTION (existing carousel, restyled to fit flow)
+        ========================================================= */
+        .dashboard-section { padding: 1rem 0 5rem; scroll-margin-top: 90px; }
+        .dashboard-header-block { text-align: center; max-width: 700px; margin: 0 auto 2rem; padding: 0 2rem; }
+        .dashboard-header-block p { color: #64748b; font-size: 0.95rem; }
+        body.dark-mode .dashboard-header-block p { color: #94a3b8; }
+
+        .dashboard-container {
+            display: flex; align-items: center; width: 100%; position: relative;
+            background: rgba(255,255,255,0.45); backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%);
+            border: 1px solid rgba(10,31,68,0.06); border-radius: 2rem; margin: 0 1.5rem; max-width: 1400px; margin-left: auto; margin-right: auto;
+        }
+        body.dark-mode .dashboard-container { background: rgba(15, 23, 42, 0.45); border-color: rgba(244,180,0,0.08); }
+
+        .charts-track {
+            display: flex; gap: 2.25rem; padding: 2.25rem; width: 100%; align-items: stretch;
             overflow-x: auto; scroll-behavior: auto;
         }
         .charts-track::-webkit-scrollbar { display: none; }
         .charts-track { -ms-overflow-style: none; scrollbar-width: none; }
 
         .chart-card {
-            background: #ffffff; border: none; border-radius: 1.2rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            display: flex; flex-direction: column; height: 75vh; min-width: 45vw; flex-shrink: 0;
-            opacity: 0; transform: translateY(100px);
-            transition: opacity 0.6s ease-out, transform 0.6s ease-out, box-shadow 0.2s ease;
+            background: #ffffff; border: none; border-radius: 1.5rem; box-shadow: 0 10px 40px rgba(10, 31, 68, 0.08);
+            display: flex; flex-direction: column; height: 70vh; min-width: 45vw; flex-shrink: 0;
+            opacity: 0; transform: translateY(60px);
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out, box-shadow 0.25s ease;
+            border: 1px solid rgba(10,31,68,0.04);
         }
         .chart-card.visible { opacity: 1; transform: translateY(0); }
-        .chart-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3); }
+        .chart-card:hover { transform: translateY(-6px); box-shadow: 0 20px 55px rgba(10, 31, 68, 0.14); }
 
-        body.dark-mode .chart-card { background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(10px); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7); }
+        body.dark-mode .chart-card { background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(10px); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45); border-color: rgba(244,180,0,0.06); }
 
-        .card-header-custom { padding: 1.2rem 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .card-header-custom { padding: 1.6rem 1.9rem 1.3rem; border-bottom: 1px solid rgba(10,31,68,0.04); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
         body.dark-mode .card-header-custom { border-bottom: 1px solid rgba(255,255,255,0.05); }
 
-        .chart-title { font-size: 1.1rem; font-weight: 800; text-transform: uppercase; color: #334155; margin: 0; }
-        body.dark-mode .chart-title { color: #f8fafc; }
+        .chart-title { font-size: 1.05rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #52627a; margin: 0; }
+        body.dark-mode .chart-title { color: #e2e8f0; }
 
         .btn-back-custom { font-size: 0.8rem; font-weight: 600; padding: 0.4rem 0.8rem; border-radius: 0.5rem; transition: all 0.2s ease; }
-        .canvas-container { position: relative; flex-grow: 1; padding: 1.5rem; display: flex; justify-content: center; align-items: center; }
-        .hint-text { font-size: 0.85rem; color: #94a3b8; margin-top: 0.3rem; font-weight: 500; }
+        .canvas-container { position: relative; flex-grow: 1; padding: 1rem 2.2rem 2.2rem; display: flex; justify-content: center; align-items: center; }
+        .hint-text { font-size: 0.82rem; color: #a3adc2; margin-top: 0.3rem; font-weight: 500; }
+        body.dark-mode .hint-text { color: #64748b; }
 
         #theme-toggle {
             position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 1050; border-radius: 50px; padding: 12px 24px; font-weight: 600; font-size: 0.9rem; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
@@ -100,14 +238,20 @@
         }
         #theme-toggle:hover { transform: scale(1.05); }
 
-        @media (max-width: 992px) { 
-            .chart-card { min-width: 80vw; height: 65vh; } 
-            .sticky-top-section { flex-direction: column; align-items: flex-start; } 
-            .nav-right { width: 100%; justify-content: space-between; } 
+        /* --- FOOTER --- */
+        .site-footer { background: var(--navy-950); color: rgba(255,255,255,0.65); text-align: center; padding: 1.5rem; font-size: 0.8rem; }
+        .site-footer strong { color: var(--gold-400); }
+
+        @media (max-width: 992px) {
+            .chart-card { min-width: 80vw; height: 60vh; }
+            .sticky-top-section { flex-direction: column; align-items: flex-start; }
+            .nav-right { width: 100%; justify-content: space-between; }
+            .site-nav { display: none; }
         }
-        @media (max-width: 576px) { 
-            .header-text-container { display: none; } 
-            .chart-card { min-width: 90vw; height: 65vh; }
+        @media (max-width: 576px) {
+            .header-text-container { display: none; }
+            .chart-card { min-width: 90vw; height: 60vh; }
+            .about-section, .org-section { padding-left: 1.2rem; padding-right: 1.2rem; }
         }
     </style>
 </head>
@@ -116,77 +260,205 @@
     <div class="bg-image"></div>
     <div class="bg-overlay"></div>
 
-    <div class="main-wrapper">
-        <div class="sticky-top-section">
-            <div class="nav-left">
-                <img src="https://cspc.edu.ph/wp-content/uploads/2022/03/Camarines_Sur_Polytechnic_Colleges_Logo.png" alt="CSPC Logo">
-                <div class="header-text-container">
-                    <h1 class="header-title">Office Of Center For Quality Assurance (CQA)</h1>
-                    <p class="header-subtitle">Public Transparency Portal • Satisfaction Survey</p>
-                </div>
-            </div>
-            
-            <div class="nav-right">
-                <select id="periodSelect" class="period-select" onchange="changePeriod()">
-                    <option value="p1">Jan - Jun 2026</option>
-                    <option value="p2">Jul - Dec 2026</option>
-                </select>
-                <!-- DINAGDAG: Isang Button na lang para sa Login Portal -->
-                <div class="auth-buttons d-flex gap-2">
-                    <a href="/login" class="btn btn-admin"><i class="fas fa-sign-in-alt me-1 d-none d-sm-inline"></i> Login Portal</a>
-                </div>
+    <div class="sticky-top-section" id="siteHeader">
+        <div class="nav-left">
+            <img src="/images/cspc-logo.png" alt="Camarines Sur Polytechnic Colleges Logo">
+            <div class="header-text-container">
+                <h1 class="header-title">Center For Quality Assurance</h1>
+                <p class="header-subtitle">Public Transparency Portal • Satisfaction Survey</p>
             </div>
         </div>
 
-        <div class="dashboard-container">
-            <div class="charts-track" id="chartsTrack">
-                
-                <div class="chart-card" id="card-c1">
-                    <div class="card-header-custom">
-                        <div>
-                            <h3 id="c1-title" class="chart-title" data-main="Overall Ratings" data-drill="Total Overall Rating">Overall Ratings</h3>
-                            <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
-                        </div>
-                        <button id="c1-back" onclick="goBack('c1')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
-                    </div>
-                    <div class="canvas-container"><canvas id="c1" style="cursor: pointer;"></canvas></div>
-                </div>
+        <nav class="site-nav">
+            <a href="#about">About</a>
+            <a href="#structure">Structure</a>
+            <a href="#dashboard">Dashboard</a>
+        </nav>
 
-                <div class="chart-card" id="card-c2">
-                    <div class="card-header-custom">
-                        <div>
-                            <h3 id="c2-title" class="chart-title" data-main="Satisfaction by Cluster" data-drill="Cluster Rating">Satisfaction by Cluster</h3>
-                            <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
-                        </div>
-                        <button id="c2-back" onclick="goBack('c2')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
-                    </div>
-                    <div class="canvas-container"><canvas id="c2" style="cursor: pointer;"></canvas></div>
-                </div>
-
-                <div class="chart-card" id="card-c3">
-                    <div class="card-header-custom">
-                        <div>
-                            <h3 id="c3-title" class="chart-title" data-main="Satisfaction By Office" data-drill="Office Rating">Satisfaction By Office</h3>
-                            <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
-                        </div>
-                        <button id="c3-back" onclick="goBack('c3')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
-                    </div>
-                    <div class="canvas-container"><canvas id="c3" style="cursor: pointer;"></canvas></div>
-                </div>
-
-                <div class="chart-card" id="card-c4">
-                    <div class="card-header-custom">
-                        <div>
-                            <h3 id="c4-title" class="chart-title" data-main="CC Awareness" data-drill="CC Awareness Breakdown">CC Awareness</h3>
-                            <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Click chart for details</div>
-                        </div>
-                        <button id="c4-back" onclick="goBack('c4')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
-                    </div>
-                    <div class="canvas-container"><canvas id="c4" style="cursor: pointer;"></canvas></div>
-                </div>
-
+        <div class="nav-right">
+            <select id="periodSelect" class="period-select" onchange="changePeriod()">
+                <option value="p1">Jan - Jun 2026</option>
+                <option value="p2">Jul - Dec 2026</option>
+            </select>
+            <div class="auth-buttons d-flex gap-2">
+                <a href="/login" class="btn btn-admin"><i class="fas fa-sign-in-alt me-1 d-none d-sm-inline"></i> Login Portal</a>
             </div>
         </div>
+    </div>
+
+    <div id="header-spacer"></div>
+
+    <div class="page-content">
+
+        <!-- ================= ABOUT CQA HERO SECTION ================= -->
+        <section class="about-section" id="about">
+            <div class="about-grid">
+                <div class="profile-card">
+                    <div class="profile-avatar"><i class="fas fa-user-tie"></i></div>
+                    <p class="profile-name">JUVY M. BUSTAMANTE, JD</p>
+                    <p class="profile-role">Head, Center for Quality Assurance</p>
+                    <div class="profile-divider"></div>
+                    <div class="profile-contact">
+                        <span><i class="fas fa-envelope"></i> <a href="mailto:qams@cspc.edu.ph">qams@cspc.edu.ph</a></span>
+                        <span><i class="fas fa-phone"></i> (054) 2884421 to 23 loc. 123</span>
+                    </div>
+                </div>
+
+                <div class="about-text">
+                    <span class="section-eyebrow">Who We Are</span>
+                    <h2 class="section-title">Center for Quality Assurance</h2>
+                    <p>
+                        The Center for Quality Assurance is where the College's quality assurance mechanisms
+                        and processes are vested. The office is in-charge of all international, national and
+                        local quality assurance mechanisms, while working closely with top management in
+                        setting up quality assurance procedures. Its main responsibility is to coordinate,
+                        assist, and monitor the different units to strengthen their academic and administrative
+                        management and processes so that they are better able to achieve their quality goals
+                        and educational objectives.
+                    </p>
+                    <div class="about-badges">
+                        <span class="about-badge"><i class="fas fa-award"></i> ISO 9001:2015 Certified</span>
+                        <span class="about-badge"><i class="fas fa-shield-halved"></i> Institutional Accreditation</span>
+                        <span class="about-badge"><i class="fas fa-chart-line"></i> Continuous Quality Monitoring</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= ORGANIZATIONAL STRUCTURE SECTION ================= -->
+        <section class="org-section" id="structure">
+            <div class="org-wrap">
+                <span class="section-eyebrow">Governance</span>
+                <h2 class="section-title">Organizational Structure</h2>
+
+                <div class="org-tree">
+                    <div class="org-node top">
+                        <div class="org-avatar"><i class="fas fa-user-graduate"></i></div>
+                        <p class="org-name">Amado A. Oliva Jr., PhD</p>
+                        <p class="org-role">SUC President III</p>
+                    </div>
+                    <div class="org-connector"></div>
+
+                    <div class="org-node top">
+                        <div class="org-avatar"><i class="fas fa-user-graduate"></i></div>
+                        <p class="org-name">Dr. Jocelyn O. Jintalan</p>
+                        <p class="org-role">Vice President of Academic Affairs</p>
+                    </div>
+                    <div class="org-connector"></div>
+
+                    <div class="org-node top">
+                        <div class="org-avatar"><i class="fas fa-user-tie"></i></div>
+                        <p class="org-name">Mr. Juvy M. Bustamante, JD</p>
+                        <p class="org-role">AO V &middot; Head, Center for Quality Assurance</p>
+                    </div>
+                    <div class="org-connector"></div>
+
+                    <div class="org-team-box">
+                        <div class="org-team-grid org-team-row">
+                            <div class="org-node">
+                                <div class="org-avatar"><i class="fas fa-user"></i></div>
+                                <p class="org-name">Angielyn L. Patricio</p>
+                                <p class="org-role">AA VI / Program Accreditation and Assessment Coordinator</p>
+                            </div>
+                            <div class="org-node">
+                                <div class="org-avatar"><i class="fas fa-user"></i></div>
+                                <p class="org-name">Marian Beatrize O. Tabalos</p>
+                                <p class="org-role">AO II / Institutional Accreditations Person-in-Charge</p>
+                            </div>
+                            <div class="org-node">
+                                <div class="org-avatar"><i class="fas fa-user"></i></div>
+                                <p class="org-name">Lea Laarni B. Albeza-Arines</p>
+                                <p class="org-role">AO IV / QMS and EOMS Person-in-Charge</p>
+                            </div>
+                        </div>
+
+                        <div class="org-team-grid org-team-row">
+                            <div class="org-node">
+                                <div class="org-avatar"><i class="fas fa-user"></i></div>
+                                <p class="org-name">Chrena Joyce I. Brutas</p>
+                                <p class="org-role">Technical Writer / CSM Focal Person</p>
+                            </div>
+                            <div class="org-node">
+                                <div class="org-avatar"><i class="fas fa-user"></i></div>
+                                <p class="org-name">Christine Joy L. Taburnal</p>
+                                <p class="org-role">AA II / Office Clerk / Clerical Support Staff</p>
+                            </div>
+                            <div class="org-node">
+                                <div class="org-avatar"><i class="fas fa-user"></i></div>
+                                <p class="org-name">Lawrence A. Rebulado</p>
+                                <p class="org-role">Layout Artist / Databank Manager</p>
+                            </div>
+                        </div>
+
+                        <div class="org-student-aide"><i class="fas fa-user-graduate me-2"></i>Student Aide</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= TRANSPARENCY DASHBOARD ================= -->
+        <section class="dashboard-section" id="dashboard">
+            <div class="dashboard-header-block">
+                <span class="section-eyebrow">Data &amp; Transparency</span>
+                <h2 class="section-title">Transparency Dashboard</h2>
+                <p>Live satisfaction survey results across clusters and offices. Hover to see details, click to drill down.</p>
+            </div>
+
+            <div class="dashboard-container">
+                <div class="charts-track" id="chartsTrack">
+
+                    <div class="chart-card" id="card-c1">
+                        <div class="card-header-custom">
+                            <div>
+                                <h3 id="c1-title" class="chart-title" data-main="Overall Ratings" data-drill="Total Overall Rating">Overall Ratings</h3>
+                                <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
+                            </div>
+                            <button id="c1-back" onclick="goBack('c1')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
+                        </div>
+                        <div class="canvas-container"><canvas id="c1" style="cursor: pointer;"></canvas></div>
+                    </div>
+
+                    <div class="chart-card" id="card-c2">
+                        <div class="card-header-custom">
+                            <div>
+                                <h3 id="c2-title" class="chart-title" data-main="Satisfaction by Cluster" data-drill="Cluster Rating">Satisfaction by Cluster</h3>
+                                <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
+                            </div>
+                            <button id="c2-back" onclick="goBack('c2')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
+                        </div>
+                        <div class="canvas-container"><canvas id="c2" style="cursor: pointer;"></canvas></div>
+                    </div>
+
+                    <div class="chart-card" id="card-c3">
+                        <div class="card-header-custom">
+                            <div>
+                                <h3 id="c3-title" class="chart-title" data-main="Satisfaction By Office" data-drill="Office Rating">Satisfaction By Office</h3>
+                                <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
+                            </div>
+                            <button id="c3-back" onclick="goBack('c3')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
+                        </div>
+                        <div class="canvas-container"><canvas id="c3" style="cursor: pointer;"></canvas></div>
+                    </div>
+
+                    <div class="chart-card" id="card-c4">
+                        <div class="card-header-custom">
+                            <div>
+                                <h3 id="c4-title" class="chart-title" data-main="CC Awareness" data-drill="CC Awareness Breakdown">CC Awareness</h3>
+                                <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Click chart for details</div>
+                            </div>
+                            <button id="c4-back" onclick="goBack('c4')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
+                        </div>
+                        <div class="canvas-container"><canvas id="c4" style="cursor: pointer;"></canvas></div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <footer class="site-footer">
+            &copy; <span id="footerYear"></span> <strong>Camarines Sur Polytechnic Colleges</strong> &middot; Center for Quality Assurance
+        </footer>
+
     </div>
 
     <button id="theme-toggle" class="btn btn-dark" onclick="toggleTheme()"><i class="fas fa-moon me-2"></i>Dark Mode</button>
@@ -194,42 +466,52 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
+        document.getElementById('footerYear').textContent = new Date().getFullYear();
+
+        function syncHeaderSpacer() {
+            const header = document.getElementById('siteHeader');
+            const spacer = document.getElementById('header-spacer');
+            spacer.style.height = header.offsetHeight + 'px';
+        }
+        window.addEventListener('load', syncHeaderSpacer);
+        window.addEventListener('resize', syncHeaderSpacer);
+
         Chart.register({
             id: 'centerText',
             beforeDraw: function(chart) {
                 if (chart.config.type !== 'doughnut' || !chart.config.options.elements.center) return;
                 var width = chart.width, height = chart.height, ctx = chart.ctx;
                 ctx.restore();
-                
+
                 var isDark = document.body.classList.contains('dark-mode');
                 var fontSize = (height / 200).toFixed(2);
                 ctx.textBaseline = "middle";
-                
+
                 var centerConfig = chart.config.options.elements.center;
                 var targetText = centerConfig.text;
-                var targetNumber = parseFloat(targetText); 
-                
+                var targetNumber = parseFloat(targetText);
+
                 if (chart.centerAnim === undefined) { chart.centerAnim = { start: performance.now() }; }
-                
+
                 var elapsed = performance.now() - chart.centerAnim.start;
                 var duration = chart.config.options.animation.duration || 8000;
                 var progress = Math.min(elapsed / duration, 1);
-                var ease = 1 - Math.pow(1 - progress, 4); 
-                
+                var ease = 1 - Math.pow(1 - progress, 4);
+
                 var displayPercent;
-                if (progress >= 1) { displayPercent = targetText; } 
+                if (progress >= 1) { displayPercent = targetText; }
                 else {
                     var currentNumber = Math.floor(targetNumber * ease);
                     displayPercent = currentNumber + '%';
-                    requestAnimationFrame(() => chart.draw()); 
+                    requestAnimationFrame(() => chart.draw());
                 }
-                
+
                 ctx.font = "800 " + fontSize + "em Inter";
                 ctx.fillStyle = isDark ? '#f8fafc' : '#1e293b';
                 var textX = Math.round((width - ctx.measureText(displayPercent).width) / 2),
                     textY = height / 2 - (height * 0.08);
                 ctx.fillText(displayPercent, textX, textY);
-                
+
                 var subText = centerConfig.subText;
                 if(subText) {
                     ctx.font = "600 " + (fontSize/3).toFixed(2) + "em Inter";
@@ -241,13 +523,38 @@
                 var subText2 = centerConfig.subText2;
                 if(subText2) {
                     ctx.font = "700 " + (fontSize/3.5).toFixed(2) + "em Inter";
-                    ctx.fillStyle = isDark ? '#10b981' : '#059669'; 
+                    ctx.fillStyle = isDark ? '#4ADE80' : '#16A34A';
                     var subX2 = Math.round((width - ctx.measureText(subText2).width) / 2);
                     ctx.fillText(subText2, subX2, textY + (height*0.25));
                 }
                 ctx.save();
             }
         });
+
+        // Soft drop-shadow behind Chart.js tooltips for a premium feel.
+        Chart.register({
+            id: 'tooltipShadow',
+            beforeTooltipDraw(chart) {
+                const ctx = chart.ctx;
+                ctx.save();
+                ctx.shadowColor = 'rgba(10, 31, 68, 0.22)';
+                ctx.shadowBlur = 22;
+                ctx.shadowOffsetY = 10;
+            },
+            afterTooltipDraw(chart) {
+                chart.ctx.restore();
+            }
+        });
+
+        // Builds a soft navy → gold-tinted vertical gradient for bar fills.
+        function barGradient(context, colorStart, colorEnd) {
+            const { ctx, chartArea } = context.chart;
+            if (!chartArea) return colorStart;
+            const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
+            gradient.addColorStop(0, colorStart);
+            gradient.addColorStop(1, colorEnd);
+            return gradient;
+        }
 
         // =========================================================================
         // DYNAMIC DATABASE MULA SA BACKEND (API FETCH)
@@ -257,25 +564,35 @@
             p2: { overall: [0, 0], clusterSat: [0, 0, 0, 0], clusterResp: [0, 0, 0, 0], officeSat: [0, 0, 0, 0, 0, 0, 0], officeResp: [0, 0, 0, 0, 0, 0, 0], ccAware: [0, 0, 0], ccOffice: [0, 0, 0, 0, 0, 0, 0] }
         }) %>;
 
-        let clusterLabels = <%- typeof clusterList !== 'undefined' ? JSON.stringify(clusterList) : JSON.stringify(['OP Cluster', 'Admin & Finance', 'RIC Cluster', 'Academic Cluster']) %>;
+        let clusterLabels = <%- typeof clusterList !== 'undefined' ? JSON.stringify(clusterList) : JSON.stringify(['OP', 'A&F', 'RIC', 'Academic']) %>;
         let officeLabels = <%- typeof officeList !== 'undefined' ? JSON.stringify(officeList) : JSON.stringify(['Admin', 'CCS', 'CEA', 'CHS', 'CTHBM', 'CTDE', 'CAS']) %>;
+
+        // Shortens long office/cluster names to compact acronyms so chart labels never overlap.
+        function shortenLabel(label) {
+            if (!label || label.length <= 12) return label;
+            const words = label.replace(/[()]/g, '').split(/\s+/).filter(w => w.length > 0);
+            if (words.length === 1) return label.substring(0, 10) + '…';
+            const skip = new Set(['of', 'the', 'and', 'for', 'de', '&']);
+            const acronym = words.filter(w => !skip.has(w.toLowerCase())).map(w => w[0].toUpperCase()).join('');
+            return acronym.length >= 2 ? acronym : label.substring(0, 10) + '…';
+        }
 
         async function fetchDynamicDashboardData() {
             try {
                 const response = await fetch('/api/public-dashboard');
                 if (response.ok) {
                     const dynamicData = await response.json();
-                    
+
                     if (dynamicData.clusterList && dynamicData.clusterList.length > 0) {
-                        clusterLabels = dynamicData.clusterList;
+                        clusterLabels = dynamicData.clusterList.map(shortenLabel);
                     }
                     if (dynamicData.officeList && dynamicData.officeList.length > 0) {
-                        officeLabels = dynamicData.officeList;
+                        officeLabels = dynamicData.officeList.map(shortenLabel);
                     }
                     if (dynamicData.chartData) {
                         datasets = dynamicData.chartData;
                     }
-                    
+
                     changePeriod();
                 }
             } catch (error) {
@@ -291,39 +608,41 @@
 
         function getChartConfig(rawId, view, index) {
             const isDark = document.body.classList.contains('dark-mode');
-            const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-            const textColor = isDark ? '#cbd5e1' : '#475569';
-            const dataP = datasets[activePeriod] || datasets['p1']; 
-            
+            const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(10,31,68,0.035)';
+            const textColor = isDark ? '#cbd5e1' : '#64748b';
+            const dataP = datasets[activePeriod] || datasets['p1'];
+
             const id = rawId.replace('_clone', '');
-            
+
             let baseOptions = {
                 responsive: true, maintainAspectRatio: false,
                 animation: { duration: 8000, easing: 'easeOutExpo' },
                 plugins: {
-                    legend: { labels: { color: textColor, font: { family: 'Inter', weight: '600', size: 13 }, usePointStyle: true }, position: 'bottom', display: id === 'c2' || id === 'c3' ? false : true },
-                    tooltip: { 
-                        backgroundColor: isDark ? 'rgba(15,23,42,0.95)' : 'rgba(255,255,255,0.95)', 
-                        titleColor: isDark ? '#fff' : '#000', bodyColor: isDark ? '#cbd5e1' : '#475569', 
-                        borderColor: isDark ? '#334155' : '#e2e8f0', borderWidth: 1, padding: 12, displayColors: false,
+                    legend: { labels: { color: textColor, font: { family: 'Inter', weight: '600', size: 12.5 }, usePointStyle: true, boxWidth: 8, boxHeight: 8, padding: 16 }, position: 'bottom', display: id === 'c2' || id === 'c3' ? false : true },
+                    tooltip: {
+                        backgroundColor: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.97)',
+                        titleColor: isDark ? '#f8fafc' : '#0a1f44', bodyColor: isDark ? '#cbd5e1' : '#475569',
+                        titleFont: { family: 'Inter', weight: '700', size: 13 }, bodyFont: { family: 'Inter', weight: '500', size: 12.5 },
+                        borderColor: isDark ? 'rgba(244,180,0,0.25)' : 'rgba(10,31,68,0.08)', borderWidth: 1,
+                        cornerRadius: 12, padding: 14, boxPadding: 6, caretSize: 6, displayColors: false,
                         callbacks: {
                             label: function(context) {
                                 let pData = datasets[activePeriod];
                                 let val = context.raw;
                                 let chartId = context.chart.canvas.id.replace('_clone', '');
-                                
+
                                 if (chartId === 'c1') {
                                     let total = pData.overall[0] + pData.overall[1];
                                     let pct = Math.round((val / total) * 100) || 0;
                                     return [`${context.label}: ${pct}%`, `Respondents: ${val}`];
                                 }
-                                
+
                                 if ((chartId === 'c2' || chartId === 'c3') && context.dataset.label && context.dataset.label.includes('Satisfaction')) {
                                     let totalResp = chartId === 'c2' ? pData.clusterResp[context.dataIndex] : pData.officeResp[context.dataIndex];
                                     let satResp = Math.round((val / 100) * totalResp) || 0;
                                     return [`Satisfaction: ${val}%`, `Respondents: ${satResp}`];
                                 }
-                                
+
                                 let label = context.dataset.label || context.label || '';
                                 return `${label}: ${val}` + (chartId === 'c4' && context.dataset.label ? '%' : '');
                             }
@@ -336,47 +655,52 @@
                 let sat = dataP.overall[0] || 0, dissat = dataP.overall[1] || 0, total = sat + dissat;
                 let percent = total === 0 ? 0 : Math.round((sat / total) * 100);
                 if (view === 'main') {
-                    return { type: 'pie', data: { labels: ['Satisfied', 'Dissatisfied'], datasets: [{ data: dataP.overall, backgroundColor: ['#10b981', '#ef4444'], borderWidth: 3, borderColor: isDark ? '#1e293b' : '#ffffff', hoverOffset: 15 }] }, options: baseOptions }
+                    return { type: 'pie', data: { labels: ['Satisfied', 'Dissatisfied'], datasets: [{ data: dataP.overall, backgroundColor: ['#4ADE80', '#F87171'], borderWidth: 3, borderColor: isDark ? '#1e293b' : '#ffffff', hoverOffset: 15 }] }, options: baseOptions }
                 } else {
-                    return { type: 'doughnut', data: { labels: ['Satisfied', 'Dissatisfied'], datasets: [{ data: [sat, dissat], backgroundColor: ['#10b981', isDark ? '#334155' : '#e2e8f0'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: percent + '%', subText: 'Total Overall Rating', subText2: `${sat} / ${total} Satisfied` } } } };
+                    return { type: 'doughnut', data: { labels: ['Satisfied', 'Dissatisfied'], datasets: [{ data: [sat, dissat], backgroundColor: ['#4ADE80', isDark ? '#334155' : '#eef1f6'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: percent + '%', subText: 'Total Overall Rating', subText2: `${sat} / ${total} Satisfied` } } } };
                 }
             }
 
+            const barScales = {
+                x: { grid: { display: false }, border: { display: false }, ticks: { color: textColor, font: { family: 'Inter', weight: '600', size: 11.5 } } },
+                y: { min: 0, max: 100, grid: { color: gridColor }, border: { display: false }, ticks: { color: textColor, font: { family: 'Inter', weight: '500', size: 11 }, callback: v => v + '%' } }
+            };
+
             if (id === 'c2') {
-                if (view === 'main') { return { type: 'bar', data: { labels: clusterLabels, datasets: [{ label: 'Satisfaction (%)', data: dataP.clusterSat, backgroundColor: '#3b82f6', borderRadius: 6 }] }, options: { ...baseOptions, scales: { x: { grid: { display: false }, ticks: { color: textColor, font: {family: 'Inter', weight: '600'} } }, y: { min: 0, max: 100, grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + '%' } } } } };
+                if (view === 'main') { return { type: 'bar', data: { labels: clusterLabels, datasets: [{ label: 'Satisfaction (%)', data: dataP.clusterSat, backgroundColor: (c) => barGradient(c, 'rgba(10,31,68,0.75)', 'rgba(90,124,214,0.9)'), hoverBackgroundColor: (c) => barGradient(c, 'rgba(10,31,68,0.9)', 'rgba(90,124,214,1)'), borderRadius: 10, borderSkipped: false, maxBarThickness: 46, categoryPercentage: 0.65, barPercentage: 0.75 }] }, options: { ...baseOptions, scales: barScales } };
                 } else {
                     let percent = dataP.clusterSat[index] || 0, totalResp = dataP.clusterResp[index] || 0, satResp = Math.round((percent / 100) * totalResp) || 0;
-                    return { type: 'doughnut', data: { labels: ['Satisfied', 'Needs Improvement'], datasets: [{ data: [satResp, totalResp - satResp], backgroundColor: ['#10b981', isDark ? '#334155' : '#e2e8f0'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: percent + '%', subText: 'Cluster Rating', subText2: `${satResp} / ${totalResp} Satisfied` } } } };
+                    return { type: 'doughnut', data: { labels: ['Satisfied', 'Needs Improvement'], datasets: [{ data: [satResp, totalResp - satResp], backgroundColor: ['#4ADE80', isDark ? '#334155' : '#eef1f6'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: percent + '%', subText: 'Cluster Rating', subText2: `${satResp} / ${totalResp} Satisfied` } } } };
                 }
             }
 
             if (id === 'c3') {
-                if (view === 'main') { return { type: 'bar', data: { labels: officeLabels, datasets: [{ label: 'Satisfaction (%)', data: dataP.officeSat, backgroundColor: '#3b82f6', borderRadius: 6 }] }, options: { ...baseOptions, scales: { x: { grid: { display: false }, ticks: { color: textColor, font: {family: 'Inter', weight: '600'} } }, y: { min: 0, max: 100, grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + '%' } } } } };
+                if (view === 'main') { return { type: 'bar', data: { labels: officeLabels, datasets: [{ label: 'Satisfaction (%)', data: dataP.officeSat, backgroundColor: (c) => barGradient(c, 'rgba(10,31,68,0.75)', 'rgba(90,124,214,0.9)'), hoverBackgroundColor: (c) => barGradient(c, 'rgba(10,31,68,0.9)', 'rgba(90,124,214,1)'), borderRadius: 10, borderSkipped: false, maxBarThickness: 40, categoryPercentage: 0.65, barPercentage: 0.75 }] }, options: { ...baseOptions, scales: barScales } };
                 } else {
                     let percent = dataP.officeSat[index] || 0, totalResp = dataP.officeResp[index] || 0, satResp = Math.round((percent / 100) * totalResp) || 0;
-                    return { type: 'doughnut', data: { labels: ['Satisfied', 'Needs Improvement'], datasets: [{ data: [satResp, totalResp - satResp], backgroundColor: ['#10b981', isDark ? '#334155' : '#e2e8f0'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: percent + '%', subText: 'Office Rating', subText2: `${satResp} / ${totalResp} Satisfied` } } } };
+                    return { type: 'doughnut', data: { labels: ['Satisfied', 'Needs Improvement'], datasets: [{ data: [satResp, totalResp - satResp], backgroundColor: ['#4ADE80', isDark ? '#334155' : '#eef1f6'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: percent + '%', subText: 'Office Rating', subText2: `${satResp} / ${totalResp} Satisfied` } } } };
                 }
             }
 
             if (id === 'c4') {
-                 if (view === 'main') { 
-                     return { 
-                         type: 'pie', 
-                         data: { 
-                             labels: ['Aware', 'Not Aware', 'Saw CC'], 
-                             datasets: [{ data: dataP.ccAware, backgroundColor: ['#0ea5e9', '#64748b', '#f59e0b'], borderWidth: 3, borderColor: isDark ? '#1e293b' : '#ffffff', hoverOffset: 15 }] 
-                         }, 
-                         options: baseOptions 
+                 if (view === 'main') {
+                     return {
+                         type: 'pie',
+                         data: {
+                             labels: ['Aware', 'Not Aware', 'Saw CC'],
+                             datasets: [{ data: dataP.ccAware, backgroundColor: ['#5B8DEF', '#B8C2D6', '#FBBF24'], borderWidth: 3, borderColor: isDark ? '#1e293b' : '#ffffff', hoverOffset: 15 }]
+                         },
+                         options: baseOptions
                      }
-                 } else { 
-                     return { 
-                         type: 'bar', 
-                         data: { 
-                             labels: officeLabels, 
-                             datasets: [{ label: '% Aware', data: dataP.ccOffice, backgroundColor: '#0ea5e9', borderRadius: 6 }] 
-                         }, 
-                         options: { ...baseOptions, scales: { x: { grid: { display: false }, ticks: { color: textColor, font: {family: 'Inter', weight: '600'} } }, y: { min: 0, max: 100, grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + '%' } } } } 
-                     } 
+                 } else {
+                     return {
+                         type: 'bar',
+                         data: {
+                             labels: officeLabels,
+                             datasets: [{ label: '% Aware', data: dataP.ccOffice, backgroundColor: (c) => barGradient(c, 'rgba(244,180,0,0.65)', 'rgba(251,191,36,0.95)'), hoverBackgroundColor: (c) => barGradient(c, 'rgba(244,180,0,0.85)', 'rgba(251,191,36,1)'), borderRadius: 10, borderSkipped: false, maxBarThickness: 40, categoryPercentage: 0.65, barPercentage: 0.75 }]
+                         },
+                         options: { ...baseOptions, scales: barScales }
+                     }
                  }
             }
         }
@@ -385,7 +709,7 @@
             chartState[rawId] = { view, index };
             const titleElem = document.getElementById(rawId + '-title');
             const id = rawId.replace('_clone', '');
-            
+
             if (titleElem) {
                 if (view === 'main') titleElem.innerText = titleElem.getAttribute('data-main');
                 else {
@@ -404,10 +728,10 @@
                     const clickedIndex = elements[0].index;
                     const baseId = rawId.replace('_clone', '');
                     const cloneId = baseId + '_clone';
-                    
+
                     loadChart(baseId, 'drill', clickedIndex);
                     if(document.getElementById(cloneId)) loadChart(cloneId, 'drill', clickedIndex);
-                    
+
                     document.getElementById(baseId + '-back').classList.remove('d-none');
                     const cloneBack = document.getElementById(cloneId + '-back');
                     if(cloneBack) cloneBack.classList.remove('d-none');
@@ -428,7 +752,7 @@
                 if(newConfig.options.elements && newConfig.options.elements.center) {
                     activeCharts[rawId].config.options.elements.center = newConfig.options.elements.center;
                 }
-                activeCharts[rawId].update(); 
+                activeCharts[rawId].update();
             });
         }
 
@@ -438,10 +762,10 @@
 
             delete activeCharts[baseId]?.centerAnim;
             delete activeCharts[cloneId]?.centerAnim;
-            
+
             loadChart(baseId, 'main');
             if(document.getElementById(cloneId)) loadChart(cloneId, 'main');
-            
+
             document.getElementById(baseId + '-back').classList.add('d-none');
             const cloneBack = document.getElementById(cloneId + '-back');
             if(cloneBack) cloneBack.classList.add('d-none');
@@ -464,26 +788,28 @@
         }
 
         document.addEventListener("DOMContentLoaded", () => {
+            syncHeaderSpacer();
+
             const track = document.getElementById('chartsTrack');
             const originalCards = Array.from(track.querySelectorAll('.chart-card'));
-            
+
             originalCards.forEach((card, index) => {
                 const canvasId = card.querySelector('canvas').id;
                 if (!activeCharts[canvasId]) loadChart(canvasId, 'main');
             });
 
             let resetPoint = 0;
-            
+
             setTimeout(() => {
                 originalCards.forEach(card => {
                     const clone = card.cloneNode(true);
                     const baseCardId = card.id;
                     clone.id = baseCardId + '_clone';
-                    
+
                     const originalCanvas = clone.querySelector('canvas');
                     const baseId = originalCanvas.id;
                     originalCanvas.id = baseId + '_clone';
-                    
+
                     const backBtn = clone.querySelector('.btn-back-custom');
                     if(backBtn) {
                         backBtn.id = baseId + '_clone-back';
@@ -496,7 +822,7 @@
                     track.appendChild(clone);
                     loadChart(originalCanvas.id, 'main');
                 });
-                
+
                 const firstCard = originalCards[0];
                 const firstClone = document.getElementById(firstCard.id + '_clone');
                 resetPoint = firstClone.offsetLeft - firstCard.offsetLeft;
@@ -514,15 +840,15 @@
                     e.preventDefault();
                     isInteracting = true;
                     scrollPos += e.deltaY;
-                    
+
                     if (scrollPos >= resetPoint) scrollPos -= resetPoint;
                     if (scrollPos < 0) scrollPos += resetPoint;
-                    
+
                     track.scrollLeft = scrollPos;
                     clearTimeout(track.interactionTimeout);
                     track.interactionTimeout = setTimeout(() => isInteracting = false, 1500);
                 });
-                
+
                 function autoScrollTrack() {
                     if (!isInteracting) {
                         scrollPos += speed;
@@ -530,7 +856,7 @@
                     } else {
                         scrollPos = track.scrollLeft;
                     }
-                    
+
                     if (scrollPos >= resetPoint) {
                         scrollPos -= resetPoint;
                         track.scrollLeft = scrollPos;
@@ -540,35 +866,35 @@
                     }
                     requestAnimationFrame(autoScrollTrack);
                 }
-                
+
                 autoScrollTrack();
-                
+
                 const cardObserver = new IntersectionObserver((entries) => {
                     entries.forEach(entry => {
                         const card = entry.target;
                         const canvas = card.querySelector('canvas');
-                        
+
                         if (entry.isIntersecting) {
                             if (!card.classList.contains('visible')) {
                                 card.classList.add('visible');
                                 if (canvas && activeCharts[canvas.id]) {
                                     const chart = activeCharts[canvas.id];
-                                    delete chart.centerAnim; 
+                                    delete chart.centerAnim;
                                     chart.reset();
-                                    chart.update(); 
+                                    chart.update();
                                 }
                             }
                         } else {
                             card.classList.remove('visible');
                         }
                     });
-                }, { root: track, threshold: 0.1 }); 
-                
+                }, { root: track, threshold: 0.1 });
+
                 document.querySelectorAll('.chart-card').forEach(card => {
                     cardObserver.observe(card);
                 });
 
-            }, 200); 
+            }, 200);
         });
     </script>
 </body>

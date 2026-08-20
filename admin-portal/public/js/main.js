@@ -1,3 +1,19 @@
+// BFCache guard: Chrome/Safari/Firefox can restore a page instantly from the
+// back/forward cache on Back/Forward navigation, completely skipping a fresh
+// request to the server — meaning our Cache-Control/session middleware never
+// even runs. `pageshow`'s event.persisted (and, as a fallback for engines that
+// don't set it consistently, the Navigation Timing API's back_forward type)
+// both indicate the page came from that cache rather than the network, so we
+// force a hard reload — that reload IS a real request, so /login redirects and
+// no-cache headers apply normally again.
+window.addEventListener('pageshow', function (event) {
+    var navEntries = (window.performance && performance.getEntriesByType) ? performance.getEntriesByType('navigation') : [];
+    var isBackForwardNav = navEntries.length > 0 && navEntries[0].type === 'back_forward';
+    if (event.persisted || isBackForwardNav) {
+        window.location.reload();
+    }
+});
+
 document.addEventListener("DOMContentLoaded", function() {
     // Sidebar Toggle
     const sidebarCollapse = document.getElementById('sidebarCollapse');

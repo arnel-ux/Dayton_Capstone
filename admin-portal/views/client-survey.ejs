@@ -36,6 +36,8 @@
             --line: #e2e8f0;
             --line-soft: #edf1f7;
             --ring: rgba(37, 84, 199, 0.15);
+            --sidebar-w: 264px;
+            --topbar-h: 68px;
         }
 
         body {
@@ -49,6 +51,214 @@
             transition: background 0.3s ease-in-out, color 0.3s ease-in-out;
         }
 
+        /* =========================================================
+           DASHBOARD SHELL — sidebar + topbar + content
+        ========================================================= */
+        .app-shell { display: flex; min-height: 100vh; }
+
+        .sidebar {
+            width: var(--sidebar-w);
+            flex-shrink: 0;
+            background: var(--ink-900);
+            color: #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 0; left: 0; bottom: 0;
+            z-index: 1040;
+            transition: transform 0.3s ease;
+        }
+        [data-bs-theme="dark"] .sidebar { background: #0a101c; }
+
+        .sidebar-brand {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 1.4rem 1.4rem 1.2rem;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .sidebar-brand img { width: 42px; height: 42px; border-radius: 50%; background: #fff; padding: 3px; flex-shrink: 0; }
+        .sidebar-brand-text { line-height: 1.25; }
+        .sidebar-brand-text .t1 { font-size: 0.8rem; font-weight: 700; color: #fff; letter-spacing: 0.3px; }
+        .sidebar-brand-text .t2 { font-size: 0.7rem; color: #94a3b8; }
+
+        .sidebar-nav { flex-grow: 1; padding: 1.25rem 0.9rem; display: flex; flex-direction: column; gap: 0.35rem; }
+        .sidebar-nav .nav-item-link {
+            display: flex; align-items: center; gap: 0.8rem;
+            padding: 0.7rem 0.9rem; border-radius: 10px;
+            color: #cbd5e1; text-decoration: none; font-weight: 600; font-size: 0.9rem;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+        .sidebar-nav .nav-item-link i { font-size: 1.05rem; width: 20px; text-align: center; }
+        .sidebar-nav .nav-item-link:hover:not(.disabled) { background: rgba(255,255,255,0.06); color: #fff; }
+        .sidebar-nav .nav-item-link.active { background: var(--brand); color: #fff; box-shadow: 0 6px 16px -6px rgba(37,84,199,0.7); }
+        .sidebar-nav .nav-item-link.disabled { color: #64748b; cursor: not-allowed; }
+        .sidebar-nav .soon-badge {
+            margin-left: auto; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.3px;
+            background: rgba(148,163,184,0.15); color: #94a3b8; padding: 0.15rem 0.5rem; border-radius: 50px;
+        }
+
+        .sidebar-footer { padding: 1rem 1.4rem 1.4rem; border-top: 1px solid rgba(255,255,255,0.08); }
+        .sidebar-footer .signed-in-email { font-size: 0.72rem; color: #94a3b8; margin-bottom: 0.6rem; word-break: break-all; }
+        .sidebar-footer .btn-logout-side {
+            width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+            background: rgba(239,68,68,0.12); color: #fca5a5; border: 1px solid rgba(239,68,68,0.25);
+            border-radius: 10px; padding: 0.55rem; font-weight: 600; font-size: 0.82rem; transition: all 0.15s ease;
+        }
+        .sidebar-footer .btn-logout-side:hover { background: rgba(239,68,68,0.22); color: #fecaca; }
+
+        .sidebar-backdrop {
+            display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.55);
+            z-index: 1035; backdrop-filter: blur(2px);
+        }
+
+        .main-content {
+            flex-grow: 1; min-width: 0; margin-left: var(--sidebar-w); display: flex; flex-direction: column;
+            transition: margin-left 0.35s cubic-bezier(.4,0,.2,1);
+        }
+
+        /* Persistent desktop sidebar collapse — same slide-away transform as the
+           mobile overlay, but without the backdrop, and it reclaims the space
+           instead of overlaying content (so the survey can go truly full-screen). */
+        .app-shell.sidebar-collapsed .sidebar { transform: translateX(-100%); }
+        .app-shell.sidebar-collapsed .main-content { margin-left: 0; }
+
+        .topbar {
+            position: sticky; top: 0; z-index: 1020;
+            height: var(--topbar-h);
+            background: var(--surface);
+            border-bottom: 1px solid var(--line-soft);
+            display: flex; align-items: center; gap: 1rem;
+            padding: 0 1.25rem;
+        }
+        .topbar-hamburger, .btn-sidebar-toggle {
+            display: none; align-items: center; justify-content: center;
+            width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line);
+            background: var(--surface); color: var(--ink-800); font-size: 1.1rem;
+            transition: all 0.2s ease; flex-shrink: 0;
+        }
+        .btn-sidebar-toggle { display: inline-flex; }
+        .btn-sidebar-toggle:hover { border-color: var(--brand); color: var(--brand); background: var(--ring); }
+        .topbar-title { font-weight: 700; color: var(--ink-900); font-size: 1rem; margin: 0; }
+        .topbar-title small { display: block; font-weight: 500; font-size: 0.72rem; color: var(--ink-600); }
+        .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 0.6rem; }
+        .lang-toggle-group { display: flex; gap: 0.4rem; }
+
+        .btn-fullscreen {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 38px; height: 38px; border-radius: 10px;
+            border: 1px solid var(--line); background: var(--surface); color: var(--ink-800);
+            font-size: 1rem; transition: all 0.2s ease;
+        }
+        .btn-fullscreen:hover { border-color: var(--brand); color: var(--brand); transform: translateY(-1px); background: var(--ring); }
+        .btn-fullscreen:active { transform: translateY(0) scale(0.94); }
+
+        .content-body { padding: 1.75rem 1.5rem 3rem; flex-grow: 1; }
+
+        /* =========================================================
+           SPA VIEW SWITCHING — Take Survey / Profile / History
+        ========================================================= */
+        .app-view { display: none; }
+        .app-view.active { display: block; animation: fadeIn .4s ease; }
+
+        .view-card {
+            border-radius: 20px;
+            background: var(--surface) !important;
+            border: 1px solid var(--line-soft);
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 24px 48px -16px rgba(15, 23, 42, 0.14);
+            max-width: 880px;
+            margin: 0 auto;
+            transition: background 0.3s ease-in-out, border-color 0.3s ease-in-out;
+        }
+        [data-bs-theme="dark"] .view-card { box-shadow: 0 24px 48px -16px rgba(0, 0, 0, 0.5); }
+
+        .view-header { text-align: center; padding-bottom: 1.5rem; margin-bottom: 2rem; border-bottom: 1px solid var(--line-soft); }
+        .view-header .view-icon {
+            width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 1rem;
+            display: flex; align-items: center; justify-content: center; font-size: 1.5rem;
+            background: var(--ring); color: var(--brand);
+        }
+
+        /* ---- Profile view ---- */
+        .profile-field-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--line-soft); }
+        .profile-field-row:last-child { border-bottom: none; }
+        .profile-field-label { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-600); }
+        .profile-field-value { font-weight: 600; color: var(--ink-900); }
+        .profile-locked-badge {
+            display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; font-weight: 700;
+            color: var(--ink-400); background: var(--line-soft); padding: 0.25rem 0.65rem; border-radius: 50px;
+        }
+        .profile-unset { color: var(--ink-400); font-style: italic; font-weight: 500; }
+
+        /* ---- History view ---- */
+        .history-item {
+            border: 1px solid var(--line); border-radius: 14px; padding: 1.1rem 1.3rem;
+            display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;
+            transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+            background: var(--surface);
+        }
+        .history-item:hover { border-color: var(--brand); box-shadow: 0 8px 20px -12px rgba(37,84,199,0.35); transform: translateY(-2px); }
+        .history-item + .history-item { margin-top: 0.9rem; }
+        .history-office { font-weight: 700; color: var(--ink-900); margin-bottom: 0.15rem; }
+        .history-meta { font-size: 0.78rem; color: var(--ink-600); }
+        .history-badge {
+            font-size: 0.72rem; font-weight: 700; padding: 0.3rem 0.75rem; border-radius: 50px;
+            background: rgba(34,197,94,0.12); color: #16a34a; white-space: nowrap;
+        }
+        [data-bs-theme="dark"] .history-badge { background: rgba(34,197,94,0.18); color: #4ade80; }
+
+        .empty-state { text-align: center; padding: 3.5rem 1.5rem; color: var(--ink-600); }
+        .empty-state i { font-size: 2.75rem; color: var(--ink-400); margin-bottom: 1rem; display: block; }
+        .empty-state p { max-width: 360px; margin: 0.5rem auto 0; font-size: 0.9rem; }
+
+        .spinner-block { text-align: center; padding: 3rem 1rem; color: var(--ink-600); }
+
+        /* ---- Review & Confirmation (Stage 5) ---- */
+        .review-section { margin-bottom: 1.75rem; }
+        .review-section-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 0.9rem;
+        }
+        .review-section-header h5 { margin: 0; font-weight: 700; color: var(--ink-900); font-size: 0.95rem; text-transform: uppercase; letter-spacing: .03em; }
+        .btn-edit-section {
+            font-size: 0.78rem; font-weight: 700; padding: 0.3rem 0.85rem; border-radius: 50px;
+            background: var(--ring); color: var(--brand); border: 1px solid transparent; transition: all .15s ease;
+        }
+        .btn-edit-section:hover { background: var(--brand); color: #fff; transform: translateY(-1px); }
+
+        .review-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.9rem; }
+        .review-item {
+            background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: 0.8rem 1rem;
+        }
+        [data-bs-theme="dark"] .review-item { background: #101827; }
+        .review-item .label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-400); margin-bottom: 0.2rem; }
+        .review-item .value { font-weight: 600; color: var(--ink-900); font-size: 0.9rem; word-break: break-word; }
+        .review-item.full { grid-column: 1 / -1; }
+
+        .review-sqd-row {
+            display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
+            padding: 0.65rem 0; border-bottom: 1px dashed var(--line);
+        }
+        .review-sqd-row:last-child { border-bottom: none; }
+        .review-sqd-statement { font-size: 0.85rem; color: var(--ink-800); }
+        .review-sqd-rating {
+            font-size: 0.78rem; font-weight: 700; white-space: nowrap; padding: 0.25rem 0.7rem; border-radius: 50px;
+            background: var(--ring); color: var(--brand);
+        }
+
+        @media (max-width: 576px) {
+            .review-grid { grid-template-columns: 1fr; }
+            .profile-field-row { flex-direction: column; align-items: flex-start; gap: 0.25rem; }
+        }
+
+        @media (max-width: 991.98px) {
+            .sidebar { transform: translateX(-100%); box-shadow: 0 0 40px rgba(0,0,0,0.35); }
+            .sidebar.show { transform: translateX(0); }
+            .app-shell.sidebar-collapsed .sidebar { transform: translateX(-100%); }
+            .sidebar-backdrop.show { display: block; }
+            .main-content { margin-left: 0; }
+            .topbar-hamburger { display: inline-flex; }
+            .btn-sidebar-toggle { display: none; }
+        }
+
         #sqd-body td {
             padding-top: 1.1rem;
             padding-bottom: 1.1rem;
@@ -56,10 +266,20 @@
 
         .page { display: none; }
         .active { display: block; animation: fadeIn .4s ease; }
+        .active.dir-fwd { animation: slideInFwd .45s cubic-bezier(.22,.61,.36,1); }
+        .active.dir-back { animation: slideInBack .45s cubic-bezier(.22,.61,.36,1); }
 
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideInFwd {
+            from { opacity: 0; transform: translateX(28px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes slideInBack {
+            from { opacity: 0; transform: translateX(-28px); }
+            to { opacity: 1; transform: translateX(0); }
         }
 
         /* Subtle padlock icon shown next to labels of previously-answered, locked fields */
@@ -101,15 +321,71 @@
             cursor: pointer;
         }
 
-        /* ---- Card shell ---- */
+        /* ---- Card shell — full-screen survey canvas, not a small boxed card ---- */
+        /* When the Take Survey view is the active one, drop the content-body's own
+           padding so the survey fills the viewport edge-to-edge; Profile/History
+           keep their normal padded, centered card look. */
+        .content-body:has(#view-survey.active) { padding: 0; }
         .survey-card {
-            border-radius: 20px;
+            border-radius: 0;
             background: var(--surface) !important;
-            border: 1px solid var(--line-soft);
-            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 24px 48px -16px rgba(15, 23, 42, 0.14);
-            max-width: 880px;
-            margin: 0 auto;
+            border: none;
+            border-top: 1px solid var(--line-soft);
+            box-shadow: none;
+            max-width: 100%;
+            width: 100%;
+            margin: 0;
+            min-height: calc(100vh - var(--topbar-h));
             transition: background 0.3s ease-in-out, border-color 0.3s ease-in-out;
+        }
+        /* Inner content still reads comfortably instead of stretching edge-to-edge on wide screens */
+        .survey-card > .card-body { max-width: 900px; margin: 0 auto; width: 100%; }
+
+        /* ---- Multi-step progress tracker ---- */
+        .survey-progress { padding: 0 6px; }
+        .progress-steps { position: relative; display: flex; justify-content: space-between; }
+        .progress-track {
+            position: absolute; top: 15px; left: 17px; right: 17px; height: 4px;
+            border-radius: 50px; background: var(--line); z-index: 0; overflow: hidden;
+        }
+        .progress-fill {
+            position: absolute; top: 0; left: 0; height: 100%; width: 0%;
+            background: linear-gradient(90deg, var(--brand), #4d7ce8);
+            border-radius: 50px; transition: width 0.5s cubic-bezier(.65,0,.35,1);
+        }
+        .progress-step { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 0.4rem; flex: 1; }
+        .step-dot {
+            width: 34px; height: 34px; border-radius: 50%; background: var(--surface);
+            border: 2.5px solid var(--line); color: var(--ink-400);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 0.85rem; transition: all 0.3s ease;
+        }
+        .step-dot i { display: none; font-size: 1rem; }
+        .step-label {
+            font-size: 0.72rem; font-weight: 600; color: var(--ink-400);
+            text-align: center; letter-spacing: 0.2px; transition: color 0.3s ease;
+        }
+        .progress-step.completed .step-dot {
+            background: var(--brand); border-color: var(--brand); color: #fff;
+        }
+        .progress-step.completed .step-dot span { display: none; }
+        .progress-step.completed .step-dot i { display: inline-block; }
+        .progress-step.completed .step-label { color: var(--ink-800); }
+        .progress-step.active .step-dot {
+            border-color: var(--brand); color: var(--brand);
+            box-shadow: 0 0 0 6px var(--ring);
+            animation: stepPulse 1.8s ease-in-out infinite;
+        }
+        .progress-step.active .step-label { color: var(--brand); font-weight: 700; }
+
+        @keyframes stepPulse {
+            0%, 100% { box-shadow: 0 0 0 5px var(--ring); }
+            50% { box-shadow: 0 0 0 9px transparent; }
+        }
+
+        @media (max-width: 480px) {
+            .step-label { display: none; }
+            .step-dot { width: 28px; height: 28px; font-size: 0.75rem; }
         }
 
         .text-heading { color: var(--ink-900) !important; }
@@ -142,12 +418,24 @@
         .option-card:hover {
             background: #f5f8ff;
             border-color: #b6c8f2;
+            transform: translateY(-2px) scale(1.005);
+            box-shadow: 0 8px 20px -12px rgba(37, 84, 199, 0.35);
         }
 
         .option-card:has(input:checked) {
             background: #eef3fe;
             border-color: var(--brand);
-            box-shadow: 0 0 0 1px var(--brand) inset;
+            box-shadow: 0 0 0 3px var(--ring), 0 8px 20px -10px rgba(37, 84, 199, 0.4);
+            transform: scale(1.01);
+        }
+
+        .option-card:active { transform: scale(0.99); }
+
+        .form-check-input {
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+        }
+        .form-check-input:checked {
+            transform: scale(1.08);
         }
 
         /* ---- Form controls ---- */
@@ -229,7 +517,42 @@
             color: #f1f5f9;
             font-weight: 600;
             border-color: var(--ink-900);
+            padding: 0.9rem 0.6rem;
         }
+
+        #sqd-body td.text-start {
+            font-size: 0.9rem;
+            line-height: 1.45;
+            padding-left: 1.25rem;
+            padding-right: 1rem;
+            color: var(--ink-800);
+        }
+
+        #sqd-body tr { transition: background 0.15s ease; }
+        #sqd-body tr:nth-child(even) { background: rgba(37, 84, 199, 0.025); }
+        #sqd-body tr:hover { background: rgba(37, 84, 199, 0.06); }
+        [data-bs-theme="dark"] #sqd-body tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+        [data-bs-theme="dark"] #sqd-body tr:hover { background: rgba(96, 141, 255, 0.08); }
+
+        #sqd-body .radio-custom { width: 20px; height: 20px; transition: transform 0.15s ease; }
+        #sqd-body .radio-custom:hover { transform: scale(1.2); }
+        #sqd-body .radio-custom:checked { transform: scale(1.25); }
+
+        #sqd-table-wrap thead th { transition: background 0.15s ease, transform 0.15s ease; cursor: default; }
+        #sqd-table-wrap thead th:not(:first-child):hover { transform: scale(1.06); }
+
+        #sqd-body td:not(.text-start) { transition: background 0.2s ease; border-radius: 6px; }
+        #sqd-body td:not(.text-start):has(.radio-custom:checked) { background: rgba(37, 84, 199, 0.1); }
+        #sqd-body td:has(input[value="5"]:checked),
+        #sqd-body td:has(input[value="4"]:checked) { background: rgba(34, 197, 94, 0.14) !important; }
+        #sqd-body td:has(input[value="3"]:checked) { background: rgba(234, 179, 8, 0.16) !important; }
+        #sqd-body td:has(input[value="2"]:checked),
+        #sqd-body td:has(input[value="1"]:checked) { background: rgba(239, 68, 68, 0.14) !important; }
+        [data-bs-theme="dark"] #sqd-body td:has(input[value="5"]:checked),
+        [data-bs-theme="dark"] #sqd-body td:has(input[value="4"]:checked) { background: rgba(34, 197, 94, 0.22) !important; }
+        [data-bs-theme="dark"] #sqd-body td:has(input[value="3"]:checked) { background: rgba(234, 179, 8, 0.22) !important; }
+        [data-bs-theme="dark"] #sqd-body td:has(input[value="2"]:checked),
+        [data-bs-theme="dark"] #sqd-body td:has(input[value="1"]:checked) { background: rgba(239, 68, 68, 0.22) !important; }
 
         /* --- DARK MODE STYLES --- */
         [data-bs-theme="dark"] {
@@ -261,24 +584,69 @@
     </style>
 </head>
 
-<body class="py-3 py-md-5">
+<body>
 
-<div class="container">
-    <div class="card border-0 survey-card">
-        <div class="card-body p-4 p-md-5 position-relative">
+<div class="app-shell">
 
-            <div class="position-absolute top-0 start-0 m-3 z-3">
+    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
+
+    <aside class="sidebar" id="clientSidebar">
+        <div class="sidebar-brand">
+            <img src="https://cspc.edu.ph/wp-content/uploads/2022/03/Camarines_Sur_Polytechnic_Colleges_Logo.png" alt="CSPC Logo">
+            <div class="sidebar-brand-text">
+                <div class="t1">CQA Client Portal</div>
+                <div class="t2">CSPC Nabua, Cam. Sur</div>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="#" data-view="survey" class="nav-item-link active" onclick="return switchView('survey');"><i class="bi bi-clipboard2-check-fill"></i> Take Survey</a>
+            <a href="#" data-view="profile" class="nav-item-link" onclick="return switchView('profile');"><i class="bi bi-person-fill"></i> Profile</a>
+            <a href="#" data-view="history" class="nav-item-link" onclick="return switchView('history');"><i class="bi bi-clock-history"></i> History</a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="signed-in-email" title="Signed in with Google">
+                <i class="bi bi-google me-1"></i><%= typeof clientEmail !== 'undefined' ? clientEmail : '' %>
+            </div>
+            <button type="button" class="btn-logout-side" onclick="logout()"><i class="bi bi-box-arrow-right"></i> Logout</button>
+        </div>
+    </aside>
+
+    <div class="main-content">
+
+        <header class="topbar">
+            <button type="button" class="topbar-hamburger" onclick="toggleSidebar()" aria-label="Toggle menu">
+                <i class="bi bi-list"></i>
+            </button>
+            <button type="button" id="btn-sidebar-collapse" class="btn-sidebar-toggle" onclick="toggleSidebarCollapse()" title="Collapse sidebar — focus on the survey" aria-label="Collapse sidebar">
+                <i class="bi bi-layout-sidebar-inset"></i>
+            </button>
+            <div class="topbar-title">
+                Client Satisfaction Survey
+                <small data-i18n="gov_rep">Republic of the Philippines</small>
+            </div>
+            <div class="topbar-actions">
+                <button id="btn-fullscreen" type="button" onclick="toggleFullscreen()" class="btn-fullscreen" title="Toggle full screen" aria-label="Toggle full screen">
+                    <i class="bi bi-arrows-fullscreen"></i>
+                </button>
                 <button id="btn-theme" type="button" onclick="toggleTheme()" class="btn bg-transparent border-0 text-body shadow-none fw-semibold d-flex align-items-center gap-1">
                     🌙 Dark
                 </button>
+                <div class="lang-toggle-group">
+                    <button id="btn-en" type="button" onclick="setLanguage('en')" class="btn btn-primary btn-sm fw-semibold shadow-sm">English</button>
+                    <button id="btn-tl" type="button" onclick="setLanguage('tl')" class="btn bg-transparent border btn-sm fw-semibold shadow-sm text-body">Tagalog</button>
+                </div>
             </div>
+        </header>
 
-            <div class="position-absolute top-0 end-0 m-3 d-flex gap-2 z-3">
-                <button id="btn-en" type="button" onclick="setLanguage('en')" class="btn btn-primary btn-sm fw-semibold shadow-sm">English</button>
-                <button id="btn-tl" type="button" onclick="setLanguage('tl')" class="btn bg-transparent border btn-sm fw-semibold shadow-sm text-body">Tagalog</button>
-            </div>
+        <div class="content-body">
 
-            <div class="text-center border-bottom pb-4 mb-5 pt-5 pt-md-4">
+        <div class="app-view active" id="view-survey">
+        <div class="card border-0 survey-card">
+        <div class="card-body p-4 p-md-5 position-relative">
+
+            <div class="text-center border-bottom pb-4 mb-5">
                 <div class="mb-3">
                     <img src="https://cspc.edu.ph/wp-content/uploads/2022/03/Camarines_Sur_Polytechnic_Colleges_Logo.png" alt="CSPC Logo" style="width: 92px; height: auto; background-color: white; border-radius: 50%; padding: 3px;" class="mb-3 shadow-sm">
                 </div>
@@ -288,6 +656,32 @@
 
                 <div class="bg-primary-subtle rounded-4 p-3 mt-4">
                     <h4 class="fw-semibold text-heading text-uppercase mb-0" data-i18n="form_title">Client Satisfaction Measurement (CSM) Survey</h4>
+                </div>
+            </div>
+
+            <div class="survey-progress mb-5" id="surveyProgress">
+                <div class="progress-steps">
+                    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+                    <div class="progress-step active" data-step="1">
+                        <div class="step-dot"><span>1</span><i class="bi bi-check-lg"></i></div>
+                        <div class="step-label">Terms</div>
+                    </div>
+                    <div class="progress-step" data-step="2">
+                        <div class="step-dot"><span>2</span><i class="bi bi-check-lg"></i></div>
+                        <div class="step-label">Client Info</div>
+                    </div>
+                    <div class="progress-step" data-step="3">
+                        <div class="step-dot"><span>3</span><i class="bi bi-check-lg"></i></div>
+                        <div class="step-label">Citizen's Charter</div>
+                    </div>
+                    <div class="progress-step" data-step="4">
+                        <div class="step-dot"><span>4</span><i class="bi bi-check-lg"></i></div>
+                        <div class="step-label">SQD Rating</div>
+                    </div>
+                    <div class="progress-step" data-step="5">
+                        <div class="step-dot"><span>5</span><i class="bi bi-check-lg"></i></div>
+                        <div class="step-label">Review</div>
+                    </div>
                 </div>
             </div>
 
@@ -333,13 +727,15 @@
 
                     <div class="row g-4">
                         <!-- IDINAGDAG: Pangalan -->
-                        <div class="col-md-6">
+                        <div class="col-12">
                             <label class="form-label fw-semibold text-dark fs-6">Name / Pangalan (Optional)</label>
                             <input type="text" name="respondent_name" class="form-control" placeholder="e.g. Juan Dela Cruz">
                         </div>
 
-                        <!-- Signed-in Google account (used to enforce 1 survey per office) -->
-                        <div class="col-md-6">
+                        <!-- Signed-in Google account (used to enforce 1 survey per office). Visually hidden
+                             per design request — the value is still bound, readonly, and submitted with the
+                             form normally; `d-none` only removes it from layout/view, not from FormData. -->
+                        <div class="col-md-6 d-none">
                             <label class="form-label fw-semibold text-dark fs-6">Google Account</label>
                             <input type="email" name="email" class="form-control" value="<%= typeof clientEmail !== 'undefined' ? clientEmail : '' %>" readonly>
                         </div>
@@ -441,7 +837,7 @@
 
                     <div class="d-flex justify-content-between border-top pt-4 mt-5">
                         <button type="button" onclick="navigate(1)" class="btn btn-outline-secondary fw-semibold" data-i18n="btn_back"></button>
-                        <button type="button" onclick="navigate(3)" class="btn btn-primary fw-semibold px-5" data-i18n="btn_next"></button>
+                        <button type="button" id="btnNextStage2" onclick="goNext(3)" class="btn btn-primary fw-semibold px-5" data-i18n="btn_next"></button>
                     </div>
                 </div>
 
@@ -541,7 +937,7 @@
 
                     <div class="d-flex justify-content-between border-top pt-4 mt-5">
                         <button type="button" onclick="navigate(2)" class="btn btn-outline-secondary fw-semibold" data-i18n="btn_back"></button>
-                        <button type="button" onclick="navigate(4)" class="btn btn-primary fw-semibold px-5" data-i18n="btn_next"></button>
+                        <button type="button" id="btnNextStage3" onclick="goNext(4)" class="btn btn-primary fw-semibold px-5" data-i18n="btn_next"></button>
                     </div>
                 </div>
 
@@ -575,6 +971,63 @@
 
                     <div class="d-flex justify-content-between border-top pt-4 mt-5">
                         <button type="button" onclick="navigate(3)" class="btn btn-outline-secondary fw-semibold" data-i18n="btn_back"></button>
+                        <button type="button" id="btnNextStage4" onclick="goNext(5)" class="btn btn-primary fw-semibold px-5" data-i18n="btn_next"></button>
+                    </div>
+                </div>
+
+                <div id="stage5" class="page">
+                    <div class="section-title mb-4">
+                        <h4 class="fw-semibold text-heading text-uppercase mb-0">Review &amp; Confirmation</h4>
+                        <p class="text-secondary mt-2 mb-0">Please double-check your answers below before submitting. Click "Edit" on any section to make changes.</p>
+                    </div>
+
+                    <div class="review-section">
+                        <div class="review-section-header">
+                            <h5><i class="bi bi-person-lines-fill me-1"></i> Client Profile</h5>
+                            <button type="button" class="btn-edit-section" onclick="goEditStage(2)"><i class="bi bi-pencil-fill me-1"></i> Edit / Baguhin</button>
+                        </div>
+                        <div class="review-grid">
+                            <div class="review-item"><div class="label">Name</div><div class="value" id="rv-name">—</div></div>
+                            <div class="review-item"><div class="label">Google Account</div><div class="value" id="rv-email">—</div></div>
+                            <div class="review-item"><div class="label">Client Type</div><div class="value" id="rv-clienttype">—</div></div>
+                            <div class="review-item"><div class="label">Sex</div><div class="value" id="rv-gender">—</div></div>
+                            <div class="review-item"><div class="label">Age</div><div class="value" id="rv-age">—</div></div>
+                            <div class="review-item"><div class="label">Date</div><div class="value" id="rv-date">—</div></div>
+                            <div class="review-item"><div class="label">Region</div><div class="value" id="rv-region">—</div></div>
+                            <div class="review-item"><div class="label">Office Visited</div><div class="value" id="rv-office">—</div></div>
+                            <div class="review-item full"><div class="label">Service Availed</div><div class="value" id="rv-service">—</div></div>
+                        </div>
+                    </div>
+
+                    <div class="review-section">
+                        <div class="review-section-header">
+                            <h5><i class="bi bi-file-earmark-text-fill me-1"></i> Citizen's Charter</h5>
+                            <button type="button" class="btn-edit-section" onclick="goEditStage(3)"><i class="bi bi-pencil-fill me-1"></i> Edit / Baguhin</button>
+                        </div>
+                        <div class="review-grid">
+                            <div class="review-item full"><div class="label">CC1</div><div class="value" id="rv-cc1">—</div></div>
+                            <div class="review-item full"><div class="label">CC2</div><div class="value" id="rv-cc2">—</div></div>
+                            <div class="review-item full"><div class="label">CC3</div><div class="value" id="rv-cc3">—</div></div>
+                        </div>
+                    </div>
+
+                    <div class="review-section">
+                        <div class="review-section-header">
+                            <h5><i class="bi bi-star-fill me-1"></i> Service Quality Ratings</h5>
+                            <button type="button" class="btn-edit-section" onclick="goEditStage(4)"><i class="bi bi-pencil-fill me-1"></i> Edit / Baguhin</button>
+                        </div>
+                        <div class="qa-block p-4" id="rv-sqd-list"></div>
+                    </div>
+
+                    <div class="review-section mb-0">
+                        <div class="review-section-header">
+                            <h5><i class="bi bi-chat-left-text-fill me-1"></i> Suggestions</h5>
+                        </div>
+                        <div class="review-item full"><div class="value" id="rv-comments">—</div></div>
+                    </div>
+
+                    <div class="d-flex justify-content-between border-top pt-4 mt-5">
+                        <button type="button" onclick="navigate(4)" class="btn btn-outline-secondary fw-semibold" data-i18n="btn_back"></button>
                         <button type="button" onclick="submitAll(event)" class="btn btn-primary fw-semibold px-5" data-i18n="btn_submit"></button>
                     </div>
                 </div>
@@ -595,6 +1048,87 @@
             </div>
 
         </div>
+        </div>
+        </div>
+        <!-- /#view-survey -->
+
+        <!-- ================= PROFILE VIEW ================= -->
+        <div class="app-view" id="view-profile">
+            <div class="card border-0 view-card">
+                <div class="card-body p-4 p-md-5">
+                    <div class="view-header">
+                        <div class="view-icon"><i class="bi bi-person-fill"></i></div>
+                        <h3 class="fw-semibold text-heading mb-1">My Profile</h3>
+                        <p class="text-secondary mb-0">View and update your registered account details.</p>
+                    </div>
+
+                    <div id="profileLoading" class="spinner-block">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-3 mb-0">Loading your profile…</p>
+                    </div>
+
+                    <div id="profileContent" class="d-none">
+                        <div class="qa-block p-4 mb-4">
+                            <div class="profile-field-row">
+                                <span class="profile-field-label">Email (Google Account)</span>
+                                <span class="profile-field-value" id="pf-email">—</span>
+                            </div>
+                            <div class="profile-field-row">
+                                <span class="profile-field-label">Region of Residence</span>
+                                <span id="pf-region"></span>
+                            </div>
+                            <div class="profile-field-row">
+                                <span class="profile-field-label">Age Bracket</span>
+                                <span id="pf-age"></span>
+                            </div>
+                            <div class="profile-field-row">
+                                <span class="profile-field-label">Sex</span>
+                                <span id="pf-gender"></span>
+                            </div>
+                        </div>
+
+                        <form id="profileForm" onsubmit="return saveProfile(event);">
+                            <label class="form-label fw-semibold text-dark fs-6">Name / Pangalan</label>
+                            <input type="text" id="pf-name-input" class="form-control mb-3" placeholder="e.g. Juan Dela Cruz">
+                            <button type="submit" id="pf-save-btn" class="btn btn-primary fw-semibold px-4">
+                                <i class="bi bi-check2-circle me-1"></i> Save Changes
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= HISTORY VIEW ================= -->
+        <div class="app-view" id="view-history">
+            <div class="card border-0 view-card">
+                <div class="card-body p-4 p-md-5">
+                    <div class="view-header">
+                        <div class="view-icon"><i class="bi bi-clock-history"></i></div>
+                        <h3 class="fw-semibold text-heading mb-1">Survey History</h3>
+                        <p class="text-secondary mb-0">Every satisfaction survey you've completed so far.</p>
+                    </div>
+
+                    <div id="historyLoading" class="spinner-block">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-3 mb-0">Loading your survey history…</p>
+                    </div>
+
+                    <div id="historyEmpty" class="empty-state d-none">
+                        <i class="bi bi-inbox"></i>
+                        <h5 class="fw-semibold text-heading mb-0">No surveys yet</h5>
+                        <p>You haven't completed a satisfaction survey yet. Once you submit one, it will show up here.</p>
+                        <button type="button" class="btn btn-primary fw-semibold mt-2" onclick="switchView('survey')">
+                            <i class="bi bi-clipboard2-check me-1"></i> Take a Survey
+                        </button>
+                    </div>
+
+                    <div id="historyList" class="d-none"></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
     </div>
 </div>
 
@@ -645,6 +1179,18 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
+// BFCache guard: if the browser restores this page from its back/forward cache
+// (e.g. the user logged out, then hit Back) instead of requesting it fresh from
+// the server, force a hard reload so /client-survey's server-side session check
+// and no-cache headers actually run again rather than being bypassed entirely.
+window.addEventListener('pageshow', function (event) {
+    var navEntries = (window.performance && performance.getEntriesByType) ? performance.getEntriesByType('navigation') : [];
+    var isBackForwardNav = navEntries.length > 0 && navEntries[0].type === 'back_forward';
+    if (event.persisted || isBackForwardNav) {
+        window.location.reload();
+    }
+});
+
 document.getElementById('surveyDate').valueAsDate = new Date();
 let currentLang = 'en';
 
@@ -704,7 +1250,242 @@ function applyLockedProfile() {
     });
 }
 
-// Theme Toggle Function 
+// Mobile sidebar toggle — slides the dashboard sidebar in/out with a backdrop
+function toggleSidebar() {
+    document.getElementById('clientSidebar').classList.toggle('show');
+    document.getElementById('sidebarBackdrop').classList.toggle('show');
+}
+
+function closeSidebarOnMobile() {
+    if (window.innerWidth < 992) {
+        document.getElementById('clientSidebar').classList.remove('show');
+        document.getElementById('sidebarBackdrop').classList.remove('show');
+    }
+}
+
+// Desktop-only persistent sidebar collapse — lets the client hide the sidebar
+// entirely to focus on the survey full-screen. Reuses the same slide transform
+// as the mobile overlay, but toggled on .app-shell (no backdrop, reclaims the
+// space instead of covering content) so it's purely a layout change.
+function toggleSidebarCollapse() {
+    const shell = document.querySelector('.app-shell');
+    const collapsed = shell.classList.toggle('sidebar-collapsed');
+    const btn = document.getElementById('btn-sidebar-collapse');
+    if (btn) {
+        btn.innerHTML = collapsed
+            ? '<i class="bi bi-layout-sidebar"></i>'
+            : '<i class="bi bi-layout-sidebar-inset"></i>';
+        btn.title = collapsed ? 'Show sidebar' : 'Collapse sidebar — focus on the survey';
+    }
+}
+
+// =====================================
+// SPA VIEW SWITCHING — Take Survey / Profile / History
+// =====================================
+const VIEW_TITLES = {
+    survey: 'Client Satisfaction Survey',
+    profile: 'My Profile',
+    history: 'Survey History'
+};
+
+let profileLoaded = false;
+let historyLoaded = false;
+
+// Swaps the visible app-view and the active sidebar link without a page
+// reload. Lazily fetches Profile/History data the first time each tab is
+// opened. Returns false so it can be used directly as an <a>'s onclick to
+// suppress the default "#" navigation.
+function switchView(view) {
+    document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active'));
+    const target = document.getElementById('view-' + view);
+    if (target) target.classList.add('active');
+
+    document.querySelectorAll('.sidebar-nav .nav-item-link').forEach(a => a.classList.remove('active'));
+    const navLink = document.querySelector(`.sidebar-nav .nav-item-link[data-view="${view}"]`);
+    if (navLink) navLink.classList.add('active');
+
+    const titleEl = document.querySelector('.topbar-title');
+    if (titleEl && titleEl.firstChild) titleEl.firstChild.textContent = (VIEW_TITLES[view] || '') + ' ';
+
+    if (view === 'profile' && !profileLoaded) loadProfileView();
+    if (view === 'history' && !historyLoaded) loadHistoryView();
+
+    closeSidebarOnMobile();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return false;
+}
+
+function loadProfileView() {
+    fetch('/api/client-profile')
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed to load profile.');
+            profileLoaded = true;
+            const p = data.profile || {};
+
+            document.getElementById('pf-email').textContent = p.email || currentClientEmail || '—';
+            document.getElementById('pf-name-input').value = p.respondent_name || '';
+
+            const lockedOrUnset = (value, iconTitle) => value
+                ? `<span class="profile-locked-badge" title="${iconTitle}"><i class="bi bi-lock-fill"></i> ${value}</span>`
+                : `<span class="profile-unset">Not set yet — captured on your first survey submission</span>`;
+
+            document.getElementById('pf-region').innerHTML = lockedOrUnset(p.region, 'Locked after your first survey');
+            document.getElementById('pf-age').innerHTML = lockedOrUnset(p.age, 'Locked after your first survey');
+            document.getElementById('pf-gender').innerHTML = lockedOrUnset(p.gender, 'Locked after your first survey');
+
+            document.getElementById('profileLoading').classList.add('d-none');
+            document.getElementById('profileContent').classList.remove('d-none');
+        })
+        .catch(err => {
+            console.error('Error loading profile:', err);
+            document.getElementById('profileLoading').innerHTML =
+                '<p class="text-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i> Could not load your profile. Please try again.</p>';
+        });
+}
+
+function saveProfile(event) {
+    if (event) event.preventDefault();
+    const nameInput = document.getElementById('pf-name-input');
+    const name = nameInput.value.trim();
+    if (!name) {
+        AppAlert.warning('Please enter your name.');
+        return false;
+    }
+
+    const btn = document.getElementById('pf-save-btn');
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving…';
+
+    fetch('/api/client-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ respondent_name: name })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Could not save your profile.');
+            AppAlert.success('Profile updated successfully.');
+        })
+        .catch(err => {
+            console.error('Error saving profile:', err);
+            AppAlert.error(err.message || 'Could not save your profile. Please try again.');
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        });
+
+    return false;
+}
+
+function loadHistoryView() {
+    fetch('/api/client-history')
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed to load history.');
+            historyLoaded = true;
+            document.getElementById('historyLoading').classList.add('d-none');
+
+            const history = data.history || [];
+            if (history.length === 0) {
+                document.getElementById('historyEmpty').classList.remove('d-none');
+                return;
+            }
+
+            const listEl = document.getElementById('historyList');
+            listEl.innerHTML = history.map(row => `
+                <div class="history-item">
+                    <div>
+                        <div class="history-office"><i class="bi bi-building me-1"></i> ${escapeHtml(row.office_name)}</div>
+                        <div class="history-meta">${escapeHtml(row.cluster_name || 'General')} &middot; ${escapeHtml(row.formatted_date)}</div>
+                    </div>
+                    <span class="history-badge"><i class="bi bi-check-circle-fill me-1"></i> Completed</span>
+                </div>
+            `).join('');
+            listEl.classList.remove('d-none');
+        })
+        .catch(err => {
+            console.error('Error loading history:', err);
+            document.getElementById('historyLoading').innerHTML =
+                '<p class="text-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i> Could not load your survey history. Please try again.</p>';
+        });
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+}
+
+// =====================================
+// FULL SCREEN MODE
+// =====================================
+function getFullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement || null;
+}
+
+// Requests full screen on the whole page. Browsers require a user gesture and
+// may still reject silently (iOS Safari, embedded webviews, etc.) — the
+// rejection is swallowed so the survey keeps working normally either way.
+function enterFullscreen() {
+    if (getFullscreenElement()) return;
+    const el = document.documentElement;
+    const request = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if (!request) return;
+    try {
+        const result = request.call(el);
+        if (result && typeof result.catch === 'function') {
+            result.catch(() => { /* blocked by browser/permissions — ignore, survey still works */ });
+        }
+    } catch (e) { /* Fullscreen API unsupported or blocked — ignore */ }
+}
+
+function exitFullscreen() {
+    if (!getFullscreenElement()) return;
+    const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+    if (!exit) return;
+    try {
+        const result = exit.call(document);
+        if (result && typeof result.catch === 'function') result.catch(() => {});
+    } catch (e) { /* ignore */ }
+}
+
+function toggleFullscreen() {
+    if (getFullscreenElement()) exitFullscreen();
+    else enterFullscreen();
+}
+
+function updateFullscreenButton() {
+    const btn = document.getElementById('btn-fullscreen');
+    if (!btn) return;
+    const isFs = !!getFullscreenElement();
+    btn.innerHTML = isFs ? '<i class="bi bi-fullscreen-exit"></i>' : '<i class="bi bi-arrows-fullscreen"></i>';
+    btn.title = isFs ? 'Exit full screen' : 'Toggle full screen';
+}
+
+['fullscreenchange', 'webkitfullscreenchange', 'msfullscreenchange'].forEach(evt => {
+    document.addEventListener(evt, updateFullscreenButton);
+});
+
+// =====================================
+// PROGRESS TRACKER
+// =====================================
+function updateProgressStepper(stage) {
+    const totalStages = 5;
+    const fill = document.getElementById('progressFill');
+    if (fill) fill.style.width = (((stage - 1) / (totalStages - 1)) * 100) + '%';
+
+    document.querySelectorAll('.progress-step').forEach(el => {
+        const s = parseInt(el.getAttribute('data-step'), 10);
+        el.classList.remove('active', 'completed');
+        if (s < stage) el.classList.add('completed');
+        else if (s === stage) el.classList.add('active');
+    });
+}
+
+// Theme Toggle Function
 function toggleTheme() {
     const htmlElement = document.documentElement;
     const currentTheme = htmlElement.getAttribute('data-bs-theme');
@@ -797,6 +1578,52 @@ function validateStage(stageNum) {
 }
 
 // Navigation Function — validates the current stage before allowing forward movement
+// =====================================
+// SMART EDIT — Stage 5 "Edit" jumps straight to a stage; that stage's "Next"
+// button then turns into "Save & Return to Review" and jumps straight back,
+// bypassing whatever intermediate stages sit between them.
+// =====================================
+let editReturnTarget = null;
+
+// New short label only — does NOT touch the protected i18n dictionary above/below.
+const UX_LABELS = {
+    en: { save_return: 'Save & Return to Review' },
+    tl: { save_return: 'I-save at Bumalik sa Review' }
+};
+
+function goEditStage(stage) {
+    editReturnTarget = 5;
+    navigate(stage);
+}
+
+// Used by the Stage 2/3/4 "Next" buttons. Normal flow: goes to normalTarget.
+// If the user got here via an Edit link from Stage 5: goes straight back to
+// Stage 5 instead, and clears the flag so the button reverts to normal next time.
+function goNext(normalTarget) {
+    if (editReturnTarget) {
+        const target = editReturnTarget;
+        editReturnTarget = null;
+        navigate(target);
+    } else {
+        navigate(normalTarget);
+    }
+}
+
+function updateNextButtonLabel(stage) {
+    const btnIds = { 2: 'btnNextStage2', 3: 'btnNextStage3', 4: 'btnNextStage4' };
+    const btn = document.getElementById(btnIds[stage]);
+    if (!btn) return;
+
+    if (editReturnTarget) {
+        const label = (UX_LABELS[currentLang] || UX_LABELS.en).save_return;
+        btn.innerHTML = '<i class="bi bi-arrow-return-left me-1"></i> ' + label;
+    } else {
+        btn.innerHTML = '<span data-i18n="btn_next"></span>';
+        const span = btn.querySelector('[data-i18n]');
+        if (span && i18n[currentLang] && i18n[currentLang].btn_next) span.textContent = i18n[currentLang].btn_next;
+    }
+}
+
 function navigate(stage) {
     const activePage = document.querySelector('#surveyForm .page.active');
     const currentStage = activePage ? parseInt(activePage.id.replace('stage', ''), 10) : null;
@@ -805,8 +1632,23 @@ function navigate(stage) {
         if (!validateStage(currentStage)) return;
     }
 
-    document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
-    document.getElementById('stage' + stage).classList.add('active');
+    // Entering Stage 2 (Profile) is the natural "survey has started" moment —
+    // request full screen here so it fires whether the user clicked
+    // START SURVEY or arrived via any other path that calls navigate(2).
+    if (stage === 2) enterFullscreen();
+
+    // Entering the Review stage — rebuild the summary from whatever is
+    // currently in the form so "Edit" + coming back always reflects the latest answers.
+    if (stage === 5) renderReviewSummary();
+
+    const direction = currentStage && stage < currentStage ? 'dir-back' : 'dir-fwd';
+
+    document.querySelectorAll('.page').forEach(page => page.classList.remove('active', 'dir-fwd', 'dir-back'));
+    const targetPage = document.getElementById('stage' + stage);
+    targetPage.classList.add('active', direction);
+
+    updateProgressStepper(stage);
+    updateNextButtonLabel(stage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -1020,6 +1862,63 @@ function setLanguage(lang) {
     updateTranslations();
     renderSQD();
     renderTermsPoints();
+
+    // Re-apply the current stage's Next-button label in the new language —
+    // covers both the normal "Next"/"Susunod" text and the Smart Edit
+    // "Save & Return to Review" label, which isn't part of the data-i18n scan above.
+    const activePage = document.querySelector('#surveyForm .page.active');
+    if (activePage) updateNextButtonLabel(parseInt(activePage.id.replace('stage', ''), 10));
+}
+
+// =====================================
+// STAGE 5 — REVIEW & CONFIRMATION SUMMARY
+// =====================================
+// Reads whatever is currently sitting in the (untouched) form fields and
+// mirrors it into the read-only review cards. Never touches submitAll()'s own
+// FormData collection below — this is purely a preview built from the same DOM.
+function renderReviewSummary() {
+    const val = (sel) => { const el = document.querySelector(sel); return el ? el.value : ''; };
+    const selectedText = (sel) => {
+        const el = document.querySelector(sel);
+        return (el && el.selectedOptions && el.selectedOptions[0]) ? el.selectedOptions[0].textContent.trim() : '—';
+    };
+    const checkedLabelText = (name) => {
+        const checked = document.querySelector(`input[name="${name}"]:checked`);
+        if (!checked) return '—';
+        const span = checked.closest('label') ? checked.closest('label').querySelector('span') : null;
+        return span ? span.textContent.trim() : checked.value;
+    };
+
+    document.getElementById('rv-name').textContent = val('input[name="respondent_name"]').trim() || 'Anonymous';
+    document.getElementById('rv-email').textContent = val('input[name="email"]') || '—';
+    document.getElementById('rv-clienttype').textContent = selectedText('select[name="client_type"]');
+    document.getElementById('rv-gender').textContent = checkedLabelText('gender');
+    document.getElementById('rv-age').textContent = selectedText('select[name="age"]');
+    document.getElementById('rv-date').textContent = val('input[name="survey_date"]') || '—';
+    document.getElementById('rv-region').textContent = selectedText('select[name="region"]');
+    document.getElementById('rv-office').textContent = selectedText('select[name="office_id"]');
+    document.getElementById('rv-service').textContent = val('input[name="service_availed"]').trim() || '—';
+
+    document.getElementById('rv-cc1').textContent = checkedLabelText('cc1');
+    document.getElementById('rv-cc2').textContent = checkedLabelText('cc2');
+    document.getElementById('rv-cc3').textContent = checkedLabelText('cc3');
+
+    const ratingLabels = {
+        '5': i18n[currentLang].th_sa, '4': i18n[currentLang].th_a, '3': i18n[currentLang].th_n,
+        '2': i18n[currentLang].th_d, '1': i18n[currentLang].th_sd, '0': 'N/A'
+    };
+    const sqdList = document.getElementById('rv-sqd-list');
+    sqdList.innerHTML = '';
+    i18n[currentLang].sqd_items.forEach((item, index) => {
+        const checked = document.querySelector(`input[name="sqd${index}"]:checked`);
+        const ratingText = checked ? (ratingLabels[checked.value] || checked.value) : '—';
+        const row = document.createElement('div');
+        row.className = 'review-sqd-row';
+        row.innerHTML = `<span class="review-sqd-statement">${item}</span><span class="review-sqd-rating">${ratingText}</span>`;
+        sqdList.appendChild(row);
+    });
+
+    document.getElementById('rv-comments').textContent = val('textarea[name="comments"]').trim() || '—';
 }
 
 // =====================================
@@ -1104,6 +2003,10 @@ function showThankYou() {
     document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
     document.getElementById('thank-you-page').classList.add('active');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    const progressEl = document.getElementById('surveyProgress');
+    if (progressEl) progressEl.style.display = 'none';
+    exitFullscreen();
 }
 
 async function logout(){
@@ -1113,7 +2016,10 @@ async function logout(){
     });
     if (confirmed) {
         try { localStorage.removeItem(CLIENT_SESSION_KEY); } catch (e) {}
-        window.location.href = '/login';
+        // Hits the server's /logout route so the session (req.session.clientEmail /
+        // passport user) is actually cleared — otherwise the Back button could
+        // still land on the survey without signing in again.
+        window.location.href = '/logout';
     }
 }
 
@@ -1125,6 +2031,8 @@ document.getElementById('agreeTermsStage1').addEventListener('change', function 
 // Initial Load Setup
 setLanguage('en');
 applyLockedProfile();
+updateProgressStepper(1);
+updateFullscreenButton();
 
 </script>
 </body>

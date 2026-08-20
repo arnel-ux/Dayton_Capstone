@@ -67,7 +67,7 @@
 
         .header-container {
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 2.25rem;
             max-width: 800px; /* Para hindi masyadong humaba sa malaking screen */
         }
 
@@ -78,34 +78,42 @@
             text-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
             margin-bottom: 0.5rem;
             letter-spacing: 0.5px;
-            
+            line-height: 1.25;
+
             /* Apply animation (Mauuna) */
             opacity: 0;
             animation: fadeSlideUp 0.8s ease-out forwards;
         }
 
         .sub-title {
-            color: #f8fafc;
+            color: #e2e8f0;
             font-weight: 400;
             font-style: italic; /* Ibang style as requested */
-            font-size: 1.1rem;
+            font-size: 1.05rem;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
-            margin-bottom: 1.2rem;
-            
+            margin-bottom: 1rem;
+
             /* Apply animation (Pangalawa, may delay na 0.3s) */
             opacity: 0;
             animation: fadeSlideUp 0.8s ease-out 0.3s forwards;
         }
 
         .portal-text {
-            color: #ffff; /* Distinct gold/yellow color para sa Admin Portal */
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #ffffff;
             font-weight: 700;
-            font-size: 1.25rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 2px;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            letter-spacing: 2.5px;
+            padding: 0.4rem 1rem;
+            background: rgba(37, 84, 199, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 50px;
+            backdrop-filter: blur(6px);
             margin-bottom: 0;
-            
+
             /* Apply animation (Pangatlo, may delay na 0.6s) */
             opacity: 0;
             animation: fadeSlideUp 0.8s ease-out 0.6s forwards;
@@ -126,58 +134,86 @@
         }
         /* -------------------------------------- */
 
-        /* 4. Card Styling (Square at mas maliit - walang binago) */
+        /* 4. Card Styling — soft glassmorphism, refined shadow (still square-ish) */
         .card-custom {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            border-radius: 1.5rem;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            
-            /* Dito natin ginawang Square */
-            width: 380px; 
-            height: 380px; 
-            
-            /* Para mag-center ang content sa loob ng square */
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(18px) saturate(160%);
+            -webkit-backdrop-filter: blur(18px) saturate(160%);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: 1.75rem;
+            box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+
+            width: 390px;
+            height: 390px;
+
             display: flex;
             flex-direction: column;
             justify-content: center;
-            padding: 1.5rem 2.5rem; 
+            padding: 1.75rem 2.5rem;
+            transition: box-shadow 0.3s ease;
         }
 
         /* Responsive para sa mobile card */
         @media (max-width: 400px) {
             .card-custom {
-                width: 90vw;
-                height: 90vw; /* Keep it square on mobile */
-                padding: 1.5rem;
+                width: 92vw;
+                height: 92vw; /* Keep it square on mobile */
+                padding: 1.5rem 1.75rem;
             }
+        }
+
+        .card-custom .cqa-logo {
+            width: 62px;
+            height: auto;
+            background-color: #ffffff;
+            border-radius: 50%;
+            padding: 5px;
+            border: 2px solid rgba(37, 84, 199, 0.15);
+        }
+
+        .card-custom h4 {
+            color: #0f172a;
+            font-size: 1.15rem;
+            letter-spacing: 0.2px;
+        }
+
+        .card-custom .divider-soft {
+            width: 42px;
+            height: 3px;
+            background: #2554c7;
+            border-radius: 50px;
+            margin: 0.6rem auto 0.85rem;
         }
 
         /* Google Button Styling */
         .btn-google {
             background-color: #ffffff;
-            color: #475569;
-            border: 1px solid #cbd5e1;
+            color: #334155;
+            border: 1.5px solid #e2e8f0;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 12px;
             font-weight: 600;
-            font-size: 1rem; /* Pinalaki ng konti */
-            transition: all 0.3s ease;
-            border-radius: 8px; /* Added border radius for a modern feel */
+            font-size: 0.98rem;
+            transition: all 0.25s ease;
+            border-radius: 10px;
         }
 
         .btn-google:hover {
             background-color: #f8fafc;
-            border-color: #94a3b8;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border-color: #2554c7;
+            box-shadow: 0 6px 16px -4px rgba(37, 84, 199, 0.25);
+            transform: translateY(-1px);
+        }
+
+        .btn-google:active {
+            transform: translateY(0);
         }
 
         .btn-google img {
-            width: 22px; 
-            height: 22px;
+            width: 21px;
+            height: 21px;
         }
 
         /* Extra small text helper */
@@ -200,26 +236,27 @@
         </div>
 
         <div class="card-custom">
-            
-            <div class="text-center mb-4">
-                <img src="https://cspc.edu.ph/wp-content/uploads/2022/03/Camarines_Sur_Polytechnic_Colleges_Logo.png" alt="CSPC Logo" style="width: 65px; height: auto; background-color: white; border-radius: 50%; padding: 4px;" class="mb-3 shadow-sm">
-                <h4 class="fw-bold text-dark mb-1">Client Login</h4>
+
+            <div class="text-center mb-3">
+                <img src="https://cspc.edu.ph/wp-content/uploads/2022/03/Camarines_Sur_Polytechnic_Colleges_Logo.png" alt="CSPC Logo" class="cqa-logo mb-3 shadow-sm">
+                <h4 class="fw-bold mb-0">Client Login</h4>
+                <div class="divider-soft"></div>
                 <p class="text-muted text-xsmall mb-0">Sign in to your CQA Dashboard</p>
             </div>
-            
+
             <div class="text-center mb-4">
-                <p class="text-muted" style="font-size: 0.85rem; line-height: 1.4;">
+                <p class="text-muted mb-0" style="font-size: 0.85rem; line-height: 1.5;">
                     Please sign in using your personal or academic Gmail account to access the survey portal.
                 </p>
             </div>
 
             <a href="/auth/google" class="text-decoration-none">
-    <button type="button" class="btn btn-google w-100 py-3 shadow-sm">
-        <img src="https://www.freepnglogos.com/uploads/google-logo-png/google-logo-png-google-icon-logo-png-transparent-svg-vector-bie-supply-14.png" alt="Google Logo">
-        Sign in with Google
-    </button>
-</a>
-            
+                <button type="button" class="btn btn-google w-100 py-3 shadow-sm">
+                    <img src="https://www.freepnglogos.com/uploads/google-logo-png/google-logo-png-google-icon-logo-png-transparent-svg-vector-bie-supply-14.png" alt="Google Logo">
+                    Sign in with Google
+                </button>
+            </a>
+
         </div>
     </div>
 

@@ -9,6 +9,7 @@ const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const bcrypt = require('bcryptjs');
+const nodemailer = require('nodemailer');
 const app = express();
 const port = 3000;
 
@@ -61,7 +62,9 @@ function getClientEmail(req) {
     return null;
 }
 
-// Ensures only an authenticated client (Google OR unified login) can view/submit the survey
+// Ensures only an authenticated client (Google OR unified login) can view/submit the survey.
+// Treats a null/undefined/destroyed session exactly like "not logged in" — there is no
+// implicit trust of anything the browser sends except the (now cache-busted) cookie.
 function ensureClientAuth(req, res, next) {
     const email = getClientEmail(req);
     if (email) {
@@ -71,7 +74,31 @@ function ensureClientAuth(req, res, next) {
     if (req.is('application/json') || req.xhr) {
         return res.status(401).json({ success: false, message: "Please sign in before submitting the survey." });
     }
-    return res.redirect('/login');
+    return res.redirect(302, '/login');
+}
+
+// Ensures only a logged-in admin (set at /auth-login) can view/use admin pages & CRUD routes.
+// Same null/undefined/destroyed-session handling as ensureClientAuth above.
+function ensureAdminAuth(req, res, next) {
+    if (req.session && req.session.user && req.session.user.role === 'admin') {
+        return next();
+    }
+    if (req.is('application/json') || req.xhr) {
+        return res.status(401).json({ success: false, message: "Please log in as admin first." });
+    }
+    return res.redirect(302, '/login');
+}
+
+// Tells the browser (and any proxy/CDN in front of it) to never cache a restricted
+// page/response and never serve it from the bfcache — otherwise, after logging
+// out, hitting the browser's Back button can re-display a stale cached copy of a
+// protected page even though the session behind it is destroyed server-side.
+function noCache(req, res, next) {
+    res.set('Cache-Control', 'no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.set('Surrogate-Control', 'no-store');
+    next();
 }
 
 // ==========================================
@@ -157,6 +184,86 @@ function analyzeComment(comment, offline = false) {
             console.error("❌ [AI] Unexpected error launching analysis:", err);
             finish({ sentiment: 'Neutral', topic: 'General Feedback' });
         }
+    });
+}
+
+// ==========================================
+// EMAIL RECEIPT (NodeMailer)
+// ==========================================
+// Entirely optional and non-blocking: if MAIL_USER/MAIL_PASS aren't set in
+// .env, sending is skipped (logged once at startup) and survey submission
+// itself is completely unaffected either way — this never throws into a
+// request handler and never delays the client's "Thank You" response.
+//
+// Configure in .env either:
+//   MAIL_USER=you@gmail.com
+//   MAIL_PASS=<a Gmail App Password, not your normal password>
+// ...for Gmail, or add MAIL_HOST / MAIL_PORT / MAIL_SECURE for any other SMTP
+// provider. Optionally set MAIL_FROM to override the display "From" name.
+let mailTransporter = null;
+if (process.env.MAIL_USER && process.env.MAIL_PASS) {
+    mailTransporter = nodemailer.createTransport(
+        process.env.MAIL_HOST
+            ? {
+                host: process.env.MAIL_HOST,
+                port: parseInt(process.env.MAIL_PORT, 10) || 587,
+                secure: process.env.MAIL_SECURE === 'true',
+                auth: { user: process.env.MAIL_USER, pass: process.env.MAIL_PASS }
+            }
+            : {
+                service: 'gmail',
+                auth: { user: process.env.MAIL_USER, pass: process.env.MAIL_PASS }
+            }
+    );
+    console.log('✅ Mail transporter configured — survey receipt emails are ON.');
+} else {
+    console.log('ℹ️  MAIL_USER/MAIL_PASS not set in .env — survey receipt emails are OFF (submissions still work normally).');
+}
+
+// Sends the client a proof-of-completion receipt of exactly what they just
+// submitted. Fire-and-forget: called AFTER the client already got its
+// success response, so a slow or failed send can never hold up the survey.
+function sendSurveyReceiptEmail(toEmail, receipt) {
+    if (!mailTransporter || !toEmail || toEmail === 'Not Specified') return;
+
+    const sqdRowsHtml = receipt.sqd.map((r) => `
+        <tr>
+            <td style="padding:8px 12px;border:1px solid #e2e8f0;">${r.label}</td>
+            <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center;font-weight:600;">${r.value === null ? 'N/A' : (r.value === 0 ? 'N/A' : r.value + ' / 5')}</td>
+        </tr>`).join('');
+
+    const html = `
+        <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">
+            <div style="background:#2554c7;color:#fff;padding:24px;border-radius:12px 12px 0 0;text-align:center;">
+                <h2 style="margin:0;">Camarines Sur Polytechnic Colleges</h2>
+                <p style="margin:4px 0 0;opacity:.9;">Client Satisfaction Measurement (CSM) Survey — Official Receipt</p>
+            </div>
+            <div style="border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 12px 12px;">
+                <p>Hi ${receipt.name},</p>
+                <p>Thank you for completing the CSM survey. This email confirms your submission was received and serves as your proof of completion.</p>
+                <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;">
+                    <tr><td style="padding:6px 10px;font-weight:bold;width:40%;">Office Visited</td><td style="padding:6px 10px;">${receipt.officeName}</td></tr>
+                    <tr><td style="padding:6px 10px;font-weight:bold;">Cluster</td><td style="padding:6px 10px;">${receipt.clusterName || 'N/A'}</td></tr>
+                    <tr><td style="padding:6px 10px;font-weight:bold;">Client Type</td><td style="padding:6px 10px;">${receipt.clientType}</td></tr>
+                    <tr><td style="padding:6px 10px;font-weight:bold;">Date Submitted</td><td style="padding:6px 10px;">${receipt.submittedAt}</td></tr>
+                    <tr><td style="padding:6px 10px;font-weight:bold;">Reference No.</td><td style="padding:6px 10px;">CSM-${receipt.surveyResponseId}</td></tr>
+                </table>
+                <h4 style="margin-bottom:6px;">Service Quality Dimension Ratings</h4>
+                <table style="width:100%;border-collapse:collapse;font-size:13px;">${sqdRowsHtml}</table>
+                <p style="margin-top:20px;font-size:12px;color:#64748b;">This is an automated message from the CSPC Center for Quality Assurance. If you did not take this survey, please disregard this email.</p>
+            </div>
+        </div>
+    `;
+
+    mailTransporter.sendMail({
+        from: process.env.MAIL_FROM || `"CSPC Center for Quality Assurance" <${process.env.MAIL_USER}>`,
+        to: toEmail,
+        subject: `CSM Survey Receipt — ${receipt.officeName} (Ref: CSM-${receipt.surveyResponseId})`,
+        html
+    }).then(() => {
+        console.log(`✅ [Mail] Survey receipt sent to ${toEmail}`);
+    }).catch((err) => {
+        console.error(`❌ [Mail] Failed to send survey receipt to ${toEmail}:`, err.message);
     });
 }
 
@@ -335,7 +442,28 @@ db.query(createSettingsTableQuery, (err) => {
 // 1. Public Routes
 // ==========================================
 app.get('/', (req, res) => res.render('index'));
-app.get('/login', (req, res) => res.render('login'));
+// Landing on /login — including via the Back button — is treated as an explicit
+// logout: any active session (admin or client) is destroyed immediately, before
+// the form even renders. This is what closes the Forward-button hole: with the
+// session gone, a Forward navigation back to /dashboard has nothing valid for
+// ensureAdminAuth to find, so it bounces straight back here instead of letting
+// the user in.
+app.get('/login', noCache, (req, res) => {
+    const hasActiveSession = !!(req.session && (req.session.user || req.session.clientEmail))
+        || (req.isAuthenticated && req.isAuthenticated());
+
+    if (!hasActiveSession) {
+        return res.render('login');
+    }
+
+    req.logout(() => {
+        req.session.destroy((err) => {
+            if (err) console.error('❌ Error destroying session on /login:', err);
+            res.clearCookie('connect.sid', { path: '/' });
+            res.render('login');
+        });
+    });
+});
 
 // ==========================================
 // UNIFIED LOGIN (Admin OR registered Client)
@@ -383,7 +511,24 @@ app.post('/auth-login', (req, res) => {
     });
 });
 
-app.get('/client-login', (req, res) => res.render('client-login'));
+// Same "landing here = logout" treatment as /login above, for the client's
+// dedicated Google sign-in entry point.
+app.get('/client-login', noCache, (req, res) => {
+    const hasActiveSession = !!(req.session && req.session.clientEmail)
+        || (req.isAuthenticated && req.isAuthenticated());
+
+    if (!hasActiveSession) {
+        return res.render('client-login');
+    }
+
+    req.logout(() => {
+        req.session.destroy((err) => {
+            if (err) console.error('❌ Error destroying session on /client-login:', err);
+            res.clearCookie('connect.sid', { path: '/' });
+            res.render('client-login');
+        });
+    });
+});
 
 // ==========================================
 // GOOGLE OAUTH ROUTES (Client login)
@@ -475,12 +620,22 @@ app.post('/complete-google-registration', async (req, res) => {
     }
 });
 
-app.get('/logout', (req, res) => {
-    req.session.clientEmail = null;
-    req.logout(() => res.redirect('/login'));
+// Full logout for BOTH admin and client sessions: unhooks passport (if a Google
+// session is active), destroys the server-side session record entirely (not just
+// nulling fields on it), clears the session cookie from the browser, stamps the
+// response so it can never be cached, and hard-redirects (302) to /login — never
+// a client-side route change, so there is nothing for the bfcache to preserve.
+app.get('/logout', noCache, (req, res) => {
+    req.logout(() => {
+        req.session.destroy((err) => {
+            if (err) console.error('❌ Error destroying session on logout:', err);
+            res.clearCookie('connect.sid', { path: '/' });
+            res.redirect(302, '/login');
+        });
+    });
 });
 
-app.get('/client-survey', ensureClientAuth, (req, res) => {
+app.get('/client-survey', ensureClientAuth, noCache, (req, res) => {
     const clientEmail = req.clientEmail;
 
     db.query('SELECT * FROM offices ORDER BY office_name ASC', (err, offices) => {
@@ -496,6 +651,59 @@ app.get('/client-survey', ensureClientAuth, (req, res) => {
                 res.render('client-survey', { offices, clientEmail, takenOfficeIds, clientProfile });
             });
         });
+    });
+});
+
+// ==========================================
+// CLIENT ACCOUNT — Profile tab (view/update)
+// ==========================================
+// Region/Age/Sex are intentionally NOT editable here — they lock after the first
+// survey submission (see /submit-survey) and that rule must hold everywhere,
+// not just be hidden in the UI. Only respondent_name can be changed.
+app.get('/api/client-profile', ensureClientAuth, noCache, (req, res) => {
+    db.query(
+        'SELECT email, respondent_name, region, age, gender FROM client_accounts WHERE email = ? LIMIT 1',
+        [req.clientEmail],
+        (err, rows) => {
+            if (err) return res.status(500).json({ success: false, message: 'Server error loading your profile.' });
+            const profile = (rows && rows.length > 0) ? rows[0] : { email: req.clientEmail, respondent_name: null, region: null, age: null, gender: null };
+            res.json({ success: true, profile });
+        }
+    );
+});
+
+app.post('/api/client-profile', ensureClientAuth, (req, res) => {
+    const respondentName = String(req.body.respondent_name || '').trim().slice(0, 255);
+    if (!respondentName) {
+        return res.status(400).json({ success: false, message: 'Name cannot be empty.' });
+    }
+    db.query(
+        `INSERT INTO client_accounts (email, respondent_name)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE respondent_name = VALUES(respondent_name)`,
+        [req.clientEmail, respondentName],
+        (err) => {
+            if (err) return res.status(500).json({ success: false, message: 'Could not save your profile.' });
+            res.json({ success: true, respondent_name: respondentName });
+        }
+    );
+});
+
+// ==========================================
+// CLIENT ACCOUNT — History tab (past submitted surveys)
+// ==========================================
+app.get('/api/client-history', ensureClientAuth, noCache, (req, res) => {
+    const query = `
+        SELECT s.id, o.office_name, o.cluster_name, s.topic, s.sentiment,
+               DATE_FORMAT(s.created_at, '%M %d, %Y') AS formatted_date
+        FROM survey_responses s
+        JOIN offices o ON s.office_id = o.id
+        WHERE s.google_email = ?
+        ORDER BY s.created_at DESC
+    `;
+    db.query(query, [req.clientEmail], (err, rows) => {
+        if (err) return res.status(500).json({ success: false, message: 'Server error loading your survey history.', history: [] });
+        res.json({ success: true, history: rows || [] });
     });
 });
 
@@ -614,6 +822,24 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
 
             // 1. Instantly respond to the frontend so the client sees "Thank You" without waiting
             res.json({ success: true, message: "Survey recorded successfully!" });
+
+            // 1b. Fire-and-forget proof-of-completion receipt to the client's Gmail.
+            // Looks up the office's display name first since only office_id is on hand here.
+            db.query('SELECT office_name, cluster_name FROM offices WHERE id = ? LIMIT 1', [finalOfficeId], (officeErr, officeRows) => {
+                const office = (!officeErr && officeRows && officeRows[0]) ? officeRows[0] : null;
+                sendSurveyReceiptEmail(googleEmail, {
+                    name: finalName,
+                    officeName: office ? office.office_name : 'Selected Office',
+                    clusterName: office ? office.cluster_name : '',
+                    clientType: finalClientType,
+                    submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
+                    surveyResponseId,
+                    sqd: [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => ({
+                        label: 'SQD' + i,
+                        value: cleanInt(req.body['sqd' + i])
+                    }))
+                });
+            });
 
             // 2. 🔥 BACKGROUND AI PROCESS START 🔥
             // Fire-and-forget: the client already has its response, so this just
@@ -821,7 +1047,7 @@ function getSemesterOptions(callback) {
 // ==========================================
 // 2. Admin Dashboard Routes
 // ==========================================
-app.get('/dashboard', (req, res) => {
+app.get('/dashboard', ensureAdminAuth, noCache, (req, res) => {
     const { semester } = req.query;
     const hasSemesterFilter = !!semester;
 
@@ -936,14 +1162,14 @@ app.get('/dashboard', (req, res) => {
     });
 });
 
-app.get('/profile', (req, res) => res.render('profile'));
-app.get('/password', (req, res) => res.render('password'));
-app.get('/print', (req, res) => res.render('print'));
+app.get('/profile', ensureAdminAuth, noCache, (req, res) => res.render('profile'));
+app.get('/password', ensureAdminAuth, noCache, (req, res) => res.render('password'));
+app.get('/print', ensureAdminAuth, noCache, (req, res) => res.render('print'));
 
 // ==========================================
 // DYNAMIC REPORTS ROUTE (Modified)
 // ==========================================
-app.get('/report', (req, res) => {
+app.get('/report', ensureAdminAuth, noCache, (req, res) => {
     db.query('SELECT office_name FROM offices ORDER BY office_name ASC', (err, offices) => {
         res.render('report', { offices: offices || [] });
     });
@@ -953,7 +1179,7 @@ app.get('/report', (req, res) => {
 // per-cluster "Select Office" drill-down (sends `cluster` + `officeId`, so "All
 // Offices" on a cluster page still scopes to that cluster instead of the whole
 // institution). `semester` narrows further to one period_year_quarter.
-app.post('/api/report-data', (req, res) => {
+app.post('/api/report-data', ensureAdminAuth, (req, res) => {
     const { office, officeId, cluster, semester } = req.body;
 
     const conditions = [];
@@ -1013,7 +1239,7 @@ app.post('/api/report-data', (req, res) => {
 // ==========================================
 // DYNAMIC SURVEY RECORDS ROUTE
 // ==========================================
-app.get('/survey-records', (req, res) => {
+app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
     const ratingQuery = `
         SELECT o.cluster_name, 
                IFNULL(ROUND(AVG((IFNULL(s.sqd1,0) + IFNULL(s.sqd2,0) + IFNULL(s.sqd3,0) + IFNULL(s.sqd4,0) + IFNULL(s.sqd5,0) + IFNULL(s.sqd6,0) + IFNULL(s.sqd7,0) + IFNULL(s.sqd8,0)) / 8) * 20, 2), 0) as rating
@@ -1061,7 +1287,7 @@ app.get('/survey-records', (req, res) => {
 // ==========================================
 // 3. OFFICES & CLUSTERS CRUD ROUTES
 // ==========================================
-app.get('/offices', (req, res) => {
+app.get('/offices', ensureAdminAuth, noCache, (req, res) => {
     db.query('SELECT * FROM clusters ORDER BY cluster_name ASC', (err, clusters) => {
         if (err) console.error("Error loading clusters:", err);
         db.query('SELECT * FROM offices ORDER BY cluster_name ASC, office_name ASC', (err, offices) => {
@@ -1074,7 +1300,7 @@ app.get('/offices', (req, res) => {
     });
 });
 
-app.post('/clusters/add', (req, res) => {
+app.post('/clusters/add', ensureAdminAuth, (req, res) => {
     const { cluster_name } = req.body;
     if (!cluster_name || cluster_name.trim() === "") {
         return res.redirect('/offices');
@@ -1085,7 +1311,7 @@ app.post('/clusters/add', (req, res) => {
     });
 });
 
-app.post('/offices/add', (req, res) => {
+app.post('/offices/add', ensureAdminAuth, (req, res) => {
     const { cluster_name, office_name, head_director, email_address } = req.body;
     db.query('INSERT INTO offices (cluster_name, office_name, head_director, email_address) VALUES (?, ?, ?, ?)', 
     [cluster_name, office_name, head_director || 'Not Assigned', email_address], (err, result) => { 
@@ -1094,7 +1320,7 @@ app.post('/offices/add', (req, res) => {
     });
 });
 
-app.post('/offices/edit', (req, res) => {
+app.post('/offices/edit', ensureAdminAuth, (req, res) => {
     const { id, cluster_name, office_name, head_director, email_address } = req.body;
     db.query('UPDATE offices SET cluster_name = ?, office_name = ?, head_director = ?, email_address = ? WHERE id = ?', 
     [cluster_name, office_name, head_director, email_address, id], (err, result) => { res.redirect('/offices'); });
@@ -1102,18 +1328,18 @@ app.post('/offices/edit', (req, res) => {
 
 // Soft delete / archive: hindi na tinatanggal ang record sa database (walang DELETE query),
 // binabago na lamang ang is_archived flag para maiwasan ang pagkawala ng historical survey data.
-app.post('/offices/delete/:id', (req, res) => {
+app.post('/offices/delete/:id', ensureAdminAuth, (req, res) => {
     db.query('UPDATE offices SET is_archived = 1 WHERE id = ?', [req.params.id], (err, result) => { res.redirect('/offices'); });
 });
 
-app.post('/offices/restore/:id', (req, res) => {
+app.post('/offices/restore/:id', ensureAdminAuth, (req, res) => {
     db.query('UPDATE offices SET is_archived = 0 WHERE id = ?', [req.params.id], (err, result) => { res.redirect('/offices'); });
 });
 
 // ==========================================
 // 4. SURVEY SETTINGS CRUD
 // ==========================================
-app.get('/survey', (req, res) => {
+app.get('/survey', ensureAdminAuth, noCache, (req, res) => {
     db.query('SELECT * FROM survey_settings ORDER BY id ASC', (err, results) => {
         let settings = { sqd: [], cc: [] };
         if (!err && results) {
@@ -1125,7 +1351,7 @@ app.get('/survey', (req, res) => {
     });
 });
 
-app.post('/settings/add', (req, res) => {
+app.post('/settings/add', ensureAdminAuth, (req, res) => {
     const { category, content } = req.body;
     db.query('INSERT INTO survey_settings (category, content) VALUES (?, ?)', [category, content], (err, result) => {
         if (err) return res.json({ success: false });
@@ -1133,7 +1359,7 @@ app.post('/settings/add', (req, res) => {
     });
 });
 
-app.post('/settings/edit', (req, res) => {
+app.post('/settings/edit', ensureAdminAuth, (req, res) => {
     const { id, content } = req.body;
     db.query('UPDATE survey_settings SET content = ? WHERE id = ?', [content, id], (err) => {
         if (err) return res.json({ success: false });
@@ -1143,7 +1369,7 @@ app.post('/settings/edit', (req, res) => {
 
 // Soft delete / archive: hindi na tinatanggal ang record sa database (walang DELETE query),
 // binabago na lamang ang is_archived flag para maiwasan ang pagkawala ng historical survey data.
-app.post('/settings/delete', (req, res) => {
+app.post('/settings/delete', ensureAdminAuth, (req, res) => {
     const { id } = req.body;
     db.query('UPDATE survey_settings SET is_archived = 1 WHERE id = ?', [id], (err) => {
         if (err) return res.json({ success: false });
@@ -1151,7 +1377,7 @@ app.post('/settings/delete', (req, res) => {
     });
 });
 
-app.post('/settings/restore', (req, res) => {
+app.post('/settings/restore', ensureAdminAuth, (req, res) => {
     const { id } = req.body;
     db.query('UPDATE survey_settings SET is_archived = 0 WHERE id = ?', [id], (err) => {
         if (err) return res.json({ success: false });
@@ -1234,11 +1460,11 @@ function renderClusterPage(view, clusterName) {
     };
 }
 
-app.get('/cluster/office-of-the-president', renderClusterPage('cluster-op', 'Office of the President Cluster'));
-app.get('/cluster/admin-finance', renderClusterPage('cluster-admin-finance', 'Administrative and Finance Cluster'));
-app.get('/cluster/research-innovation', renderClusterPage('cluster-research', 'Research, Innovation and Collaboration Cluster'));
-app.get('/cluster/academic', renderClusterPage('cluster-academic', 'Academic Cluster'));
-app.get('/cluster/other-offices', renderClusterPage('cluster-other', 'Other Offices Cluster'));
+app.get('/cluster/office-of-the-president', ensureAdminAuth, noCache, renderClusterPage('cluster-op', 'Office of the President Cluster'));
+app.get('/cluster/admin-finance', ensureAdminAuth, noCache, renderClusterPage('cluster-admin-finance', 'Administrative and Finance Cluster'));
+app.get('/cluster/research-innovation', ensureAdminAuth, noCache, renderClusterPage('cluster-research', 'Research, Innovation and Collaboration Cluster'));
+app.get('/cluster/academic', ensureAdminAuth, noCache, renderClusterPage('cluster-academic', 'Academic Cluster'));
+app.get('/cluster/other-offices', ensureAdminAuth, noCache, renderClusterPage('cluster-other', 'Other Offices Cluster'));
 
 // ==========================================
 // DYNAMIC PUBLIC DASHBOARD API
