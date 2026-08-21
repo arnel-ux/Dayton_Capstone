@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const mysql = require('mysql2');
 const { spawn } = require('child_process'); // 🔥 ADDED THIS LINE
 const { promisify } = require('util');
@@ -220,46 +221,164 @@ if (process.env.MAIL_USER && process.env.MAIL_PASS) {
     console.log('ℹ️  MAIL_USER/MAIL_PASS not set in .env — survey receipt emails are OFF (submissions still work normally).');
 }
 
+// Local logo, embedded via inline CID attachment (RFC 2392 — the standard,
+// universally-supported way to put an image inside an email body without
+// it appearing as a downloadable attachment). contentDisposition:'inline'
+// on the attachment object is what actually suppresses Gmail's attachment
+// chip — Nodemailer does NOT infer that from the presence of `cid` alone.
+const RECEIPT_LOGO_PATH = path.join(__dirname, 'public', 'images', 'cspc-logo.png');
+
+// Official Citizen's Charter SQD statements (matches client-survey.ejs's
+// sqd_items) — keyed by index so the email table can show the full
+// statement instead of just "SQD0".
+const SQD_STATEMENTS = [
+    'I am satisfied with the service that I availed.',
+    'I spent a reasonable amount of time for my transaction.',
+    "The office followed the transaction's requirements and steps based on the information provided.",
+    'The steps (including payment) I needed to do for my transaction were easy and simple.',
+    'I easily found information about my transaction from the office or its website.',
+    'I paid a reasonable amount of fees for my transaction.',
+    "I feel the office was fair to everyone, or 'walang palakasan', during my transaction.",
+    'I was treated courteously by the staff.',
+    'I got what I needed from the government office.'
+];
+const sqdStatementFor = (label) => {
+    const idx = parseInt(String(label).replace(/[^0-9]/g, ''), 10);
+    return Number.isInteger(idx) && SQD_STATEMENTS[idx] ? `${label}. ${SQD_STATEMENTS[idx]}` : label;
+};
+
 // Sends the client a proof-of-completion receipt of exactly what they just
 // submitted. Fire-and-forget: called AFTER the client already got its
 // success response, so a slow or failed send can never hold up the survey.
 function sendSurveyReceiptEmail(toEmail, receipt) {
     if (!mailTransporter || !toEmail || toEmail === 'Not Specified') return;
 
-    const sqdRowsHtml = receipt.sqd.map((r) => `
+    const sqdRowsHtml = receipt.sqd.map((r, idx) => `
         <tr>
-            <td style="padding:8px 12px;border:1px solid #e2e8f0;">${r.label}</td>
-            <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center;font-weight:600;">${r.value === null ? 'N/A' : (r.value === 0 ? 'N/A' : r.value + ' / 5')}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};font-size:13px;color:#334155;">${sqdStatementFor(r.label)}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};text-align:center;font-weight:700;font-size:13px;color:#4f46e5;width:70px;">${r.value === null ? 'N/A' : (r.value === 0 ? 'N/A' : r.value + ' / 5')}</td>
         </tr>`).join('');
 
-    const html = `
-        <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">
-            <div style="background:#2554c7;color:#fff;padding:24px;border-radius:12px 12px 0 0;text-align:center;">
-                <h2 style="margin:0;">Camarines Sur Polytechnic Colleges</h2>
-                <p style="margin:4px 0 0;opacity:.9;">Client Satisfaction Measurement (CSM) Survey — Official Receipt</p>
-            </div>
-            <div style="border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 12px 12px;">
-                <p>Hi ${receipt.name},</p>
-                <p>Thank you for completing the CSM survey. This email confirms your submission was received and serves as your proof of completion.</p>
-                <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;">
-                    <tr><td style="padding:6px 10px;font-weight:bold;width:40%;">Office Visited</td><td style="padding:6px 10px;">${receipt.officeName}</td></tr>
-                    <tr><td style="padding:6px 10px;font-weight:bold;">Cluster</td><td style="padding:6px 10px;">${receipt.clusterName || 'N/A'}</td></tr>
-                    <tr><td style="padding:6px 10px;font-weight:bold;">Client Type</td><td style="padding:6px 10px;">${receipt.clientType}</td></tr>
-                    <tr><td style="padding:6px 10px;font-weight:bold;">Date Submitted</td><td style="padding:6px 10px;">${receipt.submittedAt}</td></tr>
-                    <tr><td style="padding:6px 10px;font-weight:bold;">Reference No.</td><td style="padding:6px 10px;">CSM-${receipt.surveyResponseId}</td></tr>
+    const detailRow = (label, value) => `
+        <tr>
+            <td style="padding:10px 0;border-bottom:1px solid #eef1f6;font-size:13px;font-weight:700;color:#64748b;width:42%;vertical-align:top;">${label}</td>
+            <td style="padding:10px 0;border-bottom:1px solid #eef1f6;font-size:14px;font-weight:600;color:#0f172a;vertical-align:top;">${value}</td>
+        </tr>`;
+
+    // Only reference the logo (both the <img> tag and the attachment below) if
+    // the file actually exists — a missing/renamed logo should never break the
+    // whole receipt email, just silently omit the image.
+    const hasLogo = fs.existsSync(RECEIPT_LOGO_PATH);
+    const logoHtml = hasLogo
+        ? `<img src="cid:cspc-logo" alt="CSPC Logo" width="72" style="display:block;margin:0 auto 12px;max-width:72px;width:72px;height:auto;">`
+        : '';
+
+    // Full standalone HTML document (not just a fragment) so Gmail's mobile app
+    // and web client both respect the <meta viewport> tag and the <style>
+    // block's @media query below — that's what makes the layout genuinely
+    // reflow on a phone screen instead of just being a narrow div.
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSM Survey Receipt</title>
+<style>
+    body { margin:0; padding:0; background:#eef1f6; }
+    table { border-collapse:collapse; }
+    .receipt-wrap { width:100%; max-width:600px; margin:0 auto; }
+    .receipt-outer { padding:24px 16px; }
+    @media only screen and (max-width:600px) {
+        .receipt-outer { padding:16px 8px !important; }
+        .receipt-card { border-radius:0 !important; }
+        .receipt-header { padding:24px 20px !important; }
+        .receipt-body { padding:20px !important; }
+        .receipt-header h1 { font-size:18px !important; }
+        .receipt-header p { font-size:12px !important; }
+    }
+</style>
+</head>
+<body>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6;">
+        <tr>
+            <td class="receipt-outer" align="center">
+                <table role="presentation" class="receipt-wrap" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td class="receipt-card" style="background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;font-family:Arial,Helvetica,sans-serif;">
+
+                            <!-- Header -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td class="receipt-header" style="background:#4f46e5;padding:32px 28px;text-align:center;">
+                                        ${logoHtml}
+                                        <p style="margin:0 0 2px;color:#dbe4fb;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;">Republic of the Philippines</p>
+                                        <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">Camarines Sur Polytechnic Colleges</h1>
+                                        <p style="margin:6px 0 0;color:#dbe4fb;font-size:13px;">Client Satisfaction Measurement (CSM) Survey — Official Receipt</p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Reference strip -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="padding:14px 28px;border-bottom:1px dashed #cbd5e1;background:#f8fafc;text-align:center;">
+                                        <span style="font-size:11px;color:#64748b;letter-spacing:.04em;text-transform:uppercase;">Reference No.</span>
+                                        <span style="display:block;font-size:16px;font-weight:700;color:#4f46e5;font-family:'Courier New',monospace;letter-spacing:.03em;">CSM-${receipt.surveyResponseId}</span>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Body -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td class="receipt-body" style="padding:28px;color:#1e293b;">
+                                        <p style="margin:0 0 8px;font-size:15px;">Hi <strong>${receipt.name}</strong>,</p>
+                                        <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6;">Thank you for completing the CSM survey. This email is your official, system-generated proof of submission — no further action or signature is required.</p>
+
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+                                            ${detailRow('Name', receipt.name)}
+                                            ${detailRow('Office Visited', receipt.officeName)}
+                                            ${detailRow('Service Availed', receipt.serviceAvailed)}
+                                            ${detailRow('Date Submitted', receipt.submittedAt)}
+                                            ${detailRow('Cluster', receipt.clusterName || 'N/A')}
+                                            ${detailRow('Client Type', receipt.clientType)}
+                                        </table>
+
+                                        <h3 style="margin:0 0 10px;font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:.03em;">Service Quality Dimension Ratings</h3>
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">
+                                            ${sqdRowsHtml}
+                                        </table>
+
+                                        <p style="margin:24px 0 0;font-size:11.5px;color:#94a3b8;line-height:1.6;">This is an automated message from the CSPC Center for Quality Assurance. If you did not take this survey, please disregard this email. No file is attached — this email in full is your receipt.</p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                        </td>
+                    </tr>
                 </table>
-                <h4 style="margin-bottom:6px;">Service Quality Dimension Ratings</h4>
-                <table style="width:100%;border-collapse:collapse;font-size:13px;">${sqdRowsHtml}</table>
-                <p style="margin-top:20px;font-size:12px;color:#64748b;">This is an automated message from the CSPC Center for Quality Assurance. If you did not take this survey, please disregard this email.</p>
-            </div>
-        </div>
-    `;
+            </td>
+        </tr>
+    </table>
+</body>
+</html>`;
+
+    // contentDisposition:'inline' is the critical field — without it Gmail
+    // lists this as a separate downloadable attachment chip even though the
+    // HTML only ever references it inline via cid:cspc-logo.
+    const attachments = hasLogo ? [{
+        filename: 'cspc-logo.png',
+        path: RECEIPT_LOGO_PATH,
+        cid: 'cspc-logo',
+        contentDisposition: 'inline'
+    }] : [];
 
     mailTransporter.sendMail({
         from: process.env.MAIL_FROM || `"CSPC Center for Quality Assurance" <${process.env.MAIL_USER}>`,
         to: toEmail,
         subject: `CSM Survey Receipt — ${receipt.officeName} (Ref: CSM-${receipt.surveyResponseId})`,
-        html
+        html,
+        attachments
     }).then(() => {
         console.log(`✅ [Mail] Survey receipt sent to ${toEmail}`);
     }).catch((err) => {
@@ -307,6 +426,17 @@ CREATE TABLE IF NOT EXISTS survey_responses (
     sqd4 INT NULL, sqd5 INT NULL, sqd6 INT NULL, sqd7 INT NULL, sqd8 INT NULL,
     comments TEXT NULL,
     period_year_quarter VARCHAR(50) DEFAULT 'Jan - Jun 2026',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE
+);`;
+
+// 3b. Table para sa Services ng bawat Office (ginagamit ng dependent
+// "Service Availed" dropdown sa client-survey.ejs — see #serviceSelect)
+const createServicesTableQuery = `
+CREATE TABLE IF NOT EXISTS services (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    office_id INT NOT NULL,
+    service_name VARCHAR(255) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE
 );`;
@@ -373,6 +503,12 @@ db.query(createClustersTableQuery, (err) => {
             } else {
                 console.log('✅ offices table verified/created successfully!');
                 db.query("ALTER TABLE offices ADD COLUMN is_archived TINYINT(1) NOT NULL DEFAULT 0", () => {});
+
+                // Services table (per office) — powers the dependent "Service Availed" dropdown
+                db.query(createServicesTableQuery, (err) => {
+                    if (err) console.error("❌ Error creating services table:", err);
+                    else console.log('✅ services table verified/created successfully!');
+                });
 
                 // Isunod ang Survey Responses Table
                 db.query(createSurveyTableQuery, (err) => {
@@ -639,16 +775,28 @@ app.get('/client-survey', ensureClientAuth, noCache, (req, res) => {
     const clientEmail = req.clientEmail;
 
     db.query('SELECT * FROM offices ORDER BY office_name ASC', (err, offices) => {
-        if (err) return res.render('client-survey', { offices: [], clientEmail, takenOfficeIds: [], clientProfile: null });
+        if (err) return res.render('client-survey', { offices: [], clientEmail, takenOfficeIds: [], clientProfile: null, officeServices: {} });
 
-        // Offices this account has already submitted a survey for — disabled in the dropdown
-        db.query('SELECT office_id FROM survey_responses WHERE google_email = ?', [clientEmail], (err2, rows) => {
-            const takenOfficeIds = err2 ? [] : rows.map(r => r.office_id);
+        // All active services, grouped by office_id — powers the dependent
+        // "Service Availed" dropdown (#serviceSelect) on the client side.
+        db.query('SELECT office_id, service_name FROM services ORDER BY office_id, id', (errServices, serviceRows) => {
+            const officeServices = {};
+            if (!errServices && serviceRows) {
+                serviceRows.forEach(row => {
+                    if (!officeServices[row.office_id]) officeServices[row.office_id] = [];
+                    officeServices[row.office_id].push(row.service_name);
+                });
+            }
 
-            // Saved/locked demographics from this account's first-ever submission (if any)
-            db.query('SELECT region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [clientEmail], (err3, profileRows) => {
-                const clientProfile = (!err3 && profileRows && profileRows.length > 0) ? profileRows[0] : null;
-                res.render('client-survey', { offices, clientEmail, takenOfficeIds, clientProfile });
+            // Offices this account has already submitted a survey for — disabled in the dropdown
+            db.query('SELECT office_id FROM survey_responses WHERE google_email = ?', [clientEmail], (err2, rows) => {
+                const takenOfficeIds = err2 ? [] : rows.map(r => r.office_id);
+
+                // Saved/locked demographics from this account's first-ever submission (if any)
+                db.query('SELECT region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [clientEmail], (err3, profileRows) => {
+                    const clientProfile = (!err3 && profileRows && profileRows.length > 0) ? profileRows[0] : null;
+                    res.render('client-survey', { offices, clientEmail, takenOfficeIds, clientProfile, officeServices });
+                });
             });
         });
     });
@@ -721,7 +869,7 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
 
         const {
             office_id, topic, cc1, cc2, cc3,
-            sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments
+            sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, service_availed
         } = req.body;
 
         const respondent_name = req.body.respondent_name || req.body.respondentName || req.body.client_name || req.body.name;
@@ -832,6 +980,7 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
                     officeName: office ? office.office_name : 'Selected Office',
                     clusterName: office ? office.cluster_name : '',
                     clientType: finalClientType,
+                    serviceAvailed: cleanStr(service_availed) || 'Not specified',
                     submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
                     surveyResponseId,
                     sqd: [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => ({

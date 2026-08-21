@@ -10,6 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
+    <!-- Animation stack: GSAP + ScrollTrigger for scroll-driven reveals/parallax (native scroll, no smooth-scroll library) -->
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+
     <style>
         :root {
             --navy-950: #060e21;
@@ -19,13 +23,38 @@
             --gold-500: #f4b400;
             --gold-400: #ffc72c;
             --gold-300: #ffdd7a;
+            --gold-deep: #8a5a00; /* dark amber — passes AA contrast on light backgrounds */
+
+            /* ---- Base-8 spacing scale — every margin/padding/gap below resolves to one of these ---- */
+            --sp-1: 0.5rem;   /* 8px */
+            --sp-2: 1rem;     /* 16px */
+            --sp-3: 1.5rem;   /* 24px */
+            --sp-4: 2rem;     /* 32px */
+            --sp-5: 2.5rem;   /* 40px */
+            --sp-6: 3rem;     /* 48px */
+            --sp-7: 3.5rem;   /* 56px */
+            --sp-8: 4rem;     /* 64px */
+            --sp-10: 5rem;    /* 80px */
+            --sp-12: 6rem;    /* 96px */
+
+            /* ---- Typography scale ---- */
+            --fs-xs: 0.75rem;
+            --fs-sm: 0.875rem;
+            --fs-base: 1rem;
+            --fs-lg: 1.125rem;
+            --fs-xl: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
+            --fs-2xl: clamp(1.5rem, 1.2rem + 1.2vw, 2rem);
+            --fs-3xl: clamp(1.8rem, 1.3rem + 2vw, 2.6rem);
+            --fs-hero: clamp(2.25rem, 1.4rem + 4vw, 4.5rem);
         }
 
         /* --- GENERAL LAYOUT --- */
+        html { scroll-behavior: smooth; }
         body, html {
             margin: 0; padding: 0; font-family: 'Inter', sans-serif; color: #1e293b;
-            scroll-behavior: smooth;
+            font-size: var(--fs-base); line-height: 1.6;
         }
+        h1, h2, h3, h4, h5, h6 { line-height: 1.2; }
 
         .bg-image {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
@@ -35,7 +64,7 @@
 
         .bg-overlay {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: linear-gradient(180deg, rgba(6,14,33,0.92) 0%, rgba(10,31,68,0.85) 100%); z-index: -1; transition: background 0.3s ease;
+            background: linear-gradient(180deg, rgba(6,14,33,0.92) 0%, rgba(10,31,68,0.85) 100%); z-index: -1;
         }
 
         body.dark-mode .bg-overlay { background: linear-gradient(180deg, rgba(4,8,18,0.95) 0%, rgba(6,14,33,0.92) 100%); }
@@ -45,8 +74,8 @@
         .page-content { position: relative; z-index: 1; }
 
         /* --- SITE NAV LINKS --- */
-        .site-nav { display: flex; align-items: center; gap: 1.5rem; margin: 0 1rem; }
-        .site-nav a { color: rgba(255,255,255,0.85); text-decoration: none; font-weight: 600; font-size: 0.85rem; letter-spacing: 0.4px; text-transform: uppercase; position: relative; padding-bottom: 4px; transition: color 0.2s ease; }
+        .site-nav { display: flex; align-items: center; justify-content: center; gap: var(--sp-3); margin: 0 var(--sp-2); }
+        .site-nav a { color: rgba(255,255,255,0.85); text-decoration: none; font-weight: 600; font-size: var(--fs-sm); letter-spacing: 0.4px; text-transform: uppercase; position: relative; padding-bottom: 4px; }
         .site-nav a::after { content: ''; position: absolute; left: 0; bottom: 0; width: 0; height: 2px; background: var(--gold-400); transition: width 0.25s ease; }
         .site-nav a:hover { color: #fff; }
         .site-nav a:hover::after { width: 100%; }
@@ -58,49 +87,155 @@
             backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%);
             border-bottom: 1px solid rgba(244, 180, 0, 0.25);
             box-shadow: 0 4px 25px rgba(0,0,0,0.35);
-            padding: 0.7rem 2rem;
-            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
+            padding: var(--sp-2) var(--sp-4);
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--sp-2);
         }
 
         body.dark-mode .sticky-top-section { background: rgba(4, 8, 18, 0.92); border-bottom: 1px solid rgba(244, 180, 0, 0.15); }
 
-        .nav-left { display: flex; align-items: center; }
-        .nav-left img { width: 48px; height: 48px; object-fit: contain; margin-right: 15px; border-radius: 50%; box-shadow: 0 4px 12px rgba(244,180,0,0.35); background: white; padding: 3px; border: 2px solid var(--gold-400); }
-        .header-text-container { display: flex; flex-direction: column; }
-        .header-title { font-size: 1.05rem; font-weight: 800; color: #ffffff; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; text-shadow: 0 2px 5px rgba(0,0,0,0.5); }
-        .header-subtitle { font-size: 0.82rem; color: var(--gold-400); font-weight: 600; margin: 0; letter-spacing: 1px; }
+        .nav-left { display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-2); }
+        .nav-left img { width: 48px; height: 48px; object-fit: contain; }
+        .header-text-container { display: flex; flex-direction: column; justify-content: center; }
+        .header-title { font-size: var(--fs-lg); font-weight: 800; color: #ffffff; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; text-shadow: 0 2px 5px rgba(0,0,0,0.5); line-height: 1.3; }
+        .header-subtitle { font-size: var(--fs-sm); color: var(--gold-400); font-weight: 600; margin: 0; letter-spacing: 1px; line-height: 1.4; }
 
-        .nav-right { display: flex; align-items: center; gap: 15px; }
+        .nav-right { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); }
         .period-select {
-            padding: 6px 14px; border-radius: 50px; border: 1px solid rgba(255,255,255,0.4);
-            background: rgba(255, 255, 255, 0.1); color: white; font-weight: 600; font-size: 0.9rem;
-            outline: none; cursor: pointer; transition: all 0.3s ease;
+            padding: var(--sp-1) var(--sp-2); border-radius: 50px; border: 1px solid rgba(255,255,255,0.4);
+            background: rgba(255, 255, 255, 0.1); color: white; font-weight: 600; font-size: var(--fs-sm);
+            outline: none; cursor: pointer;
         }
         .period-select:hover { border-color: var(--gold-400); background: rgba(255, 255, 255, 0.2); }
         .period-select option { background: var(--navy-900); color: white; }
 
-        .auth-buttons .btn { border-radius: 50px; font-weight: 700; padding: 0.45rem 1.3rem; font-size: 0.85rem; transition: all 0.3s ease; }
-        .btn-admin { background: linear-gradient(135deg, var(--gold-500), var(--gold-400)); color: var(--navy-950); border: none; box-shadow: 0 4px 14px rgba(244, 180, 0, 0.45); }
-        .btn-admin:hover { filter: brightness(1.08); color: var(--navy-950); transform: translateY(-2px); }
+        .auth-buttons { display: flex; align-items: center; gap: var(--sp-2); }
+        .auth-buttons .btn { border-radius: 50px; font-weight: 700; padding: var(--sp-1) var(--sp-3); font-size: var(--fs-sm); }
+        .btn-admin { background: linear-gradient(135deg, var(--gold-500), var(--gold-400)); color: var(--navy-950); border: none; box-shadow: 0 4px 14px rgba(244, 180, 0, 0.45); position: relative; will-change: transform; }
+        .btn-admin:hover { filter: brightness(1.08); color: var(--navy-950); }
 
         /* --- SPACER for fixed header --- */
         #header-spacer { width: 100%; }
 
         /* --- SECTION HEADING HELPER --- */
-        .section-eyebrow { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: var(--gold-500); margin-bottom: 0.5rem; }
-        .section-eyebrow::before { content: ''; width: 28px; height: 2px; background: var(--gold-500); display: inline-block; }
-        .section-title { font-family: 'Playfair Display', serif; font-weight: 800; font-size: clamp(1.8rem, 3.5vw, 2.6rem); color: var(--navy-900); margin-bottom: 1.5rem; }
+        .section-eyebrow { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); font-size: var(--fs-xs); font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: var(--gold-500); margin-bottom: var(--sp-1); line-height: 1.4; }
+        .section-eyebrow::before { content: ''; width: 28px; height: 2px; background: var(--gold-500); display: inline-block; flex-shrink: 0; }
+        .section-title { font-family: 'Playfair Display', serif; font-weight: 800; font-size: var(--fs-3xl); color: var(--navy-900); margin: 0 0 var(--sp-3); }
         body.dark-mode .section-title { color: #f8fafc; }
 
+        /* ---------------------------------------------------------------
+           PERFORMANCE UTILITIES
+           Every animated interaction below moves ONLY transform/opacity.
+           Glow/lift effects use a pseudo-element whose OPACITY fades in —
+           the box-shadow value itself is static, so nothing repaints the
+           shadow geometry on hover.
+        --------------------------------------------------------------- */
+        .magnetic { display: inline-flex; will-change: transform; }
+
+        .glow-card { position: relative; isolation: isolate; will-change: transform; }
+        .glow-card::after {
+            content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+            background: radial-gradient(280px circle at var(--mx, 50%) var(--my, 50%), rgba(255,199,44,0.65), transparent 45%);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude;
+            opacity: 0; transition: opacity 0.35s ease; pointer-events: none; z-index: 2; will-change: opacity;
+        }
+        .glow-card:hover::after { opacity: 1; }
+        .glow-card:hover { transform: translateY(-6px); }
+
+        .pop-glow { position: relative; will-change: transform; }
+        .pop-glow::before {
+            content: ''; position: absolute; inset: -6px; border-radius: inherit;
+            box-shadow: 0 14px 34px rgba(244,180,0,0.45);
+            opacity: 0; transition: opacity 0.3s ease; pointer-events: none; z-index: -1; will-change: opacity;
+        }
+        .pop-glow:hover::before { opacity: 1; }
+
         /* =========================================================
-           ABOUT / HERO SECTION
+           HERO SECTION — minimal, static background, pure CSS entrance
+           (no JS required at all for this section: everything below is a
+           plain @keyframes fade-up with a staggered animation-delay)
         ========================================================= */
-        .about-section { padding: 5rem 2rem 5rem; scroll-margin-top: 100px; }
-        .about-grid { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 340px 1fr; gap: 3.5rem; align-items: center; }
+        .hero-section {
+            min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            position: relative; text-align: center; padding: var(--sp-12) var(--sp-4) var(--sp-12);
+            background: linear-gradient(180deg, #ffffff 0%, #f4f6fb 100%);
+        }
+        body.dark-mode .hero-section {
+            background: linear-gradient(180deg, var(--navy-950) 0%, var(--navy-900) 100%);
+        }
+
+        .hero-content { max-width: 55rem; }
+
+        @keyframes heroFadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .hero-eyebrow, .hero-title, .hero-subtitle, .hero-cta-group {
+            opacity: 0; animation: heroFadeUp 0.6s ease-out forwards;
+        }
+        .hero-eyebrow { animation-delay: 0.1s; }
+        .hero-title { animation-delay: 0.25s; }
+        .hero-subtitle { animation-delay: 0.45s; }
+        .hero-cta-group { animation-delay: 0.6s; }
+
+        .hero-eyebrow { color: var(--gold-deep); justify-content: center; }
+        .hero-eyebrow::before { background: var(--gold-deep); }
+        body.dark-mode .hero-eyebrow { color: var(--gold-400); }
+        body.dark-mode .hero-eyebrow::before { background: var(--gold-400); }
+
+        .hero-title { font-family: 'Playfair Display', serif; font-weight: 800; font-size: var(--fs-hero); color: var(--navy-950); line-height: 1.15; margin: var(--sp-2) 0 var(--sp-3); }
+        body.dark-mode .hero-title { color: #f8fafc; }
+        .hero-title .line { display: block; }
+        .hero-title .gold-text { color: var(--gold-deep); font-weight: 800; }
+        body.dark-mode .hero-title .gold-text { color: var(--gold-400); }
+
+        .hero-subtitle { max-width: 42.5rem; margin: 0 auto var(--sp-5); color: #334155; font-size: var(--fs-lg); line-height: 1.6; font-weight: 400; }
+        body.dark-mode .hero-subtitle { color: rgba(255,255,255,0.75); }
+        .hero-cta-group { display: flex; align-items: center; justify-content: center; gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-6); }
+
+        .btn-hero { border-radius: 50px; font-weight: 700; font-size: var(--fs-sm); padding: var(--sp-2) var(--sp-4); text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); }
+        .btn-hero-primary { background: linear-gradient(135deg, var(--gold-500), var(--gold-400)); color: var(--navy-950); box-shadow: 0 10px 30px rgba(244,180,0,0.4); }
+        .btn-hero-primary:hover { filter: brightness(1.08); }
+        .btn-hero-secondary { background: rgba(10,31,68,0.05); color: var(--navy-900); border: 1px solid rgba(10,31,68,0.18); }
+        .btn-hero-secondary:hover { background: rgba(10,31,68,0.1); border-color: var(--gold-deep); }
+        body.dark-mode .btn-hero-secondary { background: rgba(255,255,255,0.06); color: #fff; border-color: rgba(255,255,255,0.35); }
+        body.dark-mode .btn-hero-secondary:hover { background: rgba(255,255,255,0.14); border-color: var(--gold-400); }
+
+        .hero-scroll-cue {
+            /* Centered via left/right/margin-auto (not transform: translateX), because the
+               fade-in animation below also animates `transform` (translateY) — and a CSS
+               animation replaces the whole transform value, so a static translateX(-50%)
+               here would get wiped out the moment the animation runs. */
+            position: absolute; bottom: var(--sp-4); left: 0; right: 0; margin-left: auto; margin-right: auto; width: max-content;
+            color: #64748b; font-size: var(--fs-xs); letter-spacing: 2.5px; text-transform: uppercase;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-1); font-weight: 700;
+            opacity: 0; animation: heroFadeUp 0.6s ease-out forwards; animation-delay: 0.8s;
+        }
+        body.dark-mode .hero-scroll-cue { color: rgba(255,255,255,0.55); }
+
+        @keyframes heroCueBounce {
+            0%, 100% { transform: translateY(0); opacity: 0.6; }
+            50% { transform: translateY(8px); opacity: 1; }
+        }
+        .hero-scroll-cue-icon { display: inline-block; animation: heroCueBounce 2s ease-in-out infinite; }
+
+        @media (max-width: 36rem) {
+            .hero-section { padding: var(--sp-10) var(--sp-2) var(--sp-8); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .hero-eyebrow, .hero-title, .hero-subtitle, .hero-cta-group, .hero-scroll-cue { animation: none; opacity: 1; }
+            .hero-scroll-cue-icon { animation: none; }
+        }
+
+        /* =========================================================
+           ABOUT SECTION
+        ========================================================= */
+        .about-section { padding: var(--sp-10) var(--sp-4); scroll-margin-top: 6.5rem; }
+        .about-grid { max-width: 75rem; margin: 0 auto; display: grid; grid-template-columns: 21.25rem 1fr; gap: var(--sp-7); align-items: center; }
 
         .profile-card {
             background: linear-gradient(160deg, var(--navy-900), var(--navy-700));
-            border-radius: 1.5rem; padding: 2rem 1.5rem 1.5rem; text-align: center;
+            border-radius: var(--sp-3); padding: var(--sp-4) var(--sp-3) var(--sp-3); text-align: center;
             box-shadow: 0 20px 45px rgba(10,31,68,0.35); border: 1px solid rgba(244,180,0,0.25);
             position: relative; overflow: hidden;
         }
@@ -108,150 +243,284 @@
             content: ''; position: absolute; top: -40%; right: -30%; width: 220px; height: 220px;
             background: radial-gradient(circle, rgba(244,180,0,0.25), transparent 70%); border-radius: 50%;
         }
+
         .profile-avatar {
-            width: 140px; height: 140px; margin: 0 auto 1.2rem; border-radius: 50%;
+            width: 140px; height: 140px; margin: 0 auto var(--sp-2); border-radius: 50%;
             background: linear-gradient(135deg, var(--gold-400), var(--gold-500));
             display: flex; align-items: center; justify-content: center;
             font-size: 3.5rem; color: var(--navy-950); border: 4px solid rgba(255,255,255,0.85);
             box-shadow: 0 10px 25px rgba(0,0,0,0.3); position: relative; z-index: 1;
         }
-        .profile-name { color: #fff; font-weight: 800; font-size: 1.05rem; margin: 0; letter-spacing: 0.4px; position: relative; z-index: 1; }
-        .profile-role { color: var(--gold-300); font-weight: 600; font-size: 0.85rem; margin: 0.25rem 0 1rem; position: relative; z-index: 1; }
-        .profile-divider { width: 60px; height: 2px; background: rgba(244,180,0,0.5); margin: 0 auto 1rem; position: relative; z-index: 1; }
-        .profile-contact { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.82rem; color: rgba(255,255,255,0.85); position: relative; z-index: 1; }
+        .profile-name { color: #fff; font-weight: 800; font-size: var(--fs-lg); margin: 0; letter-spacing: 0.4px; position: relative; z-index: 1; line-height: 1.3; }
+        .profile-role { color: var(--gold-300); font-weight: 600; font-size: var(--fs-sm); margin: var(--sp-1) 0 var(--sp-2); position: relative; z-index: 1; line-height: 1.4; }
+        .profile-divider { width: 60px; height: 2px; background: rgba(244,180,0,0.5); margin: 0 auto var(--sp-2); position: relative; z-index: 1; }
+        .profile-contact { display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); font-size: var(--fs-sm); color: rgba(255,255,255,0.85); position: relative; z-index: 1; }
+        .profile-contact span { display: flex; align-items: center; justify-content: center; gap: var(--sp-1); }
         .profile-contact a { color: var(--gold-300); text-decoration: none; }
         .profile-contact a:hover { text-decoration: underline; }
-        .profile-contact i { width: 16px; color: var(--gold-400); margin-right: 4px; }
+        .profile-contact i { width: 16px; color: var(--gold-400); text-align: center; }
 
         .about-text { color: #1e293b; }
         body.dark-mode .about-text { color: #e2e8f0; }
-        .about-text p { font-size: 1.05rem; line-height: 1.85; font-weight: 400; }
-        .about-badges { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.5rem; }
+        .about-text p { font-size: var(--fs-lg); line-height: 1.75; font-weight: 400; margin: 0; }
+        .about-badges { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-3); }
         .about-badge {
-            display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 50px;
+            display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); padding: var(--sp-1) var(--sp-2); border-radius: 50px;
             background: rgba(10,31,68,0.06); border: 1px solid rgba(10,31,68,0.15); color: var(--navy-900);
-            font-weight: 700; font-size: 0.82rem;
+            font-weight: 700; font-size: var(--fs-sm); will-change: transform;
         }
         body.dark-mode .about-badge { background: rgba(244,180,0,0.08); border-color: rgba(244,180,0,0.25); color: var(--gold-300); }
         .about-badge i { color: var(--gold-500); }
+        .about-badge:hover { transform: translateY(-3px); }
 
-        @media (max-width: 860px) {
+        @media (max-width: 54rem) {
             .about-grid { grid-template-columns: 1fr; text-align: center; }
-            .profile-card { max-width: 340px; margin: 0 auto; }
+            .profile-card { max-width: 21.25rem; margin: 0 auto; }
             .about-badges { justify-content: center; }
         }
 
         /* =========================================================
            ORGANIZATIONAL STRUCTURE SECTION
         ========================================================= */
-        .org-section { padding: 3rem 2rem 5rem; scroll-margin-top: 100px; text-align: center; }
-        .org-wrap { max-width: 1200px; margin: 0 auto; }
+        .org-section { padding: var(--sp-6) var(--sp-4) var(--sp-10); scroll-margin-top: 6.5rem; text-align: center; }
+        .org-wrap { max-width: 75rem; margin: 0 auto; }
 
-        .org-tree { display: flex; flex-direction: column; align-items: center; }
+        .org-tree { display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .org-node {
-            display: inline-flex; flex-direction: column; align-items: center; gap: 0.5rem;
-            background: #ffffff; border-radius: 1rem; padding: 1.1rem 1.4rem; width: 220px;
+            display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-1);
+            background: #ffffff; border-radius: var(--sp-2); padding: var(--sp-2) var(--sp-3); width: 13.75rem;
             box-shadow: 0 10px 25px rgba(10,31,68,0.12); border: 1px solid rgba(10,31,68,0.08);
-            transition: transform 0.25s ease, box-shadow 0.25s ease;
         }
-        .org-node:hover { transform: translateY(-4px); box-shadow: 0 16px 35px rgba(10,31,68,0.2); }
         body.dark-mode .org-node { background: rgba(20, 33, 61, 0.95); border-color: rgba(244,180,0,0.12); }
 
         .org-avatar {
             width: 58px; height: 58px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-            background: linear-gradient(135deg, var(--navy-800), var(--navy-900)); color: var(--gold-400); font-size: 1.4rem;
-            border: 2px solid var(--gold-400);
+            background: linear-gradient(135deg, var(--navy-800), var(--navy-900)); color: var(--gold-400); font-size: var(--fs-xl);
+            border: 2px solid var(--gold-400); will-change: transform;
         }
+        .org-node:hover .org-avatar { transform: scale(1.08); }
         .org-node.top .org-avatar { background: linear-gradient(135deg, var(--gold-400), var(--gold-500)); color: var(--navy-950); border-color: var(--navy-900); }
-        .org-name { font-weight: 800; font-size: 0.85rem; color: var(--navy-900); margin: 0; line-height: 1.3; }
+        .org-name { font-weight: 800; font-size: var(--fs-sm); color: var(--navy-900); margin: 0; line-height: 1.35; }
         body.dark-mode .org-name { color: #f8fafc; }
-        .org-role { font-size: 0.72rem; font-weight: 600; color: #64748b; margin: 0; line-height: 1.3; }
+        .org-role { font-size: var(--fs-xs); font-weight: 600; color: #64748b; margin: 0; line-height: 1.5; }
         body.dark-mode .org-role { color: #94a3b8; }
 
-        .org-connector { width: 2px; height: 2.2rem; background: var(--gold-500); }
+        .org-connector { width: 2px; height: var(--sp-3); background: var(--gold-500); }
 
         .org-team-box {
-            margin-top: 0; border: 2px dashed rgba(244,180,0,0.5); border-radius: 1.5rem; padding: 2.5rem 2rem 1.5rem;
+            border: 2px dashed rgba(244,180,0,0.5); border-radius: var(--sp-3); padding: var(--sp-5) var(--sp-3) var(--sp-3);
             width: 100%; position: relative;
         }
-        .org-team-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem 1.5rem; justify-items: center; }
-        .org-team-row + .org-team-row { margin-top: 2rem; }
+        .org-team-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4) var(--sp-3); justify-items: center; align-items: start; }
+        .org-team-row + .org-team-row { margin-top: var(--sp-4); }
         .org-student-aide {
-            margin-top: 2rem; display: inline-block; padding: 0.6rem 2rem; border-radius: 50px;
-            background: var(--navy-900); color: #fff; font-weight: 700; font-size: 0.85rem;
+            margin-top: var(--sp-4); display: inline-flex; align-items: center; justify-content: center; padding: var(--sp-1) var(--sp-4);
+            border-radius: 50px; background: var(--navy-900); color: #fff; font-weight: 700; font-size: var(--fs-sm);
             box-shadow: 0 8px 20px rgba(10,31,68,0.25);
         }
 
-        @media (max-width: 860px) {
-            .org-team-grid { grid-template-columns: 1fr; gap: 1.5rem; }
-            .org-node { width: 100%; max-width: 260px; }
+        @media (max-width: 54rem) {
+            .org-team-grid { grid-template-columns: 1fr; gap: var(--sp-3); }
+            .org-node { width: 100%; max-width: 16.25rem; }
         }
 
         /* =========================================================
-           DASHBOARD SECTION (existing carousel, restyled to fit flow)
+           OUR SERVICES SECTION — flat accordion, one row per unit
+           Cluster > Office > Services. Clusters are plain horizontal tabs
+           (no framework, no extra JS libs); offices inside the active
+           cluster render as a flat accordion. Expand/collapse animates a
+           single grid-template-rows value — cheap even with ~40 offices.
         ========================================================= */
-        .dashboard-section { padding: 1rem 0 5rem; scroll-margin-top: 90px; }
-        .dashboard-header-block { text-align: center; max-width: 700px; margin: 0 auto 2rem; padding: 0 2rem; }
-        .dashboard-header-block p { color: #64748b; font-size: 0.95rem; }
+        .services-section {
+            padding: var(--sp-10) var(--sp-4); scroll-margin-top: 6rem;
+            background: linear-gradient(180deg, var(--navy-950) 0%, var(--navy-900) 100%);
+        }
+        .services-header { text-align: center; max-width: 47.5rem; margin: 0 auto var(--sp-6); }
+        .services-header .section-eyebrow { color: var(--gold-400); justify-content: center; }
+        .services-header .section-eyebrow::before { background: var(--gold-400); }
+        .services-header .section-title { color: #fff; }
+        .services-header p { color: rgba(255,255,255,0.65); font-size: var(--fs-base); line-height: 1.6; margin: 0; }
+
+        .services-wrap { max-width: 50rem; margin: 0 auto; }
+
+        /* --- Cluster tabs (level 1) --- */
+        .cluster-tabs { display: flex; flex-wrap: wrap; align-items: stretch; justify-content: center; gap: var(--sp-2); margin: 0 0 var(--sp-4); }
+        .cluster-tab-btn {
+            flex: 1 1 11rem; display: flex; align-items: center; justify-content: center; gap: var(--sp-2);
+            padding: var(--sp-2) var(--sp-3); border-radius: 50px; background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.12); color: rgba(255,255,255,0.68); font-weight: 700;
+            font-size: var(--fs-sm); font-family: inherit; cursor: pointer; text-align: center;
+        }
+        .cluster-tab-btn i { color: var(--gold-400); flex-shrink: 0; }
+        .cluster-tab-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .cluster-tab-btn.active {
+            background: linear-gradient(135deg, rgba(244,180,0,0.22), rgba(244,180,0,0.06));
+            border-color: rgba(244,180,0,0.5); color: #fff;
+        }
+
+        /* --- Offices within the active cluster (level 2, accordion) --- */
+        .services-accordion { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+        .accordion-item { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--sp-2); }
+        .accordion-item.open { border-color: rgba(244,180,0,0.3); }
+
+        .accordion-header {
+            width: 100%; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
+            padding: var(--sp-2) var(--sp-3); background: transparent; border: none; border-radius: var(--sp-2);
+            color: #fff; text-align: left; cursor: pointer; font-family: inherit;
+        }
+        .accordion-header:hover { background: rgba(255,255,255,0.05); }
+
+        .accordion-header-left { display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-2); min-width: 0; }
+        .accordion-icon {
+            width: 36px; height: 36px; border-radius: var(--sp-1); background: linear-gradient(135deg, var(--gold-400), var(--gold-500));
+            display: flex; align-items: center; justify-content: center; color: var(--navy-950); font-size: var(--fs-sm); flex-shrink: 0;
+        }
+        .accordion-text { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+        .accordion-name { font-weight: 700; font-size: var(--fs-sm); color: #fff; line-height: 1.4; }
+        .accordion-count { font-size: var(--fs-xs); color: rgba(255,255,255,0.5); font-weight: 600; line-height: 1.5; }
+
+        .accordion-chevron { color: var(--gold-400); flex-shrink: 0; transition: transform 0.3s ease; will-change: transform; }
+        .accordion-item.open .accordion-chevron { transform: rotate(180deg); }
+
+        .accordion-panel { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s ease; }
+        .accordion-item.open .accordion-panel { grid-template-rows: 1fr; }
+        .accordion-panel-inner { overflow: hidden; }
+
+        .accordion-list { list-style: none; margin: 0; padding: 0 var(--sp-3) var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-1); }
+        .accordion-list li { display: flex; align-items: flex-start; gap: var(--sp-1); font-size: var(--fs-sm); color: rgba(255,255,255,0.68); line-height: 1.6; }
+        .accordion-list i { color: var(--gold-400); font-size: 0.55rem; margin-top: 0.5rem; flex-shrink: 0; }
+
+        @media (max-width: 36rem) {
+            .services-section { padding: var(--sp-6) var(--sp-2); }
+        }
+
+        /* =========================================================
+           DASHBOARD SECTION — transform-driven marquee (no scrollLeft)
+        ========================================================= */
+        .dashboard-section { padding: var(--sp-2) 0 var(--sp-10); scroll-margin-top: 6rem; }
+        .dashboard-header-block { text-align: center; max-width: 43.75rem; margin: 0 auto var(--sp-4); padding: 0 var(--sp-4); }
+        .dashboard-header-block p { color: #64748b; font-size: var(--fs-base); line-height: 1.7; margin: 0; }
         body.dark-mode .dashboard-header-block p { color: #94a3b8; }
 
         .dashboard-container {
-            display: flex; align-items: center; width: 100%; position: relative;
+            display: flex; align-items: center; width: 100%; position: relative; overflow: hidden;
             background: rgba(255,255,255,0.45); backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%);
-            border: 1px solid rgba(10,31,68,0.06); border-radius: 2rem; margin: 0 1.5rem; max-width: 1400px; margin-left: auto; margin-right: auto;
+            border: 1px solid rgba(10,31,68,0.06); border-radius: var(--sp-4); margin: 0 auto; max-width: 87.5rem;
         }
         body.dark-mode .dashboard-container { background: rgba(15, 23, 42, 0.45); border-color: rgba(244,180,0,0.08); }
 
         .charts-track {
-            display: flex; gap: 2.25rem; padding: 2.25rem; width: 100%; align-items: stretch;
-            overflow-x: auto; scroll-behavior: auto;
+            display: flex; gap: var(--sp-4); padding: var(--sp-4); align-items: stretch;
+            will-change: transform; touch-action: pan-y;
         }
-        .charts-track::-webkit-scrollbar { display: none; }
-        .charts-track { -ms-overflow-style: none; scrollbar-width: none; }
 
         .chart-card {
-            background: #ffffff; border: none; border-radius: 1.5rem; box-shadow: 0 10px 40px rgba(10, 31, 68, 0.08);
+            background: #ffffff; border: none; border-radius: var(--sp-3); box-shadow: 0 10px 40px rgba(10, 31, 68, 0.08);
             display: flex; flex-direction: column; height: 70vh; min-width: 45vw; flex-shrink: 0;
             opacity: 0; transform: translateY(60px);
-            transition: opacity 0.6s ease-out, transform 0.6s ease-out, box-shadow 0.25s ease;
-            border: 1px solid rgba(10,31,68,0.04);
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+            border: 1px solid rgba(10,31,68,0.04); will-change: transform, opacity;
         }
         .chart-card.visible { opacity: 1; transform: translateY(0); }
-        .chart-card:hover { transform: translateY(-6px); box-shadow: 0 20px 55px rgba(10, 31, 68, 0.14); }
+        .chart-card:hover { transform: translateY(-8px); }
 
         body.dark-mode .chart-card { background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(10px); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45); border-color: rgba(244,180,0,0.06); }
 
-        .card-header-custom { padding: 1.6rem 1.9rem 1.3rem; border-bottom: 1px solid rgba(10,31,68,0.04); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .card-header-custom { padding: var(--sp-3) var(--sp-4) var(--sp-2); border-bottom: 1px solid rgba(10,31,68,0.04); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: var(--sp-2); }
         body.dark-mode .card-header-custom { border-bottom: 1px solid rgba(255,255,255,0.05); }
 
-        .chart-title { font-size: 1.05rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #52627a; margin: 0; }
+        .chart-title { font-size: var(--fs-lg); font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #52627a; margin: 0; line-height: 1.3; }
         body.dark-mode .chart-title { color: #e2e8f0; }
 
-        .btn-back-custom { font-size: 0.8rem; font-weight: 600; padding: 0.4rem 0.8rem; border-radius: 0.5rem; transition: all 0.2s ease; }
-        .canvas-container { position: relative; flex-grow: 1; padding: 1rem 2.2rem 2.2rem; display: flex; justify-content: center; align-items: center; }
-        .hint-text { font-size: 0.82rem; color: #a3adc2; margin-top: 0.3rem; font-weight: 500; }
+        .btn-back-custom { font-size: var(--fs-sm); font-weight: 600; padding: var(--sp-1) var(--sp-2); border-radius: var(--sp-1); }
+        .canvas-container { position: relative; flex-grow: 1; padding: var(--sp-2) var(--sp-4) var(--sp-4); display: flex; justify-content: center; align-items: center; }
+        .hint-text { font-size: var(--fs-sm); color: #a3adc2; margin-top: var(--sp-1); font-weight: 500; line-height: 1.5; }
         body.dark-mode .hint-text { color: #64748b; }
 
         #theme-toggle {
-            position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 1050; border-radius: 50px; padding: 12px 24px; font-weight: 600; font-size: 0.9rem; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            border: 1px solid rgba(255,255,255,0.2); transition: all 0.3s ease;
+            position: fixed; bottom: var(--sp-3); right: var(--sp-3); z-index: 1050; border-radius: 50px; padding: var(--sp-2) var(--sp-4); font-weight: 600; font-size: var(--fs-sm); box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.2); will-change: transform;
         }
         #theme-toggle:hover { transform: scale(1.05); }
 
-        /* --- FOOTER --- */
-        .site-footer { background: var(--navy-950); color: rgba(255,255,255,0.65); text-align: center; padding: 1.5rem; font-size: 0.8rem; }
-        .site-footer strong { color: var(--gold-400); }
+        /* =========================================================
+           FOOTER
+        ========================================================= */
+        .site-footer {
+            background: linear-gradient(180deg, var(--navy-900) 0%, var(--navy-950) 100%);
+            color: rgba(255,255,255,0.65); position: relative; overflow: hidden;
+        }
+        .site-footer::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, transparent, var(--gold-400), transparent);
+        }
+        .footer-main { max-width: 75rem; margin: 0 auto; padding: var(--sp-8) var(--sp-4) var(--sp-5); display: grid; grid-template-columns: 1.4fr 1fr 1.2fr 1fr; gap: var(--sp-5); }
 
-        @media (max-width: 992px) {
+        .footer-brand-logo { display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-2); margin-bottom: var(--sp-2); }
+        .footer-brand-logo img { width: 42px; height: 42px; object-fit: contain; }
+        .footer-brand-title { color: #fff; font-weight: 800; font-size: var(--fs-base); margin: 0; line-height: 1.35; }
+        .footer-brand-title span { display: block; color: var(--gold-400); font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.5px; margin-top: 2px; }
+        .footer-desc { font-size: var(--fs-sm); line-height: 1.7; color: rgba(255,255,255,0.55); margin: 0; }
+
+        .footer-heading { color: #fff; font-weight: 800; font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: 1px; margin-bottom: var(--sp-3); position: relative; padding-bottom: var(--sp-1); line-height: 1.4; }
+        .footer-heading::after { content: ''; position: absolute; left: 0; bottom: 0; width: 32px; height: 2px; background: var(--gold-400); }
+
+        .footer-links { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); }
+        .footer-links a { color: rgba(255,255,255,0.62); text-decoration: none; font-size: var(--fs-sm); font-weight: 500; display: inline-flex; align-items: center; justify-content: flex-start; gap: var(--sp-1); will-change: transform; }
+        .footer-links a i { font-size: var(--fs-xs); color: var(--gold-400); will-change: transform; }
+        .footer-links a:hover { color: var(--gold-300); transform: translateX(4px); }
+
+        .footer-contact { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+        .footer-contact li { display: flex; align-items: flex-start; justify-content: flex-start; gap: var(--sp-2); font-size: var(--fs-sm); color: rgba(255,255,255,0.62); line-height: 1.5; }
+        .footer-contact i { color: var(--gold-400); font-size: var(--fs-base); width: 16px; margin-top: 2px; flex-shrink: 0; text-align: center; }
+        .footer-contact a { color: rgba(255,255,255,0.62); text-decoration: none; }
+        .footer-contact a:hover { color: var(--gold-300); }
+
+        .footer-socials { display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-2); margin-top: var(--sp-1); }
+        .footer-socials a {
+            width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: var(--fs-base);
+            will-change: transform;
+        }
+        .footer-socials a:hover {
+            background: linear-gradient(135deg, var(--gold-500), var(--gold-400)); color: var(--navy-950);
+            border-color: transparent;
+        }
+
+        .footer-bottom {
+            border-top: 1px solid rgba(255,255,255,0.1); padding: var(--sp-3) var(--sp-4); text-align: center;
+            font-size: var(--fs-sm); color: rgba(255,255,255,0.5); line-height: 1.6;
+        }
+        .footer-bottom strong { color: var(--gold-400); }
+
+        @media (max-width: 62rem) {
+            .footer-main { grid-template-columns: 1fr 1fr; gap: var(--sp-5) var(--sp-4); }
+        }
+        @media (max-width: 36rem) {
+            .footer-main { grid-template-columns: 1fr; padding: var(--sp-6) var(--sp-3) var(--sp-4); gap: var(--sp-4); text-align: center; }
+            .footer-heading::after { left: 50%; transform: translateX(-50%); }
+            .footer-brand-logo { justify-content: center; }
+            .footer-links { align-items: center; }
+            .footer-socials { justify-content: center; }
+            .footer-contact li { justify-content: center; text-align: left; }
+        }
+
+        @media (max-width: 62rem) {
             .chart-card { min-width: 80vw; height: 60vh; }
             .sticky-top-section { flex-direction: column; align-items: flex-start; }
             .nav-right { width: 100%; justify-content: space-between; }
             .site-nav { display: none; }
         }
-        @media (max-width: 576px) {
+        @media (max-width: 36rem) {
             .header-text-container { display: none; }
             .chart-card { min-width: 90vw; height: 60vh; }
-            .about-section, .org-section { padding-left: 1.2rem; padding-right: 1.2rem; }
+            .about-section, .org-section { padding-left: var(--sp-2); padding-right: var(--sp-2); }
+        }
+
+        /* Respect reduced-motion preference: kill parallax/float, keep instant states */
+        @media (prefers-reduced-motion: reduce) {
+            * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
         }
     </style>
 </head>
@@ -272,6 +541,7 @@
         <nav class="site-nav">
             <a href="#about">About</a>
             <a href="#structure">Structure</a>
+            <a href="#services">Services</a>
             <a href="#dashboard">Dashboard</a>
         </nav>
 
@@ -280,8 +550,8 @@
                 <option value="p1">Jan - Jun 2026</option>
                 <option value="p2">Jul - Dec 2026</option>
             </select>
-            <div class="auth-buttons d-flex gap-2">
-                <a href="/login" class="btn btn-admin"><i class="fas fa-sign-in-alt me-1 d-none d-sm-inline"></i> Login Portal</a>
+            <div class="auth-buttons">
+                <a href="/login" class="btn btn-admin magnetic"><i class="fas fa-sign-in-alt me-1 d-none d-sm-inline"></i> Login Portal</a>
             </div>
         </div>
     </div>
@@ -290,10 +560,34 @@
 
     <div class="page-content">
 
-        <!-- ================= ABOUT CQA HERO SECTION ================= -->
+        <!-- ================= HERO SECTION ================= -->
+        <section class="hero-section" id="hero">
+            <div class="hero-content">
+                <span class="section-eyebrow hero-eyebrow">Camarines Sur Polytechnic Colleges</span>
+                <h1 class="hero-title">
+                    <span class="line">Center for <span class="gold-text">Quality Assurance</span></span>
+                    <span class="line">Public Transparency Portal</span>
+                </h1>
+                <p class="hero-subtitle">
+                    A live window into our institution's governance, services, and client satisfaction
+                    performance &mdash; built on data, driven by continuous quality improvement.
+                </p>
+                <div class="hero-cta-group">
+                    <a href="#dashboard" class="btn-hero btn-hero-primary magnetic"><i class="fas fa-chart-pie"></i> Explore Dashboard</a>
+                    <a href="#services" class="btn-hero btn-hero-secondary magnetic"><i class="fas fa-layer-group"></i> View Our Services</a>
+                </div>
+            </div>
+
+            <div class="hero-scroll-cue">
+                <span class="hero-scroll-cue-text">Scroll</span>
+                <i class="fas fa-chevron-down hero-scroll-cue-icon"></i>
+            </div>
+        </section>
+
+        <!-- ================= ABOUT CQA SECTION ================= -->
         <section class="about-section" id="about">
             <div class="about-grid">
-                <div class="profile-card">
+                <div class="profile-card glow-card" data-reveal="fade-right">
                     <div class="profile-avatar"><i class="fas fa-user-tie"></i></div>
                     <p class="profile-name">JUVY M. BUSTAMANTE, JD</p>
                     <p class="profile-role">Head, Center for Quality Assurance</p>
@@ -304,7 +598,7 @@
                     </div>
                 </div>
 
-                <div class="about-text">
+                <div class="about-text" data-reveal="fade-up" data-reveal-delay="150">
                     <span class="section-eyebrow">Who We Are</span>
                     <h2 class="section-title">Center for Quality Assurance</h2>
                     <p>
@@ -317,9 +611,9 @@
                         and educational objectives.
                     </p>
                     <div class="about-badges">
-                        <span class="about-badge"><i class="fas fa-award"></i> ISO 9001:2015 Certified</span>
-                        <span class="about-badge"><i class="fas fa-shield-halved"></i> Institutional Accreditation</span>
-                        <span class="about-badge"><i class="fas fa-chart-line"></i> Continuous Quality Monitoring</span>
+                        <span class="about-badge pop-glow"><i class="fas fa-award"></i> ISO 9001:2015 Certified</span>
+                        <span class="about-badge pop-glow"><i class="fas fa-shield-halved"></i> Institutional Accreditation</span>
+                        <span class="about-badge pop-glow"><i class="fas fa-chart-line"></i> Continuous Quality Monitoring</span>
                     </div>
                 </div>
             </div>
@@ -332,21 +626,21 @@
                 <h2 class="section-title">Organizational Structure</h2>
 
                 <div class="org-tree">
-                    <div class="org-node top">
+                    <div class="org-node top glow-card" data-reveal="zoom-in">
                         <div class="org-avatar"><i class="fas fa-user-graduate"></i></div>
                         <p class="org-name">Amado A. Oliva Jr., PhD</p>
                         <p class="org-role">SUC President III</p>
                     </div>
                     <div class="org-connector"></div>
 
-                    <div class="org-node top">
+                    <div class="org-node top glow-card" data-reveal="zoom-in" data-reveal-delay="100">
                         <div class="org-avatar"><i class="fas fa-user-graduate"></i></div>
                         <p class="org-name">Dr. Jocelyn O. Jintalan</p>
                         <p class="org-role">Vice President of Academic Affairs</p>
                     </div>
                     <div class="org-connector"></div>
 
-                    <div class="org-node top">
+                    <div class="org-node top glow-card" data-reveal="zoom-in" data-reveal-delay="200">
                         <div class="org-avatar"><i class="fas fa-user-tie"></i></div>
                         <p class="org-name">Mr. Juvy M. Bustamante, JD</p>
                         <p class="org-role">AO V &middot; Head, Center for Quality Assurance</p>
@@ -355,17 +649,17 @@
 
                     <div class="org-team-box">
                         <div class="org-team-grid org-team-row">
-                            <div class="org-node">
+                            <div class="org-node glow-card" data-reveal="fade-up" data-reveal-delay="0">
                                 <div class="org-avatar"><i class="fas fa-user"></i></div>
                                 <p class="org-name">Angielyn L. Patricio</p>
                                 <p class="org-role">AA VI / Program Accreditation and Assessment Coordinator</p>
                             </div>
-                            <div class="org-node">
+                            <div class="org-node glow-card" data-reveal="fade-up" data-reveal-delay="100">
                                 <div class="org-avatar"><i class="fas fa-user"></i></div>
                                 <p class="org-name">Marian Beatrize O. Tabalos</p>
                                 <p class="org-role">AO II / Institutional Accreditations Person-in-Charge</p>
                             </div>
-                            <div class="org-node">
+                            <div class="org-node glow-card" data-reveal="fade-up" data-reveal-delay="200">
                                 <div class="org-avatar"><i class="fas fa-user"></i></div>
                                 <p class="org-name">Lea Laarni B. Albeza-Arines</p>
                                 <p class="org-role">AO IV / QMS and EOMS Person-in-Charge</p>
@@ -373,26 +667,40 @@
                         </div>
 
                         <div class="org-team-grid org-team-row">
-                            <div class="org-node">
+                            <div class="org-node glow-card" data-reveal="fade-up" data-reveal-delay="0">
                                 <div class="org-avatar"><i class="fas fa-user"></i></div>
                                 <p class="org-name">Chrena Joyce I. Brutas</p>
                                 <p class="org-role">Technical Writer / CSM Focal Person</p>
                             </div>
-                            <div class="org-node">
+                            <div class="org-node glow-card" data-reveal="fade-up" data-reveal-delay="100">
                                 <div class="org-avatar"><i class="fas fa-user"></i></div>
                                 <p class="org-name">Christine Joy L. Taburnal</p>
                                 <p class="org-role">AA II / Office Clerk / Clerical Support Staff</p>
                             </div>
-                            <div class="org-node">
+                            <div class="org-node glow-card" data-reveal="fade-up" data-reveal-delay="200">
                                 <div class="org-avatar"><i class="fas fa-user"></i></div>
                                 <p class="org-name">Lawrence A. Rebulado</p>
                                 <p class="org-role">Layout Artist / Databank Manager</p>
                             </div>
                         </div>
 
-                        <div class="org-student-aide"><i class="fas fa-user-graduate me-2"></i>Student Aide</div>
+                        <div class="org-student-aide" data-reveal="fade-up" data-reveal-delay="300"><i class="fas fa-user-graduate me-2"></i>Student Aide</div>
                     </div>
                 </div>
+            </div>
+        </section>
+
+        <!-- ================= OUR SERVICES SECTION ================= -->
+        <section class="services-section" id="services">
+            <div class="services-header" data-reveal="fade-up">
+                <span class="section-eyebrow">Client Satisfaction Measurement</span>
+                <h2 class="section-title">Our Services</h2>
+                <p>Every frontline service across the College, organized by Cluster &rarr; Office. Pick a cluster, then expand an office to see what it offers.</p>
+            </div>
+
+            <div class="services-wrap" data-reveal="fade-up">
+                <div class="cluster-tabs" id="clusterTabs"></div>
+                <div class="services-accordion" id="servicesAccordion"></div>
             </div>
         </section>
 
@@ -455,8 +763,55 @@
             </div>
         </section>
 
-        <footer class="site-footer">
-            &copy; <span id="footerYear"></span> <strong>Camarines Sur Polytechnic Colleges</strong> &middot; Center for Quality Assurance
+        <footer class="site-footer" data-reveal="fade-up">
+            <div class="footer-main">
+                <div class="footer-col footer-brand">
+                    <div class="footer-brand-logo">
+                        <img src="/images/cspc-logo.png" alt="CSPC Logo">
+                        <p class="footer-brand-title">Center For Quality Assurance<span>Camarines Sur Polytechnic Colleges</span></p>
+                    </div>
+                    <p class="footer-desc">
+                        Committed to upholding transparency and accountability by providing open access
+                        to institutional quality assurance data, governance structures, and public
+                        satisfaction survey results.
+                    </p>
+                </div>
+
+                <div class="footer-col">
+                    <h4 class="footer-heading">Quick Links</h4>
+                    <ul class="footer-links">
+                        <li><a href="#about"><i class="fas fa-chevron-right"></i> About Us</a></li>
+                        <li><a href="#structure"><i class="fas fa-chevron-right"></i> Governance</a></li>
+                        <li><a href="#services"><i class="fas fa-chevron-right"></i> Our Services</a></li>
+                        <li><a href="#dashboard"><i class="fas fa-chevron-right"></i> Transparency Dashboard</a></li>
+                        <li><a href="/login"><i class="fas fa-chevron-right"></i> Admin Login</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-col">
+                    <h4 class="footer-heading">Contact Us</h4>
+                    <ul class="footer-contact">
+                        <li><i class="fas fa-location-dot"></i> <span>Center for Quality Assurance, Camarines Sur Polytechnic Colleges, Nabua, Camarines Sur, Philippines</span></li>
+                        <li><i class="fas fa-envelope"></i> <a href="mailto:qams@cspc.edu.ph">qams@cspc.edu.ph</a></li>
+                        <li><i class="fas fa-phone"></i> <span>(054) 2884421 to 23 loc. 123</span></li>
+                        <li><i class="fas fa-clock"></i> <span>Mon &ndash; Fri, 8:00 AM &ndash; 5:00 PM</span></li>
+                    </ul>
+                </div>
+
+                <div class="footer-col">
+                    <h4 class="footer-heading">Connect With Us</h4>
+                    <div class="footer-socials">
+                        <a href="https://facebook.com" target="_blank" rel="noopener" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+                        <a href="https://twitter.com" target="_blank" rel="noopener" aria-label="Twitter / X"><i class="fab fa-x-twitter"></i></a>
+                        <a href="https://linkedin.com" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+                        <a href="https://spims.cspc.edu.ph" target="_blank" rel="noopener" aria-label="SPIMS Portal"><i class="fas fa-globe"></i></a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="footer-bottom">
+                &copy; <span id="footerYear"></span> <strong>Camarines Sur Polytechnic Colleges</strong> &middot; Center for Quality Assurance. All Rights Reserved.
+            </div>
         </footer>
 
     </div>
@@ -475,6 +830,384 @@
         }
         window.addEventListener('load', syncHeaderSpacer);
         window.addEventListener('resize', syncHeaderSpacer);
+
+        // =========================================================================
+        // OUR SERVICES DATA — strict 3-level hierarchy: Cluster > Office > Services.
+        // Clusters and their office membership follow the official grouping below;
+        // service lists are mapped over from the CSM Services register. A few
+        // offices (Production and Auxiliary Services Office, Competency Assessment
+        // Center) had no distinct service text in the source register, so they
+        // carry one representative service label — swap in exact wording anytime.
+        // Note: "Public Affairs and Special Concerns (PAxS)" from the old register
+        // isn't part of the official cluster list provided, so it was dropped here;
+        // "TESDA Office" was folded into the new "Competency Assessment Center"
+        // since they cover the same function.
+        // =========================================================================
+        const serviceClusters = [
+            {
+                label: 'President Cluster',
+                icon: 'fa-landmark',
+                offices: [
+                    {
+                        name: 'Office of the President',
+                        icon: 'fa-landmark-dome',
+                        services: [
+                            'Travel Order Issuance to Students and Employees outside the Bicol Region',
+                            'Requesting for Travel Order'
+                        ]
+                    },
+                    {
+                        name: 'Vice President for Academic Affairs Office',
+                        icon: 'fa-chalkboard-user',
+                        services: [
+                            'Travel Order Issuance to Students, Teaching Staff, and Employees within the Bicol Region'
+                        ]
+                    },
+                    {
+                        name: 'Vice President for Administration and Finance Office',
+                        icon: 'fa-sack-dollar',
+                        services: [
+                            'Travel Order Issuance to Employees within the Bicol Region'
+                        ]
+                    },
+                    {
+                        name: 'VP Research, Innovation, and Collaboration Office',
+                        icon: 'fa-flask',
+                        services: [
+                            'Travel Order Issuance to Employees in REPED within the Bicol Region'
+                        ]
+                    },
+                    {
+                        name: 'Center for International Relations, and Linkages',
+                        icon: 'fa-earth-asia',
+                        services: [
+                            'Requesting for International Linkages and Exchange Program Assistance'
+                        ]
+                    },
+                    {
+                        name: 'Institutional Planning and Development Unit',
+                        icon: 'fa-diagram-project',
+                        services: [
+                            'Requesting for Institutional Planning and Development Data'
+                        ]
+                    },
+                    {
+                        name: 'Internal Audit Unit',
+                        icon: 'fa-magnifying-glass-chart',
+                        services: [
+                            'Requesting for Internal Audit Advisory Services'
+                        ]
+                    }
+                ]
+            },
+            {
+                label: 'Administrative and Finance Cluster',
+                icon: 'fa-building',
+                offices: [
+                    {
+                        name: 'Human Resource Management & Development Unit',
+                        icon: 'fa-users-gear',
+                        services: [
+                            'Applying for Leave of Absence with or without Pay',
+                            'Securing Service Records, Certificate of Employment and Other Personnel Records'
+                        ]
+                    },
+                    {
+                        name: 'Records and Freedom of Information Unit',
+                        icon: 'fa-folder-open',
+                        services: [
+                            'Securing Certified Copies of Documents'
+                        ]
+                    },
+                    {
+                        name: 'Health Services Unit',
+                        icon: 'fa-heart-pulse',
+                        services: [
+                            'Availing of Oral Examination and Certification',
+                            'Dental Treatment and Certification',
+                            'Availing of Medical Consultation and Treatment',
+                            'Securing Medical Certificate'
+                        ]
+                    },
+                    {
+                        name: 'General Services Unit',
+                        icon: 'fa-truck',
+                        services: [
+                            'Requesting for Transportation Services'
+                        ]
+                    },
+                    {
+                        name: 'Supply and Property Management Unit',
+                        icon: 'fa-boxes-stacked',
+                        services: [
+                            'Applying / Renewal of Application for Bed Space at the College Dormitory',
+                            'Borrowing Equipment and Other Facilities',
+                            'Renting College Equipment and Facilities',
+                            'Requesting Issuance / Release of Supplies, Materials and Equipment'
+                        ]
+                    },
+                    {
+                        name: 'Project Management Unit',
+                        icon: 'fa-tasks',
+                        services: [
+                            'Requesting for Project Management and Monitoring Assistance'
+                        ]
+                    },
+                    {
+                        name: 'Information and Communications Technology Unit',
+                        icon: 'fa-network-wired',
+                        services: [
+                            'Applying for New Identification Card (New / Renewal)',
+                            'Issuance of Institutional E-mail Address',
+                            "Printing of Employees' Identification Card",
+                            'Applying for Renewal of Internet Access Card',
+                            "Accessing the School's Internet Center Services"
+                        ]
+                    },
+                    {
+                        name: 'Accounting Unit',
+                        icon: 'fa-file-invoice-dollar',
+                        services: [
+                            'Requesting for Clearance',
+                            'Requesting Statement of Student Accounts Balances'
+                        ]
+                    },
+                    {
+                        name: 'Budget Unit',
+                        icon: 'fa-calculator',
+                        services: [
+                            'Requesting for an Obligation of Claim for Payment'
+                        ]
+                    },
+                    {
+                        name: 'Cash Unit',
+                        icon: 'fa-money-check-dollar',
+                        services: [
+                            'Paying of Required Fees',
+                            'Accepting Remittance of Scholarship Grants / Aids and Financial Assistance to Students',
+                            'Requesting for Reimbursement of Petty Cash Expenses',
+                            'Requesting for Liquidation of Petty Cash Expenses'
+                        ]
+                    },
+                    {
+                        name: 'Procurement Unit',
+                        icon: 'fa-cart-shopping',
+                        services: [
+                            'Requesting for Procurement of Goods and Services'
+                        ]
+                    }
+                ]
+            },
+            {
+                label: 'RIC Cluster',
+                icon: 'fa-microscope',
+                offices: [
+                    {
+                        name: 'Research Development Services Office',
+                        icon: 'fa-flask-vial',
+                        services: [
+                            'Requesting for Research and Development Support Services'
+                        ]
+                    },
+                    {
+                        name: 'Extension and Community Services Office',
+                        icon: 'fa-hands-helping',
+                        services: [
+                            'Requesting for Extension and Community Outreach Services'
+                        ]
+                    },
+                    {
+                        name: 'Production and Auxiliary Services Office',
+                        icon: 'fa-industry',
+                        services: [
+                            'Requesting for Production and Auxiliary Services Assistance'
+                        ]
+                    },
+                    {
+                        name: 'Center for Rinconada Culture and Arts',
+                        icon: 'fa-masks-theater',
+                        services: [
+                            'Requesting for Cultural and Arts Program Participation'
+                        ]
+                    },
+                    {
+                        name: 'Competency Assessment Center',
+                        icon: 'fa-certificate',
+                        services: [
+                            'Applying for Competency Assessment and TESDA Certification Services'
+                        ]
+                    }
+                ]
+            },
+            {
+                label: 'Academic Cluster',
+                icon: 'fa-graduation-cap',
+                offices: [
+                    { name: 'College of Arts and Sciences', icon: 'fa-book', services: ['Securing Certificate of Good Moral Character'] },
+                    { name: 'College of Computer Studies', icon: 'fa-laptop-code', services: ['Securing Certificate of Good Moral Character'] },
+                    { name: 'College of Engineering and Architecture', icon: 'fa-drafting-compass', services: ['Securing Certificate of Good Moral Character'] },
+                    { name: 'College of Health Sciences', icon: 'fa-briefcase-medical', services: ['Securing Certificate of Good Moral Character'] },
+                    { name: 'College of Technological and Development Education', icon: 'fa-chalkboard-teacher', services: ['Securing Certificate of Good Moral Character'] },
+                    { name: 'College of Tourism, Hospitality, and Business Management', icon: 'fa-utensils', services: ['Securing Certificate of Good Moral Character'] },
+                    { name: 'Graduate School', icon: 'fa-user-graduate', services: ['Securing Certificate of Good Moral Character'] },
+                    { name: 'Buhi Campus', icon: 'fa-building-columns', services: ['Securing Certificate of Good Moral Character'] },
+                    {
+                        name: 'Information and Alumni Affairs Unit/Broadcast Center',
+                        icon: 'fa-tower-broadcast',
+                        services: [
+                            'Requesting for Alumni Records and Engagement Services'
+                        ]
+                    },
+                    {
+                        name: 'Center for Human Rights Education',
+                        icon: 'fa-scale-balanced',
+                        services: [
+                            'Requesting for Human Rights Education and Advocacy Services'
+                        ]
+                    },
+                    {
+                        name: 'Center for Quality Assurance',
+                        icon: 'fa-award',
+                        services: [
+                            'Availing of Quality Assurance Advisory and Documentation Services'
+                        ]
+                    },
+                    {
+                        name: 'Center for Gender and Development',
+                        icon: 'fa-venus-mars',
+                        services: [
+                            'Requesting for Gender and Development Advocacy Services'
+                        ]
+                    },
+                    {
+                        name: 'Student Registration and Records Office',
+                        icon: 'fa-id-card',
+                        services: [
+                            'Applying for Enrolment (Freshmen)',
+                            'Applying for Enrolment (Transferees)',
+                            'Applying for Enrolment (Current and Returning Students)',
+                            'Applying for Authentication of Academic Records',
+                            'Applying for Certification, Authentication and Verification (CAV) of Academic Records',
+                            'Applying for Issuance of Credentials (Transcript of Records, Certifications)',
+                            'Applying for Re-Issuance of Diploma',
+                            'Applying for Graduation',
+                            'Applying for Honorable Dismissal / Certificate of Eligibility to Transfer',
+                            'Applying for Cross-Enrolment',
+                            'Applying for Adding / Dropping of Subjects',
+                            'Request for the Change / Correction of Grades',
+                            'Request for Authority to Access SIAS Account for Grade Encoding'
+                        ]
+                    },
+                    {
+                        name: 'Student Testing and Admission Office',
+                        icon: 'fa-clipboard-check',
+                        services: [
+                            'Applying for College Entrance Examination (Freshmen, Transferees)',
+                            'Applying for Entrance Examination (Graduate School Students)',
+                            'Applying for Shifting / Re-Admission',
+                            'Administering of Personality / IQ Tests'
+                        ]
+                    },
+                    {
+                        name: 'Learning Resources and Development Services',
+                        icon: 'fa-book-open',
+                        services: [
+                            'Lending Books',
+                            'Returning Books',
+                            'Providing Research Assistance to External Clients'
+                        ]
+                    },
+                    {
+                        name: 'Academic Center for Continuing Enhancement Services for Students',
+                        icon: 'fa-chalkboard',
+                        services: [
+                            'Availing of Continuing Education and Training Programs'
+                        ]
+                    },
+                    {
+                        name: 'National Services Training Program Office',
+                        icon: 'fa-flag',
+                        services: [
+                            'Enrolling in the National Service Training Program'
+                        ]
+                    },
+                    {
+                        name: 'Students Affairs and Services Office',
+                        icon: 'fa-people-group',
+                        services: [
+                            'Applying for Student Organizations Accreditation',
+                            'Complaining or Seeking Redress of Grievances',
+                            'Requesting Permit to Conduct Campus Activity / Educational Tour',
+                            'Applying for Scholarship'
+                        ]
+                    },
+                    {
+                        name: 'Guidance and Counseling Office',
+                        icon: 'fa-comments',
+                        services: [
+                            'Availing of Counseling Services',
+                            'Referring a Student for Counseling'
+                        ]
+                    }
+                ]
+            }
+        ];
+
+        let activeClusterIndex = 0;
+
+        function renderClusterTabs() {
+            const tabsWrap = document.getElementById('clusterTabs');
+            tabsWrap.innerHTML = serviceClusters.map((cluster, i) => `
+                <button type="button" class="cluster-tab-btn${i === activeClusterIndex ? ' active' : ''}" data-index="${i}">
+                    <i class="fas ${cluster.icon}"></i> ${cluster.label}
+                </button>
+            `).join('');
+
+            tabsWrap.querySelectorAll('.cluster-tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    activeClusterIndex = parseInt(btn.dataset.index, 10);
+                    tabsWrap.querySelectorAll('.cluster-tab-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    renderServicesAccordion();
+                });
+            });
+        }
+
+        // Level 2 (Office) + level 3 (Services) for whichever cluster tab is active.
+        function renderServicesAccordion() {
+            const wrap = document.getElementById('servicesAccordion');
+            const cluster = serviceClusters[activeClusterIndex];
+
+            wrap.innerHTML = cluster.offices.map(o => `
+                <div class="accordion-item">
+                    <button type="button" class="accordion-header" aria-expanded="false">
+                        <span class="accordion-header-left">
+                            <span class="accordion-icon"><i class="fas ${o.icon}"></i></span>
+                            <span class="accordion-text">
+                                <span class="accordion-name">${o.name}</span>
+                                <span class="accordion-count">${o.services.length} Service${o.services.length > 1 ? 's' : ''}</span>
+                            </span>
+                        </span>
+                        <i class="fas fa-chevron-down accordion-chevron"></i>
+                    </button>
+                    <div class="accordion-panel">
+                        <div class="accordion-panel-inner">
+                            <ul class="accordion-list">
+                                ${o.services.map(s => `<li><i class="fas fa-circle"></i><span>${s}</span></li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            wrap.querySelectorAll('.accordion-header').forEach(header => {
+                header.addEventListener('click', () => {
+                    const item = header.closest('.accordion-item');
+                    const isOpen = item.classList.toggle('open');
+                    header.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+                });
+            });
+        }
 
         Chart.register({
             id: 'centerText',
@@ -787,18 +1520,99 @@
             });
         }
 
-        document.addEventListener("DOMContentLoaded", () => {
-            syncHeaderSpacer();
+        // =========================================================================
+        // "ANTI-GRAVITY" MOTION LAYER — every tween below touches ONLY transform
+        // and opacity, so the compositor handles it without triggering layout or
+        // paint. Scrolling itself is the browser's plain native scroll (no smooth-
+        // scroll library adding lag/resistance) — anchor nav just uses the native
+        // `html { scroll-behavior: smooth }` + each section's `scroll-margin-top`
+        // to land in the right spot under the fixed header. GSAP ScrollTrigger
+        // drives reveals/parallax straight off that native scroll.
+        // =========================================================================
+        gsap.ticker.lagSmoothing(0);
 
+        function initScrollReveals() {
+            document.querySelectorAll('[data-reveal]').forEach(el => {
+                const type = el.dataset.reveal;
+                const delay = parseFloat(el.dataset.revealDelay || 0) / 1000;
+                const fromVars = { opacity: 0 };
+                if (type === 'fade-up') fromVars.y = 40;
+                if (type === 'fade-right') fromVars.x = -40;
+                if (type === 'fade-left') fromVars.x = 40;
+                if (type === 'zoom-in') fromVars.scale = 0.95;
+
+                gsap.from(el, {
+                    ...fromVars,
+                    duration: 1.2,
+                    delay,
+                    ease: 'expo.out',
+                    clearProps: 'transform',
+                    scrollTrigger: { trigger: el, start: 'top 88%', toggleActions: 'play none none none' }
+                });
+            });
+        }
+
+        // Hero entrance is pure CSS (see .hero-eyebrow/.hero-title/.hero-subtitle/
+        // .hero-cta-group/.hero-scroll-cue @keyframes heroFadeUp rules) — no JS
+        // needed for it at all, so there is nothing to initialize here anymore.
+
+        function initMagneticButtons() {
+            document.querySelectorAll('.magnetic').forEach(btn => {
+                const setX = gsap.quickSetter(btn, 'x', 'px');
+                const setY = gsap.quickSetter(btn, 'y', 'px');
+                let targetX = 0, targetY = 0, currentX = 0, currentY = 0, raf = null;
+
+                function tick() {
+                    currentX += (targetX - currentX) * 0.18;
+                    currentY += (targetY - currentY) * 0.18;
+                    setX(currentX);
+                    setY(currentY);
+                    if (Math.abs(targetX - currentX) > 0.1 || Math.abs(targetY - currentY) > 0.1) {
+                        raf = requestAnimationFrame(tick);
+                    } else {
+                        raf = null;
+                    }
+                }
+
+                btn.addEventListener('mousemove', (e) => {
+                    const rect = btn.getBoundingClientRect();
+                    targetX = (e.clientX - rect.left - rect.width / 2) * 0.35;
+                    targetY = (e.clientY - rect.top - rect.height / 2) * 0.35;
+                    if (!raf) raf = requestAnimationFrame(tick);
+                });
+                btn.addEventListener('mouseleave', () => {
+                    targetX = 0; targetY = 0;
+                    if (!raf) raf = requestAnimationFrame(tick);
+                });
+            });
+        }
+
+        function initGlowCards() {
+            let raf = null, lastEvent = null;
+            document.addEventListener('mousemove', (e) => {
+                if (!e.target.closest('.glow-card')) return;
+                lastEvent = e;
+                if (raf) return;
+                raf = requestAnimationFrame(() => {
+                    raf = null;
+                    const card = lastEvent.target.closest('.glow-card');
+                    if (!card) return;
+                    const rect = card.getBoundingClientRect();
+                    card.style.setProperty('--mx', (lastEvent.clientX - rect.left) + 'px');
+                    card.style.setProperty('--my', (lastEvent.clientY - rect.top) + 'px');
+                });
+            }, { passive: true });
+        }
+
+        function initChartsMarquee() {
+            const viewport = document.querySelector('.dashboard-container');
             const track = document.getElementById('chartsTrack');
             const originalCards = Array.from(track.querySelectorAll('.chart-card'));
 
-            originalCards.forEach((card, index) => {
+            originalCards.forEach((card) => {
                 const canvasId = card.querySelector('canvas').id;
                 if (!activeCharts[canvasId]) loadChart(canvasId, 'main');
             });
-
-            let resetPoint = 0;
 
             setTimeout(() => {
                 originalCards.forEach(card => {
@@ -811,13 +1625,13 @@
                     originalCanvas.id = baseId + '_clone';
 
                     const backBtn = clone.querySelector('.btn-back-custom');
-                    if(backBtn) {
+                    if (backBtn) {
                         backBtn.id = baseId + '_clone-back';
                         backBtn.setAttribute('onclick', `goBack('${baseId}_clone')`);
                     }
 
                     const title = clone.querySelector('.chart-title');
-                    if(title) title.id = baseId + '_clone-title';
+                    if (title) title.id = baseId + '_clone-title';
 
                     track.appendChild(clone);
                     loadChart(originalCanvas.id, 'main');
@@ -825,48 +1639,74 @@
 
                 const firstCard = originalCards[0];
                 const firstClone = document.getElementById(firstCard.id + '_clone');
-                resetPoint = firstClone.offsetLeft - firstCard.offsetLeft;
+                const resetPoint = firstClone.offsetLeft - firstCard.offsetLeft;
 
+                const setX = gsap.quickSetter(track, 'x', 'px');
                 let isInteracting = false;
                 let scrollPos = 0;
-                let speed = 1.6;
+                let isDragging = false;
+                let dragStartX = 0;
+                let dragStartScroll = 0;
+                const speed = 1.1;
 
-                track.addEventListener('mouseenter', () => isInteracting = true);
-                track.addEventListener('mouseleave', () => isInteracting = false);
-                track.addEventListener('touchstart', () => isInteracting = true);
-                track.addEventListener('touchend', () => setTimeout(() => isInteracting = false, 2000));
+                function wrapAndApply() {
+                    if (scrollPos >= resetPoint) scrollPos -= resetPoint;
+                    if (scrollPos < 0) scrollPos += resetPoint;
+                    setX(-scrollPos);
+                }
 
-                track.addEventListener('wheel', (e) => {
+                viewport.addEventListener('mouseenter', () => isInteracting = true);
+                viewport.addEventListener('mouseleave', () => { isInteracting = false; isDragging = false; });
+
+                viewport.addEventListener('wheel', (e) => {
                     e.preventDefault();
                     isInteracting = true;
                     scrollPos += e.deltaY;
+                    wrapAndApply();
+                    clearTimeout(viewport.interactionTimeout);
+                    viewport.interactionTimeout = setTimeout(() => isInteracting = false, 1500);
+                }, { passive: false });
 
-                    if (scrollPos >= resetPoint) scrollPos -= resetPoint;
-                    if (scrollPos < 0) scrollPos += resetPoint;
-
-                    track.scrollLeft = scrollPos;
-                    clearTimeout(track.interactionTimeout);
-                    track.interactionTimeout = setTimeout(() => isInteracting = false, 1500);
+                viewport.addEventListener('pointerdown', (e) => {
+                    isDragging = true;
+                    isInteracting = true;
+                    dragStartX = e.clientX;
+                    dragStartScroll = scrollPos;
+                    viewport.setPointerCapture(e.pointerId);
                 });
+                viewport.addEventListener('pointermove', (e) => {
+                    if (!isDragging) return;
+                    scrollPos = dragStartScroll + (dragStartX - e.clientX);
+                    wrapAndApply();
+                });
+                viewport.addEventListener('pointerup', () => {
+                    isDragging = false;
+                    setTimeout(() => isInteracting = false, 1200);
+                });
+                viewport.addEventListener('pointercancel', () => { isDragging = false; });
+
+                // The marquee used to keep spinning — and re-triggering each chart's
+                // 8s canvas reveal animation every time a card crossed the intersection
+                // threshold — even while the dashboard was scrolled out of view. That
+                // endless background canvas work was stealing main-thread time from the
+                // browser's own scroll/paint pipeline, which is what produced the
+                // "speeds up / slows down" stutter while scrolling anywhere on the page.
+                // Fixed by: (1) only pausing scrollPos advancement while the section is
+                // actually on screen, and (2) only ever replaying a chart's reveal
+                // animation once per card.
+                let dashboardOnScreen = true;
+                const dashboardVisibilityObserver = new IntersectionObserver((entries) => {
+                    dashboardOnScreen = entries[0].isIntersecting;
+                }, { threshold: 0 });
+                dashboardVisibilityObserver.observe(viewport);
 
                 function autoScrollTrack() {
-                    if (!isInteracting) {
+                    if (dashboardOnScreen && !isInteracting && !isDragging) {
                         scrollPos += speed;
-                        track.scrollLeft = scrollPos;
-                    } else {
-                        scrollPos = track.scrollLeft;
-                    }
-
-                    if (scrollPos >= resetPoint) {
-                        scrollPos -= resetPoint;
-                        track.scrollLeft = scrollPos;
-                    } else if (scrollPos <= 0) {
-                        scrollPos += resetPoint;
-                        track.scrollLeft = scrollPos;
+                        wrapAndApply();
                     }
                     requestAnimationFrame(autoScrollTrack);
                 }
-
                 autoScrollTrack();
 
                 const cardObserver = new IntersectionObserver((entries) => {
@@ -875,26 +1715,38 @@
                         const canvas = card.querySelector('canvas');
 
                         if (entry.isIntersecting) {
-                            if (!card.classList.contains('visible')) {
-                                card.classList.add('visible');
-                                if (canvas && activeCharts[canvas.id]) {
-                                    const chart = activeCharts[canvas.id];
-                                    delete chart.centerAnim;
-                                    chart.reset();
-                                    chart.update();
-                                }
+                            card.classList.add('visible');
+                            if (!card.dataset.revealed && canvas && activeCharts[canvas.id]) {
+                                card.dataset.revealed = '1';
+                                const chart = activeCharts[canvas.id];
+                                delete chart.centerAnim;
+                                chart.reset();
+                                chart.update();
                             }
                         } else {
                             card.classList.remove('visible');
                         }
                     });
-                }, { root: track, threshold: 0.1 });
+                }, { root: viewport, threshold: 0.1 });
 
-                document.querySelectorAll('.chart-card').forEach(card => {
-                    cardObserver.observe(card);
-                });
+                document.querySelectorAll('.chart-card').forEach(card => cardObserver.observe(card));
 
+                ScrollTrigger.refresh();
             }, 200);
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            syncHeaderSpacer();
+
+            gsap.registerPlugin(ScrollTrigger);
+            initScrollReveals();
+            initMagneticButtons();
+            initGlowCards();
+
+            renderClusterTabs();
+            renderServicesAccordion();
+
+            initChartsMarquee();
         });
     </script>
 </body>
