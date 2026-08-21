@@ -98,7 +98,7 @@
                                     let clusterArchived = meta ? !!meta.is_archived : false;
                                 %>
                                     <tbody class="<%= clusterArchived ? 'archived-row cluster-row-archived' : 'cluster-row-active' %>">
-                                        <tr class="bg-light cluster-toggle" data-target="<%= targetId %>">
+                                        <tr class="bg-light cluster-toggle" data-target="<%= targetId %>" data-cluster="<%= cluster %>">
                                             <td colspan="3" class="px-4 py-3 fw-bold text-primary">
                                                 <i class="fas fa-chevron-down me-2 cluster-icon"></i>
                                                 <%= cluster %>
@@ -370,20 +370,45 @@
             });
         }
 
-        const toggles = document.querySelectorAll('.cluster-toggle');
-        toggles.forEach(toggle => {
-            toggle.addEventListener('click', function () {
-                const targetId = this.getAttribute('data-target');
-                const target = document.getElementById(targetId);
-                if (!target) return;
+        // I-restore ang naka-save na collapsed state ng bawat cluster (per cluster name, hindi index)
+        // para hindi na mag-reset sa "open" kapag nag-refresh o lumipat ng page.
+        const COLLAPSE_KEY = 'officeClusterCollapsed';
+        function loadCollapsedState() {
+            try {
+                return JSON.parse(localStorage.getItem(COLLAPSE_KEY)) || {};
+            } catch (e) {
+                return {};
+            }
+        }
+        function saveCollapsedState(state) {
+            localStorage.setItem(COLLAPSE_KEY, JSON.stringify(state));
+        }
 
+        const collapsedState = loadCollapsedState();
+        const toggles = document.querySelectorAll('.cluster-toggle');
+
+        toggles.forEach(toggle => {
+            const targetId = toggle.getAttribute('data-target');
+            const clusterName = toggle.getAttribute('data-cluster');
+            const target = document.getElementById(targetId);
+            if (!target) return;
+
+            if (collapsedState[clusterName]) {
+                target.style.display = 'none';
+                toggle.classList.add('collapsed');
+            }
+
+            toggle.addEventListener('click', function () {
                 if (target.style.display === 'none') {
                     target.style.display = '';
-                    this.classList.remove('collapsed');
+                    toggle.classList.remove('collapsed');
+                    delete collapsedState[clusterName];
                 } else {
                     target.style.display = 'none';
-                    this.classList.add('collapsed');
+                    toggle.classList.add('collapsed');
+                    collapsedState[clusterName] = true;
                 }
+                saveCollapsedState(collapsedState);
             });
         });
     });
