@@ -247,6 +247,21 @@ const sqdStatementFor = (label) => {
     return Number.isInteger(idx) && SQD_STATEMENTS[idx] ? `${label}. ${SQD_STATEMENTS[idx]}` : label;
 };
 
+// ==========================================
+// SQD Score Formula (Citizen's Charter / ARTA)
+// ==========================================
+// Overall Score = (# 'Strongly Agree' + # 'Agree') / (Total Respondents - # 'N/A') * 100
+// sqd columns store 5=Strongly Agree, 4=Agree, 3=Neutral, 2=Disagree, 1=Strongly Disagree, 0=N/A.
+// This is purely a numeric-rating computation and never touches the AI sentiment/topic
+// pipeline (see analyzeComment) — the two scores are computed independently of each other.
+function sqdScoreExpr(cols) {
+    const agreeSum = cols.map(c => `SUM(CASE WHEN ${c} IN (4,5) THEN 1 ELSE 0 END)`).join(' + ');
+    const naSum = cols.map(c => `SUM(CASE WHEN ${c} = 0 THEN 1 ELSE 0 END)`).join(' + ');
+    const answerable = `(COUNT(s.id) * ${cols.length} - (${naSum}))`;
+    return `IFNULL(ROUND((${agreeSum}) / NULLIF(${answerable}, 0) * 100, 2), 0)`;
+}
+const ALL_SQD_COLS = [1, 2, 3, 4, 5, 6, 7, 8].map(i => `s.sqd${i}`);
+
 // Sends the client a proof-of-completion receipt of exactly what they just
 // submitted. Fire-and-forget: called AFTER the client already got its
 // success response, so a slow or failed send can never hold up the survey.
@@ -1234,13 +1249,13 @@ app.get('/dashboard', ensureAdminAuth, noCache, (req, res) => {
         const totalRespondents = (totalRes && totalRes[0]) ? totalRes[0].total : 0;
 
         const avgQuery = `
-            SELECT AVG((IFNULL(sqd1,0) + IFNULL(sqd2,0) + IFNULL(sqd3,0) + IFNULL(sqd4,0) + IFNULL(sqd5,0) + IFNULL(sqd6,0) + IFNULL(sqd7,0) + IFNULL(sqd8,0)) / 8) AS overall_avg
+            SELECT ${sqdScoreExpr(ALL_SQD_COLS)} AS overall_avg
             FROM survey_responses s${dateWhere}
         `;
         db.query(avgQuery, dateParams, (err, avgRes) => {
             let overallAvgScore = 0;
             if (avgRes && avgRes[0] && avgRes[0].overall_avg) {
-                overallAvgScore = parseFloat(((avgRes[0].overall_avg / 5) * 100).toFixed(2));
+                overallAvgScore = parseFloat(avgRes[0].overall_avg);
             }
 
             let interpretation = "POOR";
@@ -1256,7 +1271,7 @@ app.get('/dashboard', ensureAdminAuth, noCache, (req, res) => {
                     SELECT
                         cluster_name,
                         COUNT(s.id) as cluster_volume,
-                        IFNULL(ROUND(AVG((IFNULL(s.sqd1,0) + IFNULL(s.sqd2,0) + IFNULL(s.sqd3,0) + IFNULL(s.sqd4,0) + IFNULL(s.sqd5,0) + IFNULL(s.sqd6,0) + IFNULL(s.sqd7,0) + IFNULL(s.sqd8,0)) / 8) * 20, 2), 0) as cluster_rating
+                        ${sqdScoreExpr(ALL_SQD_COLS)} as cluster_rating
                     FROM offices o
                     LEFT JOIN survey_responses s ON o.id = s.office_id${dateWhereAnd}
                     WHERE o.is_archived = 0
@@ -1291,7 +1306,7 @@ app.get('/dashboard', ensureAdminAuth, noCache, (req, res) => {
                         SELECT
                             o.cluster_name,
                             o.office_name,
-                            IFNULL(ROUND(AVG((IFNULL(s.sqd1,0) + IFNULL(s.sqd2,0) + IFNULL(s.sqd3,0) + IFNULL(s.sqd4,0) + IFNULL(s.sqd5,0) + IFNULL(s.sqd6,0) + IFNULL(s.sqd7,0) + IFNULL(s.sqd8,0)) / 8) * 20, 2), 0) as office_score
+                            ${sqdScoreExpr(ALL_SQD_COLS)} as office_score
                         FROM offices o
                         LEFT JOIN survey_responses s ON o.id = s.office_id${dateWhereAnd}
                         WHERE o.is_archived = 0
@@ -1381,15 +1396,15 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
     const query = `
         SELECT
             COUNT(s.id) as total_respondents,
-            IFNULL(ROUND(AVG(s.sqd1) * 20, 2), 0) as sqd1,
-            IFNULL(ROUND(AVG(s.sqd2) * 20, 2), 0) as sqd2,
-            IFNULL(ROUND(AVG(s.sqd3) * 20, 2), 0) as sqd3,
-            IFNULL(ROUND(AVG(s.sqd4) * 20, 2), 0) as sqd4,
-            IFNULL(ROUND(AVG(s.sqd5) * 20, 2), 0) as sqd5,
-            IFNULL(ROUND(AVG(s.sqd6) * 20, 2), 0) as sqd6,
-            IFNULL(ROUND(AVG(s.sqd7) * 20, 2), 0) as sqd7,
-            IFNULL(ROUND(AVG(s.sqd8) * 20, 2), 0) as sqd8,
-            IFNULL(ROUND(AVG((IFNULL(s.sqd1,0) + IFNULL(s.sqd2,0) + IFNULL(s.sqd3,0) + IFNULL(s.sqd4,0) + IFNULL(s.sqd5,0) + IFNULL(s.sqd6,0) + IFNULL(s.sqd7,0) + IFNULL(s.sqd8,0)) / 8) * 20, 2), 0) as overall_score
+            ${sqdScoreExpr(['s.sqd1'])} as sqd1,
+            ${sqdScoreExpr(['s.sqd2'])} as sqd2,
+            ${sqdScoreExpr(['s.sqd3'])} as sqd3,
+            ${sqdScoreExpr(['s.sqd4'])} as sqd4,
+            ${sqdScoreExpr(['s.sqd5'])} as sqd5,
+            ${sqdScoreExpr(['s.sqd6'])} as sqd6,
+            ${sqdScoreExpr(['s.sqd7'])} as sqd7,
+            ${sqdScoreExpr(['s.sqd8'])} as sqd8,
+            ${sqdScoreExpr(ALL_SQD_COLS)} as overall_score
         FROM survey_responses s
         LEFT JOIN offices o ON s.office_id = o.id${whereClause}
     `;
@@ -1416,8 +1431,8 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
 // ==========================================
 app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
     const ratingQuery = `
-        SELECT o.cluster_name, 
-               IFNULL(ROUND(AVG((IFNULL(s.sqd1,0) + IFNULL(s.sqd2,0) + IFNULL(s.sqd3,0) + IFNULL(s.sqd4,0) + IFNULL(s.sqd5,0) + IFNULL(s.sqd6,0) + IFNULL(s.sqd7,0) + IFNULL(s.sqd8,0)) / 8) * 20, 2), 0) as rating
+        SELECT o.cluster_name,
+               ${sqdScoreExpr(ALL_SQD_COLS)} as rating
         FROM offices o
         LEFT JOIN survey_responses s ON o.id = s.office_id
         GROUP BY o.cluster_name
@@ -1603,11 +1618,7 @@ function getClusterPerformanceData(clusterName, semester, callback) {
                SUBSTRING(UPPER(o.office_name), 1, 4)
             ) AS label,
             COUNT(s.id) AS resp,
-            ROUND(IFNULL(AVG((
-                IFNULL(s.sqd1,0) + IFNULL(s.sqd2,0) + IFNULL(s.sqd3,0) +
-                IFNULL(s.sqd4,0) + IFNULL(s.sqd5,0) + IFNULL(s.sqd6,0) +
-                IFNULL(s.sqd7,0) + IFNULL(s.sqd8,0)
-            ) / 8) * 20, 0), 1) AS rating
+            ${sqdScoreExpr(ALL_SQD_COLS)} AS rating
         FROM offices o
         LEFT JOIN survey_responses s ON o.id = s.office_id${semesterJoinFilter}
         WHERE o.cluster_name = ?
