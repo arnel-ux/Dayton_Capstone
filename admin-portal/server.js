@@ -465,6 +465,13 @@ CREATE TABLE IF NOT EXISTS survey_settings (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );`;
 
+const createClientTypesTableQuery = `
+CREATE TABLE IF NOT EXISTS client_types (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    type_name VARCHAR(100) NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);`;
+
 const createClientProfilesTableQuery = `
 CREATE TABLE IF NOT EXISTS client_profiles (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -558,6 +565,24 @@ db.query(createClustersTableQuery, (err) => {
                         });
                     }
                 });
+            }
+        });
+    }
+});
+
+db.query(createClientTypesTableQuery, (err) => {
+    if (err) {
+        console.error("❌ Error creating client_types table:", err);
+    } else {
+        console.log('✅ client_types table verified/created successfully!');
+        db.query("SELECT COUNT(*) AS count FROM client_types", (err, result) => {
+            if (!err && result[0].count === 0) {
+                const seedClientTypes = `INSERT IGNORE INTO client_types (type_name) VALUES
+                    ('Citizen'),
+                    ('Business'),
+                    ('Government'),
+                    ('Student');`;
+                db.query(seedClientTypes, () => console.log('✅ Default client types seeded.'));
             }
         });
     }

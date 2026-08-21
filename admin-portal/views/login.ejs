@@ -239,7 +239,8 @@
                 <div class="mb-2">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-light border-end-0"><i class="fas fa-user text-muted"></i></span>
-                        <input type="text" name="username" id="usernameInput" class="form-control bg-light border-start-0 ps-0" placeholder="Enter your username or email" required title="Username or Email">
+                        <input type="text" name="username" id="usernameInput" class="form-control bg-light border-start-0 ps-0" placeholder="Enter your username or email" required title="Username or Email" autocomplete="off" list="usernameSuggestions">
+                        <datalist id="usernameSuggestions"></datalist>
                     </div>
                     <p class="text-muted text-xsmall mt-1 mb-0">Registered clients: enter the email and password you set up when you first signed in with Google.</p>
                 </div>
@@ -284,6 +285,56 @@
             AppAlert.error(loginErrorMsg, 'Login Failed');
             window.history.replaceState({}, document.title, window.location.pathname);
         }
+
+        // Native browser autofill remembers every value ever typed into a text
+        // input (including plain admin usernames), so it's disabled above via
+        // autocomplete="off". Instead we keep our own suggestion list that only
+        // ever stores values that look like an email (i.e. contain '@'), so
+        // admin usernames never show up as a suggestion here.
+        (function () {
+            const STORAGE_KEY = 'cqa_username_suggestions';
+            const MAX_SUGGESTIONS = 10;
+
+            function loadSuggestions() {
+                try {
+                    const raw = localStorage.getItem(STORAGE_KEY);
+                    const list = raw ? JSON.parse(raw) : [];
+                    return Array.isArray(list) ? list.filter(v => typeof v === 'string' && v.includes('@')) : [];
+                } catch (e) {
+                    return [];
+                }
+            }
+
+            function saveSuggestion(value) {
+                if (!value || !value.includes('@')) return;
+                const list = loadSuggestions().filter(v => v.toLowerCase() !== value.toLowerCase());
+                list.unshift(value);
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, MAX_SUGGESTIONS)));
+                } catch (e) { /* ignore storage errors */ }
+            }
+
+            function renderDatalist() {
+                const datalist = document.getElementById('usernameSuggestions');
+                if (!datalist) return;
+                datalist.innerHTML = '';
+                loadSuggestions().forEach(value => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    datalist.appendChild(option);
+                });
+            }
+
+            renderDatalist();
+
+            const form = document.getElementById('loginForm');
+            const usernameInput = document.getElementById('usernameInput');
+            if (form && usernameInput) {
+                form.addEventListener('submit', function () {
+                    saveSuggestion(usernameInput.value.trim());
+                });
+            }
+        })();
     </script>
 </body>
 </html>
