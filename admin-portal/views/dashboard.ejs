@@ -8,38 +8,62 @@
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-            --bg-body: #f1f5f9;
+            --bg-body: #f4f6fb;
+            --border-soft: rgba(15, 23, 42, 0.06);
+            --text-dark: #0f172a;
+            --text-muted: #64748b;
         }
 
-        body { background-color: var(--bg-body); font-family: 'Plus Jakarta Sans', sans-serif; }
+        body { background-color: var(--bg-body); font-family: 'Plus Jakarta Sans', sans-serif; color: var(--text-dark); }
+
+        .page-heading { letter-spacing: -0.02em; }
 
         /* Modern Header Card */
         .overall-header-card {
             background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
-            color: white; border-radius: 20px; position: relative; box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            color: white; border-radius: 16px; position: relative;
+            box-shadow: 0 8px 24px -4px rgba(30, 27, 75, 0.35);
+            overflow: hidden;
+        }
+        .overall-header-card::after {
+            content: ''; position: absolute; inset: 0;
+            background: radial-gradient(circle at 85% 15%, rgba(255,255,255,0.08), transparent 55%);
+            pointer-events: none;
         }
 
         /* Interactive Summary Statistics Cards */
         .stat-card {
-            background: white; border: 1px solid rgba(0,0,0,0.05); border-radius: 18px;
-            transition: all 0.3s ease; height: 100%; text-decoration: none !important;
+            background: white; border: 1px solid var(--border-soft); border-radius: 16px;
+            transition: box-shadow 0.2s ease, border-color 0.2s ease; height: 100%; text-decoration: none !important;
             display: flex; flex-direction: column; color: inherit;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
         }
-        .stat-card:hover { transform: translateY(-5px); box-shadow: 0 15px 35px rgba(0,0,0,0.1); }
+        .stat-card:hover { border-color: rgba(79, 70, 229, 0.25); box-shadow: 0 8px 20px -6px rgba(79, 70, 229, 0.18); }
 
         /* Cluster Mini Summary Cards */
         .cluster-mini-card {
-            background: white;
-            border-left: 5px solid #4f46e5; border-radius: 12px;
-            padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); height: 100%;
+            background: white; border: 1px solid var(--border-soft);
+            border-left: 4px solid #4f46e5; border-radius: 12px;
+            padding: 20px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); height: 100%;
+            transition: box-shadow 0.2s ease;
         }
+        .cluster-mini-card:hover { box-shadow: 0 6px 16px -6px rgba(15, 23, 42, 0.12); }
 
         .chart-container-main {
-            background: white;
-            border-radius: 20px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+            background: white; border: 1px solid var(--border-soft);
+            border-radius: 16px; padding: 28px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
         }
 
-        .count-up { font-size: 2.5rem; font-weight: 800; }
+        .filter-bar {
+            background: white; border: 1px solid var(--border-soft);
+            border-radius: 14px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        }
+
+        .section-eyebrow {
+            font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; color: var(--text-muted);
+        }
+
+        .count-up { font-size: 2.25rem; font-weight: 800; letter-spacing: -0.02em; }
 
         /* --- REPORT MODAL INTERFACE STYLES --- */
         #reportModal {
@@ -100,9 +124,9 @@
 
         <div class="container-fluid px-4 py-4">
             
-            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
                 <div>
-                    <h4 class="fw-bold text-dark mb-0">Dashboard Overview</h4>
+                    <h4 class="page-heading fw-bold text-dark mb-0">Dashboard Overview</h4>
                     <p class="text-muted small mb-0">Institution-wide client satisfaction summary</p>
                 </div>
                 <button onclick="openReportModal()" class="btn btn-primary shadow-sm px-4" title="Generate a printable institutional report">
@@ -110,20 +134,20 @@
                 </button>
             </div>
 
-            <form action="/dashboard" method="GET" class="d-flex flex-wrap align-items-end gap-3 mb-4 p-3 bg-white rounded-4 shadow-sm">
+            <form action="/dashboard" method="GET" class="filter-bar d-flex flex-wrap align-items-end gap-3 mb-4 p-3">
                 <div>
-                    <label for="semester" class="form-label small fw-bold text-muted text-uppercase mb-1">Semester</label>
-                    <select id="semester" name="semester" class="form-select form-select-sm" title="Filter records by semester" onchange="this.form.submit()">
-                        <option value="">All Semesters</option>
-                        <% if (typeof semesterOptions !== 'undefined') { %>
-                            <% semesterOptions.forEach(opt => { %>
-                                <option value="<%= opt.value %>" <%= selectedSemester === opt.value ? 'selected' : '' %>><%= opt.label %></option>
+                    <label for="periodCovered" class="form-label section-eyebrow mb-1">Period Covered</label>
+                    <select id="periodCovered" name="periodCovered" class="form-select form-select-sm" title="Filter records by period covered" onchange="this.form.submit()">
+                        <option value="">All Periods</option>
+                        <% if (typeof periodOptions !== 'undefined') { %>
+                            <% periodOptions.forEach(opt => { %>
+                                <option value="<%= opt.value %>" <%= selectedPeriod === opt.value ? 'selected' : '' %>><%= opt.label %></option>
                             <% }) %>
                         <% } %>
                     </select>
                 </div>
-                <% if (typeof selectedSemester !== 'undefined' && selectedSemester) { %>
-                    <a href="/dashboard" class="btn btn-outline-secondary btn-sm px-3" title="Clear the semester filter"><i class="fas fa-times me-1"></i> Clear</a>
+                <% if (typeof selectedPeriod !== 'undefined' && selectedPeriod) { %>
+                    <a href="/dashboard" class="btn btn-outline-secondary btn-sm px-3" title="Clear the period filter"><i class="fas fa-times me-1"></i> Clear</a>
                 <% } %>
             </form>
 
@@ -134,20 +158,20 @@
                             <div class="col-md-8">
                                 <h6 class="text-uppercase text-indigo-300 fw-bold mb-2 small" style="letter-spacing: 2px;">Overall Institutional Rating</h6>
                                 <div class="d-flex align-items-baseline">
-                                    <h1 class="display-3 fw-bold mb-0"><%= typeof satisfactionRate !== 'undefined' ? satisfactionRate : '0.00' %></h1>
-                                    <span class="fs-2 ms-2 opacity-50">%</span>
+                                    <h1 class="display-4 fw-bold mb-0"><%= typeof satisfactionRate !== 'undefined' ? satisfactionRate : '0.00' %></h1>
+                                    <span class="fs-3 ms-2 opacity-50">%</span>
                                 </div>
                                 <div class="mt-3">
-                                    <span class="badge bg-success bg-opacity-25 text-success border border-success px-3 py-2 rounded-pill">
+                                    <span class="badge bg-success bg-opacity-25 text-success border border-success px-3 py-2 rounded-pill fw-semibold">
                                         <i class="fas fa-certificate me-1"></i> LEVEL 4 <%= typeof dashboardData !== 'undefined' ? dashboardData.overallLevel : 'OUTSTANDING' %>
                                     </span>
                                 </div>
                             </div>
- 
+
                             <div class="col-md-4 text-md-end mt-4 mt-md-0">
-                                <div class="p-3 bg-white bg-opacity-10 rounded-4">
-                                    <small class="opacity-75 d-block mb-1">Current Data Year</small>
-                                    <h6 class="mb-0 fw-bold"><i class="far fa-calendar-check me-2"></i><%= typeof dashboardData !== 'undefined' ? dashboardData.academicYear : 'A.Y. 2026-2027' %></h6>
+                                <div class="p-3 bg-white bg-opacity-10 rounded-4 border border-white border-opacity-10">
+                                    <small class="opacity-75 d-block mb-1">Period Covered</small>
+                                    <h6 class="mb-0 fw-bold"><i class="far fa-calendar-check me-2"></i><%= typeof dashboardData !== 'undefined' ? dashboardData.periodCoveredLabel : 'All Periods' %></h6>
                                 </div>
                             </div>
                         </div>
@@ -155,7 +179,7 @@
                 </div>
 
                 <div class="col-xl-4 col-lg-5">
-                    <a href="/survey-records" class="stat-card p-4 shadow-sm border-0">
+                    <a href="/survey-records" class="stat-card p-4">
                         <div class="d-flex align-items-center mb-2">
                             <div class="p-3 bg-primary bg-opacity-10 rounded-3 text-primary me-3">
                                 <i class="fas fa-clipboard-check fa-xl"></i>
@@ -180,11 +204,10 @@
                         <div class="d-md-flex justify-content-between align-items-center mb-4">
                             <div>
                                 <h5 class="fw-bold text-dark mb-1">Cluster Performance Analytics</h5>
-                                <p class="text-muted small mb-0">Comparison of Volume (Respondents) vs Quality (Satisfaction Rate)</p>
+                                <p class="text-muted small mb-0">Total respondents per cluster</p>
                             </div>
                             <div class="d-flex gap-3 small fw-bold mt-2 mt-md-0">
                                 <div><i class="fas fa-square text-primary me-1"></i> Respondents Volume</div>
-                                <div><i class="fas fa-minus text-success me-1" style="font-weight:900;"></i> Satisfaction Rating %</div>
                             </div>
                         </div>
                         <div style="height: 350px; position: relative;">
@@ -199,21 +222,18 @@
                     <% clusterCards.forEach(card => { %>
                         <div class="col-xl-3 col-md-6">
                             <div class="cluster-mini-card" style="border-left: 5px solid <%= card.color || '#4f46e5' %>;">
-                                <h6 class="text-muted fw-bold small text-uppercase mb-1"><%= card.name %></h6>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <h3 class="fw-bold mb-0 text-dark"><span class="count-up"><%= card.rating %></span><span class="fs-6 opacity-50">%</span></h3>
-                                    <span class="badge bg-light text-secondary border rounded-pill small"><i class="fas fa-users me-1"></i><%= card.respondents %></span>
-                                </div>
+                                <h6 class="text-muted fw-bold small text-uppercase mb-2"><%= card.name %></h6>
+                                <span class="badge bg-light text-secondary border rounded-pill small"><i class="fas fa-users me-1"></i><%= card.respondents %> Respondents</span>
                             </div>
                         </div>
                     <% }) %>
                 </div>
             <% } else { %>
                 <div class="row g-4">
-                    <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #4f46e5;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Office of the President</h6><div class="d-flex justify-content-between align-items-center"><h3 class="fw-bold mb-0">0.00%</h3><span class="badge bg-light text-secondary border rounded-pill small">0 Res.</span></div></div></div>
-                    <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #10b981;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Admin & Finance</h6><div class="d-flex justify-content-between align-items-center"><h3 class="fw-bold mb-0">0.00%</h3><span class="badge bg-light text-secondary border rounded-pill small">0 Res.</span></div></div></div>
-                    <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #f59e0b;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Research & Innovation</h6><div class="d-flex justify-content-between align-items-center"><h3 class="fw-bold mb-0">0.00%</h3><span class="badge bg-light text-secondary border rounded-pill small">0 Res.</span></div></div></div>
-                    <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #8b5cf6;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Academic Cluster</h6><div class="d-flex justify-content-between align-items-center"><h3 class="fw-bold mb-0">0.00%</h3><span class="badge bg-light text-secondary border rounded-pill small">0 Res.</span></div></div></div>
+                    <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #4f46e5;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Office of the President</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
+                    <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #10b981;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Admin & Finance</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
+                    <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #f59e0b;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Research & Innovation</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
+                    <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #8b5cf6;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Academic Cluster</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
                 </div>
             <% } %>
 
@@ -243,7 +263,7 @@
             </div>
 
             <h5 class="print-title">Client Satisfaction Measurement (CSM) Institutional Report</h5>
-            <p class="print-period">Evaluation Period: <%= typeof dashboardData !== 'undefined' ? dashboardData.academicYear : 'A.Y. 2026-2027' %></p>
+            <p class="print-period">Period Covered: <%= typeof dashboardData !== 'undefined' ? dashboardData.periodCoveredLabel : 'All Periods' %></p>
 
             <table class="print-table">
                 <thead>
@@ -326,7 +346,6 @@ document.addEventListener("DOMContentLoaded", function() {
     // --- 2. CHART.JS CONFIGURATION & RENDER PIPELINE ---
     const chartLabels = <%- typeof chartData !== 'undefined' ? JSON.stringify(chartData.labels) : JSON.stringify(['Office of President', 'Admin & Finance', 'Research & Innov.', 'Academic Affairs', 'Other Offices']) %>;
     const chartRespondents = <%- typeof chartData !== 'undefined' ? JSON.stringify(chartData.respondents) : JSON.stringify([0, 0, 0, 0, 0]) %>;
-    const chartRatings = <%- typeof chartData !== 'undefined' ? JSON.stringify(chartData.ratings) : JSON.stringify([0, 0, 0, 0, 0]) %>;
 
     const ctx = document.getElementById('clusterAnalyticsChart').getContext('2d');
     new Chart(ctx, {
@@ -338,24 +357,9 @@ document.addEventListener("DOMContentLoaded", function() {
                     label: 'Respondents Count (Volume)',
                     data: chartRespondents,
                     backgroundColor: 'rgba(79, 70, 229, 0.85)',
-                    borderColor: '#4f46e5',
-                    borderWidth: 1,
+                    hoverBackgroundColor: '#4f46e5',
                     borderRadius: 8,
-                    yAxisID: 'y'
-                },
-                {
-                    label: 'Satisfaction Rate % (Quality)',
-                    data: chartRatings,
-                    type: 'line',
-                    borderColor: '#10b981',
-                    backgroundColor: '#10b981',
-                    borderWidth: 3,
-                    pointBackgroundColor: '#fff',
-                    pointBorderColor: '#10b981',
-                    pointRadius: 6,
-                    pointHoverRadius: 8,
-                    tension: 0.3,
-                    yAxisID: 'y1'
+                    maxBarThickness: 56
                 }
             ]
         },
@@ -366,13 +370,11 @@ document.addEventListener("DOMContentLoaded", function() {
                 legend: { display: false },
                 tooltip: {
                     backgroundColor: '#0f172a',
-                    padding: 15,
+                    padding: 12,
                     cornerRadius: 10,
+                    displayColors: false,
                     callbacks: {
                         label: function(context) {
-                            if (context.dataset.type === 'line') {
-                                return `Satisfaction: ${context.raw}%`;
-                            }
                             return `Respondents: ${context.raw.toLocaleString()}`;
                         }
                     }
@@ -381,17 +383,8 @@ document.addEventListener("DOMContentLoaded", function() {
             scales: {
                 y: {
                     beginAtZero: true,
-                    position: 'left',
-                    title: { display: true, text: 'Total Volume of Respondents', font: { weight: 'bold' } },
+                    title: { display: true, text: 'Total Respondents', font: { weight: 'bold' } },
                     grid: { color: '#f1f5f9' }
-                },
-                y1: {
-                    position: 'right',
-                    min: 0,
-                    max: 100,
-                    title: { display: true, text: 'Satisfaction Percentage (%)', font: { weight: 'bold' } },
-                    grid: { drawOnChartArea: false },
-                    ticks: { callback: function(value) { return value + '%'; } }
                 },
                 x: {
                     grid: { display: false },

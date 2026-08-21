@@ -94,12 +94,12 @@
 
                 <form class="filter-bar" method="GET" action="/cluster/office-of-the-president">
                     <div class="filter-group">
-                        <label for="semester">Semester</label>
-                        <select id="semester" name="semester" class="form-select form-select-sm" title="Filter by semester" onchange="this.form.submit()">
-                            <option value="">All Semesters</option>
-                            <% if (typeof semesterOptions !== 'undefined') { %>
-                                <% semesterOptions.forEach(opt => { %>
-                                    <option value="<%= opt.value %>" <%= selectedSemester === opt.value ? 'selected' : '' %>><%= opt.label %></option>
+                        <label for="periodCovered">Period Covered</label>
+                        <select id="periodCovered" name="periodCovered" class="form-select form-select-sm" title="Filter by period covered" onchange="this.form.submit()">
+                            <option value="">All Periods</option>
+                            <% if (typeof periodOptions !== 'undefined') { %>
+                                <% periodOptions.forEach(opt => { %>
+                                    <option value="<%= opt.value %>" <%= selectedPeriod === opt.value ? 'selected' : '' %>><%= opt.label %></option>
                                 <% }) %>
                             <% } %>
                         </select>
@@ -147,7 +147,7 @@
                 <div id="officeReportEmptyState" class="chart-card text-center text-muted py-5">
                     <i class="fas fa-chart-bar fa-3x mb-3 text-light"></i>
                     <h5>No Report Generated Yet</h5>
-                    <p class="mb-0">Select a semester and/or office above, then click "Generate Report" to view the detailed CSM report.</p>
+                    <p class="mb-0">Select a period covered and/or office above, then click "Generate Report" to view the detailed CSM report.</p>
                 </div>
 
                 <div id="officeReportWrapper" class="d-none">
@@ -307,7 +307,7 @@
 
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            // Tumatanggap ng real-time query mula sa server.js tuwing niloload ang page (already semester-filtered server-side)
+            // Tumatanggap ng real-time query mula sa server.js tuwing niloload ang page (already period-filtered server-side)
             const currentData = <%- typeof data !== 'undefined' ? JSON.stringify(data) : '[]' %>;
             
             Chart.register(ChartDataLabels);
@@ -364,10 +364,9 @@
                                 anchor: 'end', align: 'end', color: '#1e293b', 
                                 font: { weight: '800', size: 11 },
                                 formatter: function(value, context) {
-                                    // Lalagyan ng % symbol kapag rating, whole number lang kapag respondent
-                                    if(context.datasetIndex === 1) return value + '%';
+                                    if(context.datasetIndex === 1) return '';
                                     if(value === 0) return '';
-                                    return value; 
+                                    return value;
                                 }
                             },
                             tooltip: {
@@ -420,16 +419,16 @@
 
         function renderOfficeReport() {
             const officeSelect = document.getElementById('officeFilter');
-            const semesterSelect = document.getElementById('semester');
+            const periodSelect = document.getElementById('periodCovered');
             const officeId = officeSelect.value;
-            const semester = semesterSelect.value;
+            const periodCovered = periodSelect.value;
 
             const officeLabel = officeId
                 ? officeSelect.options[officeSelect.selectedIndex].text
                 : `ALL OFFICES — ${CLUSTER_NAME.toUpperCase()}`;
-            const periodLabel = semester
-                ? semesterSelect.options[semesterSelect.selectedIndex].text
-                : 'All Semesters';
+            const periodLabel = periodCovered
+                ? periodSelect.options[periodSelect.selectedIndex].text
+                : 'All Periods';
 
             document.getElementById('officeReportTitle1').innerText = officeLabel;
             document.getElementById('officeReportTitle2').innerText = officeLabel;
@@ -439,7 +438,7 @@
             fetch('/api/report-data', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cluster: CLUSTER_NAME, officeId: officeId, semester: semester })
+                body: JSON.stringify({ cluster: CLUSTER_NAME, officeId: officeId, periodCovered: periodCovered })
             })
                 .then(res => res.json())
                 .then(data => {

@@ -262,6 +262,27 @@ function sqdScoreExpr(cols) {
 }
 const ALL_SQD_COLS = [1, 2, 3, 4, 5, 6, 7, 8].map(i => `s.sqd${i}`);
 
+// ==========================================
+// PERIOD COVERED HELPERS
+// ==========================================
+// Submission tagging stays dynamic (server date -> period string) since the
+// client can't tamper with it. The filter dropdown, however, is a fixed,
+// known set of periods -- kept as a static list rather than derived from
+// whatever happens to be in the database, to avoid legacy/inconsistent
+// strings leaking into the UI.
+function getPeriodCovered(date = new Date()) {
+    const year = date.getFullYear();
+    const month = date.getMonth(); // 0 = Jan ... 11 = Dec
+    return month <= 5 ? `Jan to June ${year}` : `July to Dec ${year}`;
+}
+
+const PERIOD_COVERED_OPTIONS = [
+    { value: 'Jan to June 2026', label: 'Jan to June 2026' },
+    { value: 'July to Dec 2026', label: 'July to Dec 2026' },
+    { value: 'Jan to June 2027', label: 'Jan to June 2027' },
+    { value: 'July to Dec 2027', label: 'July to Dec 2027' }
+];
+
 // Sends the client a proof-of-completion receipt of exactly what they just
 // submitted. Fire-and-forget: called AFTER the client already got its
 // success response, so a slow or failed send can never hold up the survey.
@@ -441,7 +462,7 @@ CREATE TABLE IF NOT EXISTS survey_responses (
     sqd0 INT NULL, sqd1 INT NULL, sqd2 INT NULL, sqd3 INT NULL, 
     sqd4 INT NULL, sqd5 INT NULL, sqd6 INT NULL, sqd7 INT NULL, sqd8 INT NULL,
     comments TEXT NULL,
-    period_year_quarter VARCHAR(50) DEFAULT 'Jan - Jun 2026',
+    period_year_quarter VARCHAR(50) DEFAULT 'Jan to June 2026',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE
 );`;
@@ -956,10 +977,7 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
 
     function submitSurveyResponse() {
     // DYNAMIC 6-MONTH PERIOD LOGIC (BASED ON CURRENT DATE OF SUBMISSION)
-    const currentDate = new Date();
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth(); // 0 to 11
-    const currentPeriod = currentMonth < 6 ? `Jan - Jun ${currentYear}` : `Jul - Dec ${currentYear}`;
+    const currentPeriod = getPeriodCovered();
 
     const insertQuery = `
         INSERT INTO survey_responses
@@ -1149,10 +1167,7 @@ async function syncOneSurvey(googleEmail, body) {
         topic = 'General Feedback';
     }
 
-    const currentDate = new Date();
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth();
-    const currentPeriod = currentMonth < 6 ? `Jan - Jun ${currentYear}` : `Jul - Dec ${currentYear}`;
+    const currentPeriod = getPeriodCovered();
 
     let insertResult;
     try {
@@ -1211,39 +1226,18 @@ async function syncOneSurvey(googleEmail, body) {
 }
 
 // ==========================================
-// SEMESTER FILTER HELPERS
-// ==========================================
-// Survey submissions are auto-tagged with a period string like "Jan - Jun 2026"
-// or "Jul - Dec 2026" (see submitSurveyResponse). These map 1:1 onto academic
-// semesters, so we surface them as a single "Semester" dropdown everywhere
-// instead of separate Start Date / End Date / Quarter pickers.
-function periodToSemesterLabel(period) {
-    const match = /^(Jan - Jun|Jul - Dec) (\d{4})$/.exec(period || '');
-    if (!match) return period;
-    const semester = match[1] === 'Jan - Jun' ? '1st Semester' : '2nd Semester';
-    return `${semester}, A.Y. ${match[2]}`;
-}
-
-function getSemesterOptions(callback) {
-    db.query(
-        'SELECT DISTINCT period_year_quarter FROM survey_responses WHERE period_year_quarter IS NOT NULL ORDER BY period_year_quarter DESC',
-        (err, rows) => {
-            if (err || !rows) return callback([]);
-            callback(rows.map(r => ({ value: r.period_year_quarter, label: periodToSemesterLabel(r.period_year_quarter) })));
-        }
-    );
-}
-
-// ==========================================
 // 2. Admin Dashboard Routes
 // ==========================================
 app.get('/dashboard', ensureAdminAuth, noCache, (req, res) => {
-    const { semester } = req.query;
-    const hasSemesterFilter = !!semester;
+    // No periodCovered in the querystring at all -> default to the current
+    // active period; an explicit "" (All Periods) is a deliberate user choice.
+    const hasQueryParam = typeof req.query.periodCovered !== 'undefined';
+    const selectedPeriod = hasQueryParam ? req.query.periodCovered : getPeriodCovered();
+    const hasPeriodFilter = !!selectedPeriod;
 
-    const dateWhere = hasSemesterFilter ? ' WHERE s.period_year_quarter = ? ' : '';
-    const dateWhereAnd = hasSemesterFilter ? ' AND s.period_year_quarter = ? ' : '';
-    const dateParams = hasSemesterFilter ? [semester] : [];
+    const dateWhere = hasPeriodFilter ? ' WHERE s.period_year_quarter = ? ' : '';
+    const dateWhereAnd = hasPeriodFilter ? ' AND s.period_year_quarter = ? ' : '';
+    const dateParams = hasPeriodFilter ? [selectedPeriod] : [];
 
     db.query(`SELECT COUNT(*) AS total FROM survey_responses s${dateWhere}`, dateParams, (err, totalRes) => {
         const totalRespondents = (totalRes && totalRes[0]) ? totalRes[0].total : 0;
@@ -1337,13 +1331,11 @@ app.get('/dashboard', ensureAdminAuth, noCache, (req, res) => {
                             });
                         }
 
-                        getSemesterOptions((semesterOptions) => {
-                            res.render('dashboard', {
-                                dashboardData: { overallRating: overallAvgScore, overallLevel: interpretation, academicYear: "A.Y. 2026-2027" },
-                                chartData: chartData, clusterCards: clusterCards, satisfactionRate: overallAvgScore,
-                                totalRespondents: totalRespondents, totalOffices: totalOffices, reportData: reportData,
-                                semesterOptions: semesterOptions, selectedSemester: semester || ''
-                            });
+                        res.render('dashboard', {
+                            dashboardData: { overallRating: overallAvgScore, overallLevel: interpretation, periodCoveredLabel: selectedPeriod || 'All Periods' },
+                            chartData: chartData, clusterCards: clusterCards, satisfactionRate: overallAvgScore,
+                            totalRespondents: totalRespondents, totalOffices: totalOffices, reportData: reportData,
+                            periodOptions: PERIOD_COVERED_OPTIONS, selectedPeriod: selectedPeriod || ''
                         });
                     });
                 });
@@ -1368,9 +1360,9 @@ app.get('/report', ensureAdminAuth, noCache, (req, res) => {
 // Powers both the institution-wide /report page (sends `office` by name) and the
 // per-cluster "Select Office" drill-down (sends `cluster` + `officeId`, so "All
 // Offices" on a cluster page still scopes to that cluster instead of the whole
-// institution). `semester` narrows further to one period_year_quarter.
+// institution). `periodCovered` narrows further to one fixed date range.
 app.post('/api/report-data', ensureAdminAuth, (req, res) => {
-    const { office, officeId, cluster, semester } = req.body;
+    const { office, officeId, cluster, periodCovered } = req.body;
 
     const conditions = [];
     const queryParams = [];
@@ -1386,9 +1378,9 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
         conditions.push('o.office_name = ?');
         queryParams.push(office);
     }
-    if (semester) {
+    if (periodCovered) {
         conditions.push('s.period_year_quarter = ?');
-        queryParams.push(semester);
+        queryParams.push(periodCovered);
     }
 
     const whereClause = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
@@ -1607,8 +1599,8 @@ app.post('/settings/restore', ensureAdminAuth, (req, res) => {
 // ==========================================
 // 5. Helper Function para sa Cluster Queries
 // ==========================================
-function getClusterPerformanceData(clusterName, semester, callback) {
-    const semesterJoinFilter = semester ? ' AND s.period_year_quarter = ?' : '';
+function getClusterPerformanceData(clusterName, periodCovered, callback) {
+    const periodJoinFilter = periodCovered ? ' AND s.period_year_quarter = ?' : '';
     const clusterQuery = `
         SELECT
             o.id,
@@ -1620,11 +1612,11 @@ function getClusterPerformanceData(clusterName, semester, callback) {
             COUNT(s.id) AS resp,
             ${sqdScoreExpr(ALL_SQD_COLS)} AS rating
         FROM offices o
-        LEFT JOIN survey_responses s ON o.id = s.office_id${semesterJoinFilter}
+        LEFT JOIN survey_responses s ON o.id = s.office_id${periodJoinFilter}
         WHERE o.cluster_name = ?
         GROUP BY o.id, o.office_name
     `;
-    const queryParams = semester ? [semester, clusterName] : [clusterName];
+    const queryParams = periodCovered ? [periodCovered, clusterName] : [clusterName];
 
     db.query(clusterQuery, queryParams, (err, results) => {
         if (err) return callback(err, null);
@@ -1658,17 +1650,17 @@ function getOfficesForCluster(clusterName, callback) {
 // ==========================================
 function renderClusterPage(view, clusterName) {
     return (req, res) => {
-        const semester = req.query.semester || '';
-        getClusterPerformanceData(clusterName, semester, (err, data) => {
-            getSemesterOptions((semesterOptions) => {
-                getOfficesForCluster(clusterName, (officesInCluster) => {
-                    res.render(view, {
-                        data: data || [],
-                        semesterOptions: semesterOptions,
-                        selectedSemester: semester,
-                        officesInCluster: officesInCluster,
-                        clusterName: clusterName
-                    });
+        const hasQueryParam = typeof req.query.periodCovered !== 'undefined';
+        const selectedPeriod = hasQueryParam ? req.query.periodCovered : getPeriodCovered();
+
+        getClusterPerformanceData(clusterName, selectedPeriod, (err, data) => {
+            getOfficesForCluster(clusterName, (officesInCluster) => {
+                res.render(view, {
+                    data: data || [],
+                    periodOptions: PERIOD_COVERED_OPTIONS,
+                    selectedPeriod: selectedPeriod || '',
+                    officesInCluster: officesInCluster,
+                    clusterName: clusterName
                 });
             });
         });
@@ -1727,9 +1719,9 @@ app.get('/api/public-dashboard', (req, res) => {
         });
 
         results.forEach(row => {
-            // MAPPING LOGIC: Hinahati ang DB record papunta sa p1 o p2 para mag-reset at magsilbing archive ang past semester
+            // MAPPING LOGIC: Hinahati ang DB record papunta sa p1 o p2 para mag-reset at magsilbing archive ang past period
             const periodStr = row.period_year_quarter || '';
-            const p = periodStr.includes('Jul - Dec') ? 'p2' : 'p1';
+            const p = periodStr.includes('July to Dec') ? 'p2' : 'p1';
 
             const cIdx = clusterList.indexOf(row.cluster_name);
             const oIdx = officeList.indexOf(row.office_name);
@@ -1802,6 +1794,6 @@ app.get('/api/public-dashboard', (req, res) => {
 // ==========================================
 // SERVER START
 // ==========================================
-app.listen(port, () => {
+app.listen(3000, '0.0.0.0', () => {
     console.log(`🚀 Server is running at http://localhost:${port}`);
 });
