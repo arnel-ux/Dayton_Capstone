@@ -3,8 +3,8 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Aug 07, 2026 at 04:38 PM
--- Server version: 8.0.42
+-- Generation Time: Aug 21, 2026 at 07:16 AM
+-- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
@@ -24,33 +24,65 @@ SET time_zone = "+00:00";
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `client_accounts`
+--
+
+CREATE TABLE `client_accounts` (
+  `email` varchar(255) NOT NULL,
+  `respondent_name` varchar(255) DEFAULT NULL,
+  `region` varchar(100) DEFAULT NULL,
+  `age` varchar(50) DEFAULT NULL,
+  `gender` varchar(50) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `password` varchar(255) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `client_accounts`
+--
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `client_profiles`
 --
 
 CREATE TABLE `client_profiles` (
-  `id` int NOT NULL,
-  `survey_response_id` int NOT NULL,
-  `respondent_name` varchar(255) COLLATE utf8mb4_general_ci DEFAULT 'Anonymous',
-  `client_type` varchar(100) COLLATE utf8mb4_general_ci DEFAULT 'Citizen',
-  `age` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `gender` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `region` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `email` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  `id` int(11) NOT NULL,
+  `survey_response_id` int(11) NOT NULL,
+  `respondent_name` varchar(255) DEFAULT 'Anonymous',
+  `client_type` varchar(100) DEFAULT 'Citizen',
+  `age` varchar(50) DEFAULT NULL,
+  `gender` varchar(50) DEFAULT NULL,
+  `region` varchar(100) DEFAULT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `client_profiles`
 --
+-- --------------------------------------------------------
 
-INSERT INTO `client_profiles` (`id`, `survey_response_id`, `respondent_name`, `client_type`, `age`, `gender`, `region`, `email`, `created_at`) VALUES
-(1, 13, 'Anonymous', 'Citizen', 'Not Specified', 'Not Specified', 'Not Specified', 'Not Specified', '2026-07-13 14:18:34'),
-(2, 14, 'Anonymous', 'Citizen', 'Not Specified', 'Not Specified', 'Not Specified', 'Not Specified', '2026-07-13 14:36:34'),
-(3, 15, 'kenneth', 'Business', '19-24', 'Male', 'Region V - Bicol Region', 'op@cspc.edu.ph', '2026-07-13 14:46:48'),
-(4, 16, 'namemo', 'Government', '19-24', 'Male', 'NCR - National Capital Region', 'frobis@gmail.com', '2026-07-24 12:34:16'),
-(5, 17, 'csd', 'Business', '19-24', 'Not Specified', 'NCR - National Capital Region', 'frobis@gmail.com', '2026-07-24 12:43:03'),
-(6, 18, 'bebe', 'Citizen', '25-39', 'Male', 'Region I - Ilocos Region', '09630153103', '2026-07-24 13:05:43'),
-(7, 19, 'Arnel Marquina', 'Business', '18 and below', 'Not Specified', 'Region V - Bicol Region', 'arnelmarquina@gmail.com', '2026-08-07 14:03:19');
+--
+-- Table structure for table `client_types`
+--
+
+CREATE TABLE `client_types` (
+  `id` int(11) NOT NULL,
+  `type_name` varchar(100) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `client_types`
+--
+
+INSERT INTO `client_types` (`id`, `type_name`) VALUES
+(1, 'Citizen'),
+(2, 'Business'),
+(3, 'Government'),
+(4, 'Student');
 
 -- --------------------------------------------------------
 
@@ -59,9 +91,9 @@ INSERT INTO `client_profiles` (`id`, `survey_response_id`, `respondent_name`, `c
 --
 
 CREATE TABLE `clusters` (
-  `id` int NOT NULL,
-  `cluster_name` varchar(150) COLLATE utf8mb4_general_ci NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  `id` int(11) NOT NULL,
+  `cluster_name` varchar(150) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -72,9 +104,7 @@ INSERT INTO `clusters` (`id`, `cluster_name`, `created_at`) VALUES
 (1, 'Office of the President Cluster', '2026-07-13 15:02:10'),
 (2, 'Administrative and Finance Cluster', '2026-07-13 15:02:10'),
 (3, 'Academic Cluster', '2026-07-13 15:02:10'),
-(4, 'Research, Innovation and Collaboration Cluster', '2026-07-13 15:02:10'),
-(6, 'MICT', '2026-07-13 15:03:58'),
-(9, 'SASO', '2026-07-13 15:21:47');
+(4, 'Research, Innovation and Collaboration Cluster', '2026-07-13 15:02:10');
 
 -- --------------------------------------------------------
 
@@ -83,47 +113,160 @@ INSERT INTO `clusters` (`id`, `cluster_name`, `created_at`) VALUES
 --
 
 CREATE TABLE `offices` (
-  `id` int NOT NULL,
-  `cluster_name` varchar(150) COLLATE utf8mb4_general_ci NOT NULL,
-  `office_name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `head_director` varchar(255) COLLATE utf8mb4_general_ci DEFAULT 'Not Assigned',
-  `email_address` varchar(255) COLLATE utf8mb4_general_ci NOT NULL
+  `id` int(11) NOT NULL,
+  `cluster_name` varchar(150) NOT NULL,
+  `office_name` varchar(255) NOT NULL,
+  `head_director` varchar(255) DEFAULT 'Not Assigned',
+  `email_address` varchar(255) NOT NULL,
+  `is_archived` tinyint(1) NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `offices`
 --
 
-INSERT INTO `offices` (`id`, `cluster_name`, `office_name`, `head_director`, `email_address`) VALUES
-(1, 'Office of the President Cluster', 'OFFICE OF THE PRESIDENT', 'Not Assigned', 'op@cspc.edu.ph'),
-(2, 'Office of the President Cluster', 'VICE PRESIDENT FOR ACADEMIC AFFAIRS OFFICE', 'Not Assigned', 'vpaa@cspc.edu.ph'),
-(3, 'Office of the President Cluster', 'VICE PRESIDENT FOR ADMINISTRATION AND FINANCE OFFICE', 'Not Assigned', 'vpaf@cspc.edu.ph'),
-(4, 'Office of the President Cluster', 'VICE PRESIDENT FOR RESEARCH, INNOVATION AND COLLABORATION OFFICE', 'Not Assigned', 'vpric@cspc.edu.ph'),
-(5, 'Office of the President Cluster', 'CENTER FOR INTERNATIONAL RELATIONS AND LINKAGES', 'Not Assigned', 'cirl@cspc.edu.ph'),
-(6, 'Office of the President Cluster', 'INSTITUTIONAL PLANNING AND DEVELOPMENT OFFICE', 'Not Assigned', 'ipdo@cspc.edu.ph'),
-(7, 'Office of the President Cluster', 'INTERNAL AUDIT UNIT', 'Not Assigned', 'iau@cspc.edu.ph'),
-(8, 'Administrative and Finance Cluster', 'HUMAN RESOURCE MANAGEMENT AND DEVELOPMENT OFFICE', 'Not Assigned', 'hrmdo@cspc.edu.ph'),
-(9, 'Administrative and Finance Cluster', 'RECORDS AND FREEDOM OF INFORMATION OFFICE', 'Not Assigned', 'rfoi@cspc.edu.ph'),
-(10, 'Administrative and Finance Cluster', 'HEALTH SERVICES UNIT', 'Not Assigned', 'hsu@cspc.edu.ph'),
-(11, 'Administrative and Finance Cluster', 'GENERAL SERVICES UNIT', 'Not Assigned', 'gsu@cspc.edu.ph'),
-(12, 'Administrative and Finance Cluster', 'SUPPLY AND PROPERTY MANAGEMENT UNIT', 'Not Assigned', 'spmu@cspc.edu.ph'),
-(13, 'Administrative and Finance Cluster', 'PROJECT MANAGEMENT UNIT', 'Not Assigned', 'pmu@cspc.edu.ph'),
-(14, 'Administrative and Finance Cluster', 'INFORMATION AND COMMUNICATIONS TECHNOLOGY UNIT', 'Not Assigned', 'ictu@cspc.edu.ph'),
-(15, 'Administrative and Finance Cluster', 'ACCOUNTING UNIT', 'Not Assigned', 'accounting@cspc.edu.ph'),
-(16, 'Administrative and Finance Cluster', 'BUDGET UNIT', 'Not Assigned', 'budget@cspc.edu.ph'),
-(17, 'Administrative and Finance Cluster', 'CASH UNIT', 'Not Assigned', 'cash@cspc.edu.ph'),
-(18, 'Administrative and Finance Cluster', 'PRODUCTION AND AUXILIARY SERVICES', 'Not Assigned', 'pas@cspc.edu.ph'),
-(19, 'Administrative and Finance Cluster', 'CENTER FOR RINCONADA CULTURE AND ARTS', 'Not Assigned', 'crca@cspc.edu.ph'),
-(20, 'Academic Cluster', 'COLLEGE OF ENGINEERING AND ARCHITECTURE', 'Not Assigned', 'cea@cspc.edu.ph'),
-(21, 'Academic Cluster', 'COLLEGE OF HEALTH_SCIENCES', 'Not Assigned', 'chs@cspc.edu.ph'),
-(22, 'Academic Cluster', 'BUHI CAMPUSs', 'Not Assigned', 'buhi@cspc.edu.ph'),
-(23, 'Academic Cluster', 'INFORMATION AND ALUMNI AFFAIRS UNIT AND BROADCAST CENTER', 'Not Assigned', 'iaau@cspc.edu.ph'),
-(24, 'Research, Innovation and Collaboration Cluster', 'RESEARCH AND DEVELOPMENT SERVICES OFFICE', 'Not Assigned', 'rdso@cspc.edu.ph'),
-(25, 'Research, Innovation and Collaboration Cluster', 'CENTER FOR EXTENSION AND COMMUNITY SERVICES', 'Not Assigned', 'cecs@cspc.edu.ph'),
-(26, 'Research, Innovation and Collaboration Cluster', 'PRODUCTION AND AUXILIARY SERVICES', 'Not Assigned', 'pas@cspc.edu.ph'),
-(27, 'Research, Innovation and Collaboration Cluster', 'CENTER FOR RINCONADA CULTURE AND ARTS', 'Not Assigned', 'crca@cspc.edu.ph'),
-(28, 'MICT', 'ccs', 'Not Assigned', 'ccs@my.edu.ph'),
-(29, 'SASO', 'Admission offices', 'Not AssigneAd', 'saso@cspc.edu.ph');
+INSERT INTO `offices` (`id`, `cluster_name`, `office_name`, `head_director`, `email_address`, `is_archived`) VALUES
+(1, 'Academic Cluster', 'Student Testing and Admission', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(2, 'Academic Cluster', 'Guidance and Counseling', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(3, 'Academic Cluster', 'Student Registration and Records Office', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(4, 'Administrative and Finance Cluster', 'Health Services Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(5, 'Administrative and Finance Cluster', 'Cash Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(6, 'Administrative and Finance Cluster', 'Budget Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(7, 'Administrative and Finance Cluster', 'Accounting Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(8, 'Administrative and Finance Cluster', 'RFOIU', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(9, 'Administrative and Finance Cluster', 'Human Resource Management and Development Office', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(10, 'Academic Cluster', 'CEA', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(11, 'Academic Cluster', 'CAS', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(12, 'Academic Cluster', 'CTDE', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(13, 'Academic Cluster', 'CCS', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(14, 'Academic Cluster', 'CHS', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(15, 'Academic Cluster', 'CTHBM', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(16, 'Academic Cluster', 'GRADUATE SCHOOL', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(17, 'Academic Cluster', 'BUHI CAMPUS', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(18, 'Academic Cluster', 'Student Affairs and Services', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(19, 'Administrative and Finance Cluster', 'Information and Communications Technology Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(20, 'Not Assigned', 'Internet Center', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(21, 'Administrative and Finance Cluster', 'Supply and Property Management Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(22, 'Administrative and Finance Cluster', 'General Services Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(23, 'Academic Cluster', 'Learning Resources Development Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(24, 'PRESIDENT CLUSTER', 'Office of the President', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(25, 'PRESIDENT CLUSTER', 'VPAA', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(26, 'PRESIDENT CLUSTER', 'VPAF', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(27, 'PRESIDENT CLUSTER', 'VPRIC', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(28, 'Not Assigned', 'VPREPED', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(29, 'Academic Cluster', 'Academic Center for Continuing Enhancement Services for Students (ACCESS)', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(30, 'Academic Cluster', 'Center for Gender and Development (CGAD)', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(31, 'RIC Cluster', 'Extension and Community Services Office', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(32, 'Academic Cluster', 'Center for Human Rights Education (CHRE)', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(33, 'PRESIDENT CLUSTER', 'Center for International Relations and Linkages', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(34, 'Academic Cluster', 'Center for Quality Assurance', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(35, 'RIC Cluster', 'Research and Development Services Office', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(36, 'RIC Cluster', 'Center for Rinconada Culture, and the Arts', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(37, 'Academic Cluster', 'Information and Alumni Affairs Unit & Broadcast Center', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(38, 'PRESIDENT CLUSTER', 'Institutional Planning and Development Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(39, 'PRESIDENT CLUSTER', 'Internal Audit Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(40, 'Academic Cluster', 'National Service Training Program (NSTP)', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(41, 'Administrative and Finance Cluster', 'Procurement Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(42, 'RIC Cluster', 'PAxS', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(43, 'Administrative and Finance Cluster', 'Project Management Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(44, 'Not Assigned', 'TESDA Office', 'Not Assigned', 'default@cspc.edu.ph', 0);
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `services`
+--
+
+CREATE TABLE `services` (
+  `id` int(11) NOT NULL,
+  `office_id` int(11) NOT NULL,
+  `service_name` varchar(255) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `services`
+--
+
+INSERT INTO `services` (`id`, `office_id`, `service_name`) VALUES
+(1, 1, 'Applying for College Entrance Examination (Freshmen, Transferees)'),
+(2, 1, 'Applying for Entrance Examination (Graduate School Students)'),
+(3, 1, 'Applying for Shifting / Re-Admission'),
+(4, 1, 'Administering of Personality/ IQ Tests'),
+(5, 2, 'Availing of Counseling Services'),
+(6, 2, 'Referring a Student for Counseling'),
+(7, 3, 'Applying for Enrolment (Freshmen)'),
+(8, 3, 'Applying for Enrolment (Transferees)'),
+(9, 3, 'Applying for Enrolment (Current and Returning Students)'),
+(10, 3, 'Applying for Authentication of Academic Records'),
+(11, 3, 'Applying for Certification, Authentication and Verification (CAV) of Academic Records'),
+(12, 3, 'Applying for the Issuance of Credentials (Official Transcript of Records, Certifications)'),
+(13, 3, 'Applying for Re-Issuance of Diploma'),
+(14, 3, 'Applying for Graduation'),
+(15, 3, 'Applying for Issuance of Honorable Dismissal/Certificate of Eligibility to Transfer'),
+(16, 3, 'Applying for Cross-Enrolment'),
+(17, 3, 'Applying for Adding/Dropping of Subjects'),
+(18, 3, 'Request for the Change / Correction of Grades'),
+(19, 3, 'Request for Authority to Access SIAS Account for Grade Encoding'),
+(20, 4, 'Availing of Oral Examination and Certification'),
+(21, 4, 'Dental Treatment and Certification'),
+(22, 4, 'Availing of Medical Consultation and Treatment'),
+(23, 4, 'Securing Medical Certificate'),
+(24, 5, 'Paying of Required Fees'),
+(25, 5, 'Accepting Remittance of Scholarship Grants/Aids and Financial Assistance to Students'),
+(26, 5, 'Requesting for Reimbursement of Petty Cash Expenses'),
+(27, 5, 'Requesting for Liquidation of Petty Cash Expenses'),
+(28, 6, 'Requesting for an Obligation of Claim for Payment'),
+(29, 7, 'Requesting for Clearance'),
+(30, 7, 'Requesting Statement of Student Accounts Balances'),
+(31, 8, 'Securing Certified Copies of Documents'),
+(32, 9, 'Applying for Leave of Absence with or without pay'),
+(33, 9, 'Securing Service Records, Certificate of Employment and Other Personnel Record'),
+(34, 10, 'Securing Certificate of Good Moral Character'),
+(35, 11, 'Securing Certificate of Good Moral Character'),
+(36, 12, 'Securing Certificate of Good Moral Character'),
+(37, 13, 'Securing Certificate of Good Moral Character'),
+(38, 14, 'Securing Certificate of Good Moral Character'),
+(39, 15, 'Securing Certificate of Good Moral Character'),
+(40, 16, 'Securing Certificate of Good Moral Character'),
+(41, 17, 'Securing Certificate of Good Moral Character'),
+(42, 18, 'Applying for Student Organizations Accreditation'),
+(43, 18, 'Complaining or Seeking Redress of Grievances'),
+(44, 18, 'Requesting Permit to Conduct Campus Activity/Educational Tour and Other Related Student Activity'),
+(45, 18, 'Applying for Scholarship'),
+(46, 19, 'Applying for New Identification Card (New/Renewal)'),
+(47, 19, 'Issuance of Institutional E-mail Address'),
+(48, 19, 'Printing of Employees\' Identification Card'),
+(49, 20, 'Applying for Renewal of Internet Access Card'),
+(50, 20, 'Accessing the School\'s Internet Center Services'),
+(51, 21, 'Applying/Renewal of Application for Bed Space at the College Dormitory'),
+(52, 21, 'Borrowing Equipment and Other Facilities'),
+(53, 21, 'Renting College Equipment and Facilities'),
+(54, 21, 'Requesting Issuance/Release of Supplies and Materials, Equipment and Accountable Forms'),
+(55, 22, 'Requesting for Transportation Services'),
+(56, 23, 'Lending Books'),
+(57, 23, 'Returning Books'),
+(58, 23, 'Providing research assistance to external clients'),
+(59, 24, 'Travel Order Issuance to Students and Employees outside the Bicol Region'),
+(60, 25, 'Travel Order Issuance to Students, Teaching Staff, and Employees within the Bicol Region'),
+(61, 26, 'Travel Order Issuance to Employees within the Bicol Region'),
+(62, 27, 'Travel Order Issuance to Employees in REPED within the Bicol Region'),
+(63, 28, 'Requesting for Travel Order'),
+(64, 29, 'GENERAL SERVICES OFFERED'),
+(65, 30, 'GENERAL SERVICES OFFERED'),
+(66, 31, 'GENERAL SERVICES OFFERED'),
+(67, 32, 'GENERAL SERVICES OFFERED'),
+(68, 33, 'GENERAL SERVICES OFFERED'),
+(69, 34, 'GENERAL SERVICES OFFERED'),
+(70, 35, 'GENERAL SERVICES OFFERED'),
+(71, 36, 'GENERAL SERVICES OFFERED'),
+(72, 37, 'GENERAL SERVICES OFFERED'),
+(73, 38, 'GENERAL SERVICES OFFERED'),
+(74, 39, 'GENERAL SERVICES OFFERED'),
+(75, 40, 'GENERAL SERVICES OFFERED'),
+(76, 41, 'GENERAL SERVICES OFFERED'),
+(77, 42, 'GENERAL SERVICES OFFERED'),
+(78, 43, 'GENERAL SERVICES OFFERED'),
+(79, 44, 'GENERAL SERVICES OFFERED');
 
 -- --------------------------------------------------------
 
@@ -132,53 +275,33 @@ INSERT INTO `offices` (`id`, `cluster_name`, `office_name`, `head_director`, `em
 --
 
 CREATE TABLE `survey_responses` (
-  `id` int NOT NULL,
-  `office_id` int NOT NULL,
-  `respondent_name` varchar(255) COLLATE utf8mb4_general_ci DEFAULT 'Anonymous',
-  `topic` varchar(100) COLLATE utf8mb4_general_ci DEFAULT 'General',
-  `region` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `cc1` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `cc2` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `cc3` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `sqd0` int DEFAULT NULL,
-  `sqd1` int DEFAULT NULL,
-  `sqd2` int DEFAULT NULL,
-  `sqd3` int DEFAULT NULL,
-  `sqd4` int DEFAULT NULL,
-  `sqd5` int DEFAULT NULL,
-  `sqd6` int DEFAULT NULL,
-  `sqd7` int DEFAULT NULL,
-  `sqd8` int DEFAULT NULL,
-  `comments` text COLLATE utf8mb4_general_ci,
-  `period_year_quarter` varchar(20) COLLATE utf8mb4_general_ci DEFAULT '2026-Q1',
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  `id` int(11) NOT NULL,
+  `office_id` int(11) NOT NULL,
+  `respondent_name` varchar(255) DEFAULT 'Anonymous',
+  `topic` varchar(100) DEFAULT 'General',
+  `region` varchar(100) DEFAULT NULL,
+  `cc1` varchar(50) DEFAULT NULL,
+  `cc2` varchar(50) DEFAULT NULL,
+  `cc3` varchar(50) DEFAULT NULL,
+  `sqd0` int(11) DEFAULT NULL,
+  `sqd1` int(11) DEFAULT NULL,
+  `sqd2` int(11) DEFAULT NULL,
+  `sqd3` int(11) DEFAULT NULL,
+  `sqd4` int(11) DEFAULT NULL,
+  `sqd5` int(11) DEFAULT NULL,
+  `sqd6` int(11) DEFAULT NULL,
+  `sqd7` int(11) DEFAULT NULL,
+  `sqd8` int(11) DEFAULT NULL,
+  `comments` text DEFAULT NULL,
+  `period_year_quarter` varchar(20) DEFAULT '2026-Q1',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `sentiment` varchar(50) DEFAULT 'Neutral',
+  `google_email` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `survey_responses`
 --
-
-INSERT INTO `survey_responses` (`id`, `office_id`, `respondent_name`, `topic`, `region`, `cc1`, `cc2`, `cc3`, `sqd0`, `sqd1`, `sqd2`, `sqd3`, `sqd4`, `sqd5`, `sqd6`, `sqd7`, `sqd8`, `comments`, `period_year_quarter`, `created_at`) VALUES
-(1, 15, 'Anonymous', 'General', NULL, 'I know what a CC is but I did not see this office\'', 'Difficult to see', 'Somewhat helped', 2, 2, 2, 2, 2, 2, 0, 0, 2, 'pakaraya', '2026-Q1', '2026-07-10 05:32:37'),
-(2, 22, 'Anonymous', 'General', NULL, 'I do not know what a CC is and I did not see one i', 'Not visible at all', 'N/A', 1, 1, 1, 1, 1, 1, 1, 1, 1, 'dinalugod', '2026-Q1', '2026-07-10 05:34:47'),
-(3, 6, 'Anonymous', 'General', NULL, 'I do not know what a CC is and I did not see one i', 'Not visible at all', 'Did not help', 2, 1, 1, 1, 4, 4, 4, 4, 4, 'hehehe', '2026-Q1', '2026-07-10 05:36:35'),
-(4, 27, 'Anonymous', 'General', NULL, 'I know what a CC is but I did not see this office\'', 'Difficult to see', 'N/A', 5, 5, 5, 5, 5, 5, 5, 5, 5, 'lupet', '2026-Q1', '2026-07-10 05:37:32'),
-(5, 22, 'Anonymous', 'General', NULL, NULL, NULL, NULL, 1, 1, 1, 1, 1, 1, 1, 1, 1, 'nice', '2026-Q1', '2026-07-10 05:49:45'),
-(6, 15, 'Anonymous', 'General', NULL, NULL, NULL, NULL, 2, 2, 2, 2, 2, 2, 2, 2, 2, 'hehe', '2026-Q1', '2026-07-10 06:00:20'),
-(7, 6, 'Anonymous', 'General', NULL, NULL, NULL, NULL, 1, 1, 1, 1, 1, 1, 1, 1, 1, 'nhye', '2026-Q1', '2026-07-10 06:01:37'),
-(8, 2, 'Anonymous', 'General', NULL, NULL, NULL, NULL, 1, 1, 1, 1, 1, 1, 1, 1, 1, 'pakaray', '2026-Q1', '2026-07-10 06:10:10'),
-(9, 2, 'Anonymous', 'General', NULL, 'I know what a CC is but I did not see this office\'', 'Easy to see', 'Helped very much', 5, 5, 5, 5, 5, 5, 5, 5, 5, 'dsds', '2026-Q1', '2026-07-10 06:17:29'),
-(10, 2, 'Anonymous', 'General', NULL, 'I know what a CC is but I did not see this office\'', 'Not visible at all', 'Helped very much', 4, 4, 4, 5, 5, 5, 5, 5, 5, 'nc nc', '2026-Q1', '2026-07-10 06:23:26'),
-(11, 1, 'Anonymous', 'General', NULL, 'I learned of the CC only when I saw this office\'s ', 'Difficult to see', 'Helped very much', 5, 5, 5, 5, 5, 5, 5, 5, 5, 'lupetmo', '2026-Q1', '2026-07-10 06:45:04'),
-(12, 15, 'Anonymous', 'General', NULL, 'I know what a CC is but I did not see this office\'', 'Difficult to see', 'Somewhat helped', 1, 1, 1, 1, 1, 1, 1, 1, 1, 'nyenye', '2026-Q1', '2026-07-13 13:19:02'),
-(13, 27, 'Anonymous', 'General', NULL, 'I know what a CC is and I saw this office\'s CC.', 'Difficult to see', 'Did not help', 5, 5, 5, 5, 5, 5, 5, 5, 5, 'AHJSHWJH', '2026-Q1', '2026-07-13 14:18:34'),
-(14, 27, 'Anonymous', 'General', 'Not Specified', 'I know what a CC is and I saw this office\'s CC.', 'Easy to see', 'N/A', 5, 5, 5, 5, 5, 5, 5, 5, 5, 'hahaha', '2026-Q1', '2026-07-13 14:36:34'),
-(15, 27, 'kenneth', 'General', 'Region V - Bicol Region', 'I know what a CC is and I saw this office\'s CC.', 'Easy to see', 'Somewhat helped', 4, 4, 4, 4, 4, 4, 4, 4, 4, 'kok', '2026-Q1', '2026-07-13 14:46:48'),
-(16, 16, 'namemo', 'General', 'NCR - National Capital Region', 'I know what a CC is and I saw this office\'s CC.', 'Easy to see', 'Helped very much', 5, 5, 5, 5, 5, 4, 4, 4, 4, 'lupet nya', '2026-Q1', '2026-07-24 12:34:16'),
-(17, 21, 'csd', 'General', 'NCR - National Capital Region', 'I know what a CC is and I saw this office\'s CC.', 'Easy to see', 'Helped very much', 2, 2, 2, 2, 2, 2, 2, 2, 2, 'araymopo', '2026-Q1', '2026-07-24 12:43:03'),
-(18, 8, 'bebe', 'General', 'Region I - Ilocos Region', 'I do not know what a CC is and I did not see one i', 'Not visible at all', 'Did not help', 2, 2, 2, 2, 2, 2, 2, 2, 2, 'awawaw', 'Jul - Dec 2026', '2026-07-24 13:05:43'),
-(19, 25, 'Arnel Marquina', 'General', 'Region V - Bicol Region', 'I know what a CC is but I did not see this office\'s CC.', 'Easy to see', 'Helped very much', 3, 3, 3, 3, 3, 3, 3, 3, 3, 'need improvement', 'Jul - Dec 2026', '2026-08-07 14:03:19');
-
 -- --------------------------------------------------------
 
 --
@@ -186,33 +309,40 @@ INSERT INTO `survey_responses` (`id`, `office_id`, `respondent_name`, `topic`, `
 --
 
 CREATE TABLE `survey_settings` (
-  `id` int NOT NULL,
-  `category` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,
-  `content` text COLLATE utf8mb4_general_ci NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  `id` int(11) NOT NULL,
+  `category` varchar(50) NOT NULL,
+  `content` text NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `is_archived` tinyint(1) NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `survey_settings`
 --
 
-INSERT INTO `survey_settings` (`id`, `category`, `content`, `created_at`) VALUES
-(1, 'sqd', 'I am satisfied with the service that I availed.', '2026-07-13 13:03:02'),
-(2, 'sqd', 'I spent a reasonable amount of time for my transaction.', '2026-07-13 13:03:02'),
-(3, 'sqd', 'The office followed the transaction\'s requirements and steps based on the information provided.', '2026-07-13 13:03:02'),
-(4, 'sqd', 'The steps (including payment) I needed to do for my transaction were easy and simple.', '2026-07-13 13:03:02'),
-(5, 'sqd', 'I easily found information about my transaction from the office or its website.', '2026-07-13 13:03:02'),
-(6, 'sqd', 'I paid a reasonable amount of fees for my transaction.', '2026-07-13 13:03:02'),
-(7, 'sqd', 'I feel the office was fair to everyone, or \"walang palakasan\", during my transaction.', '2026-07-13 13:03:02'),
-(8, 'sqd', 'I was treated courteously by the staff, and (if asked for help) the staff was helpful.', '2026-07-13 13:03:02'),
-(9, 'sqd', 'I got what I needed from the government office, or (if denied) denial of request was sufficiently explained to me.', '2026-07-13 13:03:02'),
-(10, 'cc', 'Which of the following best describes your awareness of a CC?', '2026-07-13 13:03:02'),
-(11, 'cc', 'If aware of CC (answered 1-3 in CC1), would you say that the CC of this office was...?', '2026-07-13 13:03:02'),
-(12, 'cc', 'If aware of CC (answered 1-3 in CC1), how much did the CC help you in your transaction?', '2026-07-13 13:03:02');
+INSERT INTO `survey_settings` (`id`, `category`, `content`, `created_at`, `is_archived`) VALUES
+(1, 'sqd', 'I am satisfied with the service that I availed.', '2026-07-13 13:03:02', 0),
+(2, 'sqd', 'I spent a reasonable amount of time for my transaction.', '2026-07-13 13:03:02', 0),
+(3, 'sqd', 'The office followed the transaction\'s requirements and steps based on the information provided.', '2026-07-13 13:03:02', 0),
+(4, 'sqd', 'The steps (including payment) I needed to do for my transaction were easy and simple.', '2026-07-13 13:03:02', 0),
+(5, 'sqd', 'I easily found information about my transaction from the office or its website.', '2026-07-13 13:03:02', 0),
+(6, 'sqd', 'I paid a reasonable amount of fees for my transaction.', '2026-07-13 13:03:02', 0),
+(7, 'sqd', 'I feel the office was fair to everyone, or \"walang palakasan\", during my transaction.', '2026-07-13 13:03:02', 0),
+(8, 'sqd', 'I was treated courteously by the staff, and (if asked for help) the staff was helpful.', '2026-07-13 13:03:02', 0),
+(9, 'sqd', 'I got what I needed from the government office, or (if denied) denial of request was sufficiently explained to me.', '2026-07-13 13:03:02', 0),
+(10, 'cc', 'Which of the following best describes your awareness of a CC?', '2026-07-13 13:03:02', 0),
+(11, 'cc', 'If aware of CC (answered 1-3 in CC1), would you say that the CC of this office was...?', '2026-07-13 13:03:02', 0),
+(12, 'cc', 'If aware of CC (answered 1-3 in CC1), how much did the CC help you in your transaction?', '2026-07-13 13:03:02', 0);
 
 --
 -- Indexes for dumped tables
 --
+
+--
+-- Indexes for table `client_accounts`
+--
+ALTER TABLE `client_accounts`
+  ADD PRIMARY KEY (`email`);
 
 --
 -- Indexes for table `client_profiles`
@@ -220,6 +350,13 @@ INSERT INTO `survey_settings` (`id`, `category`, `content`, `created_at`) VALUES
 ALTER TABLE `client_profiles`
   ADD PRIMARY KEY (`id`),
   ADD KEY `survey_response_id` (`survey_response_id`);
+
+--
+-- Indexes for table `client_types`
+--
+ALTER TABLE `client_types`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `type_name` (`type_name`);
 
 --
 -- Indexes for table `clusters`
@@ -235,11 +372,18 @@ ALTER TABLE `offices`
   ADD PRIMARY KEY (`id`);
 
 --
+-- Indexes for table `services`
+--
+ALTER TABLE `services`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `office_id` (`office_id`);
+
+--
 -- Indexes for table `survey_responses`
 --
 ALTER TABLE `survey_responses`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `office_id` (`office_id`);
+  ADD UNIQUE KEY `unique_office_google_email` (`office_id`,`google_email`);
 
 --
 -- Indexes for table `survey_settings`
@@ -255,31 +399,43 @@ ALTER TABLE `survey_settings`
 -- AUTO_INCREMENT for table `client_profiles`
 --
 ALTER TABLE `client_profiles`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
+-- AUTO_INCREMENT for table `client_types`
+--
+ALTER TABLE `client_types`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `clusters`
 --
 ALTER TABLE `clusters`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
 -- AUTO_INCREMENT for table `offices`
 --
 ALTER TABLE `offices`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=30;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=45;
+
+--
+-- AUTO_INCREMENT for table `services`
+--
+ALTER TABLE `services`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=80;
 
 --
 -- AUTO_INCREMENT for table `survey_responses`
 --
 ALTER TABLE `survey_responses`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=20;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `survey_settings`
 --
 ALTER TABLE `survey_settings`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- Constraints for dumped tables
@@ -290,6 +446,12 @@ ALTER TABLE `survey_settings`
 --
 ALTER TABLE `client_profiles`
   ADD CONSTRAINT `client_profiles_ibfk_1` FOREIGN KEY (`survey_response_id`) REFERENCES `survey_responses` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `services`
+--
+ALTER TABLE `services`
+  ADD CONSTRAINT `services_ibfk_1` FOREIGN KEY (`office_id`) REFERENCES `offices` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `survey_responses`

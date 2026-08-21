@@ -753,8 +753,12 @@
                 </div>
 
                 <div id="stage2" class="page">
-                    <div class="section-title mb-4">
+                    <div class="section-title mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
                         <h4 class="fw-semibold text-heading text-uppercase mb-0" data-i18n="client_prof">Client Profile</h4>
+                        <div class="form-check form-switch mb-0" title="Fill in Name, Sex, Age, and Region from your account's previous answers">
+                            <input class="form-check-input" type="checkbox" role="switch" id="switchAutofillProfile" onchange="toggleAutofillClientProfile(this.checked)">
+                            <label class="form-check-label fw-semibold text-dark" for="switchAutofillProfile">Autofill</label>
+                        </div>
                     </div>
 
                     <div class="row g-4">
@@ -779,6 +783,7 @@
                                 <option value="Citizen" data-i18n="opt_citizen"></option>
                                 <option value="Business" data-i18n="opt_business"></option>
                                 <option value="Government" data-i18n="opt_gov"></option>
+                                <option value="Student" data-i18n="opt_student"></option>
                             </select>
                         </div>
 
@@ -1350,6 +1355,63 @@ function applyLockedProfile() {
     });
 }
 
+// Snapshot of Name/Sex/Age/Region taken right before the switch is turned on,
+// restored if it's turned back off. Only ever applied to fields that aren't
+// already disabled/locked from a prior submission.
+let autofillSnapshot = null;
+
+// Toggling on fills Name, Sex, Age, and Region from this account's saved profile
+// (same source as applyLockedProfile). Toggling off restores whatever those
+// fields held before the switch was turned on.
+function toggleAutofillClientProfile(enabled) {
+    if (enabled) {
+        autofillSnapshot = {
+            respondent_name: document.querySelector('input[name="respondent_name"]')?.value ?? '',
+            region: document.querySelector('select[name="region"]')?.value ?? '',
+            age: document.querySelector('select[name="age"]')?.value ?? '',
+            gender: document.querySelector('input[name="gender"]:checked')?.value ?? ''
+        };
+
+        fetch('/api/client-profile')
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) return;
+                const p = data.profile || {};
+
+                const nameInput = document.querySelector('input[name="respondent_name"]');
+                if (nameInput && !nameInput.disabled && p.respondent_name) nameInput.value = p.respondent_name;
+
+                const regionSelect = document.querySelector('select[name="region"]');
+                if (regionSelect && !regionSelect.disabled && p.region) regionSelect.value = p.region;
+
+                const ageSelect = document.querySelector('select[name="age"]');
+                if (ageSelect && !ageSelect.disabled && p.age) ageSelect.value = p.age;
+
+                const genderRadios = document.querySelectorAll('input[name="gender"]');
+                if (genderRadios.length && !genderRadios[0].disabled && p.gender) {
+                    genderRadios.forEach(radio => { radio.checked = (radio.value === p.gender); });
+                }
+            })
+            .catch(err => console.error('Error autofilling profile:', err));
+    } else if (autofillSnapshot) {
+        const nameInput = document.querySelector('input[name="respondent_name"]');
+        if (nameInput && !nameInput.disabled) nameInput.value = autofillSnapshot.respondent_name;
+
+        const regionSelect = document.querySelector('select[name="region"]');
+        if (regionSelect && !regionSelect.disabled) regionSelect.value = autofillSnapshot.region;
+
+        const ageSelect = document.querySelector('select[name="age"]');
+        if (ageSelect && !ageSelect.disabled) ageSelect.value = autofillSnapshot.age;
+
+        const genderRadios = document.querySelectorAll('input[name="gender"]');
+        if (genderRadios.length && !genderRadios[0].disabled) {
+            genderRadios.forEach(radio => { radio.checked = (radio.value === autofillSnapshot.gender); });
+        }
+
+        autofillSnapshot = null;
+    }
+}
+
 // Mobile sidebar toggle — slides the dashboard sidebar in/out with a backdrop
 function toggleSidebar() {
     document.getElementById('clientSidebar').classList.toggle('show');
@@ -1865,6 +1927,7 @@ const i18n = {
         opt_citizen: "Citizen",
         opt_business: "Business",
         opt_gov: "Government (Employee or another agency)",
+        opt_student: "Student",
         lbl_sex: "Sex:",
         lbl_male: "Male",
         lbl_female: "Female",
@@ -1944,6 +2007,7 @@ const i18n = {
         opt_citizen: "Mamamayan",
         opt_business: "Negosyo",
         opt_gov: "Gobyerno",
+        opt_student: "Estudyante",
         lbl_sex: "Kasarian:",
         lbl_male: "Lalaki",
         lbl_female: "Babae",
