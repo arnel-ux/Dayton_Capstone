@@ -119,6 +119,11 @@
                                                                 <i class="fas fa-undo"></i> Restore
                                                             </button>
                                                         </form>
+                                                        <form action="/clusters/permanent-delete/<%= meta.id %>" method="POST" style="display:inline;" class="permanent-delete-cluster-form" onclick="event.stopPropagation();">
+                                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Permanently delete this cluster">
+                                                                <i class="fas fa-trash"></i> Delete
+                                                            </button>
+                                                        </form>
                                                     <% } else { %>
                                                         <form action="/clusters/delete/<%= meta.id %>" method="POST" style="display:inline;" class="archive-cluster-form" onclick="event.stopPropagation();">
                                                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Archive this cluster">
@@ -152,6 +157,11 @@
                                                             <form action="/offices/restore/<%= office.id %>" method="POST" style="display:inline;">
                                                                 <button type="submit" class="btn btn-sm btn-outline-success" title="Restore this office">
                                                                     <i class="fas fa-undo"></i> Restore
+                                                                </button>
+                                                            </form>
+                                                            <form action="/offices/permanent-delete/<%= office.id %>" method="POST" style="display:inline;" class="permanent-delete-office-form">
+                                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Permanently delete this office">
+                                                                    <i class="fas fa-trash"></i> Delete
                                                                 </button>
                                                             </form>
                                                         <% } else { %>
@@ -350,9 +360,33 @@
         document.querySelectorAll('.archive-cluster-form').forEach(form => {
             form.addEventListener('submit', async function (e) {
                 e.preventDefault();
-                const confirmed = await AppAlert.confirm('Sigurado ka ba na gusto mong i-archive ang cluster na ito?', {
+                const confirmed = await AppAlert.confirm('Sigurado ka ba na gusto mong i-archive ang cluster na ito? Ma-a-archive din ang lahat ng offices sa ilalim nito.', {
                     title: 'Archive this cluster?',
                     confirmText: 'Yes, archive it!'
+                });
+                if (confirmed) form.submit();
+            });
+        });
+
+        // Confirm before permanently deleting an office (irreversible)
+        document.querySelectorAll('.permanent-delete-office-form').forEach(form => {
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                const confirmed = await AppAlert.confirm('Permanente itong tatanggalin sa database at hindi na maibabalik. Sigurado ka ba?', {
+                    title: 'Permanently delete this office?',
+                    confirmText: 'Yes, delete permanently!'
+                });
+                if (confirmed) form.submit();
+            });
+        });
+
+        // Confirm before permanently deleting a cluster (irreversible, cascades to its offices)
+        document.querySelectorAll('.permanent-delete-cluster-form').forEach(form => {
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                const confirmed = await AppAlert.confirm('Permanente itong tatanggalin sa database kasama ang lahat ng offices sa ilalim nito, at hindi na maibabalik. Sigurado ka ba?', {
+                    title: 'Permanently delete this cluster?',
+                    confirmText: 'Yes, delete permanently!'
                 });
                 if (confirmed) form.submit();
             });

@@ -1539,12 +1539,38 @@ app.post('/clusters/edit', ensureAdminAuth, (req, res) => {
 
 // Soft delete / archive: hindi na tinatanggal ang record sa database (walang DELETE query),
 // binabago na lamang ang is_archived flag para maiwasan ang pagkawala ng historical survey data.
+// Ini-cascade rin ang archive sa lahat ng offices sa ilalim ng cluster na ito.
 app.post('/clusters/delete/:id', ensureAdminAuth, (req, res) => {
-    db.query('UPDATE clusters SET is_archived = 1 WHERE id = ?', [req.params.id], (err, result) => { res.redirect('/offices'); });
+    db.query('SELECT cluster_name FROM clusters WHERE id = ?', [req.params.id], (err, rows) => {
+        if (err || !rows || rows.length === 0) return res.redirect('/offices');
+        const clusterName = rows[0].cluster_name;
+        db.query('UPDATE clusters SET is_archived = 1 WHERE id = ?', [req.params.id], (err) => {
+            if (err) console.error("❌ Error archiving cluster:", err);
+            db.query('UPDATE offices SET is_archived = 1 WHERE cluster_name = ?', [clusterName], (err) => {
+                if (err) console.error("❌ Error cascading cluster archive to offices:", err);
+                res.redirect('/offices');
+            });
+        });
+    });
 });
 
 app.post('/clusters/restore/:id', ensureAdminAuth, (req, res) => {
     db.query('UPDATE clusters SET is_archived = 0 WHERE id = ?', [req.params.id], (err, result) => { res.redirect('/offices'); });
+});
+
+// Permanent delete: tinatanggal talaga sa database ang cluster kasama ang mga offices sa ilalim nito.
+app.post('/clusters/permanent-delete/:id', ensureAdminAuth, (req, res) => {
+    db.query('SELECT cluster_name FROM clusters WHERE id = ?', [req.params.id], (err, rows) => {
+        if (err || !rows || rows.length === 0) return res.redirect('/offices');
+        const clusterName = rows[0].cluster_name;
+        db.query('DELETE FROM offices WHERE cluster_name = ?', [clusterName], (err) => {
+            if (err) console.error("❌ Error permanently deleting offices under cluster:", err);
+            db.query('DELETE FROM clusters WHERE id = ?', [req.params.id], (err) => {
+                if (err) console.error("❌ Error permanently deleting cluster:", err);
+                res.redirect('/offices');
+            });
+        });
+    });
 });
 
 app.post('/offices/add', ensureAdminAuth, (req, res) => {
@@ -1570,6 +1596,14 @@ app.post('/offices/delete/:id', ensureAdminAuth, (req, res) => {
 
 app.post('/offices/restore/:id', ensureAdminAuth, (req, res) => {
     db.query('UPDATE offices SET is_archived = 0 WHERE id = ?', [req.params.id], (err, result) => { res.redirect('/offices'); });
+});
+
+// Permanent delete: tinatanggal talaga sa database ang office record.
+app.post('/offices/permanent-delete/:id', ensureAdminAuth, (req, res) => {
+    db.query('DELETE FROM offices WHERE id = ?', [req.params.id], (err, result) => {
+        if (err) console.error("❌ Error permanently deleting office:", err);
+        res.redirect('/offices');
+    });
 });
 
 // ==========================================
