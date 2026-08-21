@@ -205,6 +205,38 @@
         }
         [data-bs-theme="dark"] .history-badge { background: rgba(34,197,94,0.18); color: #4ade80; }
 
+        /* ---- History detail modal ---- */
+        .history-detail-head {
+            display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap;
+            padding-bottom: 1.25rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--line-soft);
+        }
+        .history-detail-icon {
+            width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center; font-size: 1.15rem;
+            background: var(--ring); color: var(--brand);
+        }
+
+        .review-sqd-list { background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: 0.3rem 1rem; }
+        [data-bs-theme="dark"] .review-sqd-list { background: #101827; }
+
+        .sqd-rating-badge {
+            display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap;
+            font-size: 0.78rem; font-weight: 700; padding: 0.3rem 0.75rem 0.3rem 0.4rem; border-radius: 50px;
+        }
+        .sqd-rating-num {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 20px; height: 20px; border-radius: 50%; font-size: 0.72rem;
+            background: rgba(255,255,255,0.6);
+        }
+        [data-bs-theme="dark"] .sqd-rating-num { background: rgba(15,23,42,0.35); }
+        .sqd-rating-5, .sqd-rating-4 { background: rgba(34,197,94,0.14); color: #16a34a; }
+        .sqd-rating-3 { background: rgba(234,179,8,0.16); color: #b45309; }
+        .sqd-rating-2, .sqd-rating-1 { background: rgba(239,68,68,0.14); color: #dc2626; }
+        [data-bs-theme="dark"] .sqd-rating-5, [data-bs-theme="dark"] .sqd-rating-4 { background: rgba(34,197,94,0.22); color: #4ade80; }
+        [data-bs-theme="dark"] .sqd-rating-3 { background: rgba(234,179,8,0.22); color: #fbbf24; }
+        [data-bs-theme="dark"] .sqd-rating-2, [data-bs-theme="dark"] .sqd-rating-1 { background: rgba(239,68,68,0.22); color: #f87171; }
+        .sqd-rating-na, .sqd-rating-unanswered { background: var(--line-soft); color: var(--ink-600); }
+
         .empty-state { text-align: center; padding: 3.5rem 1.5rem; color: var(--ink-600); }
         .empty-state i { font-size: 2.75rem; color: var(--ink-400); margin-bottom: 1rem; display: block; }
         .empty-state p { max-width: 360px; margin: 0.5rem auto 0; font-size: 0.9rem; }
@@ -1178,6 +1210,27 @@
     </div>
 </div>
 
+<!-- Survey History Detail Modal -->
+<div class="modal fade" id="historyDetailModal" tabindex="-1" aria-labelledby="historyDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="historyDetailModalLabel"><i class="bi bi-file-earmark-text me-1"></i> Your Answers</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" title="Close"></button>
+            </div>
+            <div class="modal-body" id="historyDetailBody" style="max-height: 70vh; overflow-y: auto;">
+                <div class="spinner-block">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-3 mb-0">Loading your answers…</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" title="Close this dialog">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
@@ -1443,7 +1496,8 @@ function loadHistoryView() {
 
             const listEl = document.getElementById('historyList');
             listEl.innerHTML = history.map(row => `
-                <div class="history-item">
+                <div class="history-item" role="button" tabindex="0" title="Click to view your answers"
+                     onclick="openHistoryDetail(${row.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHistoryDetail(${row.id});}">
                     <div>
                         <div class="history-office"><i class="bi bi-building me-1"></i> ${escapeHtml(row.office_name)}</div>
                         <div class="history-meta">${escapeHtml(row.cluster_name || 'General')} &middot; ${escapeHtml(row.formatted_date)}</div>
@@ -1457,6 +1511,94 @@ function loadHistoryView() {
             console.error('Error loading history:', err);
             document.getElementById('historyLoading').innerHTML =
                 '<p class="text-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i> Could not load your survey history. Please try again.</p>';
+        });
+}
+
+const sqdRatingLabels = {
+    '5': 'Strongly Agree', '4': 'Agree', '3': 'Neutral',
+    '2': 'Disagree', '1': 'Strongly Disagree', '0': 'N/A'
+};
+
+function openHistoryDetail(id) {
+    const modalEl = document.getElementById('historyDetailModal');
+    const bodyEl = document.getElementById('historyDetailBody');
+    bodyEl.innerHTML = `
+        <div class="spinner-block">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-3 mb-0">Loading your answers…</p>
+        </div>
+    `;
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+
+    fetch('/api/client-history/' + encodeURIComponent(id))
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed to load this survey.');
+            const s = data.survey;
+            const sqdItems = (i18n[currentLang] && i18n[currentLang].sqd_items) ? i18n[currentLang].sqd_items : i18n.en.sqd_items;
+
+            const sqdRows = sqdItems.map((label, idx) => {
+                const val = s['sqd' + idx];
+                let badge;
+                if (val === null || val === undefined) {
+                    badge = `<span class="sqd-rating-badge sqd-rating-unanswered">—</span>`;
+                } else if (Number(val) === 0) {
+                    badge = `<span class="sqd-rating-badge sqd-rating-na">N/A</span>`;
+                } else {
+                    const text = sqdRatingLabels[String(val)] || val;
+                    badge = `<span class="sqd-rating-badge sqd-rating-${val}"><span class="sqd-rating-num">${escapeHtml(String(val))}</span> ${escapeHtml(text)}</span>`;
+                }
+                return `
+                    <div class="review-sqd-row">
+                        <span class="review-sqd-statement">${escapeHtml(label)}</span>
+                        ${badge}
+                    </div>
+                `;
+            }).join('');
+
+            const ccItem = (label, value) => `
+                <div class="review-item">
+                    <div class="label">${label}</div>
+                    <div class="value">${escapeHtml(value || '—')}</div>
+                </div>
+            `;
+
+            bodyEl.innerHTML = `
+                <div class="history-detail-head">
+                    <div class="history-detail-icon"><i class="bi bi-building"></i></div>
+                    <div>
+                        <div class="history-office">${escapeHtml(s.office_name)}</div>
+                        <div class="history-meta">${escapeHtml(s.cluster_name || 'General')} &middot; ${escapeHtml(s.formatted_date)}</div>
+                    </div>
+                    <span class="history-badge ms-auto"><i class="bi bi-check-circle-fill me-1"></i> Completed</span>
+                </div>
+
+                <div class="review-section">
+                    <div class="review-section-header"><h5><i class="bi bi-file-earmark-text-fill me-1"></i> Citizen's Charter</h5></div>
+                    <div class="review-grid">
+                        ${ccItem('CC1', s.cc1)}
+                        ${ccItem('CC2', s.cc2)}
+                        ${ccItem('CC3', s.cc3)}
+                    </div>
+                </div>
+
+                <div class="review-section">
+                    <div class="review-section-header"><h5><i class="bi bi-star-fill me-1"></i> Service Quality Dimensions</h5></div>
+                    <div class="review-sqd-list">${sqdRows}</div>
+                </div>
+
+                <div class="review-section mb-0">
+                    <div class="review-section-header"><h5><i class="bi bi-chat-left-text-fill me-1"></i> Suggestions / Comments</h5></div>
+                    <div class="review-item full">
+                        <div class="value">${escapeHtml(s.comments && s.comments !== 'N/A' ? s.comments : 'No comments provided.')}</div>
+                    </div>
+                </div>
+            `;
+        })
+        .catch(err => {
+            console.error('Error loading survey detail:', err);
+            bodyEl.innerHTML = '<p class="text-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i> Could not load your answers. Please try again.</p>';
         });
 }
 

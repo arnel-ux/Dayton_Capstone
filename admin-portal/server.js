@@ -395,6 +395,7 @@ const createClustersTableQuery = `
 CREATE TABLE IF NOT EXISTS clusters (
     id INT AUTO_INCREMENT PRIMARY KEY,
     cluster_name VARCHAR(150) NOT NULL UNIQUE,
+    is_archived TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );`;
 
@@ -484,6 +485,7 @@ db.query(createClustersTableQuery, (err) => {
         console.error("❌ Error creating clusters table:", err);
     } else {
         console.log('✅ clusters table verified/created successfully!');
+        db.query("ALTER TABLE clusters ADD COLUMN is_archived TINYINT(1) NOT NULL DEFAULT 0", () => {});
         // Seed default clusters kung walang laman
         db.query("SELECT COUNT(*) AS count FROM clusters", (err, result) => {
             if (!err && result[0].count === 0) {
@@ -853,6 +855,29 @@ app.get('/api/client-history', ensureClientAuth, noCache, (req, res) => {
     db.query(query, [req.clientEmail], (err, rows) => {
         if (err) return res.status(500).json({ success: false, message: 'Server error loading your survey history.', history: [] });
         res.json({ success: true, history: rows || [] });
+    });
+});
+
+// Full answers for one past submission — only returns the record if it belongs
+// to the logged-in client, so nobody can peek at another respondent's answers.
+app.get('/api/client-history/:id', ensureClientAuth, noCache, (req, res) => {
+    const query = `
+        SELECT s.id, s.topic, s.sentiment, s.region, s.cc1, s.cc2, s.cc3,
+               s.sqd0, s.sqd1, s.sqd2, s.sqd3, s.sqd4, s.sqd5, s.sqd6, s.sqd7, s.sqd8,
+               s.comments, s.period_year_quarter,
+               DATE_FORMAT(s.created_at, '%M %d, %Y %h:%i %p') AS formatted_date,
+               o.office_name, o.cluster_name,
+               p.client_type, p.age, p.gender
+        FROM survey_responses s
+        JOIN offices o ON s.office_id = o.id
+        LEFT JOIN client_profiles p ON p.survey_response_id = s.id
+        WHERE s.id = ? AND s.google_email = ?
+        LIMIT 1
+    `;
+    db.query(query, [req.params.id, req.clientEmail], (err, rows) => {
+        if (err) return res.status(500).json({ success: false, message: 'Server error loading this survey.' });
+        if (!rows || rows.length === 0) return res.status(404).json({ success: false, message: 'Survey not found.' });
+        res.json({ success: true, survey: rows[0] });
     });
 });
 
@@ -1459,6 +1484,35 @@ app.post('/clusters/add', ensureAdminAuth, (req, res) => {
         if (err) console.error("❌ Error adding cluster to database:", err);
         res.redirect('/offices');
     });
+});
+
+app.post('/clusters/edit', ensureAdminAuth, (req, res) => {
+    const { id, cluster_name } = req.body;
+    if (!cluster_name || cluster_name.trim() === "") {
+        return res.redirect('/offices');
+    }
+    const newName = cluster_name.trim();
+    db.query('SELECT cluster_name FROM clusters WHERE id = ?', [id], (err, rows) => {
+        if (err || !rows || rows.length === 0) return res.redirect('/offices');
+        const oldName = rows[0].cluster_name;
+        db.query('UPDATE clusters SET cluster_name = ? WHERE id = ?', [newName, id], (err) => {
+            if (err) { console.error("❌ Error updating cluster:", err); return res.redirect('/offices'); }
+            db.query('UPDATE offices SET cluster_name = ? WHERE cluster_name = ?', [newName, oldName], (err) => {
+                if (err) console.error("❌ Error cascading cluster rename to offices:", err);
+                res.redirect('/offices');
+            });
+        });
+    });
+});
+
+// Soft delete / archive: hindi na tinatanggal ang record sa database (walang DELETE query),
+// binabago na lamang ang is_archived flag para maiwasan ang pagkawala ng historical survey data.
+app.post('/clusters/delete/:id', ensureAdminAuth, (req, res) => {
+    db.query('UPDATE clusters SET is_archived = 1 WHERE id = ?', [req.params.id], (err, result) => { res.redirect('/offices'); });
+});
+
+app.post('/clusters/restore/:id', ensureAdminAuth, (req, res) => {
+    db.query('UPDATE clusters SET is_archived = 0 WHERE id = ?', [req.params.id], (err, result) => { res.redirect('/offices'); });
 });
 
 app.post('/offices/add', ensureAdminAuth, (req, res) => {
