@@ -399,6 +399,14 @@
            DASHBOARD SECTION — transform-driven marquee (no scrollLeft)
         ========================================================= */
         .dashboard-section { padding: var(--sp-2) 0 var(--sp-10); scroll-margin-top: 6rem; }
+        .dashboard-toolbar { display: flex; justify-content: center; max-width: 75rem; margin: 0 auto var(--sp-4); padding: 0 var(--sp-4); }
+        .dashboard-period-select {
+            border-color: rgba(15, 23, 42, 0.2); background: rgba(15, 23, 42, 0.04); color: var(--navy-900);
+        }
+        .dashboard-period-select:hover { border-color: var(--gold-500); background: rgba(15, 23, 42, 0.08); }
+        .dashboard-period-select option { background: #ffffff; color: var(--navy-900); }
+        body.dark-mode .dashboard-period-select { border-color: rgba(255,255,255,0.4); background: rgba(255, 255, 255, 0.1); color: white; }
+        body.dark-mode .dashboard-period-select option { background: var(--navy-900); color: white; }
         .dashboard-header-block { text-align: center; max-width: 43.75rem; margin: 0 auto var(--sp-4); padding: 0 var(--sp-4); }
         .dashboard-header-block p { color: #64748b; font-size: var(--fs-base); line-height: 1.7; margin: 0; }
         body.dark-mode .dashboard-header-block p { color: #94a3b8; }
@@ -546,10 +554,6 @@
         </nav>
 
         <div class="nav-right">
-            <select id="periodSelect" class="period-select" onchange="changePeriod()">
-                <option value="p1">Jan - Jun 2026</option>
-                <option value="p2">Jul - Dec 2026</option>
-            </select>
             <div class="auth-buttons">
                 <a href="/login" class="btn btn-admin magnetic"><i class="fas fa-sign-in-alt me-1 d-none d-sm-inline"></i> Login Portal</a>
             </div>
@@ -710,6 +714,13 @@
                 <span class="section-eyebrow">Data &amp; Transparency</span>
                 <h2 class="section-title">Transparency Dashboard</h2>
                 <p>Live satisfaction survey results across clusters and offices. Hover to see details, click to drill down.</p>
+            </div>
+
+            <div class="dashboard-toolbar">
+                <select id="periodSelect" class="period-select dashboard-period-select" onchange="changePeriod()">
+                    <option value="p1">Jan - Jun 2026</option>
+                    <option value="p2">Jul - Dec 2026</option>
+                </select>
             </div>
 
             <div class="dashboard-container">
