@@ -540,11 +540,11 @@ app.get('/auth/google', passport.authenticate('google', {
     prompt: 'select_account'
 }));
 
-// Google is only used as a quick REGISTRATION helper, not a recurring login method:
+// Google handles both registration AND recurring login for clients:
 //   - New email  -> stash the Google name/email in session and send them to set a local
 //                   password (they are NOT logged in yet).
-//   - Existing email with a password already set -> do NOT log them in here; send them
-//     back to /login with a flag so it can explain they should use email + password.
+//   - Existing email with a password already set -> log them straight in with Google,
+//     no need to type the password again.
 //   - Existing email with no password (legacy accounts created before this flow existed)
 //     -> treat like a new user and have them set a password to finish the upgrade.
 app.get('/auth/google/callback',
@@ -567,7 +567,8 @@ app.get('/auth/google/callback',
 
                 const existingAccount = rows && rows.length > 0 ? rows[0] : null;
                 if (existingAccount && existingAccount.password) {
-                    return res.redirect('/login?googleExists=1&email=' + encodeURIComponent(email));
+                    req.session.clientEmail = existingAccount.email;
+                    return res.redirect('/client-survey');
                 }
 
                 req.session.pendingGoogleUser = { email, name };

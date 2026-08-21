@@ -279,17 +279,9 @@
     <script>
         const loginQueryParams = new URLSearchParams(window.location.search);
         const loginErrorMsg = loginQueryParams.get('error');
-        const googleExists = loginQueryParams.get('googleExists');
-        const googleExistsEmail = loginQueryParams.get('email');
 
         if (loginErrorMsg) {
             AppAlert.error(loginErrorMsg, 'Login Failed');
-            window.history.replaceState({}, document.title, window.location.pathname);
-        } else if (googleExists) {
-            if (googleExistsEmail) {
-                document.getElementById('usernameInput').value = googleExistsEmail;
-            }
-            AppAlert.info('Your account is already registered. Please log in using your Email and Password below.', 'Account Already Registered');
             window.history.replaceState({}, document.title, window.location.pathname);
         }
     </script>
