@@ -592,7 +592,7 @@
 
     <aside class="sidebar" id="clientSidebar">
         <div class="sidebar-brand">
-            <img src="https://cspc.edu.ph/wp-content/uploads/2022/03/Camarines_Sur_Polytechnic_Colleges_Logo.png" alt="CSPC Logo">
+            <img src="/images/cspc-logo.png" alt="CSPC Logo">
             <div class="sidebar-brand-text">
                 <div class="t1">CQA Client Portal</div>
                 <div class="t2">CSPC Nabua, Cam. Sur</div>
@@ -648,7 +648,7 @@
 
             <div class="text-center border-bottom pb-4 mb-5">
                 <div class="mb-3">
-                    <img src="https://cspc.edu.ph/wp-content/uploads/2022/03/Camarines_Sur_Polytechnic_Colleges_Logo.png" alt="CSPC Logo" style="width: 92px; height: auto; background-color: white; border-radius: 50%; padding: 3px;" class="mb-3 shadow-sm">
+                    <img src="/images/cspc-logo.png" alt="CSPC Logo" style="width: 92px; height: auto;" class="mb-3">
                 </div>
                 <p class="small text-secondary text-uppercase mb-1" style="letter-spacing:.08em;" data-i18n="gov_rep">Republic of the Philippines</p>
                 <h3 class="fw-semibold text-uppercase mb-0 text-heading">Camarines Sur Polytechnic Colleges</h3>
@@ -831,7 +831,9 @@
 
                         <div class="col-12">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_service"></label>
-                            <input type="text" name="service_availed" class="form-control">
+                            <select name="service_availed" id="serviceSelect" class="form-select fs-6" disabled>
+                                <option value="" selected disabled>Select Service...</option>
+                            </select>
                         </div>
                     </div>
 
@@ -1194,6 +1196,51 @@ window.addEventListener('pageshow', function (event) {
 document.getElementById('surveyDate').valueAsDate = new Date();
 let currentLang = 'en';
 
+// =====================================
+// DEPENDENT "SERVICE AVAILED" DROPDOWN
+// =====================================
+// Built server-side in the /client-survey route (server.js) from the
+// `services` table, keyed by office_id — e.g. { "3": ["Service A", ...] }.
+const officeServices = <%- JSON.stringify(typeof officeServices !== 'undefined' ? officeServices : {}) %>;
+
+function populateServiceSelect(officeId) {
+    const serviceSelect = document.getElementById('serviceSelect');
+    if (!serviceSelect) return;
+
+    serviceSelect.innerHTML = '';
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Select Service...';
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    serviceSelect.appendChild(placeholder);
+
+    const services = officeServices[officeId] || [];
+    services.forEach(service => {
+        const opt = document.createElement('option');
+        opt.value = service;
+        opt.textContent = service;
+        serviceSelect.appendChild(opt);
+    });
+
+    serviceSelect.disabled = services.length === 0;
+}
+
+document.getElementById('officeSelect').addEventListener('change', function () {
+    populateServiceSelect(this.value);
+});
+
+// Handle the case where the browser restores a previously-selected office_id
+// (e.g. back/forward navigation, or a locked/pre-filled value) without a
+// fresh "change" event firing.
+(function initServiceSelectState() {
+    const officeSelect = document.getElementById('officeSelect');
+    if (officeSelect && officeSelect.value) {
+        populateServiceSelect(officeSelect.value);
+    }
+})();
+
 // Demographics saved from this account's FIRST-EVER survey submission (Region, Age, Sex).
 // Once set, these are pre-filled and locked so the client can never change them again.
 const savedClientProfile = <%- JSON.stringify(typeof clientProfile !== 'undefined' && clientProfile ? clientProfile : null) %>;
@@ -1537,7 +1584,7 @@ function validateStage(stageNum) {
             'input[name="survey_date"]',
             'select[name="region"]',
             'select[name="office_id"]',
-            'input[name="service_availed"]'
+            'select[name="service_availed"]'
         ];
         for (const sel of requiredSelectors) {
             const el = document.querySelector(sel);
@@ -1897,7 +1944,7 @@ function renderReviewSummary() {
     document.getElementById('rv-date').textContent = val('input[name="survey_date"]') || '—';
     document.getElementById('rv-region').textContent = selectedText('select[name="region"]');
     document.getElementById('rv-office').textContent = selectedText('select[name="office_id"]');
-    document.getElementById('rv-service').textContent = val('input[name="service_availed"]').trim() || '—';
+    document.getElementById('rv-service').textContent = selectedText('select[name="service_availed"]');
 
     document.getElementById('rv-cc1').textContent = checkedLabelText('cc1');
     document.getElementById('rv-cc2').textContent = checkedLabelText('cc2');
