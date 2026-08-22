@@ -98,7 +98,7 @@
                                     let clusterArchived = meta ? !!meta.is_archived : false;
                                 %>
                                     <tbody class="<%= clusterArchived ? 'archived-row cluster-row-archived' : 'cluster-row-active' %>">
-                                        <tr class="bg-light cluster-toggle" data-target="<%= targetId %>">
+                                        <tr class="bg-light cluster-toggle" data-target="<%= targetId %>" data-cluster="<%= cluster %>">
                                             <td colspan="3" class="px-4 py-3 fw-bold text-primary">
                                                 <i class="fas fa-chevron-down me-2 cluster-icon"></i>
                                                 <%= cluster %>
@@ -117,6 +117,11 @@
                                                         <form action="/clusters/restore/<%= meta.id %>" method="POST" style="display:inline;" onclick="event.stopPropagation();">
                                                             <button type="submit" class="btn btn-sm btn-outline-success" title="Restore this cluster">
                                                                 <i class="fas fa-undo"></i> Restore
+                                                            </button>
+                                                        </form>
+                                                        <form action="/clusters/permanent-delete/<%= meta.id %>" method="POST" style="display:inline;" class="permanent-delete-cluster-form" onclick="event.stopPropagation();">
+                                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Permanently delete this cluster">
+                                                                <i class="fas fa-trash"></i> Delete
                                                             </button>
                                                         </form>
                                                     <% } else { %>
@@ -152,6 +157,11 @@
                                                             <form action="/offices/restore/<%= office.id %>" method="POST" style="display:inline;">
                                                                 <button type="submit" class="btn btn-sm btn-outline-success" title="Restore this office">
                                                                     <i class="fas fa-undo"></i> Restore
+                                                                </button>
+                                                            </form>
+                                                            <form action="/offices/permanent-delete/<%= office.id %>" method="POST" style="display:inline;" class="permanent-delete-office-form">
+                                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Permanently delete this office">
+                                                                    <i class="fas fa-trash"></i> Delete
                                                                 </button>
                                                             </form>
                                                         <% } else { %>
@@ -350,9 +360,33 @@
         document.querySelectorAll('.archive-cluster-form').forEach(form => {
             form.addEventListener('submit', async function (e) {
                 e.preventDefault();
-                const confirmed = await AppAlert.confirm('Sigurado ka ba na gusto mong i-archive ang cluster na ito?', {
+                const confirmed = await AppAlert.confirm('Sigurado ka ba na gusto mong i-archive ang cluster na ito? Ma-a-archive din ang lahat ng offices sa ilalim nito.', {
                     title: 'Archive this cluster?',
                     confirmText: 'Yes, archive it!'
+                });
+                if (confirmed) form.submit();
+            });
+        });
+
+        // Confirm before permanently deleting an office (irreversible)
+        document.querySelectorAll('.permanent-delete-office-form').forEach(form => {
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                const confirmed = await AppAlert.confirm('Permanente itong tatanggalin sa database at hindi na maibabalik. Sigurado ka ba?', {
+                    title: 'Permanently delete this office?',
+                    confirmText: 'Yes, delete permanently!'
+                });
+                if (confirmed) form.submit();
+            });
+        });
+
+        // Confirm before permanently deleting a cluster (irreversible, cascades to its offices)
+        document.querySelectorAll('.permanent-delete-cluster-form').forEach(form => {
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                const confirmed = await AppAlert.confirm('Permanente itong tatanggalin sa database kasama ang lahat ng offices sa ilalim nito, at hindi na maibabalik. Sigurado ka ba?', {
+                    title: 'Permanently delete this cluster?',
+                    confirmText: 'Yes, delete permanently!'
                 });
                 if (confirmed) form.submit();
             });
@@ -370,20 +404,45 @@
             });
         }
 
-        const toggles = document.querySelectorAll('.cluster-toggle');
-        toggles.forEach(toggle => {
-            toggle.addEventListener('click', function () {
-                const targetId = this.getAttribute('data-target');
-                const target = document.getElementById(targetId);
-                if (!target) return;
+        // I-restore ang naka-save na collapsed state ng bawat cluster (per cluster name, hindi index)
+        // para hindi na mag-reset sa "open" kapag nag-refresh o lumipat ng page.
+        const COLLAPSE_KEY = 'officeClusterCollapsed';
+        function loadCollapsedState() {
+            try {
+                return JSON.parse(localStorage.getItem(COLLAPSE_KEY)) || {};
+            } catch (e) {
+                return {};
+            }
+        }
+        function saveCollapsedState(state) {
+            localStorage.setItem(COLLAPSE_KEY, JSON.stringify(state));
+        }
 
+        const collapsedState = loadCollapsedState();
+        const toggles = document.querySelectorAll('.cluster-toggle');
+
+        toggles.forEach(toggle => {
+            const targetId = toggle.getAttribute('data-target');
+            const clusterName = toggle.getAttribute('data-cluster');
+            const target = document.getElementById(targetId);
+            if (!target) return;
+
+            if (collapsedState[clusterName]) {
+                target.style.display = 'none';
+                toggle.classList.add('collapsed');
+            }
+
+            toggle.addEventListener('click', function () {
                 if (target.style.display === 'none') {
                     target.style.display = '';
-                    this.classList.remove('collapsed');
+                    toggle.classList.remove('collapsed');
+                    delete collapsedState[clusterName];
                 } else {
                     target.style.display = 'none';
-                    this.classList.add('collapsed');
+                    toggle.classList.add('collapsed');
+                    collapsedState[clusterName] = true;
                 }
+                saveCollapsedState(collapsedState);
             });
         });
     });
