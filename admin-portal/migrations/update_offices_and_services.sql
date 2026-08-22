@@ -59,25 +59,20 @@ INSERT INTO offices (id, cluster_name, office_name, head_director, email_address
 (41, 'Administrative and Finance Cluster', 'Procurement Unit', 'Not Assigned', 'default@cspc.edu.ph'),
 (43, 'Administrative and Finance Cluster', 'Project Management Unit', 'Not Assigned', 'default@cspc.edu.ph'),
 
--- PRESIDENT CLUSTER
-(24, 'PRESIDENT CLUSTER', 'Office of the President', 'Not Assigned', 'default@cspc.edu.ph'),
-(25, 'PRESIDENT CLUSTER', 'VPAA', 'Not Assigned', 'default@cspc.edu.ph'),
-(26, 'PRESIDENT CLUSTER', 'VPAF', 'Not Assigned', 'default@cspc.edu.ph'),
-(27, 'PRESIDENT CLUSTER', 'VPRIC', 'Not Assigned', 'default@cspc.edu.ph'),
-(33, 'PRESIDENT CLUSTER', 'Center for International Relations and Linkages', 'Not Assigned', 'default@cspc.edu.ph'),
-(38, 'PRESIDENT CLUSTER', 'Institutional Planning and Development Unit', 'Not Assigned', 'default@cspc.edu.ph'),
-(39, 'PRESIDENT CLUSTER', 'Internal Audit Unit', 'Not Assigned', 'default@cspc.edu.ph'),
+-- OFFICE OF THE PRESIDENT CLUSTER
+(24, 'Office of the President Cluster', 'Office of the President', 'Not Assigned', 'default@cspc.edu.ph'),
+(25, 'Office of the President Cluster', 'VPAA', 'Not Assigned', 'default@cspc.edu.ph'),
+(26, 'Office of the President Cluster', 'VPAF', 'Not Assigned', 'default@cspc.edu.ph'),
+(27, 'Office of the President Cluster', 'VPRIC', 'Not Assigned', 'default@cspc.edu.ph'),
+(33, 'Office of the President Cluster', 'Center for International Relations and Linkages', 'Not Assigned', 'default@cspc.edu.ph'),
+(38, 'Office of the President Cluster', 'Institutional Planning and Development Unit', 'Not Assigned', 'default@cspc.edu.ph'),
+(39, 'Office of the President Cluster', 'Internal Audit Unit', 'Not Assigned', 'default@cspc.edu.ph'),
 
--- RIC CLUSTER
-(31, 'RIC Cluster', 'Extension and Community Services Office', 'Not Assigned', 'default@cspc.edu.ph'),
-(35, 'RIC Cluster', 'Research and Development Services Office', 'Not Assigned', 'default@cspc.edu.ph'),
-(36, 'RIC Cluster', 'Center for Rinconada Culture, and the Arts', 'Not Assigned', 'default@cspc.edu.ph'),
-(42, 'RIC Cluster', 'PAxS', 'Not Assigned', 'default@cspc.edu.ph'),
-
--- NOT ASSIGNED / UNCATEGORIZED
-(20, 'Not Assigned', 'Internet Center', 'Not Assigned', 'default@cspc.edu.ph'),
-(28, 'Not Assigned', 'VPREPED', 'Not Assigned', 'default@cspc.edu.ph'),
-(44, 'Not Assigned', 'TESDA Office', 'Not Assigned', 'default@cspc.edu.ph');
+-- RESEARCH, INNOVATION AND COLLABORATION CLUSTER
+(31, 'Research, Innovation and Collaboration Cluster', 'Extension and Community Services Office', 'Not Assigned', 'default@cspc.edu.ph'),
+(35, 'Research, Innovation and Collaboration Cluster', 'Research and Development Services Office', 'Not Assigned', 'default@cspc.edu.ph'),
+(36, 'Research, Innovation and Collaboration Cluster', 'Center for Rinconada Culture, and the Arts', 'Not Assigned', 'default@cspc.edu.ph'),
+(42, 'Research, Innovation and Collaboration Cluster', 'PAxS', 'Not Assigned', 'default@cspc.edu.ph');
 
 -- `services` clears itself automatically (ON DELETE CASCADE from offices),
 -- but truncate explicitly too in case this migration is re-run.
@@ -157,10 +152,6 @@ INSERT INTO services (office_id, service_name) VALUES
 (19, 'Issuance of Institutional E-mail Address'),
 (19, 'Printing of Employees'' Identification Card'),
 
--- 20 - Internet Center
-(20, 'Applying for Renewal of Internet Access Card'),
-(20, 'Accessing the School''s Internet Center Services'),
-
 -- 21 - Supply and Property Management Unit
 (21, 'Applying/Renewal of Application for Bed Space at the College Dormitory'),
 (21, 'Borrowing Equipment and Other Facilities'),
@@ -175,14 +166,13 @@ INSERT INTO services (office_id, service_name) VALUES
 (23, 'Returning Books'),
 (23, 'Providing research assistance to external clients'),
 
--- 24-28 - Presidents / VPs
+-- 24-27 - Presidents / VPs
 (24, 'Travel Order Issuance to Students and Employees outside the Bicol Region'),
 (25, 'Travel Order Issuance to Students, Teaching Staff, and Employees within the Bicol Region'),
 (26, 'Travel Order Issuance to Employees within the Bicol Region'),
 (27, 'Travel Order Issuance to Employees in REPED within the Bicol Region'),
-(28, 'Requesting for Travel Order'),
 
--- 29-44 - Centers & Units (no distinct service text yet — placeholder)
+-- 29-43 - Centers & Units (no distinct service text yet — placeholder)
 (29, 'GENERAL SERVICES OFFERED'),
 (30, 'GENERAL SERVICES OFFERED'),
 (31, 'GENERAL SERVICES OFFERED'),
@@ -197,7 +187,6 @@ INSERT INTO services (office_id, service_name) VALUES
 (40, 'GENERAL SERVICES OFFERED'),
 (41, 'GENERAL SERVICES OFFERED'),
 (42, 'GENERAL SERVICES OFFERED'),
-(43, 'GENERAL SERVICES OFFERED'),
-(44, 'GENERAL SERVICES OFFERED');
+(43, 'GENERAL SERVICES OFFERED');
 
 COMMIT;

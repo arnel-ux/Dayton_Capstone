@@ -145,31 +145,28 @@ INSERT INTO `offices` (`id`, `cluster_name`, `office_name`, `head_director`, `em
 (17, 'Academic Cluster', 'BUHI CAMPUS', 'Not Assigned', 'default@cspc.edu.ph', 0),
 (18, 'Academic Cluster', 'Student Affairs and Services', 'Not Assigned', 'default@cspc.edu.ph', 0),
 (19, 'Administrative and Finance Cluster', 'Information and Communications Technology Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
-(20, 'Not Assigned', 'Internet Center', 'Not Assigned', 'default@cspc.edu.ph', 0),
 (21, 'Administrative and Finance Cluster', 'Supply and Property Management Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
 (22, 'Administrative and Finance Cluster', 'General Services Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
 (23, 'Academic Cluster', 'Learning Resources Development Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
-(24, 'PRESIDENT CLUSTER', 'Office of the President', 'Not Assigned', 'default@cspc.edu.ph', 0),
-(25, 'PRESIDENT CLUSTER', 'VPAA', 'Not Assigned', 'default@cspc.edu.ph', 0),
-(26, 'PRESIDENT CLUSTER', 'VPAF', 'Not Assigned', 'default@cspc.edu.ph', 0),
-(27, 'PRESIDENT CLUSTER', 'VPRIC', 'Not Assigned', 'default@cspc.edu.ph', 0),
-(28, 'Not Assigned', 'VPREPED', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(24, 'Office of the President Cluster', 'Office of the President', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(25, 'Office of the President Cluster', 'VPAA', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(26, 'Office of the President Cluster', 'VPAF', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(27, 'Office of the President Cluster', 'VPRIC', 'Not Assigned', 'default@cspc.edu.ph', 0),
 (29, 'Academic Cluster', 'Academic Center for Continuing Enhancement Services for Students (ACCESS)', 'Not Assigned', 'default@cspc.edu.ph', 0),
 (30, 'Academic Cluster', 'Center for Gender and Development (CGAD)', 'Not Assigned', 'default@cspc.edu.ph', 0),
-(31, 'RIC Cluster', 'Extension and Community Services Office', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(31, 'Research, Innovation and Collaboration Cluster', 'Extension and Community Services Office', 'Not Assigned', 'default@cspc.edu.ph', 0),
 (32, 'Academic Cluster', 'Center for Human Rights Education (CHRE)', 'Not Assigned', 'default@cspc.edu.ph', 0),
-(33, 'PRESIDENT CLUSTER', 'Center for International Relations and Linkages', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(33, 'Office of the President Cluster', 'Center for International Relations and Linkages', 'Not Assigned', 'default@cspc.edu.ph', 0),
 (34, 'Academic Cluster', 'Center for Quality Assurance', 'Not Assigned', 'default@cspc.edu.ph', 0),
-(35, 'RIC Cluster', 'Research and Development Services Office', 'Not Assigned', 'default@cspc.edu.ph', 0),
-(36, 'RIC Cluster', 'Center for Rinconada Culture, and the Arts', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(35, 'Research, Innovation and Collaboration Cluster', 'Research and Development Services Office', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(36, 'Research, Innovation and Collaboration Cluster', 'Center for Rinconada Culture, and the Arts', 'Not Assigned', 'default@cspc.edu.ph', 0),
 (37, 'Academic Cluster', 'Information and Alumni Affairs Unit & Broadcast Center', 'Not Assigned', 'default@cspc.edu.ph', 0),
-(38, 'PRESIDENT CLUSTER', 'Institutional Planning and Development Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
-(39, 'PRESIDENT CLUSTER', 'Internal Audit Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(38, 'Office of the President Cluster', 'Institutional Planning and Development Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(39, 'Office of the President Cluster', 'Internal Audit Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
 (40, 'Academic Cluster', 'National Service Training Program (NSTP)', 'Not Assigned', 'default@cspc.edu.ph', 0),
 (41, 'Administrative and Finance Cluster', 'Procurement Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
-(42, 'RIC Cluster', 'PAxS', 'Not Assigned', 'default@cspc.edu.ph', 0),
-(43, 'Administrative and Finance Cluster', 'Project Management Unit', 'Not Assigned', 'default@cspc.edu.ph', 0),
-(44, 'Not Assigned', 'TESDA Office', 'Not Assigned', 'default@cspc.edu.ph', 0);
+(42, 'Research, Innovation and Collaboration Cluster', 'PAxS', 'Not Assigned', 'default@cspc.edu.ph', 0),
+(43, 'Administrative and Finance Cluster', 'Project Management Unit', 'Not Assigned', 'default@cspc.edu.ph', 0);
 
 -- --------------------------------------------------------
 
@@ -236,8 +233,6 @@ INSERT INTO `services` (`id`, `office_id`, `service_name`) VALUES
 (46, 19, 'Applying for New Identification Card (New/Renewal)'),
 (47, 19, 'Issuance of Institutional E-mail Address'),
 (48, 19, 'Printing of Employees\' Identification Card'),
-(49, 20, 'Applying for Renewal of Internet Access Card'),
-(50, 20, 'Accessing the School\'s Internet Center Services'),
 (51, 21, 'Applying/Renewal of Application for Bed Space at the College Dormitory'),
 (52, 21, 'Borrowing Equipment and Other Facilities'),
 (53, 21, 'Renting College Equipment and Facilities'),
@@ -250,7 +245,6 @@ INSERT INTO `services` (`id`, `office_id`, `service_name`) VALUES
 (60, 25, 'Travel Order Issuance to Students, Teaching Staff, and Employees within the Bicol Region'),
 (61, 26, 'Travel Order Issuance to Employees within the Bicol Region'),
 (62, 27, 'Travel Order Issuance to Employees in REPED within the Bicol Region'),
-(63, 28, 'Requesting for Travel Order'),
 (64, 29, 'GENERAL SERVICES OFFERED'),
 (65, 30, 'GENERAL SERVICES OFFERED'),
 (66, 31, 'GENERAL SERVICES OFFERED'),
@@ -265,8 +259,7 @@ INSERT INTO `services` (`id`, `office_id`, `service_name`) VALUES
 (75, 40, 'GENERAL SERVICES OFFERED'),
 (76, 41, 'GENERAL SERVICES OFFERED'),
 (77, 42, 'GENERAL SERVICES OFFERED'),
-(78, 43, 'GENERAL SERVICES OFFERED'),
-(79, 44, 'GENERAL SERVICES OFFERED');
+(78, 43, 'GENERAL SERVICES OFFERED');
 
 -- --------------------------------------------------------
 
