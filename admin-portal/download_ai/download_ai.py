@@ -1,7 +1,18 @@
 import os
+import subprocess
+import sys
 
 # Force a massive 15-minute timeout limit so slow Wi-Fi doesn't crash it
-os.environ['HF_HUB_DOWNLOAD_TIMEOUT'] = '1000' 
+os.environ['HF_HUB_DOWNLOAD_TIMEOUT'] = '1000'
+
+# server.js now runs comment analysis through a persistent Flask model
+# server (ai_scripts/model_server.py) instead of spawning a fresh Python
+# process per comment, so Flask is a required dependency going forward.
+try:
+    import flask  # noqa: F401
+except ImportError:
+    print("Installing Flask (required by ai_scripts/model_server.py)...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "flask"])
 
 from transformers import pipeline
 

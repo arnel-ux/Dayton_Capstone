@@ -124,38 +124,69 @@ db.connect((err) => {
 // `await` each step (duplicate check → AI analysis → insert) in sequence.
 const dbQuery = promisify(db.query).bind(db);
 
-// Runs a comment through ai_scripts/analyze.py and resolves with
-// { sentiment, topic }. Used by both the live /submit-survey route (fire-and-forget,
-// applied via an UPDATE after the fact) and the /sync-surveys batch route
-// (awaited before the row is even inserted). Never rejects — a missing/blank
-// comment resolves with nulls (so DB defaults apply), and any script failure
-// resolves with the "Neutral" / "General Feedback" fallback instead of
-// throwing, so one bad comment can never crash a batch sync.
-//
-// `offline` should be true for comments coming from the /sync-surveys queue
-// (submitted while the client was offline, synced later in bulk) — analyze.py
-// takes a lightweight local heuristic fast path for those instead of loading
-// its transformer models, since nobody is waiting on a live response.
-function analyzeComment(comment, offline = false) {
-    return new Promise((resolve) => {
-        if (!comment || !String(comment).trim()) {
-            return resolve({ sentiment: null, topic: null });
+// ==========================================
+// AI MODEL SERVER (persistent, keeps ~1GB of transformer weights loaded in
+// memory for the lifetime of the admin portal, instead of reloading them
+// from disk on every single comment). Spawned once here and reused for
+// every live /submit-survey comment. See ai_scripts/model_server.py.
+// ==========================================
+const MODEL_SERVER_PORT = process.env.AI_MODEL_SERVER_PORT || 8765;
+const MODEL_SERVER_URL = `http://127.0.0.1:${MODEL_SERVER_PORT}`;
+let modelServerProcess = null;
+let modelServerReady = false;
+
+function startModelServer() {
+    const scriptPath = path.join(__dirname, 'ai_scripts', 'model_server.py');
+    modelServerProcess = spawn('python', [scriptPath], {
+        env: { ...process.env, AI_MODEL_SERVER_PORT: String(MODEL_SERVER_PORT) }
+    });
+
+    modelServerProcess.on('error', (err) => {
+        console.error("❌ [AI Model Server] Could not start Python. Is it installed?", err);
+    });
+
+    modelServerProcess.stdout.on('data', (chunk) => {
+        const text = chunk.toString();
+        process.stdout.write(`[AI Model Server] ${text}`);
+        if (text.includes('READY')) {
+            modelServerReady = true;
+            console.log(`✅ [AI Model Server] Warm and ready on ${MODEL_SERVER_URL}`);
         }
+    });
+    modelServerProcess.stderr.on('data', (chunk) => {
+        process.stdout.write(`[AI Model Server] ${chunk.toString()}`);
+    });
 
-        let settled = false;
-        const finish = (result) => {
-            if (settled) return;
-            settled = true;
-            resolve(result);
-        };
+    modelServerProcess.on('close', (code) => {
+        modelServerReady = false;
+        console.error(`❌ [AI Model Server] Exited (code ${code}). Live comment analysis will fall back to the slower per-comment path until it's restarted.`);
+    });
+}
 
+function stopModelServer() {
+    if (modelServerProcess && !modelServerProcess.killed) {
+        modelServerProcess.kill();
+    }
+}
+process.on('exit', stopModelServer);
+process.on('SIGINT', () => { stopModelServer(); process.exit(0); });
+process.on('SIGTERM', () => { stopModelServer(); process.exit(0); });
+
+// Runs a comment through the full transformer sentiment/topic pipeline via
+// ai_scripts/analyze.py, spawning a fresh Python process. This reloads the
+// models from disk every call, so it's only used as a fallback for the live
+// path (model server unreachable) and as the normal path for offline-synced
+// comments (see analyzeComment below), which take the fast lexicon branch
+// inside analyze.py instead of this heavy branch.
+function analyzeViaPythonScript(comment, offline) {
+    return new Promise((resolve) => {
         try {
             const pythonScriptPath = path.join(__dirname, 'ai_scripts', 'analyze.py');
             const pythonProcess = spawn('python', [pythonScriptPath]);
 
             pythonProcess.on('error', (err) => {
                 console.error("❌ [AI] Could not start Python. Is it installed?", err);
-                finish({ sentiment: 'Neutral', topic: 'General Feedback' });
+                resolve({ sentiment: 'Neutral', topic: 'General Feedback' });
             });
 
             pythonProcess.stdin.write(JSON.stringify({ comment: String(comment), offline: !!offline }));
@@ -171,20 +202,69 @@ function analyzeComment(comment, offline = false) {
                     if (jsonMatch) {
                         const aiResult = JSON.parse(jsonMatch[0]);
                         if (aiResult.sentiment && aiResult.topic) {
-                            return finish({ sentiment: aiResult.sentiment, topic: aiResult.topic });
+                            return resolve({ sentiment: aiResult.sentiment, topic: aiResult.topic });
                         }
                     }
                     console.error("❌ [AI Parsing Error]: Could not find JSON.\nRaw Output:", aiOutput);
-                    finish({ sentiment: 'Neutral', topic: 'General Feedback' });
+                    resolve({ sentiment: 'Neutral', topic: 'General Feedback' });
                 } catch (e) {
                     console.error("❌ [AI Execution Error]:", e.message);
-                    finish({ sentiment: 'Neutral', topic: 'General Feedback' });
+                    resolve({ sentiment: 'Neutral', topic: 'General Feedback' });
                 }
             });
         } catch (err) {
             console.error("❌ [AI] Unexpected error launching analysis:", err);
-            finish({ sentiment: 'Neutral', topic: 'General Feedback' });
+            resolve({ sentiment: 'Neutral', topic: 'General Feedback' });
         }
+    });
+}
+
+// Resolves { sentiment, topic } for a comment. Used by both the live
+// /submit-survey route (fire-and-forget, applied via an UPDATE after the
+// fact) and the /sync-surveys batch route (awaited before the row is even
+// inserted). Never rejects — a missing/blank comment resolves with nulls
+// (so DB defaults apply), and any failure resolves with the "Neutral" /
+// "General Feedback" fallback instead of throwing, so one bad comment can
+// never crash a batch sync.
+//
+// `offline` should be true for comments coming from the /sync-surveys queue
+// (submitted while the client was offline, synced later in bulk) — those
+// always go through analyze.py's fast local-heuristic path (no model
+// loading at all, so a plain per-call spawn is already fast). Live comments
+// (`offline` false) go to the persistent model server for near-instant
+// analysis, only falling back to spawning analyze.py (slow — reloads the
+// models) if the model server is unreachable.
+function analyzeComment(comment, offline = false) {
+    return new Promise((resolve) => {
+        if (!comment || !String(comment).trim()) {
+            return resolve({ sentiment: null, topic: null });
+        }
+
+        if (offline) {
+            return resolve(analyzeViaPythonScript(comment, true));
+        }
+
+        if (!modelServerReady) {
+            return resolve(analyzeViaPythonScript(comment, false));
+        }
+
+        fetch(`${MODEL_SERVER_URL}/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ comment: String(comment) }),
+            signal: AbortSignal.timeout(15000)
+        })
+            .then((res) => res.ok ? res.json() : Promise.reject(new Error(`Model server responded ${res.status}`)))
+            .then((aiResult) => {
+                if (aiResult.sentiment && aiResult.topic) {
+                    return resolve({ sentiment: aiResult.sentiment, topic: aiResult.topic });
+                }
+                throw new Error('Model server response missing sentiment/topic');
+            })
+            .catch((err) => {
+                console.error("❌ [AI Model Server] Request failed, falling back to per-comment script:", err.message);
+                resolve(analyzeViaPythonScript(comment, false));
+            });
     });
 }
 
@@ -1473,9 +1553,13 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
 
                     let badgeClass = 'bg-general';
                     const topicLower = (row.topic || '').toLowerCase();
-                    if (topicLower.includes('cr') || topicLower.includes('restroom')) badgeClass = 'bg-cr';
-                    else if (topicLower.includes('aircon') || topicLower.includes('ac')) badgeClass = 'bg-aircon';
-                    else if (topicLower.includes('facility') || topicLower.includes('equipment')) badgeClass = 'bg-facility';
+                    if (topicLower.includes('restroom') || topicLower.includes('cleanliness')) badgeClass = 'bg-cr';
+                    else if (topicLower.includes('aircon') || topicLower.includes('cooling')) badgeClass = 'bg-aircon';
+                    else if (
+                        topicLower.includes('facility') || topicLower.includes('equipment') ||
+                        topicLower.includes('furniture') || topicLower.includes('seating') ||
+                        topicLower.includes('power') || topicLower.includes('lighting')
+                    ) badgeClass = 'bg-facility';
 
                     const sentimentValue = row.sentiment || 'Neutral';
                     const sentimentLower = sentimentValue.toLowerCase();
@@ -1855,4 +1939,5 @@ app.get('/api/public-dashboard', (req, res) => {
 // ==========================================
 app.listen(3000, '0.0.0.0', () => {
     console.log(`🚀 Server is running at http://localhost:${port}`);
+    startModelServer();
 });
