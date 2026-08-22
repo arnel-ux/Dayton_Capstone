@@ -4,8 +4,8 @@
 
 importScripts('/js/offline-db.js');
 
-const STATIC_CACHE = 'cspc-static-v1';
-const RUNTIME_CACHE = 'cspc-runtime-v1';
+const STATIC_CACHE = 'cspc-static-v2';
+const RUNTIME_CACHE = 'cspc-runtime-v2';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
@@ -61,6 +61,18 @@ self.addEventListener('fetch', (event) => {
     const { request } = event;
     if (request.method !== 'GET') return;
 
+    const url = new URL(request.url);
+
+    // API calls always need live, authenticated data (e.g. the Content
+    // Management System's /api/content) — never a cache-first snapshot from
+    // whenever a given endpoint happened to be fetched for the first time.
+    // This service worker is registered with root scope ('/'), so without
+    // this early bypass it would just as happily intercept and permanently
+    // stale-cache admin-portal API calls as it does the public survey's.
+    if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) {
+        return;
+    }
+
     // Full-page navigations (e.g. opening /client-survey, /login): try the
     // network first so authenticated/dynamic content stays fresh, but fall
     // back to whatever was last cached — or the offline fallback page —
@@ -70,9 +82,12 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    const url = new URL(request.url);
+    // Same-origin static assets (CSS/JS/images): serve the cached copy
+    // instantly if there is one, but always refetch in the background and
+    // update the cache — so a deployed CSS/JS change reaches clients on
+    // their very next load instead of being frozen forever like cacheFirst.
     if (url.origin === self.location.origin) {
-        event.respondWith(cacheFirst(request, STATIC_CACHE));
+        event.respondWith(staleWhileRevalidate(request, STATIC_CACHE));
         return;
     }
 
@@ -93,6 +108,18 @@ async function handleNavigation(request) {
         const fallback = await caches.match('/offline.html');
         return fallback || Response.error();
     }
+}
+
+async function staleWhileRevalidate(request, cacheName) {
+    const cache = await caches.open(cacheName);
+    const cached = await cache.match(request);
+    const networkFetch = fetch(request)
+        .then((response) => {
+            if (response && response.ok) cache.put(request, response.clone());
+            return response;
+        })
+        .catch(() => cached);
+    return cached || networkFetch;
 }
 
 async function cacheFirst(request, cacheName) {

@@ -4,6 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CQA - Public Transparency Portal</title>
+    <script>
+        (function () {
+            try {
+                if (localStorage.getItem('theme') === 'dark') {
+                    document.documentElement.setAttribute('data-bs-theme', 'dark');
+                    document.addEventListener('DOMContentLoaded', function () {
+                        document.body.classList.add('dark-mode');
+                    });
+                }
+            } catch (e) {}
+        })();
+    </script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
 
@@ -58,7 +70,7 @@
 
         .bg-image {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background:url('https://spims.cspc.edu.ph/assets/img/background.jpg');
+            background:url('<%- landingContent.hero.imageUrl %>');
             background-size: cover; background-position: center; z-index: -2;
         }
 
@@ -160,14 +172,14 @@
             position: relative; text-align: center; padding: var(--sp-12) var(--sp-4) var(--sp-12);
             background:
                 linear-gradient(180deg, rgba(6,14,33,0.88) 0%, rgba(10,31,68,0.82) 100%),
-                url('https://spims.cspc.edu.ph/assets/img/background.jpg');
+                url('<%- landingContent.hero.imageUrl %>');
             background-size: cover;
             background-position: center;
         }
         body.dark-mode .hero-section {
             background:
                 linear-gradient(180deg, rgba(4,8,18,0.92) 0%, rgba(6,14,33,0.88) 100%),
-                url('https://spims.cspc.edu.ph/assets/img/background.jpg');
+                url('<%- landingContent.hero.imageUrl %>');
             background-size: cover;
             background-position: center;
         }
@@ -446,12 +458,6 @@
         .hint-text { font-size: var(--fs-sm); color: #a3adc2; margin-top: var(--sp-1); font-weight: 500; line-height: 1.5; }
         body.dark-mode .hint-text { color: #64748b; }
 
-        #theme-toggle {
-            position: fixed; bottom: var(--sp-3); right: var(--sp-3); z-index: 1050; border-radius: 50px; padding: var(--sp-2) var(--sp-4); font-weight: 600; font-size: var(--fs-sm); box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            border: 1px solid rgba(255,255,255,0.2); will-change: transform;
-        }
-        #theme-toggle:hover { transform: scale(1.05); }
-
         /* =========================================================
            FOOTER
         ========================================================= */
@@ -539,10 +545,10 @@
 
     <div class="sticky-top-section" id="siteHeader">
         <div class="nav-left">
-            <img src="/images/cspc-logo.png" alt="Camarines Sur Polytechnic Colleges Logo">
+            <img src="<%= landingContent.branding.logoUrl %>" alt="Camarines Sur Polytechnic Colleges Logo">
             <div class="header-text-container">
-                <h1 class="header-title">Center For Quality Assurance</h1>
-                <p class="header-subtitle">Public Transparency Portal • Satisfaction Survey</p>
+                <h1 class="header-title"><%= landingContent.branding.title %></h1>
+                <p class="header-subtitle"><%= landingContent.branding.subtitle %></p>
             </div>
         </div>
 
@@ -555,7 +561,7 @@
 
         <div class="nav-right">
             <div class="auth-buttons">
-                <a href="/login" class="btn btn-admin magnetic"><i class="fas fa-sign-in-alt me-1 d-none d-sm-inline"></i> Login Portal</a>
+                <a href="/login" class="btn btn-admin magnetic"><i class="fas fa-sign-in-alt me-1 d-none d-sm-inline"></i> <%= landingContent.branding.loginLabel %></a>
             </div>
         </div>
     </div>
@@ -567,18 +573,17 @@
         <!-- ================= HERO SECTION ================= -->
         <section class="hero-section" id="hero">
             <div class="hero-content">
-                <span class="section-eyebrow hero-eyebrow">Camarines Sur Polytechnic Colleges</span>
+                <span class="section-eyebrow hero-eyebrow"><%= landingContent.hero.eyebrow %></span>
                 <h1 class="hero-title">
-                    <span class="line">Center for <span class="gold-text">Quality Assurance</span></span>
-                    <span class="line">Public Transparency Portal</span>
+                    <span class="line"><%= landingContent.hero.titleLine1 %></span>
+                    <span class="line"><%= landingContent.hero.titleLine2 %></span>
                 </h1>
                 <p class="hero-subtitle">
-                    A live window into our institution's governance, services, and client satisfaction
-                    performance &mdash; built on data, driven by continuous quality improvement.
+                    <%= landingContent.hero.subtext %>
                 </p>
                 <div class="hero-cta-group">
-                    <a href="#dashboard" class="btn-hero btn-hero-primary magnetic"><i class="fas fa-chart-pie"></i> Explore Dashboard</a>
-                    <a href="#services" class="btn-hero btn-hero-secondary magnetic"><i class="fas fa-layer-group"></i> View Our Services</a>
+                    <a href="<%= landingContent.hero.cta1Link %>" class="btn-hero btn-hero-primary magnetic"><i class="fas fa-chart-pie"></i> <%= landingContent.hero.cta1Text %></a>
+                    <a href="<%= landingContent.hero.cta2Link %>" class="btn-hero btn-hero-secondary magnetic"><i class="fas fa-layer-group"></i> <%= landingContent.hero.cta2Text %></a>
                 </div>
             </div>
 
@@ -593,31 +598,25 @@
             <div class="about-grid">
                 <div class="profile-card glow-card" data-reveal="fade-right">
                     <div class="profile-avatar"><i class="fas fa-user-tie"></i></div>
-                    <p class="profile-name">JUVY M. BUSTAMANTE, JD</p>
-                    <p class="profile-role">Head, Center for Quality Assurance</p>
+                    <p class="profile-name"><%= landingContent.about.headName %></p>
+                    <p class="profile-role"><%= landingContent.about.headRole %></p>
                     <div class="profile-divider"></div>
                     <div class="profile-contact">
-                        <span><i class="fas fa-envelope"></i> <a href="mailto:qams@cspc.edu.ph">qams@cspc.edu.ph</a></span>
-                        <span><i class="fas fa-phone"></i> (054) 2884421 to 23 loc. 123</span>
+                        <span><i class="fas fa-envelope"></i> <a href="mailto:<%= landingContent.about.headEmail %>"><%= landingContent.about.headEmail %></a></span>
+                        <span><i class="fas fa-phone"></i> <%= landingContent.about.headPhone %></span>
                     </div>
                 </div>
 
                 <div class="about-text" data-reveal="fade-up" data-reveal-delay="150">
-                    <span class="section-eyebrow">Who We Are</span>
-                    <h2 class="section-title">Center for Quality Assurance</h2>
+                    <span class="section-eyebrow"><%= landingContent.about.eyebrow %></span>
+                    <h2 class="section-title"><%= landingContent.about.title %></h2>
                     <p>
-                        The Center for Quality Assurance is where the College's quality assurance mechanisms
-                        and processes are vested. The office is in-charge of all international, national and
-                        local quality assurance mechanisms, while working closely with top management in
-                        setting up quality assurance procedures. Its main responsibility is to coordinate,
-                        assist, and monitor the different units to strengthen their academic and administrative
-                        management and processes so that they are better able to achieve their quality goals
-                        and educational objectives.
+                        <%= landingContent.about.paragraph %>
                     </p>
                     <div class="about-badges">
-                        <span class="about-badge pop-glow"><i class="fas fa-award"></i> ISO 9001:2015 Certified</span>
-                        <span class="about-badge pop-glow"><i class="fas fa-shield-halved"></i> Institutional Accreditation</span>
-                        <span class="about-badge pop-glow"><i class="fas fa-chart-line"></i> Continuous Quality Monitoring</span>
+                        <span class="about-badge pop-glow"><i class="fas fa-award"></i> <%= landingContent.about.badge1 %></span>
+                        <span class="about-badge pop-glow"><i class="fas fa-shield-halved"></i> <%= landingContent.about.badge2 %></span>
+                        <span class="about-badge pop-glow"><i class="fas fa-chart-line"></i> <%= landingContent.about.badge3 %></span>
                     </div>
                 </div>
             </div>
@@ -626,28 +625,28 @@
         <!-- ================= ORGANIZATIONAL STRUCTURE SECTION ================= -->
         <section class="org-section" id="structure">
             <div class="org-wrap">
-                <span class="section-eyebrow">Governance</span>
-                <h2 class="section-title">Organizational Structure</h2>
+                <span class="section-eyebrow"><%= landingContent.org.eyebrow %></span>
+                <h2 class="section-title"><%= landingContent.org.title %></h2>
 
                 <div class="org-tree">
                     <div class="org-node top glow-card" data-reveal="zoom-in">
                         <div class="org-avatar"><i class="fas fa-user-graduate"></i></div>
-                        <p class="org-name">Amado A. Oliva Jr., PhD</p>
-                        <p class="org-role">SUC President III</p>
+                        <p class="org-name"><%= landingContent.org.lead1Name %></p>
+                        <p class="org-role"><%= landingContent.org.lead1Role %></p>
                     </div>
                     <div class="org-connector"></div>
 
                     <div class="org-node top glow-card" data-reveal="zoom-in" data-reveal-delay="100">
                         <div class="org-avatar"><i class="fas fa-user-graduate"></i></div>
-                        <p class="org-name">Dr. Jocelyn O. Jintalan</p>
-                        <p class="org-role">Vice President of Academic Affairs</p>
+                        <p class="org-name"><%= landingContent.org.lead2Name %></p>
+                        <p class="org-role"><%= landingContent.org.lead2Role %></p>
                     </div>
                     <div class="org-connector"></div>
 
                     <div class="org-node top glow-card" data-reveal="zoom-in" data-reveal-delay="200">
                         <div class="org-avatar"><i class="fas fa-user-tie"></i></div>
-                        <p class="org-name">Mr. Juvy M. Bustamante, JD</p>
-                        <p class="org-role">AO V &middot; Head, Center for Quality Assurance</p>
+                        <p class="org-name"><%= landingContent.org.lead3Name %></p>
+                        <p class="org-role"><%= landingContent.org.lead3Role %></p>
                     </div>
                     <div class="org-connector"></div>
 
@@ -655,40 +654,40 @@
                         <div class="org-team-grid org-team-row">
                             <div class="org-node glow-card" data-reveal="fade-up" data-reveal-delay="0">
                                 <div class="org-avatar"><i class="fas fa-user"></i></div>
-                                <p class="org-name">Angielyn L. Patricio</p>
-                                <p class="org-role">AA VI / Program Accreditation and Assessment Coordinator</p>
+                                <p class="org-name"><%= landingContent.org.team1Name %></p>
+                                <p class="org-role"><%= landingContent.org.team1Role %></p>
                             </div>
                             <div class="org-node glow-card" data-reveal="fade-up" data-reveal-delay="100">
                                 <div class="org-avatar"><i class="fas fa-user"></i></div>
-                                <p class="org-name">Marian Beatrize O. Tabalos</p>
-                                <p class="org-role">AO II / Institutional Accreditations Person-in-Charge</p>
+                                <p class="org-name"><%= landingContent.org.team2Name %></p>
+                                <p class="org-role"><%= landingContent.org.team2Role %></p>
                             </div>
                             <div class="org-node glow-card" data-reveal="fade-up" data-reveal-delay="200">
                                 <div class="org-avatar"><i class="fas fa-user"></i></div>
-                                <p class="org-name">Lea Laarni B. Albeza-Arines</p>
-                                <p class="org-role">AO IV / QMS and EOMS Person-in-Charge</p>
+                                <p class="org-name"><%= landingContent.org.team3Name %></p>
+                                <p class="org-role"><%= landingContent.org.team3Role %></p>
                             </div>
                         </div>
 
                         <div class="org-team-grid org-team-row">
                             <div class="org-node glow-card" data-reveal="fade-up" data-reveal-delay="0">
                                 <div class="org-avatar"><i class="fas fa-user"></i></div>
-                                <p class="org-name">Chrena Joyce I. Brutas</p>
-                                <p class="org-role">Technical Writer / CSM Focal Person</p>
+                                <p class="org-name"><%= landingContent.org.team4Name %></p>
+                                <p class="org-role"><%= landingContent.org.team4Role %></p>
                             </div>
                             <div class="org-node glow-card" data-reveal="fade-up" data-reveal-delay="100">
                                 <div class="org-avatar"><i class="fas fa-user"></i></div>
-                                <p class="org-name">Christine Joy L. Taburnal</p>
-                                <p class="org-role">AA II / Office Clerk / Clerical Support Staff</p>
+                                <p class="org-name"><%= landingContent.org.team5Name %></p>
+                                <p class="org-role"><%= landingContent.org.team5Role %></p>
                             </div>
                             <div class="org-node glow-card" data-reveal="fade-up" data-reveal-delay="200">
                                 <div class="org-avatar"><i class="fas fa-user"></i></div>
-                                <p class="org-name">Lawrence A. Rebulado</p>
-                                <p class="org-role">Layout Artist / Databank Manager</p>
+                                <p class="org-name"><%= landingContent.org.team6Name %></p>
+                                <p class="org-role"><%= landingContent.org.team6Role %></p>
                             </div>
                         </div>
 
-                        <div class="org-student-aide" data-reveal="fade-up" data-reveal-delay="300"><i class="fas fa-user-graduate me-2"></i>Student Aide</div>
+                        <div class="org-student-aide" data-reveal="fade-up" data-reveal-delay="300"><i class="fas fa-user-graduate me-2"></i><%= landingContent.org.aideLabel %></div>
                     </div>
                 </div>
             </div>
@@ -697,9 +696,9 @@
         <!-- ================= OUR SERVICES SECTION ================= -->
         <section class="services-section" id="services">
             <div class="services-header" data-reveal="fade-up">
-                <span class="section-eyebrow">Client Satisfaction Measurement</span>
-                <h2 class="section-title">Our Services</h2>
-                <p>Every frontline service across the College, organized by Cluster &rarr; Office. Pick a cluster, then expand an office to see what it offers.</p>
+                <span class="section-eyebrow"><%= landingContent.services.eyebrow %></span>
+                <h2 class="section-title"><%= landingContent.services.title %></h2>
+                <p><%= landingContent.services.desc %></p>
             </div>
 
             <div class="services-wrap" data-reveal="fade-up">
@@ -778,13 +777,11 @@
             <div class="footer-main">
                 <div class="footer-col footer-brand">
                     <div class="footer-brand-logo">
-                        <img src="/images/cspc-logo.png" alt="CSPC Logo">
-                        <p class="footer-brand-title">Center For Quality Assurance<span>Camarines Sur Polytechnic Colleges</span></p>
+                        <img src="<%= landingContent.branding.logoUrl %>" alt="CSPC Logo">
+                        <p class="footer-brand-title"><%= landingContent.branding.title %><span><%= landingContent.about.title %></span></p>
                     </div>
                     <p class="footer-desc">
-                        Committed to upholding transparency and accountability by providing open access
-                        to institutional quality assurance data, governance structures, and public
-                        satisfaction survey results.
+                        <%= landingContent.footer.desc %>
                     </p>
                 </div>
 
@@ -802,20 +799,20 @@
                 <div class="footer-col">
                     <h4 class="footer-heading">Contact Us</h4>
                     <ul class="footer-contact">
-                        <li><i class="fas fa-location-dot"></i> <span>Center for Quality Assurance, Camarines Sur Polytechnic Colleges, Nabua, Camarines Sur, Philippines</span></li>
-                        <li><i class="fas fa-envelope"></i> <a href="mailto:qams@cspc.edu.ph">qams@cspc.edu.ph</a></li>
-                        <li><i class="fas fa-phone"></i> <span>(054) 2884421 to 23 loc. 123</span></li>
-                        <li><i class="fas fa-clock"></i> <span>Mon &ndash; Fri, 8:00 AM &ndash; 5:00 PM</span></li>
+                        <li><i class="fas fa-location-dot"></i> <span><%= landingContent.footer.address %></span></li>
+                        <li><i class="fas fa-envelope"></i> <a href="mailto:<%= landingContent.footer.email %>"><%= landingContent.footer.email %></a></li>
+                        <li><i class="fas fa-phone"></i> <span><%= landingContent.footer.phone %></span></li>
+                        <li><i class="fas fa-clock"></i> <span><%= landingContent.footer.hours %></span></li>
                     </ul>
                 </div>
 
                 <div class="footer-col">
                     <h4 class="footer-heading">Connect With Us</h4>
                     <div class="footer-socials">
-                        <a href="https://facebook.com" target="_blank" rel="noopener" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
-                        <a href="https://twitter.com" target="_blank" rel="noopener" aria-label="Twitter / X"><i class="fab fa-x-twitter"></i></a>
-                        <a href="https://linkedin.com" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
-                        <a href="https://spims.cspc.edu.ph" target="_blank" rel="noopener" aria-label="SPIMS Portal"><i class="fas fa-globe"></i></a>
+                        <a href="<%= landingContent.footer.facebook %>" target="_blank" rel="noopener" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+                        <a href="<%= landingContent.footer.twitter %>" target="_blank" rel="noopener" aria-label="Twitter / X"><i class="fab fa-x-twitter"></i></a>
+                        <a href="<%= landingContent.footer.linkedin %>" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+                        <a href="<%= landingContent.footer.spims %>" target="_blank" rel="noopener" aria-label="SPIMS Portal"><i class="fas fa-globe"></i></a>
                     </div>
                 </div>
             </div>
@@ -827,7 +824,7 @@
 
     </div>
 
-    <button id="theme-toggle" class="btn btn-dark" onclick="toggleTheme()"><i class="fas fa-moon me-2"></i>Dark Mode</button>
+    <%- include('layout/theme-toggle') %>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
@@ -1515,21 +1512,12 @@
             if(cloneBack) cloneBack.classList.add('d-none');
         }
 
-        function toggleTheme() {
-            document.body.classList.toggle('dark-mode');
-            const btn = document.getElementById('theme-toggle');
-            if (document.body.classList.contains('dark-mode')) {
-                btn.innerHTML = '<i class="fas fa-sun me-2"></i>Light Mode';
-                btn.classList.replace('btn-dark', 'btn-light');
-            } else {
-                btn.innerHTML = '<i class="fas fa-moon me-2"></i>Dark Mode';
-                btn.classList.replace('btn-light', 'btn-dark');
-            }
+        document.addEventListener('themechange', function () {
             Object.keys(activeCharts).forEach(rawId => {
                 const state = chartState[rawId];
                 loadChart(rawId, state.view, state.index);
             });
-        }
+        });
 
         // =========================================================================
         // "ANTI-GRAVITY" MOTION LAYER — every tween below touches ONLY transform

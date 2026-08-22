@@ -9,6 +9,15 @@
     <style>
         :root { --primary-gradient: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); --glass-bg: #ffffff; --navy: #0f172a; }
         body { background-color: #f1f5f9; font-family: 'Plus Jakarta Sans', sans-serif; color: var(--navy); overflow-x: hidden; }
+        html[data-bs-theme="dark"] body { background-color: #0b1526; color: #e2e8f0; }
+        html[data-bs-theme="dark"] .chart-card,
+        html[data-bs-theme="dark"] .stat-box,
+        html[data-bs-theme="dark"] .filter-bar { background: #141d30; }
+        html[data-bs-theme="dark"] .stat-box h3 { color: #e2e8f0; }
+        html[data-bs-theme="dark"] .stat-box p,
+        html[data-bs-theme="dark"] .filter-bar label { color: #94a3b8; }
+        html[data-bs-theme="dark"] .filter-bar select,
+        html[data-bs-theme="dark"] .filter-bar .form-select { background-color: #1e293b; color: #e2e8f0; border-color: #263045; }
         @keyframes fadeInUp { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
         .animated-intro { animation: fadeInUp 1s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .hero-header { text-align: center; padding: 1rem 1rem 0.5rem 1rem; }

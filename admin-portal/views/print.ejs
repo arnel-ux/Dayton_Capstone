@@ -7,9 +7,23 @@
         :root {
             --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
             --bg-body: #f1f5f9;
+            --text-main: #1f2937;
+            --card-bg: #ffffff;
         }
 
-        body { background-color: var(--bg-body); font-family: 'Plus Jakarta Sans', sans-serif; }
+        html[data-bs-theme="dark"] {
+            --bg-body: #0b1526;
+            --text-main: #e2e8f0;
+            --card-bg: #141d30;
+        }
+
+        body { background-color: var(--bg-body); font-family: 'Plus Jakarta Sans', sans-serif; color: var(--text-main); }
+
+        html[data-bs-theme="dark"] .stat-card,
+        html[data-bs-theme="dark"] .cluster-mini-card,
+        html[data-bs-theme="dark"] .chart-container-main {
+            background: var(--card-bg);
+        }
 
         .overall-header-card {
             background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);

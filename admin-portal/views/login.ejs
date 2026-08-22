@@ -10,6 +10,7 @@
             padding: 0;
             overflow: hidden; /* Para walang lumabas na scrollbar */
             font-family: 'Plus Jakarta Sans', sans-serif;
+            -webkit-font-smoothing: antialiased;
         }
 
         /* 1. The Blurred Background Image */
@@ -39,12 +40,14 @@
             left: 0;
             width: 100vw;
             height: 100vh;
+            max-height: 100vh;
             display: flex;
             flex-direction: column; /* Para magpatong ang titles at card */
             align-items: center;    /* Centers vertically/horizontally */
-            justify-content: center;   
+            justify-content: center;
             z-index: 1;
             padding: 1rem;
+            overflow-y: auto; /* Safety fallback: scroll instead of clipping on short viewports */
         }
 
         /* --- BAGONG DAGDAG NA HEADER STYLES & ANIMATIONS --- */
@@ -63,45 +66,55 @@
 
         .header-container {
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 1.1rem;
             max-width: 800px; /* Para hindi masyadong humaba sa malaking screen */
+            flex-shrink: 0;
         }
 
         .main-title {
             color: #ffffff;
             font-weight: 800;
-            font-size: 2rem;
+            font-size: 1.5rem;
             text-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
-            margin-bottom: 0.5rem;
-            letter-spacing: 0.5px;
-            
+            margin-bottom: 0.35rem;
+            letter-spacing: 0.3px;
+            line-height: 1.25;
+
             /* Apply animation (Mauuna) */
             opacity: 0;
             animation: fadeSlideUp 0.8s ease-out forwards;
         }
 
         .sub-title {
-            color: #f8fafc;
+            color: #e2e8f0;
             font-weight: 400;
             font-style: italic; /* Ibang style as requested */
-            font-size: 1.1rem;
+            font-size: 0.85rem;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
-            margin-bottom: 1.2rem;
-            
+            margin-bottom: 0.6rem;
+
             /* Apply animation (Pangalawa, may delay na 0.3s) */
             opacity: 0;
             animation: fadeSlideUp 0.8s ease-out 0.3s forwards;
         }
 
         .portal-text {
-            color: #ffff; /* Distinct gold/yellow color para sa Admin Portal */
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #ffffff; /* Distinct gold/yellow color para sa Admin Portal */
             font-weight: 700;
-            font-size: 1.25rem;
+            font-size: 0.7rem;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 2.2px;
+            padding: 0.3rem 0.9rem;
+            background: rgba(79, 70, 229, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 50px;
+            backdrop-filter: blur(6px);
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
             margin-bottom: 0;
-            
+
             /* Apply animation (Pangatlo, may delay na 0.6s) */
             opacity: 0;
             animation: fadeSlideUp 0.8s ease-out 0.6s forwards;
@@ -110,75 +123,224 @@
         /* Responsive para sa Titles */
         @media (max-width: 600px) {
             .main-title {
-                font-size: 1.4rem;
+                font-size: 1.15rem;
             }
             .sub-title {
-                font-size: 0.9rem;
-                margin-bottom: 1rem;
+                font-size: 0.78rem;
+                margin-bottom: 0.5rem;
             }
             .portal-text {
-                font-size: 1.1rem;
+                font-size: 0.65rem;
             }
         }
         /* -------------------------------------- */
 
-        /* 4. Card Styling (Square at mas maliit - walang binago) */
+        /* 4. Card Styling — refined glassmorphism, soft layered shadow */
         .card-custom {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            border-radius: 1.5rem;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(18px) saturate(160%);
+            -webkit-backdrop-filter: blur(18px) saturate(160%);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: 1.75rem;
+            box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+
             /* Dito natin ginawang Square */
-            width: 380px;
+            width: 400px;
             height: auto;
-            
+            flex-shrink: 0;
+
             /* Para mag-center ang content sa loob ng square */
             display: flex;
             flex-direction: column;
             justify-content: center;
-            padding: 1.5rem 2rem; 
+            padding: 1.5rem 2.25rem;
         }
 
         /* Responsive para sa mobile card */
         @media (max-width: 400px) {
             .card-custom {
-                width: 90vw;
-                height: 90vw; /* Keep it square on mobile */
-                padding: 1.5rem;
+                width: 92vw;
+                height: auto;
+                padding: 1.35rem 1.5rem;
             }
+        }
+
+        .card-custom .cqa-logo {
+            width: 46px;
+            height: auto;
+        }
+
+        .card-custom h4 {
+            color: #0f172a;
+            font-size: 1.05rem;
+            letter-spacing: 0.2px;
+        }
+
+        .card-custom .divider-soft {
+            width: 36px;
+            height: 3px;
+            background: #4f46e5;
+            border-radius: 50px;
+            margin: 0.4rem auto 0.55rem;
+        }
+
+        /* Form field wrapper + label */
+        .field-group {
+            margin-bottom: 0.75rem;
+        }
+
+        .field-label {
+            display: block;
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            color: #64748b;
+            margin-bottom: 0.3rem;
+        }
+
+        /* Modern input group styling */
+        .input-modern {
+            position: relative;
+            display: flex;
+            align-items: center;
+            background: #f8fafc;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 0.75rem;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+        }
+
+        .input-modern:focus-within {
+            border-color: #4f46e5;
+            background: #ffffff;
+            box-shadow: 0 0 0 0.2rem rgba(79, 70, 229, 0.15);
+        }
+
+        .input-modern .input-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.6rem;
+            flex-shrink: 0;
+            color: #94a3b8;
+            font-size: 0.9rem;
+            transition: color 0.2s ease;
+        }
+
+        .input-modern:focus-within .input-icon {
+            color: #4f46e5;
+        }
+
+        .input-modern .form-control {
+            border: none;
+            background: transparent;
+            padding: 0.55rem 0.85rem 0.55rem 0;
+            font-size: 0.88rem;
+            box-shadow: none !important;
+        }
+
+        .input-modern .form-control:focus {
+            outline: none;
+            box-shadow: none;
+        }
+
+        .field-hint {
+            font-size: 0.68rem;
+            color: #94a3b8;
+            margin-top: 0.3rem;
+            line-height: 1.35;
+        }
+
+        .forgot-link {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #4f46e5;
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .forgot-link:hover {
+            color: #3730a3;
+            text-decoration: underline;
+        }
+
+        /* Primary login button */
+        .btn-login {
+            background: linear-gradient(135deg, #4f46e5, #4338ca);
+            border: none;
+            border-radius: 0.75rem;
+            padding: 0.6rem 1rem;
+            font-weight: 700;
+            font-size: 0.9rem;
+            letter-spacing: 0.2px;
+            color: #ffffff;
+            box-shadow: 0 8px 18px -6px rgba(79, 70, 229, 0.55);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+        }
+
+        .btn-login:hover {
+            filter: brightness(1.06);
+            transform: translateY(-1px);
+            box-shadow: 0 12px 22px -6px rgba(79, 70, 229, 0.6);
+            color: #ffffff;
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
+        }
+
+        /* Divider */
+        .divider-or {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin: 0.9rem 0;
+        }
+
+        .divider-or hr {
+            flex: 1;
+            margin: 0;
+            border-top: 1px solid #e2e8f0;
+            opacity: 1;
+        }
+
+        .divider-or span {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: #94a3b8;
         }
 
         /* Google Button Styling */
         .btn-google {
             background-color: #ffffff;
-            color: #475569;
-            border: 1px solid #cbd5e1;
+            color: #334155;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 0.75rem;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 10px;
             font-weight: 600;
-            font-size: 0.9rem; 
-            transition: all 0.3s ease;
+            font-size: 0.9rem;
+            padding: 0.6rem 1rem;
+            transition: all 0.25s ease;
         }
 
         .btn-google:hover {
             background-color: #f8fafc;
-            border-color: #94a3b8;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border-color: #4f46e5;
+            box-shadow: 0 6px 16px -4px rgba(79, 70, 229, 0.25);
+            transform: translateY(-1px);
+        }
+
+        .btn-google:active {
+            transform: translateY(0);
         }
 
         .btn-google img {
-            width: 18px; 
+            width: 18px;
             height: 18px;
-        }
-
-        /* Form Inputs Focus Effect */
-        .form-control:focus {
-            border-color: #4f46e5;
-            box-shadow: 0 0 0 0.25rem rgba(79, 70, 229, 0.25);
         }
 
         /* Extra small text helper */
@@ -228,46 +390,49 @@
 
         <div class="card-custom">
 
-            <div class="text-center mb-3">
-                <img src="/images/cspc-logo.png" alt="CSPC Logo" style="width: 55px; height: auto;" class="mb-2">
+            <div class="text-center mb-2">
+                <img src="/images/cspc-logo.png" alt="CSPC Logo" class="cqa-logo mb-1">
                 <h4 class="fw-bold text-dark mb-0">CQA Portal Login</h4>
+                <div class="divider-soft"></div>
                 <p class="text-muted text-xsmall mb-0">Sign in to your account</p>
             </div>
 
             <!-- UNIFIED LOGIN FORM (POST REQUEST) -->
             <form action="/auth-login" method="POST" id="loginForm">
-                <div class="mb-2">
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-light border-end-0"><i class="fas fa-user text-muted"></i></span>
-                        <input type="text" name="username" id="usernameInput" class="form-control bg-light border-start-0 ps-0" placeholder="Enter your username or email" required title="Username or Email" autocomplete="off" list="usernameSuggestions">
+                <div class="field-group">
+                    <label class="field-label" for="usernameInput">Username or Email</label>
+                    <div class="input-modern">
+                        <span class="input-icon"><i class="fas fa-user"></i></span>
+                        <input type="text" name="username" id="usernameInput" class="form-control" placeholder="Enter your username or email" required title="Username or Email" autocomplete="off" list="usernameSuggestions">
                         <datalist id="usernameSuggestions"></datalist>
                     </div>
-                    <p class="text-muted text-xsmall mt-1 mb-0">Registered clients: enter the email and password you set up when you first signed in with Google.</p>
+                    <p class="field-hint mb-0">Registered clients: enter the email and password you set up when you first signed in with Google.</p>
                 </div>
 
-                <div class="mb-2">
-                    <div class="d-flex justify-content-end mb-1">
-                        <a href="#" class="text-decoration-none fw-semibold text-xsmall" style="color: #4f46e5;" title="Reset your password">Forgot Password?</a>
+                <div class="field-group">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="field-label mb-0" for="passwordInput">Password</label>
+                        <a href="#" class="forgot-link" title="Reset your password">Forgot Password?</a>
                     </div>
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-light border-end-0"><i class="fas fa-lock text-muted"></i></span>
-                        <input type="password" name="password" class="form-control bg-light border-start-0 ps-0" placeholder="Enter your password" required title="Password">
+                    <div class="input-modern">
+                        <span class="input-icon"><i class="fas fa-lock"></i></span>
+                        <input type="password" name="password" id="passwordInput" class="form-control" placeholder="Enter your password" required title="Password">
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold py-2" style="background-color: #4f46e5; border-color: #4f46e5;" title="Sign in to your account">
+                <button type="submit" class="btn btn-login w-100" title="Sign in to your account">
                     <i class="fas fa-sign-in-alt me-2"></i> Login
                 </button>
             </form>
 
-            <div class="d-flex align-items-center my-3">
-                <hr class="flex-grow-1">
-                <span class="px-2 text-muted text-xsmall">OR</span>
-                <hr class="flex-grow-1">
+            <div class="divider-or">
+                <hr>
+                <span>OR</span>
+                <hr>
             </div>
 
             <!-- GOOGLE SIGN-IN (Clients) -->
-            <a href="/auth/google" class="btn btn-google btn-sm w-100 fw-bold py-2" title="Sign in as a client with your Google account">
+            <a href="/auth/google" class="btn btn-google w-100" title="Sign in as a client with your Google account">
                 <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google">
                 Sign in with Google
             </a>
@@ -336,5 +501,7 @@
             }
         })();
     </script>
+
+    <%- include('layout/theme-toggle') %>
 </body>
 </html>
