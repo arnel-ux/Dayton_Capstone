@@ -126,7 +126,6 @@ db.connect((err) => {
 const dbQuery = promisify(db.query).bind(db);
 
 // ==========================================
-<<<<<<< HEAD
 // AI MODEL SERVER (persistent, keeps ~1GB of transformer weights loaded in
 // memory for the lifetime of the admin portal, instead of reloading them
 // from disk on every single comment). Spawned once here and reused for
@@ -153,7 +152,28 @@ function startModelServer() {
         if (text.includes('READY')) {
             modelServerReady = true;
             console.log(`✅ [AI Model Server] Warm and ready on ${MODEL_SERVER_URL}`);
-=======
+        }
+    });
+    modelServerProcess.stderr.on('data', (chunk) => {
+        process.stdout.write(`[AI Model Server] ${chunk.toString()}`);
+    });
+
+    modelServerProcess.on('close', (code) => {
+        modelServerReady = false;
+        console.error(`❌ [AI Model Server] Exited (code ${code}). Live comment analysis will fall back to the slower per-comment path until it's restarted.`);
+    });
+}
+
+function stopModelServer() {
+    if (modelServerProcess && !modelServerProcess.killed) {
+        modelServerProcess.kill();
+    }
+}
+process.on('exit', stopModelServer);
+process.on('SIGINT', () => { stopModelServer(); process.exit(0); });
+process.on('SIGTERM', () => { stopModelServer(); process.exit(0); });
+
+// ==========================================
 // LANDING PAGE CONTENT (CMS-editable, index.ejs)
 // ==========================================
 // Stored as one JSON blob (single row, id = 1) rather than one column per
@@ -274,44 +294,6 @@ function saveLandingSection(section, fields) {
     fs.writeFileSync(LANDING_DATA_FILE, JSON.stringify(current, null, 2), 'utf8');
     return current[section];
 }
-
-// Runs a comment through ai_scripts/analyze.py and resolves with
-// { sentiment, topic }. Used by both the live /submit-survey route (fire-and-forget,
-// applied via an UPDATE after the fact) and the /sync-surveys batch route
-// (awaited before the row is even inserted). Never rejects — a missing/blank
-// comment resolves with nulls (so DB defaults apply), and any script failure
-// resolves with the "Neutral" / "General Feedback" fallback instead of
-// throwing, so one bad comment can never crash a batch sync.
-//
-// `offline` should be true for comments coming from the /sync-surveys queue
-// (submitted while the client was offline, synced later in bulk) — analyze.py
-// takes a lightweight local heuristic fast path for those instead of loading
-// its transformer models, since nobody is waiting on a live response.
-function analyzeComment(comment, offline = false) {
-    return new Promise((resolve) => {
-        if (!comment || !String(comment).trim()) {
-            return resolve({ sentiment: null, topic: null });
->>>>>>> 13287bbf1015757b26230775a914e5a170170c3f
-        }
-    });
-    modelServerProcess.stderr.on('data', (chunk) => {
-        process.stdout.write(`[AI Model Server] ${chunk.toString()}`);
-    });
-
-    modelServerProcess.on('close', (code) => {
-        modelServerReady = false;
-        console.error(`❌ [AI Model Server] Exited (code ${code}). Live comment analysis will fall back to the slower per-comment path until it's restarted.`);
-    });
-}
-
-function stopModelServer() {
-    if (modelServerProcess && !modelServerProcess.killed) {
-        modelServerProcess.kill();
-    }
-}
-process.on('exit', stopModelServer);
-process.on('SIGINT', () => { stopModelServer(); process.exit(0); });
-process.on('SIGTERM', () => { stopModelServer(); process.exit(0); });
 
 // Runs a comment through the full transformer sentiment/topic pipeline via
 // ai_scripts/analyze.py, spawning a fresh Python process. This reloads the
