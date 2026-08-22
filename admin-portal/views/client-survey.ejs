@@ -4,6 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CSM Survey - CSPC</title>
+    <script>
+        (function () {
+            try {
+                if (localStorage.getItem('theme') === 'dark') {
+                    document.documentElement.setAttribute('data-bs-theme', 'dark');
+                }
+            } catch (e) {}
+        })();
+    </script>
 
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#2554c7">
@@ -178,15 +187,80 @@
         }
 
         /* ---- Profile view ---- */
-        .profile-field-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--line-soft); }
-        .profile-field-row:last-child { border-bottom: none; }
-        .profile-field-label { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-600); }
-        .profile-field-value { font-weight: 600; color: var(--ink-900); }
-        .profile-locked-badge {
-            display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; font-weight: 700;
-            color: var(--ink-400); background: var(--line-soft); padding: 0.25rem 0.65rem; border-radius: 50px;
+        .profile-view-card { overflow: hidden; }
+        .profile-hero {
+            display: flex; align-items: center; gap: 1.1rem;
+            padding: 1.75rem clamp(1.25rem, 4vw, 3rem);
+            background: var(--surface);
+            border-bottom: 1px solid var(--line-soft);
         }
-        .profile-unset { color: var(--ink-400); font-style: italic; font-weight: 500; }
+        .profile-hero-avatar {
+            width: 60px; height: 60px; border-radius: 50%; flex-shrink: 0;
+            background: var(--ring); color: var(--brand);
+            display: flex; align-items: center; justify-content: center; font-size: 1.55rem;
+        }
+        .profile-hero-text h3 { margin: 0 0 0.15rem; font-weight: 700; color: var(--ink-900); }
+        .profile-hero-text p { margin: 0; color: var(--ink-600); font-size: 0.86rem; }
+
+        .profile-body { padding: clamp(1.25rem, 4vw, 2.5rem); }
+
+        .profile-section-label {
+            font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+            color: var(--ink-400); margin-bottom: 0.9rem;
+        }
+
+        .profile-section-header {
+            display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.9rem;
+        }
+        .profile-section-header .profile-section-label { margin-bottom: 0; }
+
+        .btn-edit-profile {
+            display: inline-flex; align-items: center; gap: 0.4rem; flex-shrink: 0;
+            font-size: 0.82rem; font-weight: 700; padding: 0.45rem 1rem; border-radius: 50px;
+            background: transparent; color: var(--brand); border: 1.5px solid var(--brand);
+            transition: all .15s ease;
+        }
+        .btn-edit-profile:hover { background: var(--brand); color: #fff; transform: translateY(-1px); box-shadow: 0 8px 18px -8px rgba(37,84,199,0.6); }
+        .btn-edit-profile:active { transform: translateY(0); }
+
+        .profile-info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+        @media (max-width: 640px) { .profile-info-grid { grid-template-columns: 1fr; } }
+
+        .profile-info-card {
+            display: flex; align-items: flex-start; gap: 0.85rem;
+            background: var(--surface); border: 1px solid var(--line-soft); border-radius: 14px; padding: 1.1rem 1.2rem;
+            transition: border-color .15s ease, box-shadow .15s ease;
+        }
+        .profile-info-card:hover { border-color: var(--line); box-shadow: 0 4px 14px -8px rgba(15,23,42,0.12); }
+        [data-bs-theme="dark"] .profile-info-card { background: #101827; }
+
+        /* Name is the prominent, editable field — span both grid columns and give it
+           slightly more visual weight than the locked, read-only fields beside it. */
+        .profile-info-card-name { grid-column: 1 / -1; background: var(--ring); border-color: transparent; }
+        [data-bs-theme="dark"] .profile-info-card-name { background: rgba(37,84,199,0.14); }
+        .profile-info-card-name .profile-info-value { font-size: 1.05rem; }
+
+        .profile-info-icon {
+            width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--ring); color: var(--brand); font-size: 1.05rem;
+        }
+        .profile-info-card-name .profile-info-icon { background: var(--surface); }
+        .profile-info-text { min-width: 0; }
+        .profile-info-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-400); margin-bottom: 0.25rem; }
+        .profile-info-value { font-weight: 600; color: var(--ink-900); word-break: break-word; }
+
+        .profile-edit-card {
+            background: var(--surface); border: 1px solid var(--line-soft); border-radius: 16px; padding: 1.6rem;
+        }
+        .profile-divider { border: none; border-top: 1px solid var(--line-soft); margin: 2.25rem 0; }
+
+        .profile-locked-badge {
+            display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; font-weight: 600;
+            color: var(--ink-800);
+        }
+        .profile-locked-badge i { font-size: 0.7rem; color: var(--ink-400); }
+        .profile-unset { color: var(--ink-400); font-style: italic; font-weight: 500; font-size: 0.86rem; }
 
         /* ---- History view ---- */
         .history-item {
@@ -278,7 +352,6 @@
 
         @media (max-width: 576px) {
             .review-grid { grid-template-columns: 1fr; }
-            .profile-field-row { flex-direction: column; align-items: flex-start; gap: 0.25rem; }
         }
 
         @media (max-width: 991.98px) {
@@ -661,9 +734,6 @@
             <div class="topbar-actions">
                 <button id="btn-fullscreen" type="button" onclick="toggleFullscreen()" class="btn-fullscreen" title="Toggle full screen" aria-label="Toggle full screen">
                     <i class="bi bi-arrows-fullscreen"></i>
-                </button>
-                <button id="btn-theme" type="button" onclick="toggleTheme()" class="btn bg-transparent border-0 text-body shadow-none fw-semibold d-flex align-items-center gap-1">
-                    🌙 Dark
                 </button>
                 <div class="lang-toggle-group">
                     <button id="btn-en" type="button" onclick="setLanguage('en')" class="btn btn-primary btn-sm fw-semibold shadow-sm">English</button>
@@ -1093,46 +1163,96 @@
 
         <!-- ================= PROFILE VIEW ================= -->
         <div class="app-view" id="view-profile">
-            <div class="card border-0 view-card">
-                <div class="card-body p-4 p-md-5">
-                    <div class="view-header">
-                        <div class="view-icon"><i class="bi bi-person-fill"></i></div>
-                        <h3 class="fw-semibold text-heading mb-1">My Profile</h3>
-                        <p class="text-secondary mb-0">View and update your registered account details.</p>
+            <div class="card border-0 view-card profile-view-card">
+                <div class="card-body p-0">
+
+                    <div class="profile-hero">
+                        <div class="profile-hero-avatar"><i class="bi bi-person-fill"></i></div>
+                        <div class="profile-hero-text">
+                            <h3>My Profile</h3>
+                            <p>View and update your registered account details.</p>
+                        </div>
                     </div>
 
-                    <div id="profileLoading" class="spinner-block">
-                        <div class="spinner-border text-primary" role="status"></div>
-                        <p class="mt-3 mb-0">Loading your profile…</p>
-                    </div>
+                    <div class="profile-body">
 
-                    <div id="profileContent" class="d-none">
-                        <div class="qa-block p-4 mb-4">
-                            <div class="profile-field-row">
-                                <span class="profile-field-label">Email (Google Account)</span>
-                                <span class="profile-field-value" id="pf-email">—</span>
+                        <div id="profileLoading" class="spinner-block">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <p class="mt-3 mb-0">Loading your profile…</p>
+                        </div>
+
+                        <div id="profileContent" class="d-none">
+
+                            <!-- ================= VIEW MODE ================= -->
+                            <!-- Static account summary. Hidden (via .d-none) once Edit Profile is clicked. -->
+                            <div id="profileViewMode">
+                                <div class="profile-section-header">
+                                    <div class="profile-section-label mb-0">Account Information</div>
+                                    <button type="button" id="btnEditProfile" class="btn-edit-profile" onclick="enterProfileEditMode()">
+                                        <i class="bi bi-pencil-fill me-1"></i> Edit Profile
+                                    </button>
+                                </div>
+                                <div class="profile-info-grid">
+                                    <div class="profile-info-card profile-info-card-name">
+                                        <div class="profile-info-icon"><i class="bi bi-person-fill"></i></div>
+                                        <div class="profile-info-text">
+                                            <div class="profile-info-label">Name / Pangalan</div>
+                                            <div class="profile-info-value" id="pf-name-display">—</div>
+                                        </div>
+                                    </div>
+                                    <div class="profile-info-card">
+                                        <div class="profile-info-icon"><i class="bi bi-envelope-fill"></i></div>
+                                        <div class="profile-info-text">
+                                            <div class="profile-info-label">Email (Google Account)</div>
+                                            <div class="profile-info-value" id="pf-email">—</div>
+                                        </div>
+                                    </div>
+                                    <div class="profile-info-card">
+                                        <div class="profile-info-icon"><i class="bi bi-geo-alt-fill"></i></div>
+                                        <div class="profile-info-text">
+                                            <div class="profile-info-label">Region of Residence</div>
+                                            <div class="profile-info-value" id="pf-region"></div>
+                                        </div>
+                                    </div>
+                                    <div class="profile-info-card">
+                                        <div class="profile-info-icon"><i class="bi bi-calendar3"></i></div>
+                                        <div class="profile-info-text">
+                                            <div class="profile-info-label">Age Bracket</div>
+                                            <div class="profile-info-value" id="pf-age"></div>
+                                        </div>
+                                    </div>
+                                    <div class="profile-info-card">
+                                        <div class="profile-info-icon"><i class="bi bi-gender-ambiguous"></i></div>
+                                        <div class="profile-info-text">
+                                            <div class="profile-info-label">Sex</div>
+                                            <div class="profile-info-value" id="pf-gender"></div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="profile-field-row">
-                                <span class="profile-field-label">Region of Residence</span>
-                                <span id="pf-region"></span>
-                            </div>
-                            <div class="profile-field-row">
-                                <span class="profile-field-label">Age Bracket</span>
-                                <span id="pf-age"></span>
-                            </div>
-                            <div class="profile-field-row">
-                                <span class="profile-field-label">Sex</span>
-                                <span id="pf-gender"></span>
+
+                            <!-- ================= EDIT MODE ================= -->
+                            <!-- Only Name is editable — Region/Age/Sex are locked for good after the
+                                 client's first survey submission (see loadProfileView), so they are
+                                 never turned into inputs here. Hidden by default; toggled by
+                                 enterProfileEditMode() / exitProfileEditMode() below. -->
+                            <div id="profileEditMode" class="d-none">
+                                <div class="profile-section-label">Edit Details</div>
+                                <form id="profileForm" onsubmit="return saveProfile(event);" class="profile-edit-card">
+                                    <label class="form-label fw-semibold text-dark fs-6" for="pf-name-input">Name / Pangalan</label>
+                                    <input type="text" id="pf-name-input" class="form-control mb-3" placeholder="e.g. Juan Dela Cruz">
+                                    <div class="d-flex gap-2">
+                                        <button type="submit" id="pf-save-btn" class="btn btn-primary fw-semibold px-4">
+                                            <i class="bi bi-check2-circle me-1"></i> Update
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary fw-semibold px-4" onclick="exitProfileEditMode()">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </form>
                             </div>
                         </div>
 
-                        <form id="profileForm" onsubmit="return saveProfile(event);">
-                            <label class="form-label fw-semibold text-dark fs-6">Name / Pangalan</label>
-                            <input type="text" id="pf-name-input" class="form-control mb-3" placeholder="e.g. Juan Dela Cruz">
-                            <button type="submit" id="pf-save-btn" class="btn btn-primary fw-semibold px-4">
-                                <i class="bi bi-check2-circle me-1"></i> Save Changes
-                            </button>
-                        </form>
                     </div>
                 </div>
             </div>
@@ -1253,6 +1373,11 @@ window.addEventListener('pageshow', function (event) {
 
 document.getElementById('surveyDate').valueAsDate = new Date();
 let currentLang = 'en';
+
+// The "Take Survey" view is active by default on load (no switchView() call
+// fires for it), so collapse the sidebar up front for the same focus mode
+// it gets when navigated to manually.
+setSidebarCollapsed(true);
 
 // =====================================
 // DEPENDENT "SERVICE AVAILED" DROPDOWN
@@ -1429,9 +1554,9 @@ function closeSidebarOnMobile() {
 // entirely to focus on the survey full-screen. Reuses the same slide transform
 // as the mobile overlay, but toggled on .app-shell (no backdrop, reclaims the
 // space instead of covering content) so it's purely a layout change.
-function toggleSidebarCollapse() {
+function setSidebarCollapsed(collapsed) {
     const shell = document.querySelector('.app-shell');
-    const collapsed = shell.classList.toggle('sidebar-collapsed');
+    shell.classList.toggle('sidebar-collapsed', collapsed);
     const btn = document.getElementById('btn-sidebar-collapse');
     if (btn) {
         btn.innerHTML = collapsed
@@ -1439,6 +1564,11 @@ function toggleSidebarCollapse() {
             : '<i class="bi bi-layout-sidebar-inset"></i>';
         btn.title = collapsed ? 'Show sidebar' : 'Collapse sidebar — focus on the survey';
     }
+}
+
+function toggleSidebarCollapse() {
+    const shell = document.querySelector('.app-shell');
+    setSidebarCollapsed(!shell.classList.contains('sidebar-collapsed'));
 }
 
 // =====================================
@@ -1472,6 +1602,10 @@ function switchView(view) {
     if (view === 'profile' && !profileLoaded) loadProfileView();
     if (view === 'history' && !historyLoaded) loadHistoryView();
 
+    // Auto-hide the sidebar while taking the survey (topbar stays visible);
+    // auto-restore it on Profile/History.
+    setSidebarCollapsed(view === 'survey');
+
     closeSidebarOnMobile();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return false;
@@ -1486,6 +1620,7 @@ function loadProfileView() {
             const p = data.profile || {};
 
             document.getElementById('pf-email').textContent = p.email || currentClientEmail || '—';
+            document.getElementById('pf-name-display').textContent = p.respondent_name || 'Not set yet';
             document.getElementById('pf-name-input').value = p.respondent_name || '';
 
             const lockedOrUnset = (value, iconTitle) => value
@@ -1504,6 +1639,22 @@ function loadProfileView() {
             document.getElementById('profileLoading').innerHTML =
                 '<p class="text-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i> Could not load your profile. Please try again.</p>';
         });
+}
+
+// Switches the profile view from static "View Mode" into editable "Edit Mode".
+// Only the Name field is editable (see the comment above #profileEditMode), so
+// this just swaps which of the two wrapper divs is visible.
+function enterProfileEditMode() {
+    document.getElementById('pf-name-input').value = document.getElementById('pf-name-display').textContent.trim();
+    document.getElementById('profileViewMode').classList.add('d-none');
+    document.getElementById('profileEditMode').classList.remove('d-none');
+    document.getElementById('pf-name-input').focus();
+}
+
+// Discards any unsaved edits and returns to View Mode without calling the API.
+function exitProfileEditMode() {
+    document.getElementById('profileEditMode').classList.add('d-none');
+    document.getElementById('profileViewMode').classList.remove('d-none');
 }
 
 function saveProfile(event) {
@@ -1528,6 +1679,8 @@ function saveProfile(event) {
         .then(res => res.json())
         .then(data => {
             if (!data.success) throw new Error(data.message || 'Could not save your profile.');
+            document.getElementById('pf-name-display').textContent = name;
+            exitProfileEditMode();
             AppAlert.success('Profile updated successfully.');
         })
         .catch(err => {
@@ -1734,21 +1887,6 @@ function updateProgressStepper(stage) {
         if (s < stage) el.classList.add('completed');
         else if (s === stage) el.classList.add('active');
     });
-}
-
-// Theme Toggle Function
-function toggleTheme() {
-    const htmlElement = document.documentElement;
-    const currentTheme = htmlElement.getAttribute('data-bs-theme');
-    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    htmlElement.setAttribute('data-bs-theme', newTheme);
-
-    const themeBtn = document.getElementById('btn-theme');
-    if (newTheme === 'dark') {
-        themeBtn.innerHTML = '☀️ Light';
-    } else {
-        themeBtn.innerHTML = '🌙 Dark';
-    }
 }
 
 // Validation messages per language
@@ -2288,5 +2426,7 @@ updateProgressStepper(1);
 updateFullscreenButton();
 
 </script>
+
+<%- include('layout/theme-toggle') %>
 </body>
 </html>

@@ -6,14 +6,25 @@
         :root {
             --primary-indigo: #4f46e5;
             --bg-body: #f8fafc;
+            --text-main: #334155;
+            --card-bg: #ffffff;
         }
 
-        body { 
-            background-color: var(--bg-body); 
-            font-family: 'Plus Jakarta Sans', sans-serif; 
-            color: #334155;
+        html[data-bs-theme="dark"] {
+            --bg-body: #0b1526;
+            --text-main: #e2e8f0;
+            --card-bg: #141d30;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: var(--text-main);
             overflow-x: hidden;
         }
+
+        html[data-bs-theme="dark"] .records-card { background: var(--card-bg); }
+        html[data-bs-theme="dark"] .office-group-header { background: #1e293b; }
 
         .page-header {
             background: linear-gradient(135deg, #1e1b4b 0%, #4338ca 100%);

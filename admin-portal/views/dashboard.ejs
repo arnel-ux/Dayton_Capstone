@@ -12,9 +12,28 @@
             --border-soft: rgba(15, 23, 42, 0.06);
             --text-dark: #0f172a;
             --text-muted: #64748b;
+            --card-bg: #ffffff;
+        }
+
+        html[data-bs-theme="dark"] {
+            --bg-body: #0b1526;
+            --border-soft: rgba(255, 255, 255, 0.08);
+            --text-dark: #e2e8f0;
+            --text-muted: #94a3b8;
+            --card-bg: #141d30;
         }
 
         body { background-color: var(--bg-body); font-family: 'Plus Jakarta Sans', sans-serif; color: var(--text-dark); }
+
+        html[data-bs-theme="dark"] .stat-card,
+        html[data-bs-theme="dark"] .cluster-mini-card,
+        html[data-bs-theme="dark"] .chart-container-main,
+        html[data-bs-theme="dark"] .filter-bar,
+        html[data-bs-theme="dark"] .modal-report-container {
+            background: var(--card-bg);
+        }
+        html[data-bs-theme="dark"] .form-select { background-color: var(--card-bg); color: var(--text-dark); }
+        html[data-bs-theme="dark"] .badge.bg-light { background-color: #1e293b !important; color: var(--text-muted) !important; }
 
         .page-heading { letter-spacing: -0.02em; }
 

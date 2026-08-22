@@ -6,12 +6,71 @@
     --bg-light: #f3f4f6;
     --sidebar-width: 260px;
     --card-trend-up: #10b981; /* Emeral Green for increases */
+
+    /* --- Theme tokens (light) --- */
+    --bg-main: #f3f4f6;
+    --bg-card: #ffffff;
+    --text-main: #1f2937;
+    --text-muted: #6b7280;
+    --border-color: #e5e7eb;
+    --navbar-bg: #ffffff;
+}
+
+html[data-bs-theme="dark"] {
+    --bg-main: #0b1526;
+    --bg-card: #141d30;
+    --text-main: #e2e8f0;
+    --text-muted: #94a3b8;
+    --border-color: #263045;
+    --navbar-bg: #101a2c;
+    --bg-light: #0b1526;
 }
 
 body {
     font-family: 'Inter', sans-serif;
-    background-color: var(--bg-light);
+    background-color: var(--bg-main);
+    color: var(--text-main);
     overflow-x: hidden;
+    transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* --- Dark mode overrides for shared components --- */
+html[data-bs-theme="dark"] #content { background-color: var(--bg-main); }
+
+html[data-bs-theme="dark"] .top-navbar {
+    background: var(--navbar-bg);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+html[data-bs-theme="dark"] .top-navbar #pageTitle,
+html[data-bs-theme="dark"] .top-navbar .text-dark { color: var(--text-main) !important; }
+
+html[data-bs-theme="dark"] .card-custom,
+html[data-bs-theme="dark"] .stat-card {
+    background: var(--bg-card);
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.35);
+}
+html[data-bs-theme="dark"] .stat-card-number { color: var(--text-main); }
+html[data-bs-theme="dark"] .stat-card-title,
+html[data-bs-theme="dark"] .stat-card-smalltext { color: var(--text-muted); }
+
+html[data-bs-theme="dark"] .table-custom th {
+    background: var(--bg-card);
+    color: var(--text-muted);
+    border-bottom-color: var(--border-color);
+}
+html[data-bs-theme="dark"] .table-custom td { color: var(--text-main); }
+
+html[data-bs-theme="dark"] .modal-content,
+html[data-bs-theme="dark"] .dropdown-menu {
+    background-color: var(--bg-card);
+    color: var(--text-main);
+}
+html[data-bs-theme="dark"] .text-dark { color: var(--text-main) !important; }
+html[data-bs-theme="dark"] .form-select,
+html[data-bs-theme="dark"] .form-control {
+    background-color: var(--bg-card);
+    color: var(--text-main);
+    border-color: var(--border-color);
 }
 
 /* --- Sidebar --- */

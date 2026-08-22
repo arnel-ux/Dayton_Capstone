@@ -11,6 +11,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
+const multer = require('multer');
 const app = express();
 const port = 3000;
 
@@ -125,6 +126,7 @@ db.connect((err) => {
 const dbQuery = promisify(db.query).bind(db);
 
 // ==========================================
+<<<<<<< HEAD
 // AI MODEL SERVER (persistent, keeps ~1GB of transformer weights loaded in
 // memory for the lifetime of the admin portal, instead of reloading them
 // from disk on every single comment). Spawned once here and reused for
@@ -151,6 +153,145 @@ function startModelServer() {
         if (text.includes('READY')) {
             modelServerReady = true;
             console.log(`✅ [AI Model Server] Warm and ready on ${MODEL_SERVER_URL}`);
+=======
+// LANDING PAGE CONTENT (CMS-editable, index.ejs)
+// ==========================================
+// Stored as one JSON blob (single row, id = 1) rather than one column per
+// field — the CMS only ever reads/writes whole "sections" at a time (branding,
+// hero, about, org, services, footer), so a flat SQL table would just mean a
+// migration every time a field is added. DEFAULT_LANDING_CONTENT mirrors the
+// text that used to be hardcoded in index.ejs, so a fresh DB (no row saved
+// yet) renders an identical page to before this feature existed.
+const DEFAULT_LANDING_CONTENT = {
+    branding: {
+        title: 'Center For Quality Assurance',
+        subtitle: 'Public Transparency Portal • Satisfaction Survey',
+        loginLabel: 'Login Portal',
+        logoUrl: '/images/cspc-logo.png'
+    },
+    hero: {
+        eyebrow: 'Camarines Sur Polytechnic Colleges',
+        titleLine1: 'Center for Quality Assurance',
+        titleLine2: 'Public Transparency Portal',
+        subtext: "A live window into our institution's governance, services, and client satisfaction performance — built on data, driven by continuous quality improvement.",
+        cta1Text: 'Explore Dashboard',
+        cta1Link: '#dashboard',
+        cta2Text: 'View Our Services',
+        cta2Link: '#services',
+        imageUrl: 'https://spims.cspc.edu.ph/assets/img/background.jpg'
+    },
+    about: {
+        eyebrow: 'Who We Are',
+        title: 'Center for Quality Assurance',
+        paragraph: "The Center for Quality Assurance is where the College's quality assurance mechanisms and processes are vested. The office is in-charge of all international, national and local quality assurance mechanisms, while working closely with top management in setting up quality assurance procedures. Its main responsibility is to coordinate, assist, and monitor the different units to strengthen their academic and administrative management and processes so that they are better able to achieve their quality goals and educational objectives.",
+        badge1: 'ISO 9001:2015 Certified',
+        badge2: 'Institutional Accreditation',
+        badge3: 'Continuous Quality Monitoring',
+        headName: 'JUVY M. BUSTAMANTE, JD',
+        headRole: 'Head, Center for Quality Assurance',
+        headEmail: 'qams@cspc.edu.ph',
+        headPhone: '(054) 2884421 to 23 loc. 123'
+    },
+    org: {
+        eyebrow: 'Governance',
+        title: 'Organizational Structure',
+        lead1Name: 'Amado A. Oliva Jr., PhD', lead1Role: 'SUC President III',
+        lead2Name: 'Dr. Jocelyn O. Jintalan', lead2Role: 'Vice President of Academic Affairs',
+        lead3Name: 'Mr. Juvy M. Bustamante, JD', lead3Role: 'AO V · Head, Center for Quality Assurance',
+        team1Name: 'Angielyn L. Patricio', team1Role: 'AA VI / Program Accreditation and Assessment Coordinator',
+        team2Name: 'Marian Beatrize O. Tabalos', team2Role: 'AO II / Institutional Accreditations Person-in-Charge',
+        team3Name: 'Lea Laarni B. Albeza-Arines', team3Role: 'AO IV / QMS and EOMS Person-in-Charge',
+        team4Name: 'Chrena Joyce I. Brutas', team4Role: 'Technical Writer / CSM Focal Person',
+        team5Name: 'Christine Joy L. Taburnal', team5Role: 'AA II / Office Clerk / Clerical Support Staff',
+        team6Name: 'Lawrence A. Rebulado', team6Role: 'Layout Artist / Databank Manager',
+        aideLabel: 'Student Aide'
+    },
+    services: {
+        eyebrow: 'Client Satisfaction Measurement',
+        title: 'Our Services',
+        desc: 'Every frontline service across the College, organized by Cluster → Office. Pick a cluster, then expand an office to see what it offers.'
+    },
+    footer: {
+        desc: 'Committed to upholding transparency and accountability by providing open access to institutional quality assurance data, governance structures, and public satisfaction survey results.',
+        address: 'Center for Quality Assurance, Camarines Sur Polytechnic Colleges, Nabua, Camarines Sur, Philippines',
+        email: 'qams@cspc.edu.ph',
+        phone: '(054) 2884421 to 23 loc. 123',
+        hours: 'Mon – Fri, 8:00 AM – 5:00 PM',
+        facebook: 'https://facebook.com',
+        twitter: 'https://twitter.com',
+        linkedin: 'https://linkedin.com',
+        spims: 'https://spims.cspc.edu.ph'
+    }
+};
+
+// Deliberately NOT exposed here: the Cluster → Office → Service directory
+// (services-section tab only edits the intro text above it) and the
+// Transparency Dashboard — both are out of scope per the CMS design.
+const LANDING_SECTION_KEYS = Object.keys(DEFAULT_LANDING_CONTENT);
+
+// ---- Plain JSON-file storage (no MySQL) -----------------------------------
+// admin-portal/data/landing-data.json — one flat file, read/written with
+// fs.*Sync so every request sees the latest write immediately (no async
+// driver, no connection pool, nothing that can silently fail to persist).
+const LANDING_DATA_DIR = path.join(__dirname, 'data');
+const LANDING_DATA_FILE = path.join(LANDING_DATA_DIR, 'landing-data.json');
+
+// Runs once at startup: make sure the data/ folder and the JSON file exist so
+// every route below can assume the file is always there.
+fs.mkdirSync(LANDING_DATA_DIR, { recursive: true });
+if (!fs.existsSync(LANDING_DATA_FILE)) {
+    fs.writeFileSync(LANDING_DATA_FILE, JSON.stringify(DEFAULT_LANDING_CONTENT, null, 2), 'utf8');
+    console.log('✅ Created data/landing-data.json with default landing page content.');
+}
+
+// Reads landing-data.json off disk and merges it over the defaults one
+// section at a time, so a partially-saved file (or one missing a brand-new
+// field added later in DEFAULT_LANDING_CONTENT) still renders every section
+// correctly instead of leaving something blank/undefined.
+function loadLandingContent() {
+    let saved = {};
+    try {
+        saved = JSON.parse(fs.readFileSync(LANDING_DATA_FILE, 'utf8'));
+    } catch (err) {
+        console.error('❌ Error reading/parsing data/landing-data.json — falling back to defaults:', err);
+        saved = {};
+    }
+    const merged = {};
+    for (const key of LANDING_SECTION_KEYS) {
+        merged[key] = { ...DEFAULT_LANDING_CONTENT[key], ...(saved[key] || {}) };
+    }
+    return merged;
+}
+
+// Persists one section's fields, merged over whatever was already saved (so
+// saving "hero" never wipes out "about", "footer", etc.) — read the whole
+// file, patch one key, write the whole file back out. Synchronous on purpose:
+// this is an infrequent admin action, not a hot path, so there's no reason to
+// risk two concurrent writes racing each other.
+function saveLandingSection(section, fields) {
+    const current = loadLandingContent();
+    current[section] = { ...current[section], ...fields };
+    fs.writeFileSync(LANDING_DATA_FILE, JSON.stringify(current, null, 2), 'utf8');
+    return current[section];
+}
+
+// Runs a comment through ai_scripts/analyze.py and resolves with
+// { sentiment, topic }. Used by both the live /submit-survey route (fire-and-forget,
+// applied via an UPDATE after the fact) and the /sync-surveys batch route
+// (awaited before the row is even inserted). Never rejects — a missing/blank
+// comment resolves with nulls (so DB defaults apply), and any script failure
+// resolves with the "Neutral" / "General Feedback" fallback instead of
+// throwing, so one bad comment can never crash a batch sync.
+//
+// `offline` should be true for comments coming from the /sync-surveys queue
+// (submitted while the client was offline, synced later in bulk) — analyze.py
+// takes a lightweight local heuristic fast path for those instead of loading
+// its transformer models, since nobody is waiting on a live response.
+function analyzeComment(comment, offline = false) {
+    return new Promise((resolve) => {
+        if (!comment || !String(comment).trim()) {
+            return resolve({ sentiment: null, topic: null });
+>>>>>>> 13287bbf1015757b26230775a914e5a170170c3f
         }
     });
     modelServerProcess.stderr.on('data', (chunk) => {
@@ -720,7 +861,104 @@ db.query(createSettingsTableQuery, (err) => {
 // ==========================================
 // 1. Public Routes
 // ==========================================
-app.get('/', (req, res) => res.render('index'));
+app.get('/', (req, res) => {
+    // loadLandingContent() reads data/landing-data.json synchronously (see the
+    // "LANDING PAGE CONTENT" block above) — by the time this line returns, the
+    // file has already been fully read and parsed, so whatever the admin last
+    // saved through the CMS is guaranteed to be what gets rendered here.
+    const landingContent = loadLandingContent();
+    res.render('index', { landingContent });
+});
+
+// ==========================================
+// CONTENT MANAGEMENT — landing page (index.ejs) sections
+// ==========================================
+const contentUploadDir = path.join(__dirname, 'public', 'images', 'uploads');
+fs.mkdirSync(contentUploadDir, { recursive: true });
+
+const contentUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, contentUploadDir),
+        filename: (req, file, cb) => {
+            const ext = path.extname(file.originalname).toLowerCase();
+            cb(null, `${req.params.section}-${req.params.field}-${Date.now()}${ext}`);
+        }
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    fileFilter: (req, file, cb) => {
+        if (!/^image\/(png|jpe?g|webp|svg\+xml)$/.test(file.mimetype)) {
+            return cb(new Error('Only PNG, JPG, WebP, or SVG images are allowed.'));
+        }
+        cb(null, true);
+    }
+});
+
+// Returns the full content object so the CMS can populate its form fields
+// with whatever is actually saved (instead of the hardcoded defaults baked
+// into content-management.ejs).
+app.get('/api/content', ensureAdminAuth, noCache, (req, res) => {
+    try {
+        const landingContent = loadLandingContent();
+        res.json({ success: true, content: landingContent });
+    } catch (err) {
+        console.error('❌ Error loading data/landing-data.json:', err);
+        res.status(500).json({ success: false, message: 'Could not load landing page content.' });
+    }
+});
+
+// Saves one section (branding / hero / about / org / services / footer) at a
+// time — matches how the CMS's tabs each submit their own form independently.
+app.post('/api/content/:section', ensureAdminAuth, (req, res) => {
+    const { section } = req.params;
+    if (!LANDING_SECTION_KEYS.includes(section)) {
+        return res.status(400).json({ success: false, message: 'Unknown content section.' });
+    }
+
+    // Whitelist to the known fields for this section only — never trust the
+    // request body's own key set, so an admin (or a bug in the CMS JS) can't
+    // smuggle arbitrary keys into the stored JSON.
+    const allowedFields = Object.keys(DEFAULT_LANDING_CONTENT[section]);
+    const fields = {};
+    for (const key of allowedFields) {
+        if (typeof req.body[key] === 'string') {
+            fields[key] = req.body[key].slice(0, 5000); // generous cap, still bounded
+        }
+    }
+
+    try {
+        saveLandingSection(section, fields);
+        console.log(`✅ Saved "${section}" section to data/landing-data.json`);
+        res.json({ success: true, section, fields });
+    } catch (err) {
+        console.error(`❌ Error saving landing content section "${section}" to landing-data.json:`, err);
+        res.status(500).json({ success: false, message: 'Could not save changes.' });
+    }
+});
+
+// Uploads a single image for one field (e.g. section=hero, field=imageUrl),
+// saves the resulting public URL into that field immediately, and returns it
+// so the CMS can preview it without waiting for a separate "Save Changes" click.
+app.post('/api/content/:section/upload/:field', ensureAdminAuth, (req, res) => {
+    const { section, field } = req.params;
+    if (!LANDING_SECTION_KEYS.includes(section) || !(field in DEFAULT_LANDING_CONTENT[section])) {
+        return res.status(400).json({ success: false, message: 'Unknown content field.' });
+    }
+
+    contentUpload.single('image')(req, res, (err) => {
+        if (err) return res.status(400).json({ success: false, message: err.message });
+        if (!req.file) return res.status(400).json({ success: false, message: 'No image file received.' });
+
+        const url = `/images/uploads/${req.file.filename}`;
+        try {
+            saveLandingSection(section, { [field]: url });
+            console.log(`✅ Saved uploaded image URL for ${section}.${field} to data/landing-data.json`);
+            res.json({ success: true, url });
+        } catch (writeErr) {
+            console.error('❌ Error saving uploaded image URL to landing-data.json:', writeErr);
+            res.status(500).json({ success: false, message: 'Image uploaded but could not be saved.' });
+        }
+    });
+});
 // Landing on /login — including via the Back button — is treated as an explicit
 // logout: any active session (admin or client) is destroyed immediately, before
 // the form even renders. This is what closes the Forward-button hole: with the
@@ -1693,6 +1931,15 @@ app.post('/offices/permanent-delete/:id', ensureAdminAuth, (req, res) => {
 // ==========================================
 // 4. SURVEY SETTINGS CRUD
 // ==========================================
+
+app.get('/content-management', ensureAdminAuth, noCache, (req, res) => {
+    // Same synchronous read as GET '/' — the admin must always see the exact
+    // values currently live on the landing page, never the hardcoded defaults
+    // that used to be baked into content-management.ejs.
+    const landingContent = loadLandingContent();
+    res.render('content-management', { landingContent });
+});
+
 app.get('/survey', ensureAdminAuth, noCache, (req, res) => {
     db.query('SELECT * FROM survey_settings ORDER BY id ASC', (err, results) => {
         let settings = { sqd: [], cc: [] };

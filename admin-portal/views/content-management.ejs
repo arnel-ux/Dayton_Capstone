@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <%- include('layout/header') %>
+    <style>
+        .content-management-container {
+            --primary-color: #2563eb;
+            --primary-hover: #1d4ed8;
+            --primary-soft: #eff6ff;
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --field-bg: #f9fafb;
+            --text-main: #111827;
+            --text-muted: #6b7280;
+            --border-color: #e5e7eb;
+            --focus-ring: rgba(37, 99, 235, 0.15);
+            --border-radius: 16px;
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+            width: 100%;
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-color);
+            /* Soft, layered "Stripe/Vercel"-style elevation instead of one heavy shadow */
+            box-shadow:
+                0 1px 2px rgba(16, 24, 40, 0.04),
+                0 12px 24px -8px rgba(16, 24, 40, 0.08),
+                0 32px 64px -16px rgba(16, 24, 40, 0.06);
+            display: flex;
+            overflow: hidden;
+            min-height: 700px;
+        }
+
+        /* ============= Sidebar within component ============= */
+        .cm-sidebar {
+            width: 280px;
+            flex-shrink: 0;
+            background: #fafafa;
+            border-right: 1px solid var(--border-color);
+            padding: 1.75rem 0;
+        }
+
+        .cm-sidebar-header {
+            padding: 0 1.75rem 1.25rem;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 1.25rem;
+        }
+
+        .cm-sidebar-header h2 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--text-main);
+            letter-spacing: -0.01em;
+        }
+
+        .cm-sidebar-header p {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
+        }
+
+        .cm-nav-menu {
+            list-style: none;
+            padding: 0 0.9rem;
+            margin: 0;
+        }
+
+        .cm-nav-item {
+            margin-bottom: 0.3rem;
+        }
+
+        .cm-nav-link {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.7rem 0.9rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 500;
+            font-size: 0.92rem;
+            transition: var(--transition);
+            cursor: pointer;
+        }
+
+        .cm-nav-link .cm-nav-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            transition: var(--transition);
+        }
+
+        .cm-nav-link:hover {
+            background-color: #f0f1f3;
+            color: var(--text-main);
+            transform: translateX(2px);
+        }
+
+        .cm-nav-link:hover .cm-nav-icon {
+            color: var(--text-main);
+        }
+
+        .cm-nav-link.active {
+            background-color: var(--primary-soft);
+            color: var(--primary-color);
+            font-weight: 600;
+            box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
+        }
+
+        .cm-nav-link.active .cm-nav-icon {
+            color: var(--primary-color);
+        }
+
+        /* Left accent bar on the active tab */
+        .cm-nav-link.active::before {
+            content: '';
+            position: absolute;
+            left: -0.9rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 20px;
+            border-radius: 0 4px 4px 0;
+            background: var(--primary-color);
+        }
+
+        /* ============= Main Content ============= */
+        .cm-main-content {
+            flex: 1;
+            padding: 2.5rem;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .cm-section-header {
+            margin-bottom: 2rem;
+        }
+
+        .cm-section-header h1 {
+            font-size: 1.7rem;
+            font-weight: 700;
+            margin-bottom: 0.4rem;
+            color: var(--text-main);
+            letter-spacing: -0.015em;
+        }
+
+        .cm-section-header p {
+            color: var(--text-muted);
+            font-size: 0.92rem;
+        }
+
+        .cm-content-section {
+            display: none;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        .cm-content-section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ============= Form fields ============= */
+        .cm-main-content .form-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .cm-main-content .form-control {
+            background-color: var(--field-bg);
+            border: 1.5px solid var(--border-color);
+            border-radius: 10px;
+            padding: 0.65rem 0.9rem;
+            font-size: 0.92rem;
+            color: var(--text-main);
+            transition: var(--transition);
+        }
+
+        /* Subtle tinted background while empty; turns crisp white once filled in */
+        .cm-main-content .form-control:not(:placeholder-shown) {
+            background-color: #ffffff;
+        }
+
+        .cm-main-content .form-control:hover {
+            border-color: #cbd5e1;
+        }
+
+        /* Glowing focus ring */
+        .cm-main-content .form-control:focus {
+            outline: none;
+            background-color: #ffffff;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 4px var(--focus-ring);
+        }
+
+        .cm-feature-card {
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 1.25rem 1.4rem;
+            background: #fcfcfd;
+            margin-bottom: 1rem;
+            transition: var(--transition);
+        }
+
+        .cm-feature-card:hover {
+            border-color: #d8dee9;
+            box-shadow: 0 4px 14px -8px rgba(16, 24, 40, 0.12);
+        }
+
+        .cm-feature-card-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 0.9rem;
+        }
+
+        .cm-subheading {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 1.75rem 0 0.9rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .cm-subheading:first-of-type {
+            margin-top: 0;
+            padding-top: 0;
+            border-top: none;
+        }
+
+        .cm-row-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        @media (max-width: 640px) {
+            .cm-row-2 { grid-template-columns: 1fr; }
+        }
+
+        .cm-info-note {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            background: var(--primary-soft);
+            border: 1px solid rgba(37, 99, 235, 0.18);
+            border-radius: 12px;
+            padding: 1rem 1.1rem;
+            color: #1d4ed8;
+            font-size: 0.85rem;
+            line-height: 1.55;
+            margin-bottom: 1.75rem;
+        }
+
+        .cm-info-note i {
+            margin-top: 0.15rem;
+            flex-shrink: 0;
+        }
+
+        /* ============= Image Upload Zone ============= */
+        .cm-upload-zone {
+            border: 2px dashed #d1d5db;
+            border-radius: 14px;
+            padding: 3rem 2rem;
+            text-align: center;
+            background-color: var(--field-bg);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .cm-upload-zone.cm-upload-compact {
+            padding: 1.5rem 1.5rem;
+        }
+
+        .cm-upload-zone:hover {
+            border-color: var(--primary-color);
+            background-color: var(--primary-soft);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px -10px rgba(37, 99, 235, 0.35);
+        }
+
+        .cm-upload-zone.dragover {
+            border-color: var(--primary-color);
+            border-style: solid;
+            background-color: var(--primary-soft);
+            transform: scale(1.01);
+            box-shadow: 0 0 0 4px var(--focus-ring);
+        }
+
+        .cm-upload-icon {
+            font-size: 1.9rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            transition: var(--transition);
+        }
+
+        .cm-upload-preview {
+            display: block;
+            max-width: 160px;
+            max-height: 90px;
+            object-fit: contain;
+            margin: 0 auto 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: #fff;
+            padding: 0.4rem;
+        }
+
+        .cm-upload-zone:hover .cm-upload-icon,
+        .cm-upload-zone.dragover .cm-upload-icon {
+            color: var(--primary-color);
+            transform: translateY(-3px);
+        }
+
+        .cm-upload-text {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        .cm-upload-text span {
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        /* ============= Actions ============= */
+        .cm-form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            margin-top: 2.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .cm-main-content .btn-light {
+            border: 1px solid var(--border-color);
+            font-weight: 600;
+            transition: var(--transition);
+        }
+
+        .cm-main-content .btn-light:hover {
+            background-color: #f3f4f6;
+            transform: translateY(-1px);
+        }
+
+        .cm-main-content .btn-primary {
+            font-weight: 600;
+            box-shadow: 0 4px 10px -2px rgba(37, 99, 235, 0.35);
+            transition: var(--transition);
+        }
+
+        .cm-main-content .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 14px -2px rgba(37, 99, 235, 0.45);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .content-management-container {
+                flex-direction: column;
+            }
+            .cm-sidebar {
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
+                padding: 1rem 0;
+            }
+            .cm-sidebar-header {
+                padding: 0 1.5rem 1rem;
+                margin-bottom: 1rem;
+            }
+            .cm-nav-menu {
+                display: flex;
+                overflow-x: auto;
+                padding: 0 1rem;
+                gap: 0.5rem;
+            }
+            .cm-nav-item {
+                margin-bottom: 0;
+                white-space: nowrap;
+            }
+            .cm-nav-link.active::before {
+                display: none;
+            }
+            .cm-main-content {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div id="wrapper">
+    <%- include('layout/sidebar') %>
+
+    <div id="content">
+        <%- include('layout/navbar') %>
+
+        <div class="container-fluid p-4">
+            <script>document.getElementById('pageTitle').innerText = 'Content Management';</script>
+
+            <div class="content-management-container">
+                <!-- Sidebar Navigation -->
+                <aside class="cm-sidebar">
+                    <div class="cm-sidebar-header">
+                        <h2>Content Manager</h2>
+                        <p>Landing page sections</p>
+                    </div>
+                    <ul class="cm-nav-menu">
+                        <li class="cm-nav-item">
+                            <a class="cm-nav-link active" data-target="header-branding"><i class="fas fa-shield-halved cm-nav-icon"></i> Header / Branding</a>
+                        </li>
+                        <li class="cm-nav-item">
+                            <a class="cm-nav-link" data-target="hero-section"><i class="fas fa-house cm-nav-icon"></i> Hero Section</a>
+                        </li>
+                        <li class="cm-nav-item">
+                            <a class="cm-nav-link" data-target="about-section"><i class="fas fa-circle-info cm-nav-icon"></i> About Us</a>
+                        </li>
+                        <li class="cm-nav-item">
+                            <a class="cm-nav-link" data-target="org-section"><i class="fas fa-sitemap cm-nav-icon"></i> Organizational Structure</a>
+                        </li>
+                        <li class="cm-nav-item">
+                            <a class="cm-nav-link" data-target="services-section"><i class="fas fa-layer-group cm-nav-icon"></i> Our Services</a>
+                        </li>
+                        <li class="cm-nav-item">
+                            <a class="cm-nav-link" data-target="footer-section"><i class="fas fa-address-book cm-nav-icon"></i> Contact &amp; Footer</a>
+                        </li>
+                        <!-- Transparency Dashboard intentionally excluded — handled elsewhere -->
+                    </ul>
+                </aside>
+
+                <!-- Main Content Area -->
+                <main class="cm-main-content">
+
+                    <!-- ================= HEADER / BRANDING ================= -->
+                    <section id="header-branding" class="cm-content-section active">
+                        <div class="cm-section-header">
+                            <h1>Header / Branding</h1>
+                            <p>The sticky top bar shown on every page of the public landing page.</p>
+                        </div>
+
+                        <form data-section="branding" onsubmit="return submitContentForm(event, this);">
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="brand-title">Site Title</label>
+                                <input type="text" id="brand-title" data-field="title" class="form-control" placeholder="e.g., Center For Quality Assurance" value="<%= landingContent.branding.title %>">
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="brand-subtitle">Site Subtitle</label>
+                                <input type="text" id="brand-subtitle" data-field="subtitle" class="form-control" placeholder="e.g., Public Transparency Portal" value="<%= landingContent.branding.subtitle %>">
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="brand-login-label">Admin Login Button Text</label>
+                                <input type="text" id="brand-login-label" data-field="loginLabel" class="form-control" value="<%= landingContent.branding.loginLabel %>">
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small">Site Logo</label>
+                                <div class="cm-upload-zone cm-upload-compact" data-section="branding" data-upload-field="logoUrl">
+                                    <img class="cm-upload-preview <%= landingContent.branding.logoUrl ? '' : 'd-none' %>" src="<%= landingContent.branding.logoUrl %>" alt="Current logo">
+                                    <i class="fas fa-cloud-arrow-up cm-upload-icon"></i>
+                                    <p class="cm-upload-text"><span>Click to upload</span> or drag and drop</p>
+                                    <p class="cm-upload-text" style="font-size: 0.75rem; margin-top: 0.5rem;">PNG or SVG, square, up to 2MB. Used in the header and footer.</p>
+                                    <input type="file" class="d-none" accept="image/png,image/jpeg,image/webp,image/svg+xml">
+                                </div>
+                                <label class="form-label text-muted fw-semibold small mt-2" for="brand-logo-url">Or paste an image URL</label>
+                                <input type="text" id="brand-logo-url" data-field="logoUrl" class="form-control" placeholder="https://..." value="<%= landingContent.branding.logoUrl %>">
+                            </div>
+
+                            <div class="cm-form-actions">
+                                <button type="button" class="btn btn-light shadow-sm">Discard</button>
+                                <button type="submit" class="btn btn-primary shadow-sm"><i class="fas fa-save me-2"></i>Save Changes</button>
+                            </div>
+                        </form>
+                    </section>
+
+                    <!-- ================= HERO SECTION ================= -->
+                    <section id="hero-section" class="cm-content-section">
+                        <div class="cm-section-header">
+                            <h1>Hero Section</h1>
+                            <p>The full-screen introduction shown at the very top of the landing page.</p>
+                        </div>
+
+                        <form data-section="hero" onsubmit="return submitContentForm(event, this);">
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="hero-eyebrow">Eyebrow Text</label>
+                                <input type="text" id="hero-eyebrow" data-field="eyebrow" class="form-control" placeholder="Small label above the headline" value="<%= landingContent.hero.eyebrow %>">
+                            </div>
+
+                            <div class="cm-row-2 mb-3">
+                                <div>
+                                    <label class="form-label text-muted fw-semibold small" for="hero-title-line1">Headline &mdash; Line 1</label>
+                                    <input type="text" id="hero-title-line1" data-field="titleLine1" class="form-control" value="<%= landingContent.hero.titleLine1 %>">
+                                </div>
+                                <div>
+                                    <label class="form-label text-muted fw-semibold small" for="hero-title-line2">Headline &mdash; Line 2</label>
+                                    <input type="text" id="hero-title-line2" data-field="titleLine2" class="form-control" value="<%= landingContent.hero.titleLine2 %>">
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="hero-subtext">Subtext / Description</label>
+                                <textarea id="hero-subtext" data-field="subtext" class="form-control" rows="3"><%= landingContent.hero.subtext %></textarea>
+                            </div>
+
+                            <div class="cm-subheading">Call-to-Action Buttons</div>
+                            <div class="cm-row-2 mb-3">
+                                <div>
+                                    <label class="form-label text-muted fw-semibold small" for="hero-cta1-text">Primary Button Text</label>
+                                    <input type="text" id="hero-cta1-text" data-field="cta1Text" class="form-control" value="<%= landingContent.hero.cta1Text %>">
+                                </div>
+                                <div>
+                                    <label class="form-label text-muted fw-semibold small" for="hero-cta1-link">Primary Button Link</label>
+                                    <input type="text" id="hero-cta1-link" data-field="cta1Link" class="form-control" value="<%= landingContent.hero.cta1Link %>">
+                                </div>
+                            </div>
+                            <div class="cm-row-2 mb-3">
+                                <div>
+                                    <label class="form-label text-muted fw-semibold small" for="hero-cta2-text">Secondary Button Text</label>
+                                    <input type="text" id="hero-cta2-text" data-field="cta2Text" class="form-control" value="<%= landingContent.hero.cta2Text %>">
+                                </div>
+                                <div>
+                                    <label class="form-label text-muted fw-semibold small" for="hero-cta2-link">Secondary Button Link</label>
+                                    <input type="text" id="hero-cta2-link" data-field="cta2Link" class="form-control" value="<%= landingContent.hero.cta2Link %>">
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small">Background Image</label>
+                                <div class="cm-upload-zone" data-section="hero" data-upload-field="imageUrl">
+                                    <img class="cm-upload-preview <%= landingContent.hero.imageUrl ? '' : 'd-none' %>" src="<%= landingContent.hero.imageUrl %>" alt="Current background">
+                                    <i class="fas fa-cloud-arrow-up cm-upload-icon"></i>
+                                    <p class="cm-upload-text"><span>Click to upload</span> or drag and drop</p>
+                                    <p class="cm-upload-text" style="font-size: 0.75rem; margin-top: 0.5rem;">PNG, JPG, WebP up to 5MB. Also used as the site-wide background.</p>
+                                    <input type="file" class="d-none" accept="image/png,image/jpeg,image/webp,image/svg+xml">
+                                </div>
+                                <label class="form-label text-muted fw-semibold small mt-2" for="hero-image-url">Or paste an image URL</label>
+                                <input type="text" id="hero-image-url" data-field="imageUrl" class="form-control" placeholder="https://..." value="<%= landingContent.hero.imageUrl %>">
+                            </div>
+
+                            <div class="cm-form-actions">
+                                <button type="button" class="btn btn-light shadow-sm">Discard</button>
+                                <button type="submit" class="btn btn-primary shadow-sm"><i class="fas fa-save me-2"></i>Save Changes</button>
+                            </div>
+                        </form>
+                    </section>
+
+                    <!-- ================= ABOUT US ================= -->
+                    <section id="about-section" class="cm-content-section">
+                        <div class="cm-section-header">
+                            <h1>About Us</h1>
+                            <p>The "Who We Are" section, including the CQA Head's profile card.</p>
+                        </div>
+
+                        <form data-section="about" onsubmit="return submitContentForm(event, this);">
+
+                            <div class="cm-subheading">Section Text</div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="about-eyebrow">Eyebrow Text</label>
+                                <input type="text" id="about-eyebrow" data-field="eyebrow" class="form-control" value="<%= landingContent.about.eyebrow %>">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="about-title">Section Title</label>
+                                <input type="text" id="about-title" data-field="title" class="form-control" value="<%= landingContent.about.title %>">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="about-paragraph">About Paragraph</label>
+                                <textarea id="about-paragraph" data-field="paragraph" class="form-control" rows="5"><%= landingContent.about.paragraph %></textarea>
+                            </div>
+
+                            <div class="cm-subheading">Credibility Badges</div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="about-badge-1">Badge 1</label>
+                                <input type="text" id="about-badge-1" data-field="badge1" class="form-control" value="<%= landingContent.about.badge1 %>">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="about-badge-2">Badge 2</label>
+                                <input type="text" id="about-badge-2" data-field="badge2" class="form-control" value="<%= landingContent.about.badge2 %>">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="about-badge-3">Badge 3</label>
+                                <input type="text" id="about-badge-3" data-field="badge3" class="form-control" value="<%= landingContent.about.badge3 %>">
+                            </div>
+
+                            <div class="cm-subheading">Head, Center for Quality Assurance</div>
+                            <div class="cm-feature-card">
+                                <div class="mb-3">
+                                    <label class="form-label text-muted fw-semibold small" for="about-head-name">Full Name</label>
+                                    <input type="text" id="about-head-name" data-field="headName" class="form-control" value="<%= landingContent.about.headName %>">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label text-muted fw-semibold small" for="about-head-role">Position / Title</label>
+                                    <input type="text" id="about-head-role" data-field="headRole" class="form-control" value="<%= landingContent.about.headRole %>">
+                                </div>
+                                <div class="cm-row-2">
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="about-head-email">Email</label>
+                                        <input type="email" id="about-head-email" data-field="headEmail" class="form-control" value="<%= landingContent.about.headEmail %>">
+                                    </div>
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="about-head-phone">Phone</label>
+                                        <input type="text" id="about-head-phone" data-field="headPhone" class="form-control" value="<%= landingContent.about.headPhone %>">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="cm-form-actions">
+                                <button type="button" class="btn btn-light shadow-sm">Discard</button>
+                                <button type="submit" class="btn btn-primary shadow-sm"><i class="fas fa-save me-2"></i>Save Changes</button>
+                            </div>
+                        </form>
+                    </section>
+
+                    <!-- ================= ORGANIZATIONAL STRUCTURE ================= -->
+                    <section id="org-section" class="cm-content-section">
+                        <div class="cm-section-header">
+                            <h1>Organizational Structure</h1>
+                            <p>The governance chart, from the College President down to the CQA support team.</p>
+                        </div>
+
+                        <form data-section="org" onsubmit="return submitContentForm(event, this);">
+
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="org-eyebrow">Eyebrow Text</label>
+                                <input type="text" id="org-eyebrow" data-field="eyebrow" class="form-control" value="<%= landingContent.org.eyebrow %>">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="org-title">Section Title</label>
+                                <input type="text" id="org-title" data-field="title" class="form-control" value="<%= landingContent.org.title %>">
+                            </div>
+
+                            <div class="cm-subheading">Top Leadership</div>
+
+                            <div class="cm-feature-card">
+                                <div class="cm-feature-card-title"><i class="fas fa-user-graduate me-1"></i> Leader 1</div>
+                                <div class="cm-row-2">
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-lead-1-name">Name</label>
+                                        <input type="text" id="org-lead-1-name" data-field="lead1Name" class="form-control" value="<%= landingContent.org.lead1Name %>">
+                                    </div>
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-lead-1-role">Role</label>
+                                        <input type="text" id="org-lead-1-role" data-field="lead1Role" class="form-control" value="<%= landingContent.org.lead1Role %>">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="cm-feature-card">
+                                <div class="cm-feature-card-title"><i class="fas fa-user-graduate me-1"></i> Leader 2</div>
+                                <div class="cm-row-2">
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-lead-2-name">Name</label>
+                                        <input type="text" id="org-lead-2-name" data-field="lead2Name" class="form-control" value="<%= landingContent.org.lead2Name %>">
+                                    </div>
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-lead-2-role">Role</label>
+                                        <input type="text" id="org-lead-2-role" data-field="lead2Role" class="form-control" value="<%= landingContent.org.lead2Role %>">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="cm-feature-card">
+                                <div class="cm-feature-card-title"><i class="fas fa-user-tie me-1"></i> Leader 3</div>
+                                <div class="cm-row-2">
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-lead-3-name">Name</label>
+                                        <input type="text" id="org-lead-3-name" data-field="lead3Name" class="form-control" value="<%= landingContent.org.lead3Name %>">
+                                    </div>
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-lead-3-role">Role</label>
+                                        <input type="text" id="org-lead-3-role" data-field="lead3Role" class="form-control" value="<%= landingContent.org.lead3Role %>">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="cm-subheading">CQA Support Team</div>
+
+                            <div class="cm-feature-card">
+                                <div class="cm-feature-card-title"><i class="fas fa-user me-1"></i> Team Member 1</div>
+                                <div class="cm-row-2">
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-team-1-name">Name</label>
+                                        <input type="text" id="org-team-1-name" data-field="team1Name" class="form-control" value="<%= landingContent.org.team1Name %>">
+                                    </div>
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-team-1-role">Role</label>
+                                        <input type="text" id="org-team-1-role" data-field="team1Role" class="form-control" value="<%= landingContent.org.team1Role %>">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="cm-feature-card">
+                                <div class="cm-feature-card-title"><i class="fas fa-user me-1"></i> Team Member 2</div>
+                                <div class="cm-row-2">
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-team-2-name">Name</label>
+                                        <input type="text" id="org-team-2-name" data-field="team2Name" class="form-control" value="<%= landingContent.org.team2Name %>">
+                                    </div>
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-team-2-role">Role</label>
+                                        <input type="text" id="org-team-2-role" data-field="team2Role" class="form-control" value="<%= landingContent.org.team2Role %>">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="cm-feature-card">
+                                <div class="cm-feature-card-title"><i class="fas fa-user me-1"></i> Team Member 3</div>
+                                <div class="cm-row-2">
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-team-3-name">Name</label>
+                                        <input type="text" id="org-team-3-name" data-field="team3Name" class="form-control" value="<%= landingContent.org.team3Name %>">
+                                    </div>
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-team-3-role">Role</label>
+                                        <input type="text" id="org-team-3-role" data-field="team3Role" class="form-control" value="<%= landingContent.org.team3Role %>">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="cm-feature-card">
+                                <div class="cm-feature-card-title"><i class="fas fa-user me-1"></i> Team Member 4</div>
+                                <div class="cm-row-2">
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-team-4-name">Name</label>
+                                        <input type="text" id="org-team-4-name" data-field="team4Name" class="form-control" value="<%= landingContent.org.team4Name %>">
+                                    </div>
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-team-4-role">Role</label>
+                                        <input type="text" id="org-team-4-role" data-field="team4Role" class="form-control" value="<%= landingContent.org.team4Role %>">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="cm-feature-card">
+                                <div class="cm-feature-card-title"><i class="fas fa-user me-1"></i> Team Member 5</div>
+                                <div class="cm-row-2">
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-team-5-name">Name</label>
+                                        <input type="text" id="org-team-5-name" data-field="team5Name" class="form-control" value="<%= landingContent.org.team5Name %>">
+                                    </div>
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-team-5-role">Role</label>
+                                        <input type="text" id="org-team-5-role" data-field="team5Role" class="form-control" value="<%= landingContent.org.team5Role %>">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="cm-feature-card">
+                                <div class="cm-feature-card-title"><i class="fas fa-user me-1"></i> Team Member 6</div>
+                                <div class="cm-row-2">
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-team-6-name">Name</label>
+                                        <input type="text" id="org-team-6-name" data-field="team6Name" class="form-control" value="<%= landingContent.org.team6Name %>">
+                                    </div>
+                                    <div>
+                                        <label class="form-label text-muted fw-semibold small" for="org-team-6-role">Role</label>
+                                        <input type="text" id="org-team-6-role" data-field="team6Role" class="form-control" value="<%= landingContent.org.team6Role %>">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="org-aide-label">Student Aide Badge Label</label>
+                                <input type="text" id="org-aide-label" data-field="aideLabel" class="form-control" value="<%= landingContent.org.aideLabel %>">
+                            </div>
+
+                            <div class="cm-form-actions">
+                                <button type="button" class="btn btn-light shadow-sm">Discard</button>
+                                <button type="submit" class="btn btn-primary shadow-sm"><i class="fas fa-save me-2"></i>Save Changes</button>
+                            </div>
+                        </form>
+                    </section>
+
+                    <!-- ================= OUR SERVICES ================= -->
+                    <section id="services-section" class="cm-content-section">
+                        <div class="cm-section-header">
+                            <h1>Our Services</h1>
+                            <p>The intro text shown above the Cluster &rarr; Office &rarr; Services directory.</p>
+                        </div>
+
+                        <div class="cm-info-note">
+                            <i class="fas fa-circle-info"></i>
+                            <div>The full Cluster &rarr; Office &rarr; Services directory (7+ clusters, 40+ offices) is data-driven from a structured dataset in the landing page code, not a flat form — editing it here would risk breaking the hierarchy. Only the section intro below is managed through this form. Ask your developer if you need the office/service directory itself made editable.</div>
+                        </div>
+
+                        <form data-section="services" onsubmit="return submitContentForm(event, this);">
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="services-eyebrow">Eyebrow Text</label>
+                                <input type="text" id="services-eyebrow" data-field="eyebrow" class="form-control" value="<%= landingContent.services.eyebrow %>">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="services-title">Section Title</label>
+                                <input type="text" id="services-title" data-field="title" class="form-control" value="<%= landingContent.services.title %>">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="services-desc">Section Description</label>
+                                <textarea id="services-desc" data-field="desc" class="form-control" rows="3"><%= landingContent.services.desc %></textarea>
+                            </div>
+
+                            <div class="cm-form-actions">
+                                <button type="button" class="btn btn-light shadow-sm">Discard</button>
+                                <button type="submit" class="btn btn-primary shadow-sm"><i class="fas fa-save me-2"></i>Save Changes</button>
+                            </div>
+                        </form>
+                    </section>
+
+                    <!-- ================= CONTACT & FOOTER ================= -->
+                    <section id="footer-section" class="cm-content-section">
+                        <div class="cm-section-header">
+                            <h1>Contact &amp; Footer</h1>
+                            <p>The site footer: description, contact details, and social links.</p>
+                        </div>
+
+                        <form data-section="footer" onsubmit="return submitContentForm(event, this);">
+
+                            <div class="cm-subheading">Footer Description</div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="footer-desc">About Blurb</label>
+                                <textarea id="footer-desc" data-field="desc" class="form-control" rows="3"><%= landingContent.footer.desc %></textarea>
+                            </div>
+
+                            <div class="cm-subheading">Contact Details</div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="footer-address">Office Address</label>
+                                <textarea id="footer-address" data-field="address" class="form-control" rows="2"><%= landingContent.footer.address %></textarea>
+                            </div>
+                            <div class="cm-row-2 mb-3">
+                                <div>
+                                    <label class="form-label text-muted fw-semibold small" for="footer-email">Contact Email</label>
+                                    <input type="email" id="footer-email" data-field="email" class="form-control" value="<%= landingContent.footer.email %>">
+                                </div>
+                                <div>
+                                    <label class="form-label text-muted fw-semibold small" for="footer-phone">Phone Number</label>
+                                    <input type="text" id="footer-phone" data-field="phone" class="form-control" value="<%= landingContent.footer.phone %>">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted fw-semibold small" for="footer-hours">Office Hours</label>
+                                <input type="text" id="footer-hours" data-field="hours" class="form-control" value="<%= landingContent.footer.hours %>">
+                            </div>
+
+                            <div class="cm-subheading">Social Links</div>
+                            <div class="cm-row-2 mb-3">
+                                <div>
+                                    <label class="form-label text-muted fw-semibold small" for="footer-facebook"><i class="fab fa-facebook-f me-1"></i> Facebook URL</label>
+                                    <input type="url" id="footer-facebook" data-field="facebook" class="form-control" value="<%= landingContent.footer.facebook %>">
+                                </div>
+                                <div>
+                                    <label class="form-label text-muted fw-semibold small" for="footer-twitter"><i class="fab fa-x-twitter me-1"></i> Twitter / X URL</label>
+                                    <input type="url" id="footer-twitter" data-field="twitter" class="form-control" value="<%= landingContent.footer.twitter %>">
+                                </div>
+                            </div>
+                            <div class="cm-row-2 mb-3">
+                                <div>
+                                    <label class="form-label text-muted fw-semibold small" for="footer-linkedin"><i class="fab fa-linkedin-in me-1"></i> LinkedIn URL</label>
+                                    <input type="url" id="footer-linkedin" data-field="linkedin" class="form-control" value="<%= landingContent.footer.linkedin %>">
+                                </div>
+                                <div>
+                                    <label class="form-label text-muted fw-semibold small" for="footer-spims"><i class="fas fa-globe me-1"></i> SPIMS Portal URL</label>
+                                    <input type="url" id="footer-spims" data-field="spims" class="form-control" value="<%= landingContent.footer.spims %>">
+                                </div>
+                            </div>
+
+                            <div class="cm-form-actions">
+                                <button type="button" class="btn btn-light shadow-sm">Discard</button>
+                                <button type="submit" class="btn btn-primary shadow-sm"><i class="fas fa-save me-2"></i>Save Changes</button>
+                            </div>
+                        </form>
+                    </section>
+
+                </main>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<%- include('layout/footer') %>
+
+<script>
+    // Small wrapper so every call site doesn't need its own typeof-check —
+    // falls back to a plain alert() if AppAlert.js failed to load.
+    function notify(kind, message) {
+        if (typeof AppAlert !== 'undefined') {
+            AppAlert[kind](message);
+        } else {
+            alert(message);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // LOAD — the server already pre-fills every field's `value`/textarea
+    // content straight from landing-data.json on page render (see
+    // content-management route in server.js), so a normal page load needs no
+    // JS here at all. This function exists for the "Discard" button: it
+    // re-fetches the last-SAVED state and snaps the form back to it,
+    // discarding whatever the admin typed but didn't submit.
+    //
+    // IMPORTANT: only <input>/<textarea> elements carry `data-field` — the
+    // upload-zone <div>s use `data-upload-field` instead, specifically so
+    // they're never mistaken for a real form value here (a <div> has no
+    // `.value`) or in submitContentForm()/uploadZoneFile() below.
+    // ---------------------------------------------------------------------
+    function loadContent() {
+        fetch('/api/content')
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) throw new Error(data.message || 'Failed to load content.');
+                const content = data.content;
+
+                document.querySelectorAll('input[data-field], textarea[data-field]').forEach(el => {
+                    const form = el.closest('form[data-section]');
+                    if (!form) return;
+                    const section = form.getAttribute('data-section');
+                    const field = el.getAttribute('data-field');
+                    const value = content[section] && content[section][field];
+                    if (value !== undefined) el.value = value;
+                });
+
+                document.querySelectorAll('[data-upload-field]').forEach(zone => {
+                    const section = zone.getAttribute('data-section');
+                    const field = zone.getAttribute('data-upload-field');
+                    const value = content[section] && content[section][field];
+                    const img = zone.querySelector('.cm-upload-preview');
+                    if (img && value) {
+                        img.src = value;
+                        img.classList.remove('d-none');
+                    }
+                });
+            })
+            .catch(err => {
+                console.error('Error loading landing page content:', err);
+                notify('error', 'Could not reload saved content.');
+            });
+    }
+
+    // ---------------------------------------------------------------------
+    // SAVE — called from each form's onsubmit="return submitContentForm(...)"
+    // ---------------------------------------------------------------------
+    function submitContentForm(event, form) {
+        event.preventDefault();
+        const section = form.getAttribute('data-section');
+        const payload = {};
+        form.querySelectorAll('input[data-field], textarea[data-field]').forEach(el => {
+            payload[el.getAttribute('data-field')] = el.value;
+        });
+
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const originalHtml = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Saving…';
+
+        fetch(`/api/content/${section}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) throw new Error(data.message || 'Could not save changes.');
+                notify('success', 'Changes saved! The landing page is now updated.');
+            })
+            .catch(err => {
+                console.error(`Error saving "${section}":`, err);
+                notify('error', err.message || 'Could not save changes. Please try again.');
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalHtml;
+            });
+
+        return false;
+    }
+
+    // ---------------------------------------------------------------------
+    // UPLOAD — a zone's own hidden <input type="file"> is used for both the
+    // click-to-browse and the drag-and-drop path, so there is exactly one
+    // upload code path regardless of how the file was chosen.
+    // ---------------------------------------------------------------------
+    function uploadZoneFile(zone, file) {
+        const section = zone.getAttribute('data-section');
+        const field = zone.getAttribute('data-upload-field');
+        if (!file.type.startsWith('image/')) {
+            return notify('error', 'Please choose an image file (PNG, JPG, WebP, or SVG).');
+        }
+
+        const icon = zone.querySelector('.cm-upload-icon');
+        const originalIconClass = icon.className;
+        icon.className = 'fas fa-spinner fa-spin cm-upload-icon';
+
+        const formData = new FormData();
+        formData.append('image', file);
+
+        fetch(`/api/content/${section}/upload/${field}`, { method: 'POST', body: formData })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) throw new Error(data.message || 'Upload failed.');
+
+                const img = zone.querySelector('.cm-upload-preview');
+                if (img) {
+                    img.src = data.url;
+                    img.classList.remove('d-none');
+                }
+
+                // Keep the "Or paste an image URL" text input (same `data-field`
+                // name as this zone's `data-upload-field`, in the same form) in
+                // sync, so Save Changes submits the freshly uploaded URL even if
+                // the admin never touches that text box.
+                const form = zone.closest('form');
+                const urlInput = form && form.querySelector(`input[data-field="${field}"]`);
+                if (urlInput) urlInput.value = data.url;
+
+                notify('success', 'Image uploaded and saved.');
+            })
+            .catch(err => {
+                console.error('Error uploading image:', err);
+                notify('error', err.message || 'Could not upload image. Please try again.');
+            })
+            .finally(() => {
+                icon.className = originalIconClass;
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // NOTE: loadContent() is intentionally NOT called here. Every field's
+        // value is already rendered server-side from landing-data.json (see
+        // the value attributes bound to landingContent fields above), so it's
+        // already correct and fresh the instant the page loads. loadContent()
+        // is kept only for the "Discard" buttons below, which need to re-pull
+        // the last-saved state after the admin has typed unsaved edits.
+
+        // --- Tab switching ---
+        const navLinks = document.querySelectorAll('.cm-nav-link');
+        const sections = document.querySelectorAll('.cm-content-section');
+
+        navLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                navLinks.forEach(l => l.classList.remove('active'));
+                sections.forEach(s => s.classList.remove('active'));
+
+                link.classList.add('active');
+                const targetId = link.getAttribute('data-target');
+                document.getElementById(targetId).classList.add('active');
+            });
+        });
+
+        // --- Discard buttons: reload the saved values, dropping unsaved edits ---
+        document.querySelectorAll('.cm-form-actions .btn-light').forEach(btn => {
+            btn.addEventListener('click', loadContent);
+        });
+
+        // --- Drag-and-drop / click-to-browse image upload ---
+        const uploadZones = document.querySelectorAll('.cm-upload-zone');
+        uploadZones.forEach(zone => {
+            const fileInput = zone.querySelector('input[type="file"]');
+
+            zone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                zone.classList.add('dragover');
+            });
+            zone.addEventListener('dragleave', () => {
+                zone.classList.remove('dragover');
+            });
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('dragover');
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    uploadZoneFile(zone, e.dataTransfer.files[0]);
+                }
+            });
+            zone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', () => {
+                if (fileInput.files && fileInput.files[0]) {
+                    uploadZoneFile(zone, fileInput.files[0]);
+                }
+                fileInput.value = ''; // allow re-selecting the same file later
+            });
+        });
+    });
+</script>
+</body>
+</html>

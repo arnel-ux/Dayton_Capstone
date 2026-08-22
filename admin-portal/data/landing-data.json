@@ -1,0 +1,70 @@
+{
+  "branding": {
+    "title": "Center For Quality Assurance",
+    "subtitle": "Public Transparency Portal • Satisfaction Survey",
+    "loginLabel": "Login Portal",
+    "logoUrl": "/images/uploads/branding-logoUrl-1787412644785.png"
+  },
+  "hero": {
+    "eyebrow": "Camarines Sur Polytechnic Colleges",
+    "titleLine1": "Center for Quality Assurance",
+    "titleLine2": "Public Transparency Portal",
+    "subtext": "A live window into our institution's governance, services, and client satisfaction performance — built on data, driven by continuous quality improvement.",
+    "cta1Text": "Explore Dashboard",
+    "cta1Link": "#dashboard",
+    "cta2Text": "View Our Services",
+    "cta2Link": "#services",
+    "imageUrl": "https://spims.cspc.edu.ph/assets/img/background.jpg"
+  },
+  "about": {
+    "eyebrow": "Who We Are",
+    "title": "Center for Quality Assurance",
+    "paragraph": "The Center for Quality Assurance is where the College's quality assurance mechanisms and processes are vested. The office is in-charge of all international, national and local quality assurance mechanisms, while working closely with top management in setting up quality assurance procedures. Its main responsibility is to coordinate, assist, and monitor the different units to strengthen their academic and administrative management and processes so that they are better able to achieve their quality goals and educational objectives.",
+    "badge1": "ISO 9001:2015 Certified",
+    "badge2": "Institutional Accreditation",
+    "badge3": "Continuous Quality Monitoring",
+    "headName": "JUVY M. BUSTAMANTE, JD",
+    "headRole": "Head, Center for Quality Assurance",
+    "headEmail": "qams@cspc.edu.ph",
+    "headPhone": "(054) 2884421 to 23 loc. 123"
+  },
+  "org": {
+    "eyebrow": "Governance",
+    "title": "Organizational Structure",
+    "lead1Name": "Amado A. Oliva Jr., PhD",
+    "lead1Role": "SUC President III",
+    "lead2Name": "Dr. Jocelyn O. Jintalan",
+    "lead2Role": "Vice President of Academic Affairs",
+    "lead3Name": "Mr. Juvy M. Bustamante, JD",
+    "lead3Role": "AO V · Head, Center for Quality Assurance",
+    "team1Name": "Angielyn L. Patricio",
+    "team1Role": "AA VI / Program Accreditation and Assessment Coordinator",
+    "team2Name": "Marian Beatrize O. Tabalos",
+    "team2Role": "AO II / Institutional Accreditations Person-in-Charge",
+    "team3Name": "Lea Laarni B. Albeza-Arines",
+    "team3Role": "AO IV / QMS and EOMS Person-in-Charge",
+    "team4Name": "Chrena Joyce I. Brutas",
+    "team4Role": "Technical Writer / CSM Focal Person",
+    "team5Name": "Christine Joy L. Taburnal",
+    "team5Role": "AA II / Office Clerk / Clerical Support Staff",
+    "team6Name": "Lawrence A. Rebulado",
+    "team6Role": "Layout Artist / Databank Manager",
+    "aideLabel": "Student Aide"
+  },
+  "services": {
+    "eyebrow": "Client Satisfaction Measurement",
+    "title": "Our Services",
+    "desc": "Every frontline service across the College, organized by Cluster → Office. Pick a cluster, then expand an office to see what it offers."
+  },
+  "footer": {
+    "desc": "Committed to upholding transparency and accountability by providing open access to institutional quality assurance data, governance structures, and public satisfaction survey results.",
+    "address": "Center for Quality Assurance, Camarines Sur Polytechnic Colleges, Nabua, Camarines Sur, Philippines",
+    "email": "qams@cspc.edu.ph",
+    "phone": "(054) 2884421 to 23 loc. 123",
+    "hours": "Mon – Fri, 8:00 AM – 5:00 PM",
+    "facebook": "https://facebook.com",
+    "twitter": "https://twitter.com",
+    "linkedin": "https://linkedin.com",
+    "spims": "https://spims.cspc.edu.ph"
+  }
+}
