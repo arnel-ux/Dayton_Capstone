@@ -36,6 +36,8 @@
             --bs-primary-rgb: 37, 84, 199;
             --brand: #2554c7;
             --brand-dark: #1c3f9c;
+            --brand-light: #4d7ce8;
+            --accent: #d4af37;
             --ink-900: #0f172a;
             --ink-800: #1e293b;
             --ink-600: #475569;
@@ -45,8 +47,10 @@
             --line: #e2e8f0;
             --line-soft: #edf1f7;
             --ring: rgba(37, 84, 199, 0.15);
-            --sidebar-w: 264px;
-            --topbar-h: 68px;
+            --sidebar-w: 272px;
+            --topbar-h: 72px;
+            --shadow-soft: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.10);
+            --shadow-lift: 0 4px 10px -4px rgba(15,23,42,.10), 0 24px 48px -20px rgba(15,23,42,.18);
         }
 
         body {
@@ -55,9 +59,20 @@
             margin: 0;
             padding: 0;
             min-height: 100vh;
-            background: var(--page-bg);
+            background:
+                radial-gradient(1100px 520px at 100% -8%, rgba(37,84,199,0.07), transparent 60%),
+                radial-gradient(900px 480px at -8% 0%, rgba(37,84,199,0.05), transparent 55%),
+                var(--page-bg);
+            background-attachment: fixed;
             color: var(--ink-800);
             transition: background 0.3s ease-in-out, color 0.3s ease-in-out;
+        }
+        [data-bs-theme="dark"] body {
+            background:
+                radial-gradient(1100px 520px at 100% -8%, rgba(77,124,232,0.10), transparent 60%),
+                radial-gradient(900px 480px at -8% 0%, rgba(77,124,232,0.06), transparent 55%),
+                var(--page-bg);
+            background-attachment: fixed;
         }
 
         /* =========================================================
@@ -68,51 +83,65 @@
         .sidebar {
             width: var(--sidebar-w);
             flex-shrink: 0;
-            background: var(--ink-900);
+            background: linear-gradient(190deg, #131c30 0%, var(--ink-900) 55%, #0c1424 100%);
             color: #e2e8f0;
             display: flex;
             flex-direction: column;
             position: fixed;
             top: 0; left: 0; bottom: 0;
             z-index: 1040;
+            box-shadow: 4px 0 24px -8px rgba(0,0,0,0.25);
             transition: transform 0.3s ease;
         }
-        [data-bs-theme="dark"] .sidebar { background: #0a101c; }
+        [data-bs-theme="dark"] .sidebar { background: linear-gradient(190deg, #0d1524 0%, #0a101c 55%, #070c16 100%); }
 
         .sidebar-brand {
-            display: flex; align-items: center; gap: 0.75rem;
-            padding: 1.4rem 1.4rem 1.2rem;
+            display: flex; align-items: center; gap: 0.8rem;
+            padding: 1.6rem 1.5rem 1.35rem;
             border-bottom: 1px solid rgba(255,255,255,0.08);
         }
-        .sidebar-brand img { width: 42px; height: 42px; border-radius: 50%; background: #fff; padding: 3px; flex-shrink: 0; }
-        .sidebar-brand-text { line-height: 1.25; }
-        .sidebar-brand-text .t1 { font-size: 0.8rem; font-weight: 700; color: #fff; letter-spacing: 0.3px; }
-        .sidebar-brand-text .t2 { font-size: 0.7rem; color: #94a3b8; }
+        .sidebar-brand img { width: 44px; height: 44px; object-fit: contain; flex-shrink: 0; }
+        .sidebar-brand-text { line-height: 1.3; }
+        .sidebar-brand-text .t1 { font-size: 0.84rem; font-weight: 700; color: #fff; letter-spacing: 0.3px; }
+        .sidebar-brand-text .t2 { font-size: 0.7rem; color: #8996ac; margin-top: 0.1rem; }
 
-        .sidebar-nav { flex-grow: 1; padding: 1.25rem 0.9rem; display: flex; flex-direction: column; gap: 0.35rem; }
+        .sidebar-nav { flex-grow: 1; padding: 1.5rem 1rem; display: flex; flex-direction: column; gap: 0.3rem; }
+        .sidebar-nav-label {
+            font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .09em;
+            color: #5b6a85; padding: 0 0.9rem; margin-bottom: 0.6rem;
+        }
         .sidebar-nav .nav-item-link {
-            display: flex; align-items: center; gap: 0.8rem;
-            padding: 0.7rem 0.9rem; border-radius: 10px;
-            color: #cbd5e1; text-decoration: none; font-weight: 600; font-size: 0.9rem;
-            transition: background 0.15s ease, color 0.15s ease;
+            display: flex; align-items: center; gap: 0.85rem;
+            padding: 0.72rem 0.95rem; border-radius: 11px;
+            color: #b6c0d4; text-decoration: none; font-weight: 600; font-size: 0.9rem;
+            position: relative;
+            transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
         }
         .sidebar-nav .nav-item-link i { font-size: 1.05rem; width: 20px; text-align: center; }
-        .sidebar-nav .nav-item-link:hover:not(.disabled) { background: rgba(255,255,255,0.06); color: #fff; }
-        .sidebar-nav .nav-item-link.active { background: var(--brand); color: #fff; box-shadow: 0 6px 16px -6px rgba(37,84,199,0.7); }
-        .sidebar-nav .nav-item-link.disabled { color: #64748b; cursor: not-allowed; }
+        .sidebar-nav .nav-item-link:hover:not(.disabled) { background: rgba(255,255,255,0.07); color: #fff; transform: translateX(2px); }
+        .sidebar-nav .nav-item-link.active {
+            background: linear-gradient(135deg, var(--brand), var(--brand-light));
+            color: #fff; box-shadow: 0 8px 20px -8px rgba(37,84,199,0.8);
+        }
+        .sidebar-nav .nav-item-link.disabled { color: #55627a; cursor: not-allowed; }
         .sidebar-nav .soon-badge {
             margin-left: auto; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.3px;
             background: rgba(148,163,184,0.15); color: #94a3b8; padding: 0.15rem 0.5rem; border-radius: 50px;
         }
 
-        .sidebar-footer { padding: 1rem 1.4rem 1.4rem; border-top: 1px solid rgba(255,255,255,0.08); }
-        .sidebar-footer .signed-in-email { font-size: 0.72rem; color: #94a3b8; margin-bottom: 0.6rem; word-break: break-all; }
+        .sidebar-footer { padding: 1.1rem 1.5rem 1.5rem; border-top: 1px solid rgba(255,255,255,0.08); }
+        .sidebar-footer .signed-in-email {
+            font-size: 0.72rem; color: #8996ac; margin-bottom: 0.75rem; word-break: break-all;
+            display: flex; align-items: center; gap: 0.4rem;
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px; padding: 0.55rem 0.7rem;
+        }
         .sidebar-footer .btn-logout-side {
             width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
             background: rgba(239,68,68,0.12); color: #fca5a5; border: 1px solid rgba(239,68,68,0.25);
-            border-radius: 10px; padding: 0.55rem; font-weight: 600; font-size: 0.82rem; transition: all 0.15s ease;
+            border-radius: 11px; padding: 0.6rem; font-weight: 600; font-size: 0.82rem; transition: all 0.15s ease;
         }
-        .sidebar-footer .btn-logout-side:hover { background: rgba(239,68,68,0.22); color: #fecaca; }
+        .sidebar-footer .btn-logout-side:hover { background: rgba(239,68,68,0.22); color: #fecaca; transform: translateY(-1px); }
 
         .sidebar-backdrop {
             display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.55);
@@ -135,32 +164,35 @@
             height: var(--topbar-h);
             background: var(--surface);
             border-bottom: 1px solid var(--line-soft);
-            display: flex; align-items: center; gap: 1rem;
-            padding: 0 1.25rem;
+            box-shadow: 0 1px 0 rgba(15,23,42,0.02), 0 6px 18px -14px rgba(15,23,42,0.25);
+            display: flex; align-items: center; gap: 1.1rem;
+            padding: 0 1.5rem;
+            backdrop-filter: saturate(1.1);
         }
         .topbar-hamburger, .btn-sidebar-toggle {
             display: none; align-items: center; justify-content: center;
-            width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line);
+            width: 40px; height: 40px; border-radius: 11px; border: 1px solid var(--line);
             background: var(--surface); color: var(--ink-800); font-size: 1.1rem;
             transition: all 0.2s ease; flex-shrink: 0;
         }
         .btn-sidebar-toggle { display: inline-flex; }
         .btn-sidebar-toggle:hover { border-color: var(--brand); color: var(--brand); background: var(--ring); }
-        .topbar-title { font-weight: 700; color: var(--ink-900); font-size: 1rem; margin: 0; }
-        .topbar-title small { display: block; font-weight: 500; font-size: 0.72rem; color: var(--ink-600); }
-        .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 0.6rem; }
-        .lang-toggle-group { display: flex; gap: 0.4rem; }
+        .topbar-title { font-weight: 700; color: var(--ink-900); font-size: 1.05rem; margin: 0; letter-spacing: -.01em; }
+        .topbar-title small { display: block; font-weight: 500; font-size: 0.72rem; color: var(--ink-600); margin-top: 0.1rem; }
+        .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 0.7rem; }
+        .lang-toggle-group { display: flex; gap: 0.4rem; background: var(--page-bg); border: 1px solid var(--line-soft); padding: 0.25rem; border-radius: 50px; }
+        .lang-toggle-group .btn { border-radius: 50px !important; padding: 0.35rem 0.9rem; }
 
         .btn-fullscreen {
             display: inline-flex; align-items: center; justify-content: center;
-            width: 38px; height: 38px; border-radius: 10px;
+            width: 40px; height: 40px; border-radius: 11px;
             border: 1px solid var(--line); background: var(--surface); color: var(--ink-800);
             font-size: 1rem; transition: all 0.2s ease;
         }
         .btn-fullscreen:hover { border-color: var(--brand); color: var(--brand); transform: translateY(-1px); background: var(--ring); }
         .btn-fullscreen:active { transform: translateY(0) scale(0.94); }
 
-        .content-body { padding: 1.75rem 1.5rem 3rem; flex-grow: 1; }
+        .content-body { padding: 2rem 1.75rem 3.5rem; flex-grow: 1; }
 
         /* =========================================================
            SPA VIEW SWITCHING — Take Survey / Profile / History
@@ -169,11 +201,11 @@
         .app-view.active { display: block; animation: fadeIn .4s ease; }
 
         .view-card {
-            border-radius: 20px;
+            border-radius: 22px;
             background: var(--surface) !important;
             border: 1px solid var(--line-soft);
-            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 24px 48px -16px rgba(15, 23, 42, 0.14);
-            max-width: 880px;
+            box-shadow: var(--shadow-lift);
+            max-width: 900px;
             margin: 0 auto;
             transition: background 0.3s ease-in-out, border-color 0.3s ease-in-out;
         }
@@ -330,10 +362,14 @@
         }
         .btn-edit-section:hover { background: var(--brand); color: #fff; transform: translateY(-1px); }
 
-        .review-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.9rem; }
+        .review-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
         .review-item {
-            background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: 0.8rem 1rem;
+            background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: 0.9rem 1.1rem;
+            transition: border-color .15s ease, box-shadow .15s ease;
         }
+        .review-item:hover { border-color: #c7d5f2; box-shadow: 0 4px 14px -10px rgba(37,84,199,0.3); }
+        #terms-box { box-shadow: var(--shadow-soft); }
+        .review-section + .review-section { padding-top: 1.75rem; border-top: 1px dashed var(--line); }
         [data-bs-theme="dark"] .review-item { background: #101827; }
         .review-item .label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-400); margin-bottom: 0.2rem; }
         .review-item .value { font-weight: 600; color: var(--ink-900); font-size: 0.9rem; word-break: break-word; }
@@ -430,24 +466,61 @@
         /* When the Take Survey view is the active one, drop the content-body's own
            padding so the survey fills the viewport edge-to-edge; Profile/History
            keep their normal padded, centered card look. */
-        .content-body:has(#view-survey.active) { padding: 0; }
+        .content-body:has(#view-survey.active) { padding: 2rem 1.75rem 3.5rem; }
         .survey-card {
-            border-radius: 0;
+            border-radius: 22px;
             background: var(--surface) !important;
+            border: 1px solid var(--line-soft);
+            box-shadow: var(--shadow-lift);
+            max-width: 940px;
+            width: 100%;
+            margin: 0 auto;
+            min-height: 0;
+            transition: background 0.3s ease-in-out, border-color 0.3s ease-in-out;
+        }
+        /* Inner content still reads comfortably instead of stretching edge-to-edge on wide screens */
+        .survey-card > .card-body { max-width: 820px; margin: 0 auto; width: 100%; }
+
+        @media (max-width: 575.98px) {
+            .content-body:has(#view-survey.active) { padding: 0; }
+            .survey-card { border-radius: 0; border-left: none; border-right: none; }
+        }
+
+        /* ---- Full-width "in progress" survey (Stage 2 onward) ----
+           Clicking START SURVEY drops the small boxed card look in favor of
+           an edge-to-edge, full-screen form canvas. Stage 1 (Terms) keeps
+           the centered hero-card presentation. */
+        .app-shell.survey-inprogress .content-body:has(#view-survey.active) { padding: 0; }
+        .app-shell.survey-inprogress .survey-card {
+            border-radius: 0;
             border: none;
             border-top: 1px solid var(--line-soft);
             box-shadow: none;
             max-width: 100%;
-            width: 100%;
-            margin: 0;
             min-height: calc(100vh - var(--topbar-h));
-            transition: background 0.3s ease-in-out, border-color 0.3s ease-in-out;
         }
-        /* Inner content still reads comfortably instead of stretching edge-to-edge on wide screens */
-        .survey-card > .card-body { max-width: 900px; margin: 0 auto; width: 100%; }
+        .app-shell.survey-inprogress .survey-card > .card-body { max-width: 1100px; }
+
+        /* ---- Survey hero header (logo + institution + form title) ---- */
+        .survey-hero { padding-bottom: 1.75rem; border-bottom: 1px solid var(--line-soft); }
+        .survey-hero-logo {
+            width: 88px; height: 88px; object-fit: contain;
+        }
+        .survey-hero-badge {
+            display: inline-block; margin-top: 1.5rem;
+            background: linear-gradient(135deg, var(--brand), var(--brand-light));
+            color: #fff; border-radius: 50px; padding: 0.85rem 2rem;
+            box-shadow: 0 10px 24px -10px rgba(37,84,199,0.55);
+        }
+        .survey-hero-badge h4 { color: #fff; letter-spacing: .02em; }
 
         /* ---- Multi-step progress tracker ---- */
-        .survey-progress { padding: 0 6px; }
+        .survey-progress {
+            padding: 1.1rem 1.4rem;
+            background: var(--page-bg);
+            border: 1px solid var(--line-soft);
+            border-radius: 16px;
+        }
         .progress-steps { position: relative; display: flex; justify-content: space-between; }
         .progress-track {
             position: absolute; top: 15px; left: 17px; right: 17px; height: 4px;
@@ -458,12 +531,13 @@
             background: linear-gradient(90deg, var(--brand), #4d7ce8);
             border-radius: 50px; transition: width 0.5s cubic-bezier(.65,0,.35,1);
         }
-        .progress-step { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 0.4rem; flex: 1; }
+        .progress-step { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 0.45rem; flex: 1; }
         .step-dot {
             width: 34px; height: 34px; border-radius: 50%; background: var(--surface);
             border: 2.5px solid var(--line); color: var(--ink-400);
             display: flex; align-items: center; justify-content: center;
             font-weight: 700; font-size: 0.85rem; transition: all 0.3s ease;
+            box-shadow: 0 2px 6px -2px rgba(15,23,42,0.08);
         }
         .step-dot i { display: none; font-size: 1rem; }
         .step-label {
@@ -499,10 +573,13 @@
 
         .section-title {
             border-left: 4px solid var(--brand);
-            padding-left: 14px;
+            padding-left: 16px;
+            padding-top: 2px;
+            padding-bottom: 2px;
         }
 
         .section-title h4 { letter-spacing: .02em; }
+        .section-title p { max-width: 62ch; }
 
         /* ---- Soft question/info blocks (formerly bg-light) ---- */
         .qa-block {
@@ -510,14 +587,17 @@
             border: 1px solid var(--line) !important;
             border-radius: 16px !important;
         }
+        .qa-block + .qa-block { margin-top: 1.1rem; }
+        .qa-block > p:first-child { margin-bottom: 1.1rem; }
 
         .option-card {
             border: 1px solid var(--line);
-            border-radius: 10px;
-            padding: 15px 16px;
+            border-radius: 12px;
+            padding: 16px 18px;
             transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
             cursor: pointer;
             background: var(--surface);
+            line-height: 1.45;
         }
 
         .option-card:hover {
@@ -546,12 +626,14 @@
         /* ---- Form controls ---- */
         .form-control, .form-select {
             border: 1px solid var(--line);
-            border-radius: 8px;
-            padding: .65rem .9rem;
+            border-radius: 10px;
+            padding: .7rem .95rem;
             color: var(--ink-800);
             background-color: var(--surface);
             transition: border-color .15s ease, box-shadow .15s ease;
         }
+        .row.g-4 > * { padding-top: 0.15rem; }
+        .form-label { margin-bottom: .5rem; font-size: .88rem; letter-spacing: .01em; }
 
         .form-control:focus, .form-select:focus {
             border-color: var(--brand);
@@ -578,17 +660,19 @@
 
         /* ---- Buttons ---- */
         .btn {
-            border-radius: 8px;
+            border-radius: 10px;
+            font-weight: 600;
             transition: transform .12s ease, box-shadow .15s ease, background-color .15s ease, border-color .15s ease;
         }
 
         .btn-primary {
-            background: var(--brand);
+            background: linear-gradient(135deg, var(--brand), var(--brand-dark));
             border-color: var(--brand);
+            box-shadow: 0 4px 12px -4px rgba(37, 84, 199, 0.45);
         }
 
         .btn-primary:hover, .btn-primary:focus {
-            background: var(--brand-dark);
+            background: linear-gradient(135deg, var(--brand-dark), var(--brand-dark));
             border-color: var(--brand-dark);
             transform: translateY(-1px);
             box-shadow: 0 8px 20px -8px rgba(37, 84, 199, 0.55);
@@ -683,6 +767,9 @@
         [data-bs-theme="dark"] .table { --bs-table-bg: transparent; --bs-table-color: var(--ink-800); border-color: var(--line); }
         [data-bs-theme="dark"] #sqd-table-wrap thead th { background: #050a13; }
         [data-bs-theme="dark"] #terms-box { background-color: var(--surface) !important; border-color: var(--line) !important; }
+        [data-bs-theme="dark"] .review-item { background: #101827; }
+        [data-bs-theme="dark"] .review-item:hover { border-color: var(--brand); }
+        [data-bs-theme="dark"] .survey-progress { background: #101827; border-color: var(--line); }
 
         summary { list-style: none; outline: none; }
         summary::-webkit-details-marker { display: none; }
@@ -748,16 +835,14 @@
         <div class="card border-0 survey-card">
         <div class="card-body p-4 p-md-5 position-relative">
 
-            <div class="text-center border-bottom pb-4 mb-5">
-                <div class="mb-3">
-                    <img src="/images/cspc-logo.png" alt="CSPC Logo" style="width: 92px; height: auto;" class="mb-3">
-                </div>
-                <p class="small text-secondary text-uppercase mb-1" style="letter-spacing:.08em;" data-i18n="gov_rep">Republic of the Philippines</p>
-                <h3 class="fw-semibold text-uppercase mb-0 text-heading">Camarines Sur Polytechnic Colleges</h3>
-                <p class="text-secondary fst-italic mb-0">Nabua, Camarines Sur</p>
+            <div class="survey-hero text-center mb-5">
+                <img src="/images/cspc-logo.png" alt="CSPC Logo" class="survey-hero-logo mb-3">
+                <p class="small text-secondary text-uppercase mb-1" style="letter-spacing:.1em;" data-i18n="gov_rep">Republic of the Philippines</p>
+                <h3 class="fw-bold text-uppercase mb-0 text-heading">Camarines Sur Polytechnic Colleges</h3>
+                <p class="text-secondary fst-italic mb-4">Nabua, Camarines Sur</p>
 
-                <div class="bg-primary-subtle rounded-4 p-3 mt-4">
-                    <h4 class="fw-semibold text-heading text-uppercase mb-0" data-i18n="form_title">Client Satisfaction Measurement (CSM) Survey</h4>
+                <div class="survey-hero-badge">
+                    <h4 class="fw-semibold text-uppercase mb-0" data-i18n="form_title">Client Satisfaction Measurement (CSM) Survey</h4>
                 </div>
             </div>
 
@@ -2025,6 +2110,14 @@ function navigate(stage) {
     // request full screen here so it fires whether the user clicked
     // START SURVEY or arrived via any other path that calls navigate(2).
     if (stage === 2) enterFullscreen();
+
+    // From Stage 2 onward the survey drops its boxed/contained card look and
+    // goes edge-to-edge — sidebar tucked away — so it reads as a full-screen
+    // form instead of content sitting inside a small rectangle. Stage 1
+    // (Terms) keeps the centered hero-card presentation.
+    const shell = document.querySelector('.app-shell');
+    if (shell) shell.classList.toggle('survey-inprogress', stage >= 2);
+    if (stage >= 2) setSidebarCollapsed(true);
 
     // Entering the Review stage — rebuild the summary from whatever is
     // currently in the form so "Edit" + coming back always reflects the latest answers.

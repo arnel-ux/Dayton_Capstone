@@ -45,6 +45,52 @@ app.use(passport.session());
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((user, done) => done(null, user));
 
+// Feeds the "Admin Logs" modal (layout/navbar.ejs) on every admin page with the
+// most recent login sessions, each carrying a live duration for the row that's
+// still active (logout_time NULL). Only queried for actual admin sessions so
+// public/client pages don't pay for it. Must run AFTER the session middleware
+// above — req.session doesn't exist yet before that.
+app.use((req, res, next) => {
+    res.locals.adminLogs = [];
+    if (!(req.session && req.session.user && req.session.user.role === 'admin')) {
+        return next();
+    }
+
+    db.query(`
+        SELECT
+            id, username, login_time, logout_time,
+            DATE_FORMAT(login_time, '%b %d, %Y') AS login_date,
+            DATE_FORMAT(login_time, '%h:%i %p') AS login_time_fmt,
+            DATE_FORMAT(logout_time, '%h:%i %p') AS logout_time_fmt,
+            TIMESTAMPDIFF(SECOND, login_time, IFNULL(logout_time, NOW())) AS duration_seconds
+        FROM admin_logs
+        ORDER BY login_time DESC
+        LIMIT 20
+    `, (err, rows) => {
+        if (err) {
+            console.error('❌ Error loading admin logs:', err);
+            return next();
+        }
+
+        res.locals.adminLogs = (rows || []).map(r => {
+            const totalSeconds = r.duration_seconds || 0;
+            const hrs = Math.floor(totalSeconds / 3600);
+            const mins = Math.floor((totalSeconds % 3600) / 60);
+
+            return {
+                username: r.username,
+                login_date: r.login_date,
+                login_time_fmt: r.login_time_fmt,
+                logout_time_fmt: r.logout_time_fmt,
+                duration_text: hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`,
+                isActive: !r.logout_time,
+                login_time_iso: r.login_time.toISOString()
+            };
+        });
+        next();
+    });
+});
+
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -725,6 +771,35 @@ CREATE TABLE IF NOT EXISTS client_accounts (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );`;
 
+// One row per admin login session — closed off (logout_time filled in) on
+// /logout or when /login treats an active session as an implicit logout.
+const createAdminLogsTableQuery = `
+CREATE TABLE IF NOT EXISTS admin_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(255) NOT NULL DEFAULT 'admin',
+    login_time DATETIME NOT NULL,
+    logout_time DATETIME NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);`;
+
+db.query(createAdminLogsTableQuery, (err) => {
+    if (err) {
+        console.error("❌ Error creating admin_logs table:", err);
+        return;
+    }
+    console.log('✅ admin_logs table verified/created successfully!');
+
+    // Sessions live in memory (express-session's default MemoryStore) — a server
+    // restart wipes every session, including req.session.adminLogId, so no
+    // browser can ever close these rows via /logout anymore. Left alone they'd
+    // show as "Active now" forever. Close them out at the moment of restart,
+    // since that's effectively when those sessions actually ended.
+    db.query('UPDATE admin_logs SET logout_time = NOW() WHERE logout_time IS NULL', (err, result) => {
+        if (err) console.error("❌ Error closing orphaned admin_logs rows:", err);
+        else if (result.affectedRows > 0) console.log(`✅ Closed ${result.affectedRows} orphaned admin_logs row(s) from before this restart.`);
+    });
+});
+
 // SINKRONISADONG PAGGAWA NG MGA TABLE (Para maiwasan ang Foreign Key Errors)
 db.query(createClustersTableQuery, (err) => {
     if (err) {
@@ -955,13 +1030,25 @@ app.get('/login', noCache, (req, res) => {
         return res.render('login');
     }
 
-    req.logout(() => {
-        req.session.destroy((err) => {
-            if (err) console.error('❌ Error destroying session on /login:', err);
-            res.clearCookie('connect.sid', { path: '/' });
-            res.render('login');
+    const adminLogId = req.session && req.session.adminLogId;
+    const finishLogout = () => {
+        req.logout(() => {
+            req.session.destroy((err) => {
+                if (err) console.error('❌ Error destroying session on /login:', err);
+                res.clearCookie('connect.sid', { path: '/' });
+                res.render('login');
+            });
         });
-    });
+    };
+
+    if (adminLogId) {
+        db.query('UPDATE admin_logs SET logout_time = NOW() WHERE id = ? AND logout_time IS NULL', [adminLogId], (err) => {
+            if (err) console.error('❌ Error recording admin logout:', err);
+            finishLogout();
+        });
+    } else {
+        finishLogout();
+    }
 });
 
 // ==========================================
@@ -976,7 +1063,18 @@ app.post('/auth-login', (req, res) => {
 
     if (username === 'admin' && password === 'admin123') {
         req.session.user = { username: 'admin', role: 'admin' };
-        return res.redirect('/dashboard');
+        // Only one admin session should ever show as "Active now" — a fresh login
+        // (new tab/window, or logging back in) supersedes whatever was left open
+        // before it, so close those out first instead of letting them pile up.
+        db.query('UPDATE admin_logs SET logout_time = NOW() WHERE logout_time IS NULL', (err) => {
+            if (err) console.error('❌ Error closing previous admin_logs sessions:', err);
+            db.query('INSERT INTO admin_logs (username, login_time) VALUES (?, NOW())', [username], (err, result) => {
+                if (err) console.error('❌ Error recording admin login:', err);
+                else req.session.adminLogId = result.insertId;
+                res.redirect('/dashboard');
+            });
+        });
+        return;
     } else if (username === 'admin') {
         // Wrong admin password — clients must use the "Sign in with Google" button instead
         return res.redirect('/login?error=' + encodeURIComponent('Invalid admin credentials!'));
@@ -1126,13 +1224,25 @@ app.post('/complete-google-registration', async (req, res) => {
 // response so it can never be cached, and hard-redirects (302) to /login — never
 // a client-side route change, so there is nothing for the bfcache to preserve.
 app.get('/logout', noCache, (req, res) => {
-    req.logout(() => {
-        req.session.destroy((err) => {
-            if (err) console.error('❌ Error destroying session on logout:', err);
-            res.clearCookie('connect.sid', { path: '/' });
-            res.redirect(302, '/login');
+    const adminLogId = req.session && req.session.adminLogId;
+    const finishLogout = () => {
+        req.logout(() => {
+            req.session.destroy((err) => {
+                if (err) console.error('❌ Error destroying session on logout:', err);
+                res.clearCookie('connect.sid', { path: '/' });
+                res.redirect(302, '/login');
+            });
         });
-    });
+    };
+
+    if (adminLogId) {
+        db.query('UPDATE admin_logs SET logout_time = NOW() WHERE id = ? AND logout_time IS NULL', [adminLogId], (err) => {
+            if (err) console.error('❌ Error recording admin logout:', err);
+            finishLogout();
+        });
+    } else {
+        finishLogout();
+    }
 });
 
 app.get('/client-survey', ensureClientAuth, noCache, (req, res) => {
@@ -1660,7 +1770,8 @@ app.get('/dashboard', ensureAdminAuth, noCache, (req, res) => {
                             dashboardData: { overallRating: overallAvgScore, overallLevel: interpretation, periodCoveredLabel: selectedPeriod || 'All Periods' },
                             chartData: chartData, clusterCards: clusterCards, satisfactionRate: overallAvgScore,
                             totalRespondents: totalRespondents, totalOffices: totalOffices, reportData: reportData,
-                            periodOptions: PERIOD_COVERED_OPTIONS, selectedPeriod: selectedPeriod || ''
+                            periodOptions: PERIOD_COVERED_OPTIONS, selectedPeriod: selectedPeriod || '',
+                            hasQueryParam: hasQueryParam
                         });
                     });
                 });
@@ -2039,9 +2150,9 @@ function renderClusterPage(view, clusterName) {
     };
 }
 
-app.get('/cluster/office-of-the-president', ensureAdminAuth, noCache, renderClusterPage('cluster-op', 'Office of the President Cluster'));
+app.get('/cluster/office-of-the-president', ensureAdminAuth, noCache, renderClusterPage('cluster-op', 'Office of the president cluster'));
 app.get('/cluster/admin-finance', ensureAdminAuth, noCache, renderClusterPage('cluster-admin-finance', 'Administrative and Finance Cluster'));
-app.get('/cluster/research-innovation', ensureAdminAuth, noCache, renderClusterPage('cluster-research', 'Research, Innovation and Collaboration Cluster'));
+app.get('/cluster/research-innovation', ensureAdminAuth, noCache, renderClusterPage('cluster-research', 'Reasearch, Innovation and Collaboration Cluster'));
 app.get('/cluster/academic', ensureAdminAuth, noCache, renderClusterPage('cluster-academic', 'Academic Cluster'));
 app.get('/cluster/other-offices', ensureAdminAuth, noCache, renderClusterPage('cluster-other', 'Other Offices Cluster'));
 
