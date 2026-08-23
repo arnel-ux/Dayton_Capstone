@@ -17,13 +17,16 @@ os.environ.setdefault('TRANSFORMERS_VERBOSITY', 'error')
 from topic_common import (
     broad_label_list,
     broad_label_to_topic,
-    facility_label_list,
-    facility_label_to_topic,
+    BROAD_TOPICS,
+    BROAD_TO_SPECIFIC_FALLBACK,
+    SUBTOPIC_GROUPS,
     keyword_topic_override,
+    office_hint_topics,
     HYPOTHESIS_TEMPLATE,
     GENERAL_FEEDBACK,
     GENERAL_FALLBACK_THRESHOLD,
-    FACILITY_SUBTOPIC_THRESHOLD,
+    SUBTOPIC_THRESHOLD,
+    OFFICE_HINT_BOOST,
 )
 
 _state = {}
@@ -197,7 +200,13 @@ def classify_sentiment(text):
     return best[0]
 
 
-def classify_topic(text):
+def classify_topic(text, office_hint=None):
+    """
+    office_hint: optional free-text string (e.g. "Accounting Office" or a
+    cluster name) describing which office/service the comment's survey was
+    submitted for. Used only as a small additive nudge on stage 1 — see
+    topic_common.office_hint_topics's docstring for why it stays soft.
+    """
     import torch
     # Keyword anchors win outright when present (see
     # keyword_topic_override's docstring for why) — this also skips
@@ -217,24 +226,40 @@ def classify_topic(text):
     # just for being the safe default.
     with torch.no_grad():
         res = modeler(text, broad_label_list, hypothesis_template=HYPOTHESIS_TEMPLATE, multi_label=False)
-    top_label, top_score = res['labels'][0], res['scores'][0]
+
+    hinted = office_hint_topics(office_hint)
+    if hinted:
+        scores = dict(zip(res['labels'], res['scores']))
+        for topic in hinted:
+            label = broad_label_list[BROAD_TOPICS.index(topic)] if topic in BROAD_TOPICS else None
+            if label in scores:
+                scores[label] += OFFICE_HINT_BOOST
+        ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+        top_label, top_score = ranked[0]
+    else:
+        top_label, top_score = res['labels'][0], res['scores'][0]
+
     if top_score < GENERAL_FALLBACK_THRESHOLD:
         return GENERAL_FEEDBACK
     broad_topic = broad_label_to_topic[top_label]
 
     # Stage 2: only spend the extra compute narrowing down to a specific
-    # facility subtype when the comment is actually facility-related.
-    if broad_topic == "Facilities and Equipment":
+    # subtype when the comment landed on a broad bucket that actually has
+    # subtypes (facility / staff groups) — see SUBTOPIC_GROUPS.
+    if broad_topic in SUBTOPIC_GROUPS:
+        sub_topics, sub_labels = SUBTOPIC_GROUPS[broad_topic]
+        sub_label_list = [sub_labels[t] for t in sub_topics]
+        sub_label_to_topic = {v: k for k, v in sub_labels.items()}
         with torch.no_grad():
-            res2 = modeler(text, facility_label_list, hypothesis_template=HYPOTHESIS_TEMPLATE, multi_label=False)
+            res2 = modeler(text, sub_label_list, hypothesis_template=HYPOTHESIS_TEMPLATE, multi_label=False)
         top2_label, top2_score = res2['labels'][0], res2['scores'][0]
-        if top2_score >= FACILITY_SUBTOPIC_THRESHOLD:
-            return facility_label_to_topic[top2_label]
-        return "Facilities and Equipment"
+        if top2_score >= SUBTOPIC_THRESHOLD:
+            return sub_label_to_topic[top2_label]
+        return BROAD_TO_SPECIFIC_FALLBACK[broad_topic]
 
     return broad_topic
 
 
-def analyze(text):
+def analyze(text, office_hint=None):
     """Convenience wrapper: returns (sentiment, topic) for a single comment."""
-    return classify_sentiment(text), classify_topic(text)
+    return classify_sentiment(text), classify_topic(text, office_hint=office_hint)

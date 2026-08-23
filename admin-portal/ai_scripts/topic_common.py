@@ -8,13 +8,28 @@ import re
 
 # ---------------------------------------------------------------------------
 # TOPIC TAXONOMY
-# "Facilities and Equipment" used to be one catch-all bucket for anything
-# physical — aircon, restrooms, chairs, lighting all landed on the same
-# generic tag. That's not useful for an office trying to act on feedback, so
-# the physical-facility comments are now split into the specific thing being
-# complained/praised about. "Facilities and Equipment" is kept as a narrower
-# fallback for physical-facility comments that don't name one of those
-# specific things (e.g. "sirang gusto", generic "pasilidad").
+# Split into topics specific enough that an admin reading a feedback report
+# can tell what a comment is about from its topic tag alone, without opening
+# the comment text. Grouped conceptually:
+#   - Speed/process:      Queueing and Waiting Time, Transaction Speed,
+#                          Process Efficiency
+#   - Systems:             Ease of Use, Online System and Portal,
+#                          Internet Connection
+#   - Physical facility:   Aircon and Cooling, Restroom and Cleanliness,
+#                          Seating and Furniture, Power and Lighting,
+#                          Facilities and Equipment (narrow fallback)
+#   - People:              Staff Courtesy and Attitude,
+#                          Staff Competence and Knowledge,
+#                          Fairness and Equal Treatment
+#   - Transaction-specific: Payment and Fees, Document and Credential
+#                          Processing, Enrollment and Registration
+#   - Information:          Communication and Information
+#
+# "Facilities and Equipment" is a narrower fallback for physical-facility
+# comments that don't name one of the more specific facility subtypes
+# (e.g. "sirang gusto", generic "pasilidad"). Likewise "Staff Courtesy and
+# Attitude" doubles as the default bucket for staff-related comments that
+# don't clearly single out competence or fairness specifically.
 #
 # "General Feedback" is deliberately NOT a zero-shot candidate (see
 # classify_topic in heavy_model.py) — it's a low-confidence fallback only, so
@@ -26,13 +41,20 @@ candidate_topics = [
     "Transaction Speed",
     "Process Efficiency",
     "Ease of Use",
+    "Online System and Portal",
     "Internet Connection",
     "Aircon and Cooling",
     "Restroom and Cleanliness",
     "Seating and Furniture",
     "Power and Lighting",
     "Facilities and Equipment",
-    "Customer Service",
+    "Staff Courtesy and Attitude",
+    "Staff Competence and Knowledge",
+    "Fairness and Equal Treatment",
+    "Payment and Fees",
+    "Document and Credential Processing",
+    "Enrollment and Registration",
+    "Communication and Information",
 ]
 
 # ---------------------------------------------------------------------------
@@ -45,22 +67,30 @@ candidate_topics = [
 #   2. Provide a small deterministic score boost/tiebreak when a comment
 #      contains one of these unambiguous object-noun keywords, and power the
 #      fast offline heuristic path entirely on their own.
-# Only *object nouns* (aircon, wifi, pila) are used as anchors — never bare
-# descriptors like "mabagal"/"mahina"/"malinis" alone, since those are
-# ambiguous across every category (slow queue vs slow wifi vs weak aircon,
-# clean restroom vs clean process) and would misfire.
+# Only *object nouns* or unambiguous compound phrases are used as anchors —
+# never bare descriptors like "mabagal"/"mahina"/"malinis" alone, since those
+# are ambiguous across every category (slow queue vs slow wifi vs weak
+# aircon, clean restroom vs clean process) and would misfire.
 #
-# Dict order matters for keyword_topic_override's tie-break: the broad
-# "Facilities and Equipment" fallback bucket is listed LAST so that on an
-# equal keyword-hit count, a more specific facility subtype (Aircon,
-# Restroom, Seating, Power) always wins over the generic bucket.
+# Dict order matters for keyword_topic_override's tie-break: on an equal
+# keyword-hit count, whichever topic is listed FIRST wins. So the more
+# specific sub-buckets of a group are listed before that group's broad
+# fallback bucket (e.g. "Fairness and Equal Treatment" and "Staff Competence
+# and Knowledge" before the generic "Staff Courtesy and Attitude" catch-all;
+# the four specific facility subtypes before the generic "Facilities and
+# Equipment" catch-all).
 # ---------------------------------------------------------------------------
 TOPIC_KEYWORDS = {
     "Queueing and Waiting Time": [
         "pila", "linya", "queue", "queueing", "waiting line", "numero", "hintay",
     ],
     "Internet Connection": [
-        "internet", "wifi", "wi-fi", "signal", "network", "koneksyon", "online system",
+        "internet", "wifi", "wi-fi", "signal", "network", "koneksyon",
+        "walang signal", "walang internet",
+    ],
+    "Online System and Portal": [
+        "portal", "website", "web site", "sias", "online form", "online system",
+        "log-in", "login", "log in", "e-services", "e-portal", "online account",
     ],
     "Aircon and Cooling": [
         "aircon", "air-con", "air condition", "aircondition", "air conditioning",
@@ -76,9 +106,45 @@ TOPIC_KEYWORDS = {
         "kuryente", "ilaw", "brownout", "blackout", "lighting", "power outage",
         "walang kuryente",
     ],
-    "Customer Service": [
+    # Unambiguous compound phrases naming a fairness/impartiality concern —
+    # listed before the generic staff bucket so it wins the tie-break.
+    # "walang palakasan" is lifted straight from the SQD7 survey question
+    # itself, so it's a strong, unambiguous anchor for real client phrasing.
+    "Fairness and Equal Treatment": [
+        "palakasan", "walang palakasan", "paboritism", "favoritism",
+        "nepotism", "bias", "unfair", "hindi patas", "walang katarungan",
+    ],
+    # Unambiguous compound phrases naming a knowledge/competence gap, as
+    # opposed to bare attitude/manners complaints — also listed before the
+    # generic staff bucket.
+    "Staff Competence and Knowledge": [
+        "hindi marunong", "walang alam", "not knowledgeable", "incompetent",
+        "hindi sanay", "untrained", "kulang sa training", "hindi sigurado sa sagot",
+    ],
+    # Generic staff-behavior bucket: role nouns with no more specific
+    # competence/fairness phrase present. Listed after those two so a
+    # comment naming both (e.g. "yung guard, walang palakasan") resolves to
+    # the more specific bucket instead.
+    "Staff Courtesy and Attitude": [
         "staff", "kawani", "empleyado", "tauhan", "employee", "receptionist",
-        "guard", "security", "clerk",
+        "guard", "security", "clerk", "bastos",
+    ],
+    "Payment and Fees": [
+        "bayad", "babayaran", "fee", "fees", "singil", "kabayaran", "resibo",
+        "official receipt", "sobrang mahal ang bayad",
+    ],
+    "Document and Credential Processing": [
+        "transcript", "tor", "diploma", "certification", "certificate",
+        "credentials", "cav", "transcript of records", "honorable dismissal",
+        "diploma ko",
+    ],
+    "Enrollment and Registration": [
+        "enrollment", "enrolment", "pagpapatala", "registration", "rehistrasyon",
+        "matriculation", "cross-enrollment", "re-admission", "shifting",
+    ],
+    "Communication and Information": [
+        "impormasyon", "information", "announcement", "abiso", "notice",
+        "paalala", "text blast", "walang paalam",
     ],
     # "transaction" is the unambiguous object-noun anchor for comments whose
     # core driver is how fast the service itself moved (hal. "bilis ng
@@ -113,22 +179,22 @@ GENERAL_FEEDBACK = "General Feedback"
 # The keyword lexicon above resolves most Taglish comments instantly and
 # never touches the model. Zero-shot is the fallback for the minority of
 # comments with no keyword anchor (typically plain English or phrasing the
-# lexicon doesn't cover). Running all 11 specific candidates through the
-# model on every such comment is both slower (more candidates = more
-# compute, and CPU zero-shot is already the heaviest step in the pipeline)
-# and, empirically, *less* accurate — the four facility subtypes are close
-# enough in meaning that spreading them across the same single classification
-# pass dilutes the model's confidence on the correct broad category.
+# lexicon doesn't cover). Running every specific candidate through the model
+# on every such comment is both slower (more candidates = more compute, and
+# CPU zero-shot is already the heaviest step in the pipeline) and,
+# empirically, *less* accurate — close-in-meaning subtypes spread across the
+# same single classification pass dilute the model's confidence on the
+# correct broad category.
 #
 # So the fallback is staged instead:
-#   Stage 1 — classify against the 7 broad categories (same shape as the
-#             original taxonomy). Fast: fewer candidates, short hypotheses.
-#   Stage 2 — only runs if stage 1's winner is the broad "Facilities and
-#             Equipment" bucket, and picks which specific facility subtype
-#             (aircon/restroom/furniture/power) fits, or confirms the
-#             general bucket if none clearly fits. This means the extra
-#             compute for specificity is only spent on comments that are
-#             actually facility-related.
+#   Stage 1 — classify against the broad categories below (one entry per
+#             conceptual group). Fast: short hypotheses, one pass.
+#   Stage 2 — only runs if stage 1's winner is a broad bucket that has
+#             specific subtypes (Facilities and Equipment, or Staff and
+#             Service Quality), and picks which specific subtype fits, or
+#             falls back to the group's generic bucket if none clearly fits.
+#             This means the extra compute for specificity is only spent on
+#             comments that are actually in that group.
 # Candidate labels are short noun phrases fed through HYPOTHESIS_TEMPLATE,
 # NOT full hand-written sentences. This matches the simple "This example is
 # about {}."-style template these MNLI/XNLI zero-shot checkpoints are
@@ -149,9 +215,14 @@ BROAD_TOPICS = [
     "Transaction Speed",
     "Process Efficiency",
     "Ease of Use",
+    "Online System and Portal",
     "Internet Connection",
     "Facilities and Equipment",
-    "Customer Service",
+    "Staff and Service Quality",
+    "Payment and Fees",
+    "Document and Credential Processing",
+    "Enrollment and Registration",
+    "Communication and Information",
 ]
 
 BROAD_LABELS = {
@@ -159,9 +230,23 @@ BROAD_LABELS = {
     "Transaction Speed": "the speed of the transaction itself",
     "Process Efficiency": "the process being simple or complicated",
     "Ease of Use": "a system or form being easy or hard to use",
+    "Online System and Portal": "an online portal, website, or system account",
     "Internet Connection": "internet or wifi connectivity problems",
     "Facilities and Equipment": "physical facilities or equipment, like aircon, restrooms, or furniture",
-    "Customer Service": "staff behavior or courtesy",
+    "Staff and Service Quality": "staff behavior, competence, or fairness",
+    "Payment and Fees": "fees, payments, or receipts",
+    "Document and Credential Processing": "processing of documents, certificates, or credentials",
+    "Enrollment and Registration": "enrollment, registration, or matriculation",
+    "Communication and Information": "how clearly information or updates were communicated",
+}
+
+# broad-topic key -> the specific taxonomy label used when a comment lands
+# on that broad bucket but stage 2 doesn't clear its own threshold (or the
+# group has no stage 2 at all). Most groups map to themselves 1:1; the two
+# grouped buckets (facility / staff) map down to their generic sub-label.
+BROAD_TO_SPECIFIC_FALLBACK = {
+    "Facilities and Equipment": "Facilities and Equipment",
+    "Staff and Service Quality": "Staff Courtesy and Attitude",
 }
 
 FACILITY_SUBTOPICS = [
@@ -180,19 +265,79 @@ FACILITY_LABELS = {
     "Facilities and Equipment": "some other physical facility, building, or equipment issue",
 }
 
+STAFF_SUBTOPICS = [
+    "Staff Courtesy and Attitude",
+    "Staff Competence and Knowledge",
+    "Fairness and Equal Treatment",
+]
+
+STAFF_LABELS = {
+    "Staff Courtesy and Attitude": "staff being polite, rude, or courteous",
+    "Staff Competence and Knowledge": "staff being knowledgeable or skilled at their job",
+    "Fairness and Equal Treatment": "staff treating everyone fairly and without favoritism",
+}
+
+# Stage-2 group registry: broad topic -> (candidate list, label map).
+SUBTOPIC_GROUPS = {
+    "Facilities and Equipment": (FACILITY_SUBTOPICS, FACILITY_LABELS),
+    "Staff and Service Quality": (STAFF_SUBTOPICS, STAFF_LABELS),
+}
+
 # Confidence floors for each stage. Below the floor, the comment genuinely
 # doesn't lean toward any specific theme in that stage, so it stays at the
 # broader/safer answer instead of forcing a low-confidence specific guess.
-# With 7 broad candidates a uniform/no-signal read is ~0.14 each, and a real
-# winner clears ~0.25+ in practice; with 5 facility subtypes uniform is ~0.20.
-GENERAL_FALLBACK_THRESHOLD = 0.25
-FACILITY_SUBTOPIC_THRESHOLD = 0.25
+# With ~12 broad candidates a uniform/no-signal read is well under 0.10 each,
+# and a real winner clears ~0.20+ in practice; with 3-5 subtypes uniform is
+# ~0.20-0.33.
+GENERAL_FALLBACK_THRESHOLD = 0.20
+SUBTOPIC_THRESHOLD = 0.25
 
 broad_label_list = [BROAD_LABELS[t] for t in BROAD_TOPICS]
 broad_label_to_topic = {v: k for k, v in BROAD_LABELS.items()}
 
-facility_label_list = [FACILITY_LABELS[t] for t in FACILITY_SUBTOPICS]
-facility_label_to_topic = {v: k for k, v in FACILITY_LABELS.items()}
+# ---------------------------------------------------------------------------
+# OFFICE-AWARE HINT (soft, additive — never a hard override)
+# The comment text is always the primary signal: keyword hits above resolve
+# a comment outright regardless of which office the survey was for, and this
+# hint only ever nudges the zero-shot STAGE 1 score by a small additive
+# amount before picking the top broad category. That keeps a comment about
+# "walang wifi" tagged Internet Connection even on the Registrar's survey —
+# the office only breaks genuine near-ties (e.g. a vague "maganda naman"
+# style comment with no strong lexical signal in any direction) instead of
+# steering a comment that already has a clear textual answer.
+#
+# Matched against office_name/cluster_name substrings so it stays correct as
+# offices are added/renamed, instead of hardcoding office IDs.
+# ---------------------------------------------------------------------------
+OFFICE_HINT_KEYWORDS = {
+    "Payment and Fees": ["accounting", "cashier", "budget", "finance"],
+    "Document and Credential Processing": ["registrar", "records"],
+    "Enrollment and Registration": ["registrar", "records", "admission"],
+    "Facilities and Equipment": ["general services", "supply", "motorpool"],
+    "Communication and Information": ["information", "public affairs", "ict", "mis"],
+    "Online System and Portal": ["ict", "mis", "information technology"],
+}
+
+# Small enough to only decide a near-tie (stage-1 scores of otherwise
+# similar candidates typically differ by single-digit-percent margins at the
+# uncertain end of the distribution); nowhere near enough to overturn a
+# comment with genuine textual signal for a different category.
+OFFICE_HINT_BOOST = 0.05
+
+
+def office_hint_topics(office_text):
+    """
+    Broad topics to nudge for a given office/cluster name string, or an
+    empty set if nothing matches. Case-insensitive substring match against
+    OFFICE_HINT_KEYWORDS.
+    """
+    if not office_text:
+        return set()
+    lowered = office_text.lower()
+    return {
+        topic for topic, needles in OFFICE_HINT_KEYWORDS.items()
+        if any(needle in lowered for needle in needles)
+    }
 
 
 def keyword_topic_override(text):
