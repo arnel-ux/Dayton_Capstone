@@ -22,14 +22,29 @@ import re
 #                          Staff Competence and Knowledge,
 #                          Fairness and Equal Treatment
 #   - Transaction-specific: Payment and Fees, Document and Credential
-#                          Processing, Enrollment and Registration
+#                          Processing, Enrollment and Registration,
+#                          Scholarship and Financial Assistance
+#   - Service-specific:    Health and Medical Services,
+#                          Guidance and Counseling Services
 #   - Information:          Communication and Information
 #
 # "Facilities and Equipment" is a narrower fallback for physical-facility
 # comments that don't name one of the more specific facility subtypes
-# (e.g. "sirang gusto", generic "pasilidad"). Likewise "Staff Courtesy and
-# Attitude" doubles as the default bucket for staff-related comments that
-# don't clearly single out competence or fairness specifically.
+# (e.g. "sirang gusto", generic "pasilidad") — it also covers library,
+# dormitory, and transportation complaints via item-level refinement (see
+# TOPIC_ITEM_KEYWORDS) since those are physical/logistics services without
+# enough distinct comment volume to justify their own top-level topic.
+# Likewise "Staff Courtesy and Attitude" doubles as the default bucket for
+# staff-related comments that don't clearly single out competence or
+# fairness specifically.
+#
+# Health and Medical Services, Guidance and Counseling Services, and
+# Scholarship and Financial Assistance were added 2026-08-24 after
+# cross-checking the taxonomy against cqa_db.sql's actual `services` table —
+# these are real, distinct CSPC offices (Health Services Unit; Guidance and
+# Counseling; scholarship processing under Student Affairs and Services /
+# Cash Unit) that previously had no topic anchor at all and would silently
+# fall into General Feedback.
 #
 # "General Feedback" is deliberately NOT a zero-shot candidate (see
 # classify_topic in heavy_model.py) — it's a low-confidence fallback only, so
@@ -55,6 +70,9 @@ candidate_topics = [
     "Document and Credential Processing",
     "Enrollment and Registration",
     "Communication and Information",
+    "Health and Medical Services",
+    "Guidance and Counseling Services",
+    "Scholarship and Financial Assistance",
 ]
 
 # ---------------------------------------------------------------------------
@@ -83,21 +101,28 @@ candidate_topics = [
 TOPIC_KEYWORDS = {
     "Queueing and Waiting Time": [
         "pila", "linya", "queue", "queueing", "waiting line", "numero", "hintay",
+        "priority number", "numbering system",
     ],
     "Internet Connection": [
         "internet", "wifi", "wi-fi", "signal", "network", "koneksyon",
         "walang signal", "walang internet",
     ],
     "Online System and Portal": [
-        "portal", "website", "web site", "sias", "online form", "online system",
+        "portal", "website", "web site", "sias", "online system",
         "log-in", "login", "log in", "e-services", "e-portal", "online account",
+        # Weighted below default: "online form" alone is a softer/shared
+        # anchor with Ease of Use's confusion descriptors (a comment naming
+        # both, e.g. "nalilito ako sa online form", is really about the form
+        # being confusing, not the portal itself) — see Ease of Use below.
+        ("online form", 0.75),
     ],
     "Aircon and Cooling": [
         "aircon", "air-con", "air condition", "aircondition", "air conditioning",
         "electric fan", "bentilador", "pabentilador",
     ],
     "Restroom and Cleanliness": [
-        "banyo", "cr", "palikuran", "restroom", "toilet", "kalinisan", "cleanliness",
+        "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
+        "kalinisan", "cleanliness", "malinis", "marumi",
     ],
     "Seating and Furniture": [
         "upuan", "silya", "mesa", "bangko", "furniture", "chairs", "seats", "muwebles",
@@ -113,6 +138,7 @@ TOPIC_KEYWORDS = {
     "Fairness and Equal Treatment": [
         "palakasan", "walang palakasan", "paboritism", "favoritism",
         "nepotism", "bias", "unfair", "hindi patas", "walang katarungan",
+        "may kilala",
     ],
     # Unambiguous compound phrases naming a knowledge/competence gap, as
     # opposed to bare attitude/manners complaints — also listed before the
@@ -120,31 +146,49 @@ TOPIC_KEYWORDS = {
     "Staff Competence and Knowledge": [
         "hindi marunong", "walang alam", "not knowledgeable", "incompetent",
         "hindi sanay", "untrained", "kulang sa training", "hindi sigurado sa sagot",
+        "hindi updated", "hindi na updated", "hindi pa updated", "outdated",
     ],
     # Generic staff-behavior bucket: role nouns with no more specific
     # competence/fairness phrase present. Listed after those two so a
     # comment naming both (e.g. "yung guard, walang palakasan") resolves to
     # the more specific bucket instead.
+    #
+    # Role nouns (staff/kawani/empleyado/...) are near-synonyms for "this is
+    # about a staff member" rather than independent signals, so they're
+    # weighted 0.5 each — otherwise a comment naming two synonyms for the
+    # same person (e.g. "yung staff... parang bagong empleyado") could
+    # outscore a single specific phrase in another bucket (e.g. Staff
+    # Competence's "hindi sigurado sa sagot") purely by synonym-stacking.
+    # "bastos" is a real, unambiguous courtesy signal on its own, so it
+    # keeps the default weight of 1.
     "Staff Courtesy and Attitude": [
-        "staff", "kawani", "empleyado", "tauhan", "employee", "receptionist",
-        "guard", "security", "clerk", "bastos",
+        ("staff", 0.5), ("kawani", 0.5), ("empleyado", 0.5), ("tauhan", 0.5),
+        ("employee", 0.5), ("receptionist", 0.5), ("guard", 0.5),
+        ("security", 0.5), ("clerk", 0.5), ("faculty", 0.5),
+        ("professor", 0.5), ("guro", 0.5), ("adviser", 0.5),
+        ("ma'am", 0.5), ("sir", 0.5),
+        "bastos",
     ],
     "Payment and Fees": [
         "bayad", "babayaran", "fee", "fees", "singil", "kabayaran", "resibo",
-        "official receipt", "sobrang mahal ang bayad",
+        "official receipt", "sobrang mahal ang bayad", "tuition", "tuition fee",
     ],
     "Document and Credential Processing": [
         "transcript", "tor", "diploma", "certification", "certificate",
         "credentials", "cav", "transcript of records", "honorable dismissal",
-        "diploma ko",
+        "diploma ko", "good moral", "form 137", "form 138",
+        "certificate of grades", "identification card", "id card", "school id",
+        "grade change", "correction of grades", "change of grade",
     ],
     "Enrollment and Registration": [
         "enrollment", "enrolment", "pagpapatala", "registration", "rehistrasyon",
         "matriculation", "cross-enrollment", "re-admission", "shifting",
     ],
     "Communication and Information": [
-        "impormasyon", "information", "announcement", "abiso", "notice",
-        "paalala", "text blast", "walang paalam",
+        "impormasyon", "information", "communication", "announcement", "abiso",
+        "notice", "paalala", "text blast", "walang paalam", "walang reply",
+        "hindi sumasagot", "no response", "not informed", "nobody informed",
+        "no update", "walang update",
     ],
     # "transaction" is the unambiguous object-noun anchor for comments whose
     # core driver is how fast the service itself moved (hal. "bilis ng
@@ -157,20 +201,257 @@ TOPIC_KEYWORDS = {
     # process itself being simple/tedious, not any specific object.
     "Process Efficiency": [
         "hassle-free", "hassle free", "walang abala", "walang hassle",
-        "streamlined", "isang beses lang", "one-stop", "maraming hakbang",
-        "kumplikado",
+        "streamlined", "isang beses lang", "isang hakbang lang", "one-stop",
+        "maraming hakbang", "kumplikado",
+        # Low-weight generic fallback: "the process" alone is too vague to
+        # win against a topic with a real specific anchor (e.g. "proseso ng
+        # enrollment" still resolves to Enrollment), but it's better than no
+        # signal at all for a bare "ang bagal ng proseso" complaint that
+        # names no other specific object.
+        ("proseso", 0.5), ("process", 0.5),
     ],
     "Ease of Use": [
         "user-friendly", "user friendly", "madaling gamitin",
-        "mahirap gamitin", "nakakalito", "confusing na sundin",
+        "mahirap gamitin", "nakakalito", "nalilito", "confusing na sundin",
     ],
     # Broad physical-facility fallback — only object nouns that don't already
-    # belong to one of the more specific facility subtypes above.
+    # belong to one of the more specific facility subtypes above. Also
+    # covers library, dormitory, and transportation via item-level
+    # refinement (TOPIC_ITEM_KEYWORDS) — see candidate_topics comment.
     "Facilities and Equipment": [
         "pasilidad", "kagamitan", "equipment", "facilities", "aparatus",
         "makina", "istruktura", "parking", "paradahan",
+        "library", "aklatan", "librong hiniram", "libro", "book", "books",
+        "dormitory", "dorm", "bed space", "boarding house",
+        "transportation", "sasakyan", "service vehicle", "shuttle",
+    ],
+    "Health and Medical Services": [
+        "clinic", "klinika", "doktor", "doctor", "dentista", "dentist",
+        "dental", "medical certificate", "gamot", "nurse", "nars",
+        "konsultasyon", "check-up", "checkup", "medical consultation",
+    ],
+    "Guidance and Counseling Services": [
+        "guidance office", "guidance councilor", "guidance counselor",
+        "counseling", "counselor", "guidance", "pagpapayo",
+    ],
+    "Scholarship and Financial Assistance": [
+        "scholarship", "iskolarship", "iskolar", "scholar",
+        "financial assistance", "grants-in-aid", "scholarship grant",
     ],
 }
+
+# ---------------------------------------------------------------------------
+# ITEM-LEVEL REFINEMENT (topic -> "{Topic} - {Specific Item}")
+# One more level of specificity than TOPIC_KEYWORDS, applied only AFTER a
+# topic has already been resolved by keyword_topic_override. Not every topic
+# has a meaningful item breakdown (e.g. "Queueing and Waiting Time" doesn't
+# name a physical thing), so only the topics below ever get a " - Item"
+# suffix — everything else stays at the plain topic label. This keeps the
+# taxonomy "only the applicable topic" specific, per admin's request, instead
+# of forcing an item guess onto every comment.
+#
+# Each entry is an ORDERED list of (item_label, keywords) — order matters for
+# the tie-break in item_label_override, same convention as TOPIC_KEYWORDS:
+# on an equal keyword-hit count, the first-listed item wins, so the more
+# specific/common item for that topic should be listed first.
+#
+# item_label already includes the full "{Topic} - {Item}" text so badge/color
+# matching in server.js (which does substring .includes() checks like
+# "aircon" or "facility") keeps working unchanged — the parent topic's own
+# keyword is still present as a substring of the combined label.
+# ---------------------------------------------------------------------------
+TOPIC_ITEM_KEYWORDS = {
+    "Queueing and Waiting Time": [
+        ("Queueing and Waiting Time - Numbering System", [
+            "numero", "priority number", "numbering system",
+        ]),
+        ("Queueing and Waiting Time - Long Lines", [
+            "pila", "linya", "queue", "queueing", "waiting line", "hintay",
+        ]),
+    ],
+    "Transaction Speed": [
+        ("Transaction Speed - Processing Time", ["processing time", "release ng resulta"]),
+        ("Transaction Speed - Transaction Duration", ["transaction", "pag-transact"]),
+    ],
+    "Process Efficiency": [
+        ("Process Efficiency - Complexity/Red Tape", ["maraming hakbang", "kumplikado"]),
+        ("Process Efficiency - Simplicity", [
+            "hassle-free", "hassle free", "walang abala", "walang hassle",
+            "streamlined", "isang beses lang", "isang hakbang lang", "one-stop",
+        ]),
+    ],
+    "Ease of Use": [
+        ("Ease of Use - Confusing Design", [
+            "mahirap gamitin", "nakakalito", "nalilito", "confusing na sundin",
+        ]),
+        ("Ease of Use - User-Friendly Design", [
+            "user-friendly", "user friendly", "madaling gamitin",
+        ]),
+    ],
+    "Aircon and Cooling": [
+        ("Aircon and Cooling - Electric Fan", ["electric fan", "bentilador", "pabentilador"]),
+        ("Aircon and Cooling - Air Conditioning Unit", [
+            "aircon", "air-con", "air condition", "aircondition", "air conditioning",
+        ]),
+    ],
+    "Restroom and Cleanliness": [
+        ("Restroom and Cleanliness - Restroom/CR", [
+            "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
+        ]),
+        ("Restroom and Cleanliness - General Cleanliness", [
+            "kalinisan", "cleanliness", "malinis", "marumi",
+        ]),
+    ],
+    "Seating and Furniture": [
+        ("Seating and Furniture - Chairs", ["upuan", "silya", "chairs", "seats"]),
+        ("Seating and Furniture - Tables", ["mesa"]),
+        ("Seating and Furniture - Benches", ["bangko"]),
+        ("Seating and Furniture - General Furniture", ["furniture", "muwebles"]),
+    ],
+    "Power and Lighting": [
+        ("Power and Lighting - Power Outage", [
+            "kuryente", "brownout", "blackout", "power outage", "walang kuryente",
+        ]),
+        ("Power and Lighting - Lighting", ["ilaw", "lighting"]),
+    ],
+    "Facilities and Equipment": [
+        ("Facilities and Equipment - Parking", ["parking", "paradahan"]),
+        ("Facilities and Equipment - Library", [
+            "library", "aklatan", "librong hiniram", "libro", "book", "books",
+        ]),
+        ("Facilities and Equipment - Dormitory/Housing", [
+            "dormitory", "dorm", "bed space", "boarding house",
+        ]),
+        ("Facilities and Equipment - Transportation", [
+            "transportation", "sasakyan", "service vehicle", "shuttle",
+        ]),
+        ("Facilities and Equipment - Equipment/Machine", [
+            "kagamitan", "equipment", "makina", "aparatus",
+        ]),
+        ("Facilities and Equipment - Building/Structure", ["istruktura"]),
+    ],
+    "Online System and Portal": [
+        ("Online System and Portal - Login/Account", [
+            "log-in", "login", "log in", "online account",
+        ]),
+        ("Online System and Portal - Website", ["website", "web site"]),
+        ("Online System and Portal - Online System", [
+            "portal", "sias", "online form", "online system", "e-services", "e-portal",
+        ]),
+    ],
+    "Internet Connection": [
+        ("Internet Connection - Wifi", ["wifi", "wi-fi"]),
+        ("Internet Connection - Signal", [
+            "signal", "network", "walang signal", "koneksyon", "walang internet",
+        ]),
+    ],
+    "Fairness and Equal Treatment": [
+        ("Fairness and Equal Treatment - Favoritism", [
+            "palakasan", "walang palakasan", "paboritism", "favoritism", "nepotism",
+            "may kilala",
+        ]),
+        ("Fairness and Equal Treatment - Bias/Unequal Treatment", [
+            "bias", "unfair", "hindi patas", "walang katarungan",
+        ]),
+    ],
+    "Staff Competence and Knowledge": [
+        ("Staff Competence and Knowledge - Training Gap", [
+            "hindi sanay", "untrained", "kulang sa training",
+        ]),
+        ("Staff Competence and Knowledge - Knowledge/Answer Accuracy", [
+            "hindi marunong", "walang alam", "not knowledgeable", "incompetent",
+            "hindi sigurado sa sagot",
+        ]),
+    ],
+    "Document and Credential Processing": [
+        # Compound/specific phrases listed before the generic "Certification"
+        # catch-all so e.g. "good moral certificate" (which also contains the
+        # bare word "certificate") resolves to the more specific bucket on a
+        # tied keyword-hit count, same tie-break convention as TOPIC_KEYWORDS.
+        ("Document and Credential Processing - Transcript of Records", [
+            "transcript", "tor", "transcript of records",
+        ]),
+        ("Document and Credential Processing - Diploma", ["diploma", "diploma ko"]),
+        ("Document and Credential Processing - Honorable Dismissal", [
+            "honorable dismissal",
+        ]),
+        ("Document and Credential Processing - Good Moral Certificate", [
+            "good moral",
+        ]),
+        ("Document and Credential Processing - Academic Records", [
+            "form 137", "form 138", "certificate of grades",
+        ]),
+        ("Document and Credential Processing - ID Card", [
+            "identification card", "id card", "school id",
+        ]),
+        ("Document and Credential Processing - Grade Change/Correction", [
+            "grade change", "correction of grades", "change of grade",
+        ]),
+        ("Document and Credential Processing - Certification", [
+            "certification", "certificate", "cav",
+        ]),
+    ],
+    "Enrollment and Registration": [
+        ("Enrollment and Registration - Matriculation", ["matriculation"]),
+        ("Enrollment and Registration - Cross-Enrollment", ["cross-enrollment"]),
+        ("Enrollment and Registration - Re-admission", ["re-admission"]),
+        ("Enrollment and Registration - Shifting", ["shifting"]),
+        ("Enrollment and Registration - Enrollment/Registration Process", [
+            "enrollment", "enrolment", "pagpapatala", "registration", "rehistrasyon",
+        ]),
+    ],
+    "Payment and Fees": [
+        ("Payment and Fees - Official Receipt", ["resibo", "official receipt"]),
+        ("Payment and Fees - Tuition Fee", ["tuition", "tuition fee"]),
+        ("Payment and Fees - Fees", [
+            "bayad", "babayaran", "fee", "fees", "singil", "kabayaran",
+            "sobrang mahal ang bayad",
+        ]),
+    ],
+    "Staff Courtesy and Attitude": [
+        ("Staff Courtesy and Attitude - Security Guard", ["guard", "security"]),
+        ("Staff Courtesy and Attitude - Front Desk/Clerk", ["receptionist", "clerk"]),
+        ("Staff Courtesy and Attitude - Faculty/Adviser", [
+            "faculty", "professor", "guro", "adviser",
+        ]),
+    ],
+    "Communication and Information": [
+        ("Communication and Information - Response to Inquiries", [
+            "walang reply", "hindi sumasagot", "no response",
+        ]),
+        ("Communication and Information - Announcements", [
+            "announcement", "abiso", "notice", "paalala", "text blast",
+        ]),
+    ],
+}
+
+
+def item_label_override(topic, text):
+    """
+    Best-matching "{topic} - {item}" label for a topic that already resolved
+    via keyword_topic_override, or None if that topic has no item breakdown
+    or the text doesn't name any specific item within it. Same
+    count-then-order tie-break as keyword_topic_override, scoped to the
+    winning topic's own item list.
+    """
+    groups = TOPIC_ITEM_KEYWORDS.get(topic)
+    if not groups:
+        return None
+    lowered = text.lower()
+    hits = {}
+    for item_label, keywords in groups:
+        count = sum(1 for kw in keywords if re.search(r'\b' + re.escape(kw) + r'\b', lowered))
+        if count:
+            hits[item_label] = count
+    if not hits:
+        return None
+    # Preserve declared order on ties by scanning `groups` instead of `hits`.
+    best_count = max(hits.values())
+    for item_label, _ in groups:
+        if hits.get(item_label) == best_count:
+            return item_label
+    return None
+
 
 GENERAL_FEEDBACK = "General Feedback"
 
@@ -223,6 +504,9 @@ BROAD_TOPICS = [
     "Document and Credential Processing",
     "Enrollment and Registration",
     "Communication and Information",
+    "Health and Medical Services",
+    "Guidance and Counseling Services",
+    "Scholarship and Financial Assistance",
 ]
 
 BROAD_LABELS = {
@@ -238,6 +522,9 @@ BROAD_LABELS = {
     "Document and Credential Processing": "processing of documents, certificates, or credentials",
     "Enrollment and Registration": "enrollment, registration, or matriculation",
     "Communication and Information": "how clearly information or updates were communicated",
+    "Health and Medical Services": "the clinic, a doctor, dentist, or medical/dental service",
+    "Guidance and Counseling Services": "guidance counseling or the guidance office",
+    "Scholarship and Financial Assistance": "a scholarship grant or financial assistance",
 }
 
 # broad-topic key -> the specific taxonomy label used when a comment lands
@@ -316,6 +603,9 @@ OFFICE_HINT_KEYWORDS = {
     "Facilities and Equipment": ["general services", "supply", "motorpool"],
     "Communication and Information": ["information", "public affairs", "ict", "mis"],
     "Online System and Portal": ["ict", "mis", "information technology"],
+    "Health and Medical Services": ["health services", "clinic", "dental"],
+    "Guidance and Counseling Services": ["guidance", "counseling"],
+    "Scholarship and Financial Assistance": ["scholarship", "cash unit", "student affairs"],
 }
 
 # Small enough to only decide a near-tie (stage-1 scores of otherwise
@@ -355,48 +645,165 @@ def keyword_topic_override(text):
     lowered = text.lower()
     hits = {}
     for topic, keywords in TOPIC_KEYWORDS.items():
-        count = sum(1 for kw in keywords if re.search(r'\b' + re.escape(kw) + r'\b', lowered))
+        count = 0
+        for entry in keywords:
+            kw, weight = entry if isinstance(entry, tuple) else (entry, 1)
+            if re.search(r'\b' + re.escape(kw) + r'\b', lowered):
+                count += weight
         if count:
             hits[topic] = count
     if not hits:
         return None
-    return max(hits.items(), key=lambda kv: kv[1])[0]
+    topic = max(hits.items(), key=lambda kv: kv[1])[0]
+    # Refine to "{topic} - {item}" when the text names a specific enough
+    # item within that topic (see TOPIC_ITEM_KEYWORDS) — otherwise stays at
+    # the plain topic label.
+    return item_label_override(topic, text) or topic
 
 
 # ---------------------------------------------------------------------------
-# FAST PATH — lightweight lexicon heuristics, zero model loading.
-# Used for offline-synced comments where the batch is processed after the
-# fact with nobody waiting live, so we skip loading any transformer weights
-# entirely and rely on local keyword/lexicon matching — "immediate local
-# processing" instead of heavy inference.
+# SENTIMENT LEXICON — negation-aware keyword scoring, zero model loading.
+# Used two ways:
+#   1. The offline/fast path (fast_sentiment): no model at all, this is the
+#      entire answer.
+#   2. The heavy/live path (heavy_model.classify_sentiment): tried FIRST,
+#      before the transformer. Empirically, the multilingual sentiment
+#      transformer (tabularisai/multilingual-sentiment-analysis) is
+#      miscalibrated on short Tagalog/Taglish text in exactly the way the
+#      topic zero-shot model is miscalibrated on Taglish topics (see
+#      keyword_topic_override's docstring): plainly positive Tagalog
+#      sentences ("mabilis na-release yung resulta ko", "hassle-free talaga")
+#      routinely score highest on Neutral, and negated phrases ("walang
+#      palakasan dito, pantay-pantay lahat") can score highest on Very
+#      Negative because the model reacts to the raw negative-coded word
+#      inside the negation instead of the negation itself. A small additive
+#      boost can't fix a gap that size, so — same convention as topic
+#      keywords — a clear lexicon hit wins outright and the transformer is
+#      reserved for text with no keyword coverage (nuanced English, genuinely
+#      mixed reviews, sarcasm), which is exactly where it adds real value.
+#
+# Negation handling: a NEGATOR word ("hindi", "wala", "walang", "di", "huwag",
+# "ayaw", "not", "no", "never", "without") found in the up-to-3 words
+# immediately before a sentiment keyword, WITHIN THE SAME CLAUSE (split on
+# ,.;:!?), flips that keyword's polarity. This is what correctly turns
+# "walang problema" (no problem) positive and "wala...maayos" (not
+# proper/fine) negative, instead of naive substring-in-lowered scanning that
+# scored both purely on the presence of "problema"/"maayos" regardless of
+# the negator sitting right next to them. Clause-scoping keeps a negator in
+# one clause from leaking across a comma into an unrelated later clause
+# (e.g. "walang palakasan dito, pantay-pantay lahat" must not let "walang"
+# flip "pantay").
 # ---------------------------------------------------------------------------
 FAST_NEGATIVE_WORDS = [
     "mahina", "masama", "pangit", "sira", "sirang", "bastos", "mabagal",
-    "matagal", "bobo", "reklamo", "galit", "problema", "hassle",
+    "matagal", "tagal", "bagal", "bobo", "reklamo", "galit", "problema", "hassle",
+    "dumi", "madumi", "marumi", "amoy-amoy", "kulang", "konti", "hirap",
+    "mahirap", "nahirapan", "nakakainis", "nakakastress", "sakit ng ulo",
+    "kumplikado", "maraming hakbang", "palakasan", "may kilala", "paulit-ulit",
+    "nawawalan ng koneksyon", "nawalan ng signal",
     "poor", "bad", "slow", "broken", "rude", "worst", "terrible", "awful",
+    "annoying", "frustrating", "difficult",
 ]
 FAST_POSITIVE_WORDS = [
     "maganda", "mabilis", "magaling", "mabait", "salamat", "masaya",
+    "maayos", "ayos naman", "walang problema", "walang reklamo", "pantay",
+    "patas", "madali", "kadali", "mahusay", "stable",
     "satisfied", "great", "good", "excellent", "fast", "helpful",
     "friendly", "nice", "the best", "love it", "hassle-free", "hassle free",
+    "streamlined", "efficient", "smooth", "convenient", "fair", "equal",
+    "commend", "professional", "professionalism", "appreciate", "appreciated",
 ]
+
+# Filler phrases that read as flat/neutral on their own — matched only when
+# no positive/negative keyword fired at all (see lexicon_sentiment), so a
+# comment that also carries real signal elsewhere isn't dragged to Neutral
+# just for containing one of these.
+FAST_NEUTRAL_PHRASES = [
+    "walang masabi", "karaniwan lang", "ok lang", "okay lang",
+    "walang komento",
+]
+
+# Known idiom collisions: a phrase that contains a sentiment-lexicon word as
+# a substring but means something unrelated to that word's polarity, e.g.
+# "good moral certificate" is a specific document name (see
+# TOPIC_ITEM_KEYWORDS), not praise — it must not trip the bare word "good".
+# Masked out of the text before keyword scanning.
+SENTIMENT_COLLISION_PHRASES = ["good moral"]
+
+NEGATOR_WORDS = {
+    "hindi", "wala", "walang", "di", "'di", "huwag", "ayaw",
+    "not", "no", "never", "without",
+}
+NEGATION_LOOKBACK = 3
+
+
+def _keyword_spans(clause_lower, keywords):
+    spans = []
+    for kw in keywords:
+        for m in re.finditer(r'\b' + re.escape(kw) + r'\b', clause_lower):
+            spans.append((m.start(), m.end()))
+    return spans
+
+
+def _is_negated(clause_lower, span_start):
+    words_before = clause_lower[:span_start].split()[-NEGATION_LOOKBACK:]
+    return any(w.strip("'") in NEGATOR_WORDS for w in words_before)
+
+
+def lexicon_sentiment(text):
+    """
+    Negation-aware keyword sentiment verdict, or None if the text contains no
+    sentiment keyword at all (caller should fall back to a full model in
+    that case — see module docstring above for why this wins outright over
+    the transformer whenever it does have a signal).
+    """
+    lowered = text.lower()
+    for phrase in SENTIMENT_COLLISION_PHRASES:
+        lowered = re.sub(r'\b' + re.escape(phrase) + r'\b', ' ', lowered)
+
+    clauses = re.split(r'[.,;:!?]+', lowered)
+    pos_count = 0
+    neg_count = 0
+    neutral_hit = False
+    for clause in clauses:
+        clause = clause.strip()
+        if not clause:
+            continue
+        if any(re.search(r'\b' + re.escape(p) + r'\b', clause) for p in FAST_NEUTRAL_PHRASES):
+            neutral_hit = True
+        pos_spans = _keyword_spans(clause, FAST_POSITIVE_WORDS)
+        covered = set()
+        for s, e in pos_spans:
+            covered.update(range(s, e))
+        # Drop negative spans that overlap an already-claimed positive
+        # phrase, so e.g. "hassle-free" (positive phrase) doesn't also
+        # register "hassle" (negative word) as a second, contradictory hit.
+        neg_spans = [
+            (s, e) for s, e in _keyword_spans(clause, FAST_NEGATIVE_WORDS)
+            if not (set(range(s, e)) & covered)
+        ]
+        for s, e in pos_spans:
+            if _is_negated(clause, s):
+                neg_count += 1
+            else:
+                pos_count += 1
+        for s, e in neg_spans:
+            if _is_negated(clause, s):
+                pos_count += 1
+            else:
+                neg_count += 1
+
+    if pos_count == 0 and neg_count == 0:
+        return "Neutral" if neutral_hit else None
+    if pos_count > neg_count:
+        return "Positive"
+    if neg_count > pos_count:
+        return "Negative"
+    return "Neutral"
 
 
 def fast_sentiment(text):
-    lowered = text.lower()
-    pos = sum(1 for w in FAST_POSITIVE_WORDS if w in lowered)
-    # Strip matched positive phrases before scanning for negative words, so a
-    # positive phrase containing a negative substring (e.g. "hassle-free"
-    # contains "hassle") isn't double-counted as evidence for both sides.
-    masked = lowered
-    for w in FAST_POSITIVE_WORDS:
-        masked = masked.replace(w, " ")
-    neg = sum(1 for w in FAST_NEGATIVE_WORDS if w in masked)
-    if neg > pos:
-        return "Negative"
-    if pos > neg:
-        return "Positive"
-    return "Neutral"
+    return lexicon_sentiment(text) or "Neutral"
 
 
 def fast_topic(text):

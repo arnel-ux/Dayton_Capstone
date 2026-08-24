@@ -1924,6 +1924,7 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                     else if (topicLower.includes('payment') || topicLower.includes('fees')) badgeClass = 'bg-payment';
                     else if (topicLower.includes('document') || topicLower.includes('credential') || topicLower.includes('enrollment') || topicLower.includes('registration')) badgeClass = 'bg-docs';
                     else if (topicLower.includes('online') || topicLower.includes('portal') || topicLower.includes('internet')) badgeClass = 'bg-online';
+                    else if (topicLower.includes('health') || topicLower.includes('medical') || topicLower.includes('guidance') || topicLower.includes('counseling') || topicLower.includes('scholarship')) badgeClass = 'bg-health';
 
                     const sentimentValue = row.sentiment || 'Neutral';
                     const sentimentLower = sentimentValue.toLowerCase();

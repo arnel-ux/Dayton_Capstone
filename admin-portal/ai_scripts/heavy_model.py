@@ -21,6 +21,7 @@ from topic_common import (
     BROAD_TO_SPECIFIC_FALLBACK,
     SUBTOPIC_GROUPS,
     keyword_topic_override,
+    lexicon_sentiment,
     office_hint_topics,
     HYPOTHESIS_TEMPLATE,
     GENERAL_FEEDBACK,
@@ -142,6 +143,21 @@ DIFF_THRESHOLD = 0.65
 
 
 def classify_sentiment(text):
+    # Keyword lexicon wins outright when it has a signal at all — see
+    # topic_common's lexicon_sentiment docstring for why: the transformer is
+    # empirically miscalibrated on short Tagalog/Taglish text (plain
+    # positives scoring Neutral, negated phrases scoring Very Negative off
+    # the negated word alone) in a way no amount of threshold tuning below
+    # fixes. This also skips the transformer call entirely on a hit, which
+    # is a nice speed win since it's one of the two heaviest steps in the
+    # pipeline. The transformer remains the fallback for text with no
+    # keyword coverage at all — nuanced English, genuinely mixed reviews,
+    # sarcasm — which is exactly where its mixed-sentiment logic below adds
+    # real value over a keyword count.
+    lex = lexicon_sentiment(text)
+    if lex:
+        return lex
+
     import torch
     analyzer = _get_sentiment_pipeline()
     with torch.no_grad():
