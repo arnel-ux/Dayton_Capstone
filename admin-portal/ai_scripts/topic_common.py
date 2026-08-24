@@ -101,7 +101,7 @@ candidate_topics = [
 TOPIC_KEYWORDS = {
     "Queueing and Waiting Time": [
         "pila", "linya", "queue", "queueing", "waiting line", "numero", "hintay",
-        "priority number", "numbering system",
+        "antay", "priority number", "numbering system",
     ],
     "Internet Connection": [
         "internet", "wifi", "wi-fi", "signal", "network", "koneksyon",
@@ -147,6 +147,13 @@ TOPIC_KEYWORDS = {
         "hindi marunong", "walang alam", "not knowledgeable", "incompetent",
         "hindi sanay", "untrained", "kulang sa training", "hindi sigurado sa sagot",
         "hindi updated", "hindi na updated", "hindi pa updated", "outdated",
+        # Bare "sanay" (accustomed/skilled at a job) is a real positive
+        # competence signal on its own ("sanay naman sila sa trabaho nila")
+        # but is more ambiguous than the object nouns elsewhere in this file
+        # (could describe being used to something unrelated to a job) — kept
+        # at reduced weight so it never outranks a more specific competing
+        # topic, only wins when nothing else does.
+        ("sanay", 0.5),
     ],
     # Generic staff-behavior bucket: role nouns with no more specific
     # competence/fairness phrase present. Listed after those two so a
@@ -266,7 +273,7 @@ TOPIC_ITEM_KEYWORDS = {
             "numero", "priority number", "numbering system",
         ]),
         ("Queueing and Waiting Time - Long Lines", [
-            "pila", "linya", "queue", "queueing", "waiting line", "hintay",
+            "pila", "linya", "queue", "queueing", "waiting line", "hintay", "antay",
         ]),
     ],
     "Transaction Speed": [
@@ -719,18 +726,19 @@ def keyword_topic_override(text):
 # ---------------------------------------------------------------------------
 FAST_NEGATIVE_WORDS = [
     "mahina", "masama", "pangit", "sira", "sirang", "bastos", "mabagal",
-    "matagal", "tagal", "bagal", "bobo", "reklamo", "galit", "problema", "hassle",
-    "dumi", "madumi", "marumi", "amoy-amoy", "kulang", "konti", "hirap",
-    "mahirap", "nahirapan", "nakakainis", "nakakastress", "sakit ng ulo",
-    "kumplikado", "maraming hakbang", "palakasan", "may kilala", "paulit-ulit",
-    "nawawalan ng koneksyon", "nawalan ng signal",
+    "matagal", "tagal", "bagal", "katagal", "bobo", "reklamo", "galit",
+    "problema", "hassle", "dumi", "madumi", "marumi", "amoy-amoy", "kulang",
+    "konti", "hirap", "mahirap", "nahirapan", "nakakainis", "nakakastress",
+    "sakit ng ulo", "kumplikado", "maraming hakbang", "palakasan",
+    "may kilala", "paulit-ulit", "nawawalan ng koneksyon", "nawalan ng signal",
+    "nakakalito", "nalilito",
     "poor", "bad", "slow", "broken", "rude", "worst", "terrible", "awful",
-    "annoying", "frustrating", "difficult",
+    "annoying", "frustrating", "difficult", "messy",
 ]
 FAST_POSITIVE_WORDS = [
     "maganda", "mabilis", "magaling", "mabait", "salamat", "masaya",
     "maayos", "ayos naman", "walang problema", "walang reklamo", "pantay",
-    "patas", "madali", "kadali", "mahusay", "stable",
+    "patas", "madali", "kadali", "mahusay", "sanay", "stable",
     "satisfied", "great", "good", "excellent", "fast", "helpful",
     "friendly", "nice", "the best", "love it", "hassle-free", "hassle free",
     "streamlined", "efficient", "smooth", "convenient", "fair", "equal",
