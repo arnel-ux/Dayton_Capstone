@@ -148,12 +148,18 @@ def classify_sentiment(text):
     # empirically miscalibrated on short Tagalog/Taglish text (plain
     # positives scoring Neutral, negated phrases scoring Very Negative off
     # the negated word alone) in a way no amount of threshold tuning below
-    # fixes. This also skips the transformer call entirely on a hit, which
-    # is a nice speed win since it's one of the two heaviest steps in the
-    # pipeline. The transformer remains the fallback for text with no
-    # keyword coverage at all — nuanced English, genuinely mixed reviews,
-    # sarcasm — which is exactly where its mixed-sentiment logic below adds
-    # real value over a keyword count.
+    # fixes. Tried making the transformer the primary decision-maker
+    # (2026-08-24) with a confidence gate deferring to the lexicon only when
+    # the AI was unsure — measured regression from 114/117 to 94/117 on the
+    # sentiment test suite, because the transformer's confidence doesn't
+    # reliably separate its right answers from its wrong ones on this data
+    # (both land in a similar range), so a threshold can't cleanly rescue
+    # only the wrong ones. Reverted. This also skips the transformer call
+    # entirely on a lexicon hit, which is a nice speed win since it's one of
+    # the two heaviest steps in the pipeline. The transformer remains the
+    # fallback for text with no keyword coverage at all — nuanced English,
+    # genuinely mixed reviews, sarcasm — which is exactly where its
+    # mixed-sentiment logic below adds real value over a keyword count.
     lex = lexicon_sentiment(text)
     if lex:
         return lex
@@ -222,6 +228,17 @@ def classify_topic(text, office_hint=None):
     cluster name) describing which office/service the comment's survey was
     submitted for. Used only as a small additive nudge on stage 1 — see
     topic_common.office_hint_topics's docstring for why it stays soft.
+
+    Tried making the zero-shot model the primary decision-maker (2026-08-24)
+    with a confidence gate deferring to the keyword lexicon only when the AI
+    was unsure — measured regression from 114/117 to 103/117 on the topic
+    test suite. Diagnosed why: dumped the model's raw per-label scores and
+    found it landed similar confidence (~0.35-0.49) on both correct AND
+    incorrect top picks for this ~15-way classification, so no threshold can
+    cleanly separate the two — set it low enough to accept good answers and
+    you also accept bad ones at the same confidence; set it high enough to
+    reject bad ones and you reject most good ones too, which just pushes
+    almost everything to the lexicon anyway. Reverted to lexicon-first.
     """
     import torch
     # Keyword anchors win outright when present (see

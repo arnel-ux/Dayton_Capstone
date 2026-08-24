@@ -522,7 +522,18 @@ BROAD_LABELS = {
     "Document and Credential Processing": "processing of documents, certificates, or credentials",
     "Enrollment and Registration": "enrollment, registration, or matriculation",
     "Communication and Information": "how clearly information or updates were communicated",
-    "Health and Medical Services": "the clinic, a doctor, dentist, or medical/dental service",
+    # More concrete/distinctive phrasing than a plain "clinic, doctor,
+    # dentist" list — testing on 2026-08-24 found that shorter, more generic
+    # phrasing here acted as a false attractor in zero-shot, winning with
+    # 35-49% confidence on unrelated comments (a rude guard, a nice staff
+    # member, favoritism, a queue complaint). This wording measurably fixed
+    # that false-attraction in the same test (though zero-shot topic
+    # classification for this specific label group remains generally
+    # unreliable regardless of wording — most genuine health/medical
+    # comments are still resolved via the TOPIC_KEYWORDS lexicon above, not
+    # this zero-shot fallback, which is only reached when the lexicon has no
+    # hit at all).
+    "Health and Medical Services": "seeing a doctor, dentist, or nurse at the campus health clinic for a checkup or treatment",
     "Guidance and Counseling Services": "guidance counseling or the guidance office",
     "Scholarship and Financial Assistance": "a scholarship grant or financial assistance",
 }
@@ -641,6 +652,13 @@ def keyword_topic_override(text):
     local-language nouns wins outright instead of just nudging the model.
     The zero-shot model is kept as the fallback for comments that don't
     contain any of these anchors.
+
+    (Tried flipping this — AI first, lexicon as fallback — on 2026-08-24;
+    reverted after measuring the regression. See heavy_model.classify_topic's
+    docstring for the concrete numbers and the reason a confidence gate
+    can't safely make that swap: the model lands similar confidence on both
+    correct and incorrect top picks for this data, so no threshold cleanly
+    separates them.)
     """
     lowered = text.lower()
     hits = {}
@@ -681,6 +699,11 @@ def keyword_topic_override(text):
 #      keywords — a clear lexicon hit wins outright and the transformer is
 #      reserved for text with no keyword coverage (nuanced English, genuinely
 #      mixed reviews, sarcasm), which is exactly where it adds real value.
+#      (Tried the opposite ordering — AI first, lexicon as a confidence-gated
+#      fallback — on 2026-08-24; reverted after measuring the regression from
+#      114/117 to 94/117 on the sentiment test suite, for the same root
+#      cause as the topic model: the transformer's confidence doesn't
+#      reliably separate its right answers from its wrong ones on this data.)
 #
 # Negation handling: a NEGATOR word ("hindi", "wala", "walang", "di", "huwag",
 # "ayaw", "not", "no", "never", "without") found in the up-to-3 words
