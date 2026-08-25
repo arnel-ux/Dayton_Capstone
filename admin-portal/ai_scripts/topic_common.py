@@ -190,12 +190,13 @@ TOPIC_KEYWORDS = {
     "Enrollment and Registration": [
         "enrollment", "enrolment", "pagpapatala", "registration", "rehistrasyon",
         "matriculation", "cross-enrollment", "re-admission", "shifting",
+        "mag-shift", "nag-shift",
     ],
     "Communication and Information": [
         "impormasyon", "information", "communication", "announcement", "abiso",
         "notice", "paalala", "text blast", "walang paalam", "walang reply",
         "hindi sumasagot", "no response", "not informed", "nobody informed",
-        "no update", "walang update",
+        "no update", "walang update", "no updates", "walang updates", "email",
     ],
     # "transaction" is the unambiguous object-noun anchor for comments whose
     # core driver is how fast the service itself moved (hal. "bilis ng
@@ -203,6 +204,7 @@ TOPIC_KEYWORDS = {
     # "Process Efficiency" (how simple the steps were).
     "Transaction Speed": [
         "transaction", "pag-transact", "processing time", "release ng resulta",
+        "ma-release", "na-release",
     ],
     # Compound Taglish/English phrases that unambiguously describe the
     # process itself being simple/tedious, not any specific object.
@@ -231,6 +233,7 @@ TOPIC_KEYWORDS = {
         "library", "aklatan", "librong hiniram", "libro", "book", "books",
         "dormitory", "dorm", "bed space", "boarding house",
         "transportation", "sasakyan", "service vehicle", "shuttle",
+        "printer", "computer lab", "computer laboratory", "computer shop",
     ],
     "Health and Medical Services": [
         "clinic", "klinika", "doktor", "doctor", "dentista", "dentist",
@@ -277,7 +280,9 @@ TOPIC_ITEM_KEYWORDS = {
         ]),
     ],
     "Transaction Speed": [
-        ("Transaction Speed - Processing Time", ["processing time", "release ng resulta"]),
+        ("Transaction Speed - Processing Time", [
+            "processing time", "release ng resulta", "ma-release", "na-release",
+        ]),
         ("Transaction Speed - Transaction Duration", ["transaction", "pag-transact"]),
     ],
     "Process Efficiency": [
@@ -333,7 +338,8 @@ TOPIC_ITEM_KEYWORDS = {
             "transportation", "sasakyan", "service vehicle", "shuttle",
         ]),
         ("Facilities and Equipment - Equipment/Machine", [
-            "kagamitan", "equipment", "makina", "aparatus",
+            "kagamitan", "equipment", "makina", "aparatus", "printer",
+            "computer lab", "computer laboratory", "computer shop",
         ]),
         ("Facilities and Equipment - Building/Structure", ["istruktura"]),
     ],
@@ -725,24 +731,28 @@ def keyword_topic_override(text):
 # flip "pantay").
 # ---------------------------------------------------------------------------
 FAST_NEGATIVE_WORDS = [
-    "mahina", "masama", "pangit", "sira", "sirang", "bastos", "mabagal",
-    "matagal", "tagal", "bagal", "katagal", "bobo", "reklamo", "galit",
-    "problema", "hassle", "dumi", "madumi", "marumi", "amoy-amoy", "kulang",
-    "konti", "hirap", "mahirap", "nahirapan", "nakakainis", "nakakastress",
-    "sakit ng ulo", "kumplikado", "maraming hakbang", "palakasan",
-    "may kilala", "paulit-ulit", "nawawalan ng koneksyon", "nawalan ng signal",
-    "nakakalito", "nalilito",
+    "mahina", "masama", "masamang", "pangit", "sira", "sirang", "bastos",
+    "mabagal", "matagal", "tagal", "bagal", "katagal", "bobo", "reklamo",
+    "galit", "problema", "hassle", "dumi", "madumi", "marumi", "amoy-amoy",
+    "kulang", "konti", "hirap", "mahirap", "nahirapan", "nakakainis",
+    "nakakastress", "sakit ng ulo", "kumplikado", "maraming hakbang",
+    "palakasan", "may kilala", "paulit-ulit", "nawawalan ng koneksyon",
+    "nawalan ng signal", "nakakalito", "nalilito", "walang kwenta",
+    "sayang",
     "poor", "bad", "slow", "broken", "rude", "worst", "terrible", "awful",
-    "annoying", "frustrating", "difficult", "messy",
+    "annoying", "frustrating", "difficult", "messy", "disappoint",
+    "disappointed", "disappointing", "disappointment",
 ]
 FAST_POSITIVE_WORDS = [
-    "maganda", "mabilis", "magaling", "mabait", "salamat", "masaya",
-    "maayos", "ayos naman", "walang problema", "walang reklamo", "pantay",
-    "patas", "madali", "kadali", "mahusay", "sanay", "stable",
+    "maganda", "magandang", "mabilis", "magaling", "mabait", "salamat",
+    "masaya", "masayang", "maayos", "ayos naman", "okay naman", "ok naman",
+    "walang problema", "walang reklamo", "pantay", "patas", "madali",
+    "kadali", "mahusay", "sanay", "stable",
     "satisfied", "great", "good", "excellent", "fast", "helpful",
-    "friendly", "nice", "the best", "love it", "hassle-free", "hassle free",
-    "streamlined", "efficient", "smooth", "convenient", "fair", "equal",
-    "commend", "professional", "professionalism", "appreciate", "appreciated",
+    "friendly", "nice", "pleasant", "malinis", "the best", "love it", "hassle-free",
+    "hassle free", "streamlined", "efficient", "smooth", "convenient",
+    "fair", "equal", "commend", "professional", "professionalism",
+    "appreciate", "appreciated",
 ]
 
 # Filler phrases that read as flat/neutral on their own — matched only when
@@ -764,8 +774,23 @@ SENTIMENT_COLLISION_PHRASES = ["good moral"]
 NEGATOR_WORDS = {
     "hindi", "wala", "walang", "di", "'di", "huwag", "ayaw",
     "not", "no", "never", "without",
+    "wasn't", "isn't", "doesn't", "don't", "didn't", "couldn't", "can't",
+    "cannot", "won't", "aren't", "wouldn't", "shouldn't",
 }
 NEGATION_LOOKBACK = 3
+
+# "sana" (I hope/wish) marks a positive word as aspirational rather than
+# descriptive of the current state — "sana maayos pa" ("hope it gets fixed")
+# is a complaint, not praise, even though it contains "maayos". Treated like
+# a negator for lookback purposes, but it neutralizes the keyword (drops it)
+# instead of flipping its polarity, since "sana [positive]" isn't a negative
+# claim either — it's a wish, distinct from both.
+ASPIRATIONAL_WORDS = {"sana"}
+
+
+def _is_aspirational(clause_lower, span_start):
+    words_before = clause_lower[:span_start].split()[-NEGATION_LOOKBACK:]
+    return any(w.strip("'") in ASPIRATIONAL_WORDS for w in words_before)
 
 
 def _keyword_spans(clause_lower, keywords):
@@ -816,6 +841,8 @@ def lexicon_sentiment(text):
         for s, e in pos_spans:
             if _is_negated(clause, s):
                 neg_count += 1
+            elif _is_aspirational(clause, s):
+                pass
             else:
                 pos_count += 1
         for s, e in neg_spans:
