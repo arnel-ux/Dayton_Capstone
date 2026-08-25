@@ -31,11 +31,13 @@ raw_input = sys.stdin.read().strip()
 
 client_comment = raw_input
 is_offline = False
+office_hint = None
 if raw_input.startswith('{'):
     try:
         payload = json.loads(raw_input)
         client_comment = str(payload.get("comment", "") or "").strip()
         is_offline = bool(payload.get("offline", False))
+        office_hint = str(payload.get("office", "") or "").strip() or None
     except (json.JSONDecodeError, ValueError):
         pass  # not JSON after all — treat raw_input as the plain comment text
 
@@ -57,7 +59,7 @@ try:
         # directly). Loads the full transformer models in this one-off
         # process, so it's slow but self-contained and always correct.
         import heavy_model
-        final_sentiment, final_topic = heavy_model.analyze(client_comment)
+        final_sentiment, final_topic = heavy_model.analyze(client_comment, office_hint=office_hint)
 
     print(json.dumps({
         "sentiment": final_sentiment,

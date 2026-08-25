@@ -38,12 +38,13 @@ def health():
 def analyze_route():
     data = request.get_json(force=True, silent=True) or {}
     comment = str(data.get("comment", "") or "").strip()
+    office_hint = str(data.get("office", "") or "").strip() or None
 
     if not comment:
         return jsonify({"sentiment": "Neutral", "topic": GENERAL_FEEDBACK})
 
     try:
-        sentiment, topic = heavy_model.analyze(comment)
+        sentiment, topic = heavy_model.analyze(comment, office_hint=office_hint)
         return jsonify({"sentiment": sentiment, "topic": topic})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

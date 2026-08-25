@@ -254,11 +254,35 @@ db.connect((err) => {
         return;
     }
     console.log('✅ Connected to cqa_db database successfully!');
+    loadOfficeNameCache();
 });
 
 // Promise wrapper around db.query — used by the offline-sync route so it can
 // `await` each step (duplicate check → AI analysis → insert) in sequence.
 const dbQuery = promisify(db.query).bind(db);
+
+// office_id -> "office_name, cluster_name" cache, used only to give the AI
+// topic classifier a soft office/cluster hint (see topic_common.py's
+// office_hint_topics). Offices change rarely, so a cache refreshed at
+// startup and lazily on a cache miss is plenty fresh — this is never more
+// than a small tie-break nudge, not something that needs to be transaction-
+// consistent with the offices table.
+const officeNameCache = new Map();
+function loadOfficeNameCache() {
+    db.query('SELECT id, office_name, cluster_name FROM offices', (err, rows) => {
+        if (err) {
+            console.error("❌ [Office Cache] Failed to load office names:", err);
+            return;
+        }
+        officeNameCache.clear();
+        (rows || []).forEach((row) => {
+            officeNameCache.set(row.id, `${row.office_name}, ${row.cluster_name || ''}`.trim());
+        });
+    });
+}
+function getOfficeHint(officeId) {
+    return officeNameCache.get(officeId) || null;
+}
 
 // ==========================================
 // AI MODEL SERVER (persistent, keeps ~1GB of transformer weights loaded in
@@ -436,7 +460,7 @@ function saveLandingSection(section, fields) {
 // path (model server unreachable) and as the normal path for offline-synced
 // comments (see analyzeComment below), which take the fast lexicon branch
 // inside analyze.py instead of this heavy branch.
-function analyzeViaPythonScript(comment, offline) {
+function analyzeViaPythonScript(comment, offline, officeHint) {
     return new Promise((resolve) => {
         try {
             const pythonScriptPath = path.join(__dirname, 'ai_scripts', 'analyze.py');
@@ -447,7 +471,7 @@ function analyzeViaPythonScript(comment, offline) {
                 resolve({ sentiment: 'Neutral', topic: 'General Feedback' });
             });
 
-            pythonProcess.stdin.write(JSON.stringify({ comment: String(comment), offline: !!offline }));
+            pythonProcess.stdin.write(JSON.stringify({ comment: String(comment), offline: !!offline, office: officeHint || '' }));
             pythonProcess.stdin.end();
 
             let aiOutput = '';
@@ -492,24 +516,29 @@ function analyzeViaPythonScript(comment, offline) {
 // (`offline` false) go to the persistent model server for near-instant
 // analysis, only falling back to spawning analyze.py (slow — reloads the
 // models) if the model server is unreachable.
-function analyzeComment(comment, offline = false) {
+// officeId: optional office_id whose cached office/cluster name is passed to
+// the classifier as a soft topic hint (see topic_common.py's
+// office_hint_topics) — never a hard override, just a tie-break nudge.
+function analyzeComment(comment, offline = false, officeId = null) {
     return new Promise((resolve) => {
         if (!comment || !String(comment).trim()) {
             return resolve({ sentiment: null, topic: null });
         }
 
+        const officeHint = officeId != null ? getOfficeHint(officeId) : null;
+
         if (offline) {
-            return resolve(analyzeViaPythonScript(comment, true));
+            return resolve(analyzeViaPythonScript(comment, true, officeHint));
         }
 
         if (!modelServerReady) {
-            return resolve(analyzeViaPythonScript(comment, false));
+            return resolve(analyzeViaPythonScript(comment, false, officeHint));
         }
 
         fetch(`${MODEL_SERVER_URL}/analyze`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ comment: String(comment) }),
+            body: JSON.stringify({ comment: String(comment), office: officeHint || '' }),
             signal: AbortSignal.timeout(15000)
         })
             .then((res) => res.ok ? res.json() : Promise.reject(new Error(`Model server responded ${res.status}`)))
@@ -521,7 +550,7 @@ function analyzeComment(comment, offline = false) {
             })
             .catch((err) => {
                 console.error("❌ [AI Model Server] Request failed, falling back to per-comment script:", err.message);
-                resolve(analyzeViaPythonScript(comment, false));
+                resolve(analyzeViaPythonScript(comment, false, officeHint));
             });
     });
 }
@@ -1778,7 +1807,7 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
             // Fire-and-forget: the client already has its response, so this just
             // patches sentiment/topic onto the row once analyze.py finishes.
             if (comments && comments.trim() !== "") {
-                analyzeComment(comments).then(({ sentiment, topic }) => {
+                analyzeComment(comments, false, finalOfficeId).then(({ sentiment, topic }) => {
                     if (sentiment && topic) {
                         const updateQuery = 'UPDATE survey_responses SET sentiment = ?, topic = ? WHERE id = ?';
                         db.query(updateQuery, [sentiment, topic, surveyResponseId]);
@@ -1883,7 +1912,7 @@ async function syncOneSurvey(googleEmail, body) {
     let sentiment = null;
     let topic = null;
     try {
-        const aiResult = await analyzeComment(comments, true);
+        const aiResult = await analyzeComment(comments, true, finalOfficeId);
         sentiment = aiResult.sentiment;
         topic = aiResult.topic;
     } catch (err) {
@@ -2268,6 +2297,11 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                         topicLower.includes('furniture') || topicLower.includes('seating') ||
                         topicLower.includes('power') || topicLower.includes('lighting')
                     ) badgeClass = 'bg-facility';
+                    else if (topicLower.includes('staff') || topicLower.includes('fairness') || topicLower.includes('courtesy') || topicLower.includes('competence')) badgeClass = 'bg-staff';
+                    else if (topicLower.includes('payment') || topicLower.includes('fees')) badgeClass = 'bg-payment';
+                    else if (topicLower.includes('document') || topicLower.includes('credential') || topicLower.includes('enrollment') || topicLower.includes('registration')) badgeClass = 'bg-docs';
+                    else if (topicLower.includes('online') || topicLower.includes('portal') || topicLower.includes('internet')) badgeClass = 'bg-online';
+                    else if (topicLower.includes('health') || topicLower.includes('medical') || topicLower.includes('guidance') || topicLower.includes('counseling') || topicLower.includes('scholarship')) badgeClass = 'bg-health';
 
                     const sentimentValue = row.sentiment || 'Neutral';
                     const sentimentLower = sentimentValue.toLowerCase();
@@ -2364,6 +2398,7 @@ app.post('/clusters/edit', ensureAdminAuth, (req, res) => {
             if (err) { console.error("❌ Error updating cluster:", err); return res.redirect('/offices'); }
             db.query('UPDATE offices SET cluster_name = ? WHERE cluster_name = ?', [newName, oldName], (err) => {
                 if (err) console.error("❌ Error cascading cluster rename to offices:", err);
+                loadOfficeNameCache();
                 res.redirect('/offices');
             });
         });
@@ -2408,6 +2443,7 @@ app.post('/clusters/permanent-delete/:id', ensureAdminAuth, (req, res) => {
 
 app.post('/offices/add', ensureAdminAuth, (req, res) => {
     const { cluster_name, office_name, head_director, email_address } = req.body;
+<<<<<<< HEAD
     db.query('INSERT INTO offices (cluster_name, office_name, head_director, email_address) VALUES (?, ?, ?, ?)',
     [cluster_name, office_name, head_director || 'Not Assigned', email_address], (err, result) => {
         if (err) { console.error("❌ Error adding office:", err); return res.redirect('/offices'); }
@@ -2445,14 +2481,20 @@ app.post('/services/add', ensureAdminAuth, (req, res) => {
 app.post('/services/delete/:id', ensureAdminAuth, (req, res) => {
     db.query('DELETE FROM services WHERE id = ?', [req.params.id], (err) => {
         if (err) console.error("❌ Error deleting service:", err);
+=======
+    db.query('INSERT INTO offices (cluster_name, office_name, head_director, email_address) VALUES (?, ?, ?, ?)', 
+    [cluster_name, office_name, head_director || 'Not Assigned', email_address], (err, result) => {
+        if (err) console.error("❌ Error adding office:", err);
+        loadOfficeNameCache();
+>>>>>>> 676dd150df872390e115371f4ea44c8b3f3b0d39
         res.redirect('/offices');
     });
 });
 
 app.post('/offices/edit', ensureAdminAuth, (req, res) => {
     const { id, cluster_name, office_name, head_director, email_address } = req.body;
-    db.query('UPDATE offices SET cluster_name = ?, office_name = ?, head_director = ?, email_address = ? WHERE id = ?', 
-    [cluster_name, office_name, head_director, email_address, id], (err, result) => { res.redirect('/offices'); });
+    db.query('UPDATE offices SET cluster_name = ?, office_name = ?, head_director = ?, email_address = ? WHERE id = ?',
+    [cluster_name, office_name, head_director, email_address, id], (err, result) => { loadOfficeNameCache(); res.redirect('/offices'); });
 });
 
 // Soft delete / archive: hindi na tinatanggal ang record sa database (walang DELETE query),
@@ -2469,6 +2511,7 @@ app.post('/offices/restore/:id', ensureAdminAuth, (req, res) => {
 app.post('/offices/permanent-delete/:id', ensureAdminAuth, (req, res) => {
     db.query('DELETE FROM offices WHERE id = ?', [req.params.id], (err, result) => {
         if (err) console.error("❌ Error permanently deleting office:", err);
+        loadOfficeNameCache();
         res.redirect('/offices');
     });
 });

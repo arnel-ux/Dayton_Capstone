@@ -17,13 +17,17 @@ os.environ.setdefault('TRANSFORMERS_VERBOSITY', 'error')
 from topic_common import (
     broad_label_list,
     broad_label_to_topic,
-    facility_label_list,
-    facility_label_to_topic,
+    BROAD_TOPICS,
+    BROAD_TO_SPECIFIC_FALLBACK,
+    SUBTOPIC_GROUPS,
     keyword_topic_override,
+    lexicon_sentiment,
+    office_hint_topics,
     HYPOTHESIS_TEMPLATE,
     GENERAL_FEEDBACK,
     GENERAL_FALLBACK_THRESHOLD,
-    FACILITY_SUBTOPIC_THRESHOLD,
+    SUBTOPIC_THRESHOLD,
+    OFFICE_HINT_BOOST,
 )
 
 _state = {}
@@ -139,6 +143,27 @@ DIFF_THRESHOLD = 0.65
 
 
 def classify_sentiment(text):
+    # Keyword lexicon wins outright when it has a signal at all — see
+    # topic_common's lexicon_sentiment docstring for why: the transformer is
+    # empirically miscalibrated on short Tagalog/Taglish text (plain
+    # positives scoring Neutral, negated phrases scoring Very Negative off
+    # the negated word alone) in a way no amount of threshold tuning below
+    # fixes. Tried making the transformer the primary decision-maker
+    # (2026-08-24) with a confidence gate deferring to the lexicon only when
+    # the AI was unsure — measured regression from 114/117 to 94/117 on the
+    # sentiment test suite, because the transformer's confidence doesn't
+    # reliably separate its right answers from its wrong ones on this data
+    # (both land in a similar range), so a threshold can't cleanly rescue
+    # only the wrong ones. Reverted. This also skips the transformer call
+    # entirely on a lexicon hit, which is a nice speed win since it's one of
+    # the two heaviest steps in the pipeline. The transformer remains the
+    # fallback for text with no keyword coverage at all — nuanced English,
+    # genuinely mixed reviews, sarcasm — which is exactly where its
+    # mixed-sentiment logic below adds real value over a keyword count.
+    lex = lexicon_sentiment(text)
+    if lex:
+        return lex
+
     import torch
     analyzer = _get_sentiment_pipeline()
     with torch.no_grad():
@@ -197,7 +222,24 @@ def classify_sentiment(text):
     return best[0]
 
 
-def classify_topic(text):
+def classify_topic(text, office_hint=None):
+    """
+    office_hint: optional free-text string (e.g. "Accounting Office" or a
+    cluster name) describing which office/service the comment's survey was
+    submitted for. Used only as a small additive nudge on stage 1 — see
+    topic_common.office_hint_topics's docstring for why it stays soft.
+
+    Tried making the zero-shot model the primary decision-maker (2026-08-24)
+    with a confidence gate deferring to the keyword lexicon only when the AI
+    was unsure — measured regression from 114/117 to 103/117 on the topic
+    test suite. Diagnosed why: dumped the model's raw per-label scores and
+    found it landed similar confidence (~0.35-0.49) on both correct AND
+    incorrect top picks for this ~15-way classification, so no threshold can
+    cleanly separate the two — set it low enough to accept good answers and
+    you also accept bad ones at the same confidence; set it high enough to
+    reject bad ones and you reject most good ones too, which just pushes
+    almost everything to the lexicon anyway. Reverted to lexicon-first.
+    """
     import torch
     # Keyword anchors win outright when present (see
     # keyword_topic_override's docstring for why) — this also skips
@@ -217,24 +259,40 @@ def classify_topic(text):
     # just for being the safe default.
     with torch.no_grad():
         res = modeler(text, broad_label_list, hypothesis_template=HYPOTHESIS_TEMPLATE, multi_label=False)
-    top_label, top_score = res['labels'][0], res['scores'][0]
+
+    hinted = office_hint_topics(office_hint)
+    if hinted:
+        scores = dict(zip(res['labels'], res['scores']))
+        for topic in hinted:
+            label = broad_label_list[BROAD_TOPICS.index(topic)] if topic in BROAD_TOPICS else None
+            if label in scores:
+                scores[label] += OFFICE_HINT_BOOST
+        ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+        top_label, top_score = ranked[0]
+    else:
+        top_label, top_score = res['labels'][0], res['scores'][0]
+
     if top_score < GENERAL_FALLBACK_THRESHOLD:
         return GENERAL_FEEDBACK
     broad_topic = broad_label_to_topic[top_label]
 
     # Stage 2: only spend the extra compute narrowing down to a specific
-    # facility subtype when the comment is actually facility-related.
-    if broad_topic == "Facilities and Equipment":
+    # subtype when the comment landed on a broad bucket that actually has
+    # subtypes (facility / staff groups) — see SUBTOPIC_GROUPS.
+    if broad_topic in SUBTOPIC_GROUPS:
+        sub_topics, sub_labels = SUBTOPIC_GROUPS[broad_topic]
+        sub_label_list = [sub_labels[t] for t in sub_topics]
+        sub_label_to_topic = {v: k for k, v in sub_labels.items()}
         with torch.no_grad():
-            res2 = modeler(text, facility_label_list, hypothesis_template=HYPOTHESIS_TEMPLATE, multi_label=False)
+            res2 = modeler(text, sub_label_list, hypothesis_template=HYPOTHESIS_TEMPLATE, multi_label=False)
         top2_label, top2_score = res2['labels'][0], res2['scores'][0]
-        if top2_score >= FACILITY_SUBTOPIC_THRESHOLD:
-            return facility_label_to_topic[top2_label]
-        return "Facilities and Equipment"
+        if top2_score >= SUBTOPIC_THRESHOLD:
+            return sub_label_to_topic[top2_label]
+        return BROAD_TO_SPECIFIC_FALLBACK[broad_topic]
 
     return broad_topic
 
 
-def analyze(text):
+def analyze(text, office_hint=None):
     """Convenience wrapper: returns (sentiment, topic) for a single comment."""
-    return classify_sentiment(text), classify_topic(text)
+    return classify_sentiment(text), classify_topic(text, office_hint=office_hint)
