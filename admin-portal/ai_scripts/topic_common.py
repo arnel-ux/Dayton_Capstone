@@ -808,6 +808,17 @@ NEGATOR_WORDS = {
 }
 NEGATION_LOOKBACK = 3
 
+# A generic complaint-filler word co-occurring in the same clause as a more
+# specific negative descriptor is redundant with it, not a second
+# independent gripe — e.g. "may kunting problema lang kasi madumi" ("there's
+# a small problem because it's dirty") is ONE complaint (dirtiness) named
+# twice, not two. Left uncorrected this double-counts and can make a
+# genuinely mixed comment (one real compliment + one real complaint) read as
+# more negative than it is purely because the complaint used two words. Only
+# dropped when a more specific negative word fires in the same clause —
+# a clause with ONLY "problema" and nothing else still counts it normally.
+GENERIC_NEGATIVE_FILLERS = {"problema", "reklamo", "issue", "concern"}
+
 # "sana" (I hope/wish) marks a positive word as aspirational rather than
 # descriptive of the current state — "sana maayos pa" ("hope it gets fixed")
 # is a complaint, not praise, even though it contains "maayos". Treated like
@@ -867,6 +878,11 @@ def lexicon_sentiment(text):
             (s, e) for s, e in _keyword_spans(clause, FAST_NEGATIVE_WORDS)
             if not (set(range(s, e)) & covered)
         ]
+        specific_neg_spans = [
+            (s, e) for s, e in neg_spans if clause[s:e] not in GENERIC_NEGATIVE_FILLERS
+        ]
+        if specific_neg_spans:
+            neg_spans = specific_neg_spans
         for s, e in pos_spans:
             if _is_negated(clause, s):
                 neg_count += 1

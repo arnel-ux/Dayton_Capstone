@@ -823,6 +823,13 @@
             border-radius: 5px;
         }
 
+        /* The generic border-radius above squares off Bootstrap's pill-shaped
+           switch knob (e.g. the Autofill toggle) — restore it here so the
+           switch still renders/slides like a switch instead of a checkbox. */
+        .form-switch .form-check-input {
+            border-radius: 2em;
+        }
+
         .form-check-input:focus {
             box-shadow: 0 0 0 4px var(--ring);
             border-color: var(--brand);
@@ -844,13 +851,13 @@
 
         .btn-primary {
             background: linear-gradient(135deg, var(--brand), var(--brand-dark));
-            border-color: var(--brand);
+            border: 1.5px solid var(--brand-dark);
             box-shadow: 0 4px 12px -4px rgba(37, 84, 199, 0.45);
         }
 
         .btn-primary:hover, .btn-primary:focus {
             background: linear-gradient(135deg, var(--brand-dark), var(--brand-dark));
-            border-color: var(--brand-dark);
+            border: 1.5px solid var(--brand-dark);
             transform: translateY(-2px);
             box-shadow: 0 10px 24px -8px rgba(37, 84, 199, 0.6);
         }
@@ -1203,7 +1210,7 @@
 
                         <div class="col-md-6">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_date"></label>
-                            <input type="date" id="surveyDate" name="survey_date" class="form-control">
+                            <input type="date" id="surveyDate" name="survey_date" class="form-control" readonly onkeydown="return false;" style="background-color: var(--line-soft); cursor: not-allowed;">
                         </div>
 
                         <div class="col-12">
@@ -1463,7 +1470,7 @@
                 <p class="text-secondary">
                     <span data-i18n="ty_desc"></span> <strong class="text-primary">CSPC</strong>
                 </p>
-                <button onclick="location.reload()" class="btn btn-outline-primary px-5 py-3 fw-semibold mt-4" data-i18n="btn_again"></button>
+                <button type="button" onclick="startNewSurvey()" class="btn btn-outline-primary px-5 py-3 fw-semibold mt-4" data-i18n="btn_again"></button>
                 <div class="mt-3">
                     <button type="button" onclick="logout()" class="btn btn-outline-danger px-5 py-3 fw-semibold">🚪 Logout</button>
                 </div>
@@ -2764,6 +2771,11 @@ function submitAll(event) {
         data[`sqd${i}`] = parseInt(data[`sqd${i}`] || 5);
     }
 
+    // Lock the just-submitted office in the dropdown right away so a
+    // "Submit Again" run in the same session can't target it a second time
+    // (mirrors the server-rendered takenOfficeIds disabling on page load).
+    markOfficeAsTaken(data.office_id);
+
     // Offline: skip the network call entirely and queue the survey locally —
     // it will be replayed automatically once the connection returns.
     if (!navigator.onLine) {
@@ -2814,6 +2826,38 @@ function showThankYou() {
     const progressEl = document.getElementById('surveyProgress');
     if (progressEl) progressEl.style.display = 'none';
     exitFullscreen();
+}
+
+function markOfficeAsTaken(officeId) {
+    if (!officeId) return;
+    const opt = document.querySelector('#officeSelect option[value="' + CSS.escape(officeId) + '"]');
+    if (!opt) return;
+    opt.disabled = true;
+    opt.title = 'Survey already completed for this office';
+    if (!opt.textContent.startsWith('✓ ')) opt.textContent = '✓ ' + opt.textContent;
+}
+
+// "Submit Again" from the Thank You page — resets the form and drops the
+// client straight back into a fresh survey (Stage 1) without touching the
+// session, unlike the old location.reload() which bounced to the Home view
+// and read to the user as if they'd been logged out.
+function startNewSurvey() {
+    const form = document.getElementById('surveyForm');
+    if (form) form.reset();
+
+    // form.reset() clears values but not the `disabled` attribute on
+    // already-locked profile fields, and doesn't restore today's date.
+    document.getElementById('surveyDate').valueAsDate = new Date();
+    applyLockedProfile();
+    populateServiceSelect('');
+
+    editReturnTarget = null;
+
+    const progressEl = document.getElementById('surveyProgress');
+    if (progressEl) progressEl.style.display = '';
+
+    switchView('survey');
+    navigate(1);
 }
 
 async function logout(){
