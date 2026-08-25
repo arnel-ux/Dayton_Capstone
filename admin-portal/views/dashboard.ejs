@@ -7,7 +7,7 @@
     
     <style>
         :root {
-            --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            --primary-gradient: linear-gradient(135deg, #0a1f44 0%, #12305c 100%);
             --bg-body: #f4f6fb;
             --border-soft: rgba(15, 23, 42, 0.06);
             --text-dark: #0f172a;
@@ -39,9 +39,9 @@
 
         /* Modern Header Card */
         .overall-header-card {
-            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+            background: linear-gradient(135deg, #0a1f44 0%, #12305c 100%);
             color: white; border-radius: 16px; position: relative;
-            box-shadow: 0 8px 24px -4px rgba(30, 27, 75, 0.35);
+            box-shadow: 0 8px 24px -4px rgba(10, 31, 68, 0.35);
             overflow: hidden;
         }
         .overall-header-card::after {
@@ -57,12 +57,27 @@
             display: flex; flex-direction: column; color: inherit;
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
         }
-        .stat-card:hover { border-color: rgba(79, 70, 229, 0.25); box-shadow: 0 8px 20px -6px rgba(79, 70, 229, 0.18); }
+        .stat-card:hover { border-color: rgba(10, 31, 68, 0.25); box-shadow: 0 8px 20px -6px rgba(10, 31, 68, 0.18); }
+
+        /* Makes "View Details" read as an obvious clickable pill instead of plain small text */
+        .view-details-pill {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: rgba(10, 31, 68, 0.08);
+            color: #0a1f44 !important;
+            font-weight: 700; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em;
+            padding: 4px 12px; border-radius: 999px;
+            transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+        }
+        .stat-card:hover .view-details-pill {
+            background: #0a1f44; color: #fff !important; transform: translateX(2px);
+        }
+        html[data-bs-theme="dark"] .view-details-pill { background: rgba(244, 180, 0, 0.12); color: #ffc72c !important; }
+        html[data-bs-theme="dark"] .stat-card:hover .view-details-pill { background: #f4b400; color: #0a1f44 !important; }
 
         /* Cluster Mini Summary Cards */
         .cluster-mini-card {
             background: white; border: 1px solid var(--border-soft);
-            border-left: 4px solid #4f46e5; border-radius: 12px;
+            border-left: 4px solid #f4b400; border-radius: 12px;
             padding: 20px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); height: 100%;
             transition: box-shadow 0.2s ease;
         }
@@ -205,7 +220,7 @@
                             </div>
                             <div>
                                 <h6 class="text-muted fw-bold mb-0 small text-uppercase">Total Completed Surveys</h6>
-                                <small class="text-primary small fw-bold">View Details <i class="fas fa-external-link-alt ms-1"></i></small>
+                                <span class="view-details-pill mt-1">View Details <i class="fas fa-arrow-right ms-1"></i></span>
                             </div>
                         </div>
                         <h2 class="count-up mb-0 text-dark"><%= typeof totalRespondents !== 'undefined' ? totalRespondents : '0' %></h2>
@@ -240,7 +255,7 @@
                 <div class="row g-4">
                     <% clusterCards.forEach(card => { %>
                         <div class="col-xl-3 col-md-6">
-                            <div class="cluster-mini-card" style="border-left: 5px solid <%= card.color || '#4f46e5' %>;">
+                            <div class="cluster-mini-card" style="border-left: 5px solid <%= card.color || '#0a1f44' %>;">
                                 <h6 class="text-muted fw-bold small text-uppercase mb-2"><%= card.name %></h6>
                                 <span class="badge bg-light text-secondary border rounded-pill small"><i class="fas fa-users me-1"></i><%= card.respondents %> Respondents</span>
                             </div>
@@ -249,7 +264,7 @@
                 </div>
             <% } else { %>
                 <div class="row g-4">
-                    <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #4f46e5;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Office of the President</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
+                    <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #0a1f44;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Office of the President</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
                     <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #10b981;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Admin & Finance</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
                     <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #f59e0b;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Research & Innovation</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
                     <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #8b5cf6;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Academic Cluster</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
@@ -375,8 +390,8 @@ document.addEventListener("DOMContentLoaded", function() {
                 {
                     label: 'Respondents Count (Volume)',
                     data: chartRespondents,
-                    backgroundColor: 'rgba(79, 70, 229, 0.85)',
-                    hoverBackgroundColor: '#4f46e5',
+                    backgroundColor: 'rgba(10, 31, 68, 0.85)',
+                    hoverBackgroundColor: '#f4b400',
                     borderRadius: 8,
                     maxBarThickness: 56
                 }

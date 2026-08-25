@@ -2,16 +2,17 @@
     // currentPath is set globally in server.js via res.locals.currentPath
     const _path = typeof currentPath !== 'undefined' ? currentPath : '';
     const isClusterPage = _path.startsWith('/cluster');
-    const clusterLinks = [
-        { href: '/cluster/office-of-the-president', icon: 'fa-building', label: 'Office of the President' },
-        { href: '/cluster/admin-finance', icon: 'fa-money-check-alt', label: 'Admin & Finance' },
-        { href: '/cluster/research-innovation', icon: 'fa-lightbulb', label: 'Research & Innovation' },
-        { href: '/cluster/academic', icon: 'fa-graduation-cap', label: 'Academic Cluster' }
-    ];
+    // Populated per-request by ensureAdminAuth (res.locals.sidebarClusters) from
+    // the `clusters` table, so a newly added cluster shows up here automatically.
+    const _sidebarClusters = typeof sidebarClusters !== 'undefined' ? sidebarClusters : [];
+    const clusterLinks = _sidebarClusters.map(c => ({
+        href: '/cluster/' + c.id, icon: 'fa-layer-group', label: c.cluster_name
+    }));
+    const _currentAdmin = typeof currentAdmin !== 'undefined' ? currentAdmin : null;
+    // Profile, Manage Password, and Manage Admins live in the navbar's admin-name
+    // dropdown (see layout/navbar.ejs) — kept out of here to avoid duplicating them.
     const mainLinks = [
         { href: '/dashboard', icon: 'fa-th-large', label: 'Dashboard' },
-        { href: '/profile', icon: 'fa-user-circle', label: 'Profile' },
-        { href: '/password', icon: 'fa-key', label: 'Manage Password' },
         { href: '/survey', icon: 'fa-clipboard-list', label: 'Survey Management' },
         { href: '/content-management', icon: 'fa-pager', label: 'Content Management' },
         { href: '/offices', icon: 'fa-building', label: 'Manage Offices' },
@@ -132,7 +133,7 @@
     #sidebar ul li a.active {
         background: rgba(255, 255, 255, 0.12);
         color: #fff;
-        border-left-color: #818cf8;
+        border-left-color: var(--accent, #f4b400);
         font-weight: 600;
     }
     #statisticsSubmenu li a.active {

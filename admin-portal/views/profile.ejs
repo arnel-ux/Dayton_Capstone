@@ -3,52 +3,131 @@
 <head>
     <%- include('layout/header') %>
     <style>
-        /* Custom styles for the profile page to make it pop */
-        .card-custom {
-            border: none;
-            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-            border-radius: 0.5rem;
+        .profile-hero {
+            position: relative;
+            border-radius: 1rem;
+            padding: 2.5rem 2rem 2rem;
+            background: linear-gradient(120deg, #060e21 0%, #0a1f44 55%, #12305c 100%);
+            overflow: hidden;
+            color: #fff;
+            isolation: isolate;
+        }
+        .profile-hero::before,
+        .profile-hero::after {
+            content: "";
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.08);
+            z-index: -1;
+        }
+        .profile-hero::before {
+            width: 260px;
+            height: 260px;
+            top: -120px;
+            right: -60px;
+        }
+        .profile-hero::after {
+            width: 160px;
+            height: 160px;
+            bottom: -80px;
+            left: 10%;
+            background: rgba(255, 255, 255, 0.06);
+        }
+        .profile-avatar-ring {
+            width: 108px;
+            height: 108px;
+            border-radius: 50%;
+            padding: 4px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.35));
+            flex-shrink: 0;
+        }
+        .profile-avatar-ring img {
+            width: 100%;
             height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            display: block;
+            border: 3px solid #fff;
         }
-        .profile-cover {
-            background: linear-gradient(135deg, #312e81 0%, #1e1b4b 100%); /* Green theme for CQA */
-            height: 120px;
-            border-radius: 0.5rem 0.5rem 0 0;
+        .profile-hero-name {
+            font-size: 1.6rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.15rem;
         }
-        .profile-img-container {
-            margin-top: -60px;
-            text-align: center;
+        .profile-hero-username {
+            font-size: 0.92rem;
+            color: rgba(255, 255, 255, 0.78);
+            font-weight: 500;
         }
-        .profile-img {
-            width: 120px;
-            height: 120px;
-            border: 4px solid #ffffff;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            background-color: #ffffff;
-            object-fit: cover; /* Ensures uploaded image fits nicely */
+        .profile-hero-username::before {
+            content: "@";
+            opacity: 0.7;
         }
-        /* Styling for inputs when they are read-only */
-        .form-control:read-only {
-            background-color: #f8f9fa;
-            opacity: 1;
-            border-color: #e9ecef;
-            color: #1e1b4b;
-            cursor: not-allowed;
+        .btn-hero-photo {
+            background: rgba(255, 255, 255, 0.14);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            color: #fff;
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 0.4rem 0.9rem;
+            border-radius: 999px;
+            transition: background 0.15s ease;
         }
-        /* Styling for inputs when editing */
-        .form-control:not(:read-only) {
-            background-color: #ffffff;
-            border-color: #86b7fe;
-            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        .btn-hero-photo:hover {
+            background: rgba(255, 255, 255, 0.24);
+            color: #fff;
         }
-        .section-title {
-            font-size: 0.85rem;
-            letter-spacing: 1px;
-            color: #6c757d;
+
+        .info-tile {
+            border: 1px solid #eef0f5;
+            border-radius: 0.85rem;
+            padding: 1.1rem 1.25rem;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            gap: 0.9rem;
+            height: 100%;
+            transition: border-color 0.15s ease, transform 0.15s ease;
+        }
+        .info-tile:hover {
+            border-color: rgba(10, 31, 68, 0.25);
+            transform: translateY(-2px);
+        }
+        .info-tile-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 0.65rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+        .info-tile-label {
+            font-size: 0.72rem;
             text-transform: uppercase;
-            border-bottom: 1px solid #e9ecef;
-            padding-bottom: 0.5rem;
-            margin-bottom: 1.5rem;
+            letter-spacing: 0.06em;
+            color: #94a3b8;
+            font-weight: 700;
+            margin-bottom: 0.1rem;
+        }
+        .info-tile-value {
+            font-size: 0.98rem;
+            font-weight: 600;
+            color: #0a1f44;
+        }
+
+        .security-card {
+            border: 1px solid #eef0f5;
+            border-radius: 0.85rem;
+            background: #fff;
+            padding: 1.25rem 1.4rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
         }
     </style>
 </head>
@@ -60,117 +139,90 @@
     <div id="content">
         <%- include('layout/navbar') %>
 
-        <div class="container-fluid p-4">
+        <%
+            const admin = typeof currentAdmin !== 'undefined' && currentAdmin ? currentAdmin : {
+                fullname: 'Admin', username: 'admin', gender: 'Male'
+            };
+            const avatarBg = admin.gender === 'Female' ? 'ec4899' : '0a1f44';
+            const memberSince = admin.created_at ? new Date(admin.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }) : null;
+            const avatarSrc = admin.photo_url
+                ? admin.photo_url
+                : `https://ui-avatars.com/api/?name=${encodeURIComponent(admin.fullname)}&background=${avatarBg}&color=fff&bold=true&size=120`;
+        %>
+        <div class="container-fluid p-4" style="max-width: 900px;">
             <script>document.getElementById('pageTitle').innerText = 'My Profile';</script>
 
-            <div class="row">
-                <div class="col-xl-4 col-lg-5 mb-4">
-                    <div class="card card-custom">
-                        <div class="profile-cover"></div>
-                        <div class="card-body text-center pb-4">
-                            <div class="profile-img-container mb-3">
-                                <img id="profilePreview" src="https://ui-avatars.com/api/?name=CQA+Admin&background=e0e7ff&color=198754&size=120" class="rounded-circle profile-img" alt="Profile Avatar">
-                            </div>
-                            <h4 class="fw-bold mb-1">Francis James Obis</h4>
-                            <p class="text-success fw-semibold mb-3">CQA Admin</p>
-                            
-                            <input type="file" id="imageUpload" accept="image/*" style="display: none;">
-                            
-                            <button id="btnChangePhoto" class="btn btn-outline-success btn-sm px-4 mb-4 rounded-pill">
-                                <i class="fas fa-camera me-2"></i>Change Photo
-                            </button>
-                            
-                            <hr class="text-muted mb-4">
-                            
-                            <div class="text-start px-3">
-                                <div class="d-flex align-items-center mb-3">
-                                    <div class="bg-light p-2 rounded me-3 text-success"><i class="fas fa-envelope fa-fw"></i></div>
-                                    <div>
-                                        <p class="mb-0 text-muted small">Email</p>
-                                        <p class="mb-0 fw-semibold">cqa.admin@cspc.edu.ph</p>
-                                    </div>
-                                </div>
-                                <div class="d-flex align-items-center mb-3">
-                                    <div class="bg-light p-2 rounded me-3 text-success"><i class="fas fa-phone fa-fw"></i></div>
-                                    <div>
-                                        <p class="mb-0 text-muted small">Contact</p>
-                                        <p class="mb-0 fw-semibold">+63 912 345 6789</p>
-                                    </div>
-                                </div>
-                                <div class="d-flex align-items-center">
-                                    <div class="bg-light p-2 rounded me-3 text-success"><i class="fas fa-building fa-fw"></i></div>
-                                    <div>
-                                        <p class="mb-0 text-muted small">Office</p>
-                                        <p class="mb-0 fw-semibold">Center for Quality Assurance</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+            <div class="profile-hero d-flex align-items-center gap-4 flex-wrap mb-4">
+                <div class="profile-avatar-ring">
+                    <img id="profilePreview" src="<%= avatarSrc %>" alt="Profile Avatar">
                 </div>
-
-                <div class="col-xl-8 col-lg-7 mb-4">
-                    <div class="card card-custom">
-                        <div class="card-header bg-white border-0 pt-4 pb-0">
-                            <h5 class="fw-bold"><i class="fas fa-user-edit me-2 text-success"></i>Profile Information</h5>
-                        </div>
-                        <div class="card-body p-4">
-                            <form id="profileForm">
-                                <h6 class="fw-bold section-title mt-2">Personal Details</h6>
-                                <div class="row mb-3">
-                                    <div class="col-md-6 mb-3 mb-md-0">
-                                        <label class="form-label text-muted fw-semibold small">First Name</label>
-                                        <input type="text" class="form-control editable-field" value="Francis James" readonly>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label text-muted fw-semibold small">Last Name</label>
-                                        <input type="text" class="form-control editable-field" value="Obis" readonly>
-                                    </div>
-                                </div>
-                                <div class="row mb-4">
-                                    <div class="col-md-6 mb-3 mb-md-0">
-                                        <label class="form-label text-muted fw-semibold small">Birthdate</label>
-                                        <input type="date" class="form-control editable-field" value="2003-05-10" readonly>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label text-muted fw-semibold small">Gender</label>
-                                        <select class="form-select editable-field" disabled>
-                                            <option value="Male" selected>Male</option>
-                                            <option value="Female">Female</option>
-                                            <option value="Other">Other</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <h6 class="fw-bold section-title mt-5">Work & Contact Information</h6>
-                                <div class="row mb-3">
-                                    <div class="col-md-6 mb-3 mb-md-0">
-                                        <label class="form-label text-muted fw-semibold small">Email Address</label>
-                                        <input type="email" class="form-control editable-field" value="cqa.admin@cspc.edu.ph" readonly>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label text-muted fw-semibold small">Contact Number</label>
-                                        <input type="text" class="form-control editable-field" value="+63 912 345 6789" readonly>
-                                    </div>
-                                </div>
-                                <div class="row mb-4">
-                                    <div class="col-md-12">
-                                        <label class="form-label text-muted fw-semibold small">Position / Role</label>
-                                        <input type="text" class="form-control editable-field" value="CQA Staff" readonly>
-                                    </div>
-                                </div>
-
-                                <div class="text-end mt-4 pt-3 border-top">
-                                    <button type="button" id="btnEditProfile" class="btn btn-primary px-4 shadow-sm">
-                                        <i class="fas fa-edit me-2"></i>Edit Profile
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
+                <div class="flex-grow-1">
+                    <div class="profile-hero-name"><%= admin.fullname %></div>
+                    <div class="profile-hero-username mb-3"><%= admin.username %></div>
+                    <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+                    <button id="btnChangePhoto" class="btn btn-hero-photo">
+                        <i class="fas fa-camera me-2"></i>Change Photo
+                    </button>
                 </div>
-
             </div>
+
+            <h6 class="fw-bold text-uppercase text-muted mb-3" style="font-size: 0.78rem; letter-spacing: 0.06em;">Account Information</h6>
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="info-tile">
+                        <div class="info-tile-icon" style="background: #eef2fa; color: #0a1f44;"><i class="fas fa-user"></i></div>
+                        <div>
+                            <div class="info-tile-label">Username</div>
+                            <div class="info-tile-value"><%= admin.username %></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="info-tile">
+                        <div class="info-tile-icon" style="background: #ecfeff; color: #0891b2;"><i class="fas fa-venus-mars"></i></div>
+                        <div>
+                            <div class="info-tile-label">Gender</div>
+                            <div class="info-tile-value"><%= admin.gender %></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="info-tile">
+                        <div class="info-tile-icon" style="background: #f0fdf4; color: #16a34a;"><i class="fas fa-building"></i></div>
+                        <div>
+                            <div class="info-tile-label">Office</div>
+                            <div class="info-tile-value">Center for Quality Assurance</div>
+                        </div>
+                    </div>
+                </div>
+                <% if (memberSince) { %>
+                <div class="col-md-4">
+                    <div class="info-tile">
+                        <div class="info-tile-icon" style="background: #fff7ed; color: #ea580c;"><i class="fas fa-calendar-check"></i></div>
+                        <div>
+                            <div class="info-tile-label">Member Since</div>
+                            <div class="info-tile-value"><%= memberSince %></div>
+                        </div>
+                    </div>
+                </div>
+                <% } %>
+            </div>
+
+            <h6 class="fw-bold text-uppercase text-muted mb-3" style="font-size: 0.78rem; letter-spacing: 0.06em;">Security</h6>
+            <div class="security-card">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="info-tile-icon" style="background: #fef2f2; color: #dc2626;"><i class="fas fa-lock"></i></div>
+                    <div>
+                        <div class="fw-semibold" style="color: #0a1f44;">Password</div>
+                        <div class="text-muted small">Keep your account secure with a strong password.</div>
+                    </div>
+                </div>
+                <a href="/password" class="btn btn-outline-primary btn-sm px-3">
+                    <i class="fas fa-key me-2"></i>Manage Password
+                </a>
+            </div>
+
+            <p class="text-muted small mt-4 mb-0"><i class="fas fa-info-circle me-1"></i> To change your name or gender, contact a Super Admin under Manage Admins.</p>
         </div>
     </div>
 </div>
@@ -179,70 +231,50 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
-    
-    // --- 1. PHOTO UPLOAD LOGIC ---
     const btnChangePhoto = document.getElementById('btnChangePhoto');
     const imageUpload = document.getElementById('imageUpload');
     const profilePreview = document.getElementById('profilePreview');
+    const originalBtnHtml = btnChangePhoto.innerHTML;
 
-    // Trigger hidden file input when button is clicked
     btnChangePhoto.addEventListener('click', function() {
         imageUpload.click();
     });
 
-    // Update image preview when a file is selected
-    imageUpload.addEventListener('change', function(event) {
+    imageUpload.addEventListener('change', async function(event) {
         const file = event.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                profilePreview.src = e.target.result;
+        if (!file) return;
+
+        // Preview immediately while the upload is in flight.
+        const reader = new FileReader();
+        reader.onload = function(e) { profilePreview.src = e.target.result; };
+        reader.readAsDataURL(file);
+
+        btnChangePhoto.disabled = true;
+        btnChangePhoto.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Uploading...';
+
+        try {
+            const formData = new FormData();
+            formData.append('photo', file);
+
+            const response = await fetch('/api/profile/photo', { method: 'POST', body: formData });
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                AppAlert.error(data.message || 'Failed to upload photo.');
+                return;
             }
-            reader.readAsDataURL(file);
+
+            // Swap in the saved URL (with a cache-buster) so a refresh shows the same photo.
+            profilePreview.src = data.url + '?t=' + Date.now();
+        } catch (err) {
+            console.error('Error uploading profile photo:', err);
+            AppAlert.error('Network error while uploading photo.');
+        } finally {
+            btnChangePhoto.disabled = false;
+            btnChangePhoto.innerHTML = originalBtnHtml;
+            imageUpload.value = '';
         }
     });
-
-    // --- 2. EDIT PROFILE LOGIC ---
-    const btnEditProfile = document.getElementById('btnEditProfile');
-    const editableFields = document.querySelectorAll('.editable-field');
-    let isEditing = false;
-
-    btnEditProfile.addEventListener('click', function() {
-        isEditing = !isEditing;
-
-        if (isEditing) {
-            // Switch to Edit Mode
-            editableFields.forEach(field => {
-                if (field.tagName === 'SELECT') {
-                    field.removeAttribute('disabled');
-                } else {
-                    field.removeAttribute('readonly');
-                }
-            });
-            // Focus on first input
-            editableFields[0].focus();
-            
-            // Change button appearance to Save
-            btnEditProfile.innerHTML = '<i class="fas fa-save me-2"></i>Save Profile';
-            btnEditProfile.classList.replace('btn-primary', 'btn-success');
-        } else {
-            // Switch to Save Mode (Read-only)
-            editableFields.forEach(field => {
-                if (field.tagName === 'SELECT') {
-                    field.setAttribute('disabled', 'true');
-                } else {
-                    field.setAttribute('readonly', 'true');
-                }
-            });
-            
-            // Change button appearance back to Edit
-            btnEditProfile.innerHTML = '<i class="fas fa-edit me-2"></i>Edit Profile';
-            btnEditProfile.classList.replace('btn-success', 'btn-primary');
-            
-            AppAlert.success("Profile successfully updated!");
-        }
-    });
-
 });
 </script>
 

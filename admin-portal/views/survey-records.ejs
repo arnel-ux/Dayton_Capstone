@@ -4,7 +4,7 @@
     <%- include('layout/header') %>
     <style>
         :root {
-            --primary-indigo: #4f46e5;
+            --primary-indigo: #0a1f44;
             --bg-body: #f8fafc;
             --text-main: #334155;
             --card-bg: #ffffff;
@@ -27,11 +27,11 @@
         html[data-bs-theme="dark"] .office-group-header { background: #1e293b; }
 
         .page-header {
-            background: linear-gradient(135deg, #1e1b4b 0%, #4338ca 100%);
+            background: linear-gradient(135deg, #0a1f44 0%, #12305c 100%);
             color: white;
             padding: 3rem 2rem;
             border-radius: 0 0 40px 40px;
-            box-shadow: 0 15px 30px rgba(79, 70, 229, 0.15);
+            box-shadow: 0 15px 30px rgba(10, 31, 68, 0.15);
             margin-bottom: 2rem;
         }
 
@@ -115,6 +115,78 @@
             transition: 0.3s;
         }
         .btn-back:hover { background: white; color: var(--primary-indigo); }
+
+        .btn-view-result,
+        .btn-view-result:visited {
+            background-color: var(--primary-indigo) !important;
+            color: #fff !important;
+            border: 1px solid var(--primary-indigo) !important;
+            font-size: 0.78rem;
+            font-weight: 700;
+            padding: 7px 14px;
+            border-radius: 8px;
+            transition: background-color 0.15s ease, transform 0.15s ease;
+        }
+        .btn-view-result:hover,
+        .btn-view-result:focus,
+        .btn-view-result:focus-visible,
+        .btn-view-result:active {
+            background-color: #12305c !important;
+            border-color: #12305c !important;
+            color: #fff !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(10, 31, 68, 0.35) !important;
+        }
+
+        /* --- View Result modal --- */
+        .result-detail-head {
+            display: flex; align-items: center; gap: 14px;
+            background: linear-gradient(135deg, #0a1f44 0%, #12305c 100%);
+            color: #fff; border-radius: 14px; padding: 18px 20px; margin-bottom: 20px;
+        }
+        .result-detail-icon {
+            width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
+            background: rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+        }
+        .result-office { font-weight: 800; font-size: 1.05rem; line-height: 1.3; }
+        .result-meta { font-size: 0.8rem; color: rgba(255,255,255,0.75); }
+        .result-badge {
+            margin-left: auto; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+            background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.3);
+            padding: 5px 12px; border-radius: 999px; white-space: nowrap;
+        }
+
+        .result-section { margin-bottom: 22px; }
+        .result-section-header {
+            font-weight: 800; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px;
+            color: var(--primary-indigo); margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+        }
+        html[data-bs-theme="dark"] .result-section-header { color: #93c5fd; }
+
+        .result-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+        .result-item {
+            background: #f8fafc; border-radius: 10px; padding: 10px 14px; border: 1px solid #eef2f7;
+        }
+        html[data-bs-theme="dark"] .result-item { background: #1e293b; border-color: #263045; }
+        .result-item .label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; margin-bottom: 3px; }
+        .result-item .value { font-size: 0.9rem; font-weight: 600; color: #1e293b; }
+        html[data-bs-theme="dark"] .result-item .value { color: #e2e8f0; }
+
+        .result-sqd-row {
+            display: flex; justify-content: space-between; align-items: center; gap: 12px;
+            padding: 10px 14px; border-radius: 10px; background: #f8fafc; border: 1px solid #eef2f7; margin-bottom: 8px;
+        }
+        html[data-bs-theme="dark"] .result-sqd-row { background: #1e293b; border-color: #263045; }
+        .result-sqd-statement { font-size: 0.85rem; color: #334155; flex: 1; }
+        html[data-bs-theme="dark"] .result-sqd-statement { color: #cbd5e1; }
+
+        .sqd-badge {
+            flex-shrink: 0; font-size: 0.72rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+        }
+        .sqd-badge-5, .sqd-badge-4 { background: #dcfce7; color: #15803d; }
+        .sqd-badge-3 { background: #e2e8f0; color: #334155; }
+        .sqd-badge-2, .sqd-badge-1 { background: #fee2e2; color: #b91c1c; }
+        .sqd-badge-na, .sqd-badge-unanswered { background: #f1f5f9; color: #94a3b8; }
     </style>
 </head>
 <body>
@@ -164,10 +236,11 @@
                                 <table class="table">
                                     <thead>
                                         <tr>
-                                            <th style="width: 20%;">Name</th>
-                                            <th style="width: 40%;">Comments</th>
-                                            <th style="width: 20%;">Topic</th>
-                                            <th style="width: 20%;">Sentiment</th>
+                                            <th style="width: 18%;">Name</th>
+                                            <th style="width: 32%;">Comments</th>
+                                            <th style="width: 15%;">Topic</th>
+                                            <th style="width: 15%;">Sentiment</th>
+                                            <th style="width: 20%;">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -177,6 +250,11 @@
                                                 <td class="text-muted small"><%= record.comments %></td>
                                                 <td><span class="topic-badge <%= record.topicClass %>"><%= record.topic %></span></td>
                                                 <td><span class="sentiment-badge <%= record.sentimentClass %>"><%= record.sentiment %></span></td>
+                                                <td>
+                                                    <button type="button" class="btn btn-view-result" onclick="openViewResult(<%= record.id %>)" title="View this respondent's full survey answers">
+                                                        <i class="fas fa-eye me-1"></i> View Result
+                                                    </button>
+                                                </td>
                                             </tr>
                                         <% }) %>
                                     </tbody>
@@ -197,9 +275,128 @@
     </div>
 </div>
 
+<!-- View Result modal: shows one respondent's full CC + SQD answers, pulled live from the database -->
+<div class="modal fade" id="viewResultModal" tabindex="-1" aria-labelledby="viewResultModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header border-bottom-0 pb-0">
+                <h5 class="modal-title fw-bold" id="viewResultModalLabel"><i class="fas fa-poll me-2" style="color:#0a1f44;"></i>Survey Result</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-2" id="viewResultBody">
+                <div class="text-center py-5 text-muted">
+                    <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                    <p class="mb-0">Loading answers...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <%- include('layout/footer') %>
 
 <script>
+    const SQD_ITEMS = [
+        "SQD0. I am satisfied with the service that I availed.",
+        "SQD1. I spent a reasonable amount of time for my transaction.",
+        "SQD2. The office followed the transaction's requirements and steps based on the information provided.",
+        "SQD3. The steps (including payment) I needed to do for my transaction were easy and simple.",
+        "SQD4. I easily found information about my transaction from the office or its website.",
+        "SQD5. I paid a reasonable amount of fees for my transaction.",
+        "SQD6. I feel the office was fair to everyone, or 'walang palakasan', during my transaction.",
+        "SQD7. I was treated courteously by the staff.",
+        "SQD8. I got what I needed from the government office."
+    ];
+    const SQD_RATING_LABELS = { '5': 'Strongly Agree', '4': 'Agree', '3': 'Neutral', '2': 'Disagree', '1': 'Strongly Disagree' };
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str == null ? '' : String(str);
+        return div.innerHTML;
+    }
+
+    function openViewResult(id) {
+        const modalEl = document.getElementById('viewResultModal');
+        const bodyEl = document.getElementById('viewResultBody');
+        bodyEl.innerHTML = `
+            <div class="text-center py-5 text-muted">
+                <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                <p class="mb-0">Loading answers...</p>
+            </div>
+        `;
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        fetch('/api/admin/survey-response/' + encodeURIComponent(id))
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) throw new Error(data.message || 'Failed to load this survey.');
+                const s = data.survey;
+
+                const sqdRows = SQD_ITEMS.map((label, idx) => {
+                    const val = s['sqd' + idx];
+                    let badge;
+                    if (val === null || val === undefined) {
+                        badge = `<span class="sqd-badge sqd-badge-unanswered">&mdash;</span>`;
+                    } else if (Number(val) === 0) {
+                        badge = `<span class="sqd-badge sqd-badge-na">N/A</span>`;
+                    } else {
+                        const text = SQD_RATING_LABELS[String(val)] || val;
+                        badge = `<span class="sqd-badge sqd-badge-${val}">${escapeHtml(String(val))} &middot; ${escapeHtml(text)}</span>`;
+                    }
+                    return `
+                        <div class="result-sqd-row">
+                            <span class="result-sqd-statement">${escapeHtml(label)}</span>
+                            ${badge}
+                        </div>
+                    `;
+                }).join('');
+
+                const ccItem = (label, value) => `
+                    <div class="result-item">
+                        <div class="label">${label}</div>
+                        <div class="value">${escapeHtml(value || 'N/A')}</div>
+                    </div>
+                `;
+
+                bodyEl.innerHTML = `
+                    <div class="result-detail-head">
+                        <div class="result-detail-icon"><i class="fas fa-building"></i></div>
+                        <div>
+                            <div class="result-office">${escapeHtml(s.respondent_name || 'Anonymous')}</div>
+                            <div class="result-meta">${escapeHtml(s.office_name)} &middot; ${escapeHtml(s.cluster_name || 'General')} &middot; ${escapeHtml(s.formatted_date)}</div>
+                        </div>
+                        <span class="result-badge"><i class="fas fa-check-circle me-1"></i>Completed</span>
+                    </div>
+
+                    <div class="result-section">
+                        <div class="result-section-header"><i class="fas fa-file-alt"></i> Citizen's Charter</div>
+                        <div class="result-grid">
+                            ${ccItem('CC1 &mdash; Awareness', s.cc1)}
+                            ${ccItem('CC2 &mdash; Visibility', s.cc2)}
+                            ${ccItem('CC3 &mdash; Helpfulness', s.cc3)}
+                        </div>
+                    </div>
+
+                    <div class="result-section">
+                        <div class="result-section-header"><i class="fas fa-star"></i> Service Quality Dimensions</div>
+                        ${sqdRows}
+                    </div>
+
+                    <div class="result-section mb-0">
+                        <div class="result-section-header"><i class="fas fa-comment-dots"></i> Suggestions / Comments</div>
+                        <div class="result-item">
+                            <div class="value">${escapeHtml(s.comments && s.comments !== 'N/A' ? s.comments : 'No comments provided.')}</div>
+                        </div>
+                    </div>
+                `;
+            })
+            .catch(err => {
+                console.error('Error loading survey result:', err);
+                bodyEl.innerHTML = '<p class="text-danger mb-0 text-center py-4"><i class="fas fa-exclamation-triangle me-1"></i> Could not load this survey\'s answers. Please try again.</p>';
+            });
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         const searchInput = document.getElementById('searchInput');
         const officeSections = document.querySelectorAll('.office-section');

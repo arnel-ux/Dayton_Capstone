@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <%- include('layout/header') %>
+</head>
+<body>
+<div id="wrapper">
+    <%- include('layout/sidebar') %>
+
+    <div id="content">
+        <%- include('layout/navbar') %>
+        <script>document.getElementById('pageTitle').innerText = 'Manage Admins';</script>
+
+        <div class="container-fluid p-0">
+            <div class="card card-custom">
+
+                <div class="card-header bg-white border-0 p-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h6 class="fw-bold mb-0">Registered Admin Accounts</h6>
+                    <button class="btn btn-primary btn-sm" title="Add a new admin" data-bs-toggle="modal" data-bs-target="#addAdminModal">
+                        <i class="fas fa-user-plus me-1"></i> Add Admin
+                    </button>
+                </div>
+
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-custom table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="px-4 py-3">Full Name</th>
+                                    <th class="py-3">Username</th>
+                                    <th class="py-3">Gender</th>
+                                    <th class="px-4 py-3 text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% if (typeof adminsData !== 'undefined' && adminsData.length > 0) { %>
+                                    <% adminsData.forEach(admin => { %>
+                                        <tr>
+                                            <td class="px-4 py-2 fw-semibold"><%= admin.fullname %></td>
+                                            <td><%= admin.username %></td>
+                                            <td><%= admin.gender %></td>
+                                            <td class="px-4 py-2 text-end text-nowrap">
+                                                <button class="btn btn-sm btn-outline-primary me-1" title="Edit this admin"
+                                                        onclick="openEditAdminModal('<%= admin.id %>', '<%= admin.username %>', '<%= admin.fullname %>', '<%= admin.gender %>')">
+                                                    <i class="fas fa-edit"></i> Edit
+                                                </button>
+                                                <% if (typeof currentAdmin !== 'undefined' && currentAdmin && currentAdmin.id === admin.id) { %>
+                                                    <button class="btn btn-sm btn-outline-secondary" disabled title="You cannot delete your own account">
+                                                        <i class="fas fa-trash"></i> Delete
+                                                    </button>
+                                                <% } else { %>
+                                                    <form action="/admins/delete/<%= admin.id %>" method="POST" style="display:inline;" class="delete-admin-form">
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete this admin">
+                                                            <i class="fas fa-trash"></i> Delete
+                                                        </button>
+                                                    </form>
+                                                <% } %>
+                                            </td>
+                                        </tr>
+                                    <% }) %>
+                                <% } else { %>
+                                    <tr>
+                                        <td colspan="4" class="text-center py-4 text-muted">No admin accounts found.</td>
+                                    </tr>
+                                <% } %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addAdminModal" tabindex="-1" aria-labelledby="addAdminModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form action="/admins/add" method="POST">
+          <div class="modal-header">
+            <h5 class="modal-title fw-bold" id="addAdminModalLabel">Add New Admin</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+                <label class="form-label fw-bold">Username</label>
+                <input type="text" name="username" class="form-control" placeholder="E.g., admin3" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">Password</label>
+                <input type="password" name="password" class="form-control" placeholder="Minimum 8 characters" minlength="8" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">Full Name</label>
+                <input type="text" name="fullname" class="form-control" placeholder="E.g., Juan Dela Cruz" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">Gender</label>
+                <select name="gender" class="form-select">
+                    <option value="Male" selected>Male</option>
+                    <option value="Female">Female</option>
+                </select>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Admin</button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editAdminModal" tabindex="-1" aria-labelledby="editAdminModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form action="/admins/edit" method="POST">
+          <div class="modal-header">
+            <h5 class="modal-title fw-bold" id="editAdminModalLabel">Edit Admin</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" name="id" id="edit_admin_id">
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">Username</label>
+                <input type="text" name="username" id="edit_admin_username" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">New Password</label>
+                <input type="password" name="password" class="form-control" placeholder="Leave blank to keep current password" minlength="8">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">Full Name</label>
+                <input type="text" name="fullname" id="edit_admin_fullname" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">Gender</label>
+                <select name="gender" id="edit_admin_gender" class="form-select">
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                </select>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Update Admin</button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<%- include('layout/footer') %>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.delete-admin-form').forEach(form => {
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                const confirmed = await AppAlert.confirm('Permanente itong tatanggalin sa database at hindi na maibabalik. Sigurado ka ba?', {
+                    title: 'Delete this admin account?',
+                    confirmText: 'Yes, delete it!'
+                });
+                if (confirmed) form.submit();
+            });
+        });
+    });
+
+    function openEditAdminModal(id, username, fullname, gender) {
+        document.getElementById('edit_admin_id').value = id;
+        document.getElementById('edit_admin_username').value = username;
+        document.getElementById('edit_admin_fullname').value = fullname;
+        document.getElementById('edit_admin_gender').value = gender;
+
+        var editModal = new bootstrap.Modal(document.getElementById('editAdminModal'));
+        editModal.show();
+    }
+</script>
+</body>
+</html>

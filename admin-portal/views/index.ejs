@@ -454,6 +454,14 @@
         body.dark-mode .chart-title { color: #e2e8f0; }
 
         .btn-back-custom { font-size: var(--fs-sm); font-weight: 600; padding: var(--sp-1) var(--sp-2); border-radius: var(--sp-1); }
+        .chart-header-actions { display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0; }
+        .office-cluster-select {
+            font-size: var(--fs-xs); font-weight: 600; padding: 4px 8px; border-radius: var(--sp-1);
+            border: 1px solid rgba(10,31,68,0.15); background: #ffffff; color: #52627a; cursor: pointer; max-width: 9rem;
+        }
+        .office-cluster-select:hover { border-color: var(--gold-400); }
+        body.dark-mode .office-cluster-select { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); color: #e2e8f0; }
+        body.dark-mode .office-cluster-select option { background: var(--navy-900); color: #e2e8f0; }
         .canvas-container { position: relative; flex-grow: 1; padding: var(--sp-2) var(--sp-4) var(--sp-4); display: flex; justify-content: center; align-items: center; }
         .hint-text { font-size: var(--fs-sm); color: #a3adc2; margin-top: var(--sp-1); font-weight: 500; line-height: 1.5; }
         body.dark-mode .hint-text { color: #64748b; }
@@ -753,7 +761,12 @@
                                 <h3 id="c3-title" class="chart-title" data-main="Satisfaction By Office" data-drill="Office Rating">Satisfaction By Office</h3>
                                 <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
                             </div>
-                            <button id="c3-back" onclick="goBack('c3')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
+                            <div class="chart-header-actions">
+                                <select class="office-cluster-select" onchange="setOfficeClusterFilter(this.value)">
+                                    <option value="all">All Clusters</option>
+                                </select>
+                                <button id="c3-back" onclick="goBack('c3')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
+                            </div>
                         </div>
                         <div class="canvas-container"><canvas id="c3" style="cursor: pointer;"></canvas></div>
                     </div>
@@ -853,7 +866,7 @@
         // =========================================================================
         const serviceClusters = [
             {
-                label: 'President Cluster',
+                label: 'Office of the President Cluster',
                 icon: 'fa-landmark',
                 offices: [
                     {
@@ -1007,7 +1020,7 @@
                 ]
             },
             {
-                label: 'RIC Cluster',
+                label: 'Research, Innovation and Collaboration Cluster',
                 icon: 'fa-microscope',
                 offices: [
                     {
@@ -1308,6 +1321,49 @@
         let clusterLabels = <%- typeof clusterList !== 'undefined' ? JSON.stringify(clusterList) : JSON.stringify(['OP', 'A&F', 'RIC', 'Academic']) %>;
         let officeLabels = <%- typeof officeList !== 'undefined' ? JSON.stringify(officeList) : JSON.stringify(['Admin', 'CCS', 'CEA', 'CHS', 'CTHBM', 'CTDE', 'CAS']) %>;
 
+        // Full (un-shortened) names, parallel-indexed to clusterLabels/officeLabels —
+        // used only to show the full name in the tooltip when hovering a bar whose
+        // axis label got shortened to an acronym (e.g. "RICC").
+        let clusterFullNames = clusterLabels.slice();
+        let officeFullNames = officeLabels.slice();
+
+        // Parallel-indexed to officeList/officeLabels — the (unshortened) cluster
+        // name each office belongs to. Powers the "Satisfaction By Office" cluster
+        // filter dropdown so selecting a cluster narrows the chart to its offices.
+        let officeClusterMap = [];
+        let activeOfficeClusterFilter = 'all';
+
+        function getVisibleOfficeIndices() {
+            const allIdx = officeLabels.map((_, i) => i);
+            if (activeOfficeClusterFilter === 'all') return allIdx;
+            return allIdx.filter(i => officeClusterMap[i] === activeOfficeClusterFilter);
+        }
+
+        function populateOfficeClusterFilter() {
+            const uniqueClusters = Array.from(new Set(clusterFullNames.filter(Boolean)));
+            const optionsHtml = ['<option value="all">All Clusters</option>']
+                .concat(uniqueClusters.map(c => `<option value="${c.replace(/"/g, '&quot;')}">${c}</option>`))
+                .join('');
+            document.querySelectorAll('.office-cluster-select').forEach(sel => {
+                sel.innerHTML = optionsHtml;
+                sel.value = activeOfficeClusterFilter;
+            });
+        }
+
+        function setOfficeClusterFilter(value) {
+            activeOfficeClusterFilter = value;
+            document.querySelectorAll('.office-cluster-select').forEach(sel => {
+                if (sel.value !== value) sel.value = value;
+            });
+            ['c3', 'c3_clone'].forEach(rawId => {
+                if (activeCharts[rawId]) {
+                    const backBtn = document.getElementById(rawId + '-back');
+                    if (backBtn) backBtn.classList.add('d-none');
+                    loadChart(rawId, 'main');
+                }
+            });
+        }
+
         // Shortens long office/cluster names to compact acronyms so chart labels never overlap.
         function shortenLabel(label) {
             if (!label || label.length <= 12) return label;
@@ -1318,6 +1374,12 @@
             return acronym.length >= 2 ? acronym : label.substring(0, 10) + '…';
         }
 
+        // True once the period dropdown has been built from the server's real
+        // period list and defaulted to whichever period covers today. Later polls
+        // (the real-time refresh below) skip rebuilding it so a period the visitor
+        // picked manually isn't silently reset back to the default every refresh.
+        let hasLoadedPeriodOptions = false;
+
         async function fetchDynamicDashboardData() {
             try {
                 const response = await fetch('/api/public-dashboard');
@@ -1325,13 +1387,35 @@
                     const dynamicData = await response.json();
 
                     if (dynamicData.clusterList && dynamicData.clusterList.length > 0) {
+                        clusterFullNames = dynamicData.clusterList;
                         clusterLabels = dynamicData.clusterList.map(shortenLabel);
                     }
                     if (dynamicData.officeList && dynamicData.officeList.length > 0) {
+                        officeFullNames = dynamicData.officeList;
                         officeLabels = dynamicData.officeList.map(shortenLabel);
+                    }
+                    if (dynamicData.officeCluster) {
+                        officeClusterMap = dynamicData.officeCluster;
                     }
                     if (dynamicData.chartData) {
                         datasets = dynamicData.chartData;
+                    }
+
+                    populateOfficeClusterFilter();
+
+                    // Period select is built once from the real, exact period list — this
+                    // is what makes the dashboard "real-time": it defaults to whichever
+                    // period actually covers today's date (dynamicData.currentPeriod), so
+                    // it flips from Jan-Jun to Jul-Dec on its own once the calendar rolls
+                    // over. Only done on the first load — see hasLoadedPeriodOptions.
+                    if (!hasLoadedPeriodOptions && dynamicData.periodOptions && dynamicData.periodOptions.length > 0) {
+                        const periodSelect = document.getElementById('periodSelect');
+                        const defaultPeriod = dynamicData.currentPeriod || dynamicData.periodOptions[0].value;
+                        periodSelect.innerHTML = dynamicData.periodOptions.map(opt =>
+                            `<option value="${opt.value}"${opt.value === defaultPeriod ? ' selected' : ''}>${opt.label}</option>`
+                        ).join('');
+                        activePeriod = defaultPeriod;
+                        hasLoadedPeriodOptions = true;
                     }
 
                     changePeriod();
@@ -1342,6 +1426,12 @@
         }
 
         fetchDynamicDashboardData();
+
+        // Public dashboard is meant to be a live, real-time view of the database —
+        // clients are watching it without reloading, so it re-polls the API on its
+        // own instead of only ever fetching once at page load. Any survey submitted
+        // in the meantime shows up here within this interval.
+        setInterval(fetchDynamicDashboardData, 15000);
 
         let activePeriod = 'p1';
         let activeCharts = {};
@@ -1354,10 +1444,14 @@
             const dataP = datasets[activePeriod] || datasets['p1'];
 
             const id = rawId.replace('_clone', '');
+            // Real office indices currently visible in c3's main view, given the
+            // active cluster filter — chart-local (filtered) indices map through
+            // this back to the real index in officeLabels/dataP.officeSat.
+            const officeIndexMap = getVisibleOfficeIndices();
 
             let baseOptions = {
                 responsive: true, maintainAspectRatio: false,
-                animation: { duration: 8000, easing: 'easeOutExpo' },
+                animation: { duration: 900, easing: 'easeOutExpo' },
                 plugins: {
                     legend: { labels: { color: textColor, font: { family: 'Inter', weight: '600', size: 12.5 }, usePointStyle: true, boxWidth: 8, boxHeight: 8, padding: 16 }, position: 'bottom', display: id === 'c2' || id === 'c3' ? false : true },
                     tooltip: {
@@ -1367,6 +1461,19 @@
                         borderColor: isDark ? 'rgba(244,180,0,0.25)' : 'rgba(10,31,68,0.08)', borderWidth: 1,
                         cornerRadius: 12, padding: 14, boxPadding: 6, caretSize: 6, displayColors: false,
                         callbacks: {
+                            // Shows the full cluster/office name in the tooltip title when
+                            // hovering a bar whose axis label was shortened to an acronym
+                            // (e.g. "RICC" -> "Research, Innovation and Collaboration Cluster").
+                            title: function(items) {
+                                if (!items || items.length === 0) return '';
+                                const chartId = items[0].chart.canvas.id.replace('_clone', '');
+                                const idx = items[0].dataIndex;
+                                // Only the main bar view's x-axis is a cluster/office name — the
+                                // drilldown doughnut's labels are "Satisfied"/"Needs Improvement".
+                                if (view === 'main' && chartId === 'c2' && clusterFullNames[idx]) return clusterFullNames[idx];
+                                if (view === 'main' && chartId === 'c3' && officeFullNames[officeIndexMap[idx]]) return officeFullNames[officeIndexMap[idx]];
+                                return items[0].label || '';
+                            },
                             label: function(context) {
                                 let pData = datasets[activePeriod];
                                 let val = context.raw;
@@ -1379,9 +1486,21 @@
                                 }
 
                                 if ((chartId === 'c2' || chartId === 'c3') && context.dataset.label && context.dataset.label.includes('Satisfaction')) {
-                                    let totalResp = chartId === 'c2' ? pData.clusterResp[context.dataIndex] : pData.officeResp[context.dataIndex];
-                                    let satResp = Math.round((val / 100) * totalResp) || 0;
-                                    return [`Satisfaction: ${val}%`, `Respondents: ${satResp}`];
+                                    // Real percent, not context.raw — the bar's actual drawn
+                                    // height is nudged up from 0 so a real (but 0%) result is
+                                    // still visible, but the tooltip must report the true value.
+                                    let totalResp, realPercent;
+                                    if (chartId === 'c2') {
+                                        totalResp = pData.clusterResp[context.dataIndex];
+                                        realPercent = pData.clusterSat[context.dataIndex];
+                                    } else {
+                                        const realIdx = officeIndexMap[context.dataIndex];
+                                        totalResp = pData.officeResp[realIdx];
+                                        realPercent = pData.officeSat[realIdx];
+                                    }
+                                    if (realPercent === null) return ['No ratings yet', `Respondents: ${totalResp}`];
+                                    let satResp = Math.round((realPercent / 100) * totalResp) || 0;
+                                    return [`Satisfaction: ${realPercent}%`, `Respondents: ${satResp}`];
                                 }
 
                                 let label = context.dataset.label || context.label || '';
@@ -1407,18 +1526,44 @@
                 y: { min: 0, max: 100, grid: { color: gridColor }, border: { display: false }, ticks: { color: textColor, font: { family: 'Inter', weight: '500', size: 11 }, callback: v => v + '%' } }
             };
 
+            const noRatingColor = isDark ? 'rgba(148,163,184,0.35)' : 'rgba(148,163,184,0.45)';
+            const noRatingHoverColor = isDark ? 'rgba(148,163,184,0.5)' : 'rgba(148,163,184,0.6)';
+
             if (id === 'c2') {
-                if (view === 'main') { return { type: 'bar', data: { labels: clusterLabels, datasets: [{ label: 'Satisfaction (%)', data: dataP.clusterSat, backgroundColor: (c) => barGradient(c, 'rgba(10,31,68,0.75)', 'rgba(90,124,214,0.9)'), hoverBackgroundColor: (c) => barGradient(c, 'rgba(10,31,68,0.9)', 'rgba(90,124,214,1)'), borderRadius: 10, borderSkipped: false, maxBarThickness: 46, categoryPercentage: 0.65, barPercentage: 0.75 }] }, options: { ...baseOptions, scales: barScales } };
+                if (view === 'main') {
+                    // A real result of 0% would render as a 0px-tall bar, indistinguishable
+                    // from a cluster with no responses at all — nudge it to a barely-visible
+                    // sliver instead. null means respondents exist but all marked every SQD
+                    // question N/A — also nudged visible, but colored gray, not blue.
+                    const clusterBarData = dataP.clusterSat.map((v, i) => (v === null || (v <= 0 && dataP.clusterResp[i] > 0)) ? 1.5 : v);
+                    return { type: 'bar', data: { labels: clusterLabels, datasets: [{ label: 'Satisfaction (%)', data: clusterBarData, backgroundColor: (c) => dataP.clusterSat[c.dataIndex] === null ? noRatingColor : barGradient(c, 'rgba(10,31,68,0.75)', 'rgba(90,124,214,0.9)'), hoverBackgroundColor: (c) => dataP.clusterSat[c.dataIndex] === null ? noRatingHoverColor : barGradient(c, 'rgba(10,31,68,0.9)', 'rgba(90,124,214,1)'), borderRadius: 10, borderSkipped: false, maxBarThickness: 46, categoryPercentage: 0.65, barPercentage: 0.75 }] }, options: { ...baseOptions, scales: barScales } };
                 } else {
-                    let percent = dataP.clusterSat[index] || 0, totalResp = dataP.clusterResp[index] || 0, satResp = Math.round((percent / 100) * totalResp) || 0;
+                    let percent = dataP.clusterSat[index], totalResp = dataP.clusterResp[index] || 0;
+                    if (percent === null) {
+                        return { type: 'doughnut', data: { labels: ['No Ratings Yet'], datasets: [{ data: [totalResp || 1], backgroundColor: [isDark ? '#334155' : '#eef1f6'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: 'N/A', subText: 'Cluster Rating', subText2: `${totalResp} Respondent(s) — No SQD Ratings` } } } };
+                    }
+                    let satResp = Math.round((percent / 100) * totalResp) || 0;
                     return { type: 'doughnut', data: { labels: ['Satisfied', 'Needs Improvement'], datasets: [{ data: [satResp, totalResp - satResp], backgroundColor: ['#4ADE80', isDark ? '#334155' : '#eef1f6'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: percent + '%', subText: 'Cluster Rating', subText2: `${satResp} / ${totalResp} Satisfied` } } } };
                 }
             }
 
             if (id === 'c3') {
-                if (view === 'main') { return { type: 'bar', data: { labels: officeLabels, datasets: [{ label: 'Satisfaction (%)', data: dataP.officeSat, backgroundColor: (c) => barGradient(c, 'rgba(10,31,68,0.75)', 'rgba(90,124,214,0.9)'), hoverBackgroundColor: (c) => barGradient(c, 'rgba(10,31,68,0.9)', 'rgba(90,124,214,1)'), borderRadius: 10, borderSkipped: false, maxBarThickness: 40, categoryPercentage: 0.65, barPercentage: 0.75 }] }, options: { ...baseOptions, scales: barScales } };
+                if (view === 'main') {
+                    const labels = officeIndexMap.map(i => officeLabels[i]);
+                    // Same 0%-but-real-data nudge as c2 above, applied per visible office.
+                    const data = officeIndexMap.map(i => {
+                        const v = dataP.officeSat[i];
+                        return (v === null || (v <= 0 && dataP.officeResp[i] > 0)) ? 1.5 : v;
+                    });
+                    const config = { type: 'bar', data: { labels, datasets: [{ label: 'Satisfaction (%)', data, backgroundColor: (c) => dataP.officeSat[officeIndexMap[c.dataIndex]] === null ? noRatingColor : barGradient(c, 'rgba(10,31,68,0.75)', 'rgba(90,124,214,0.9)'), hoverBackgroundColor: (c) => dataP.officeSat[officeIndexMap[c.dataIndex]] === null ? noRatingHoverColor : barGradient(c, 'rgba(10,31,68,0.9)', 'rgba(90,124,214,1)'), borderRadius: 10, borderSkipped: false, maxBarThickness: 40, categoryPercentage: 0.65, barPercentage: 0.75 }] }, options: { ...baseOptions, scales: barScales } };
+                    config._officeIndexMap = officeIndexMap;
+                    return config;
                 } else {
-                    let percent = dataP.officeSat[index] || 0, totalResp = dataP.officeResp[index] || 0, satResp = Math.round((percent / 100) * totalResp) || 0;
+                    let percent = dataP.officeSat[index], totalResp = dataP.officeResp[index] || 0;
+                    if (percent === null) {
+                        return { type: 'doughnut', data: { labels: ['No Ratings Yet'], datasets: [{ data: [totalResp || 1], backgroundColor: [isDark ? '#334155' : '#eef1f6'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: 'N/A', subText: 'Office Rating', subText2: `${totalResp} Respondent(s) — No SQD Ratings` } } } };
+                    }
+                    let satResp = Math.round((percent / 100) * totalResp) || 0;
                     return { type: 'doughnut', data: { labels: ['Satisfied', 'Needs Improvement'], datasets: [{ data: [satResp, totalResp - satResp], backgroundColor: ['#4ADE80', isDark ? '#334155' : '#eef1f6'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: percent + '%', subText: 'Office Rating', subText2: `${satResp} / ${totalResp} Satisfied` } } } };
                 }
             }
@@ -1444,6 +1589,31 @@
                      }
                  }
             }
+
+        }
+
+        // Chart.js only tooltips data points, not axis tick labels — but c2/c3's
+        // tick labels are shortened acronyms (e.g. "RICC"), so hovering directly
+        // over a tick should still reveal the full cluster/office name. Binds the
+        // mousemove listener once per canvas; the chart instance and name-lookup
+        // function are refreshed on every reload via canvas._axisChart/_axisFullNameGetter.
+        function ensureAxisLabelTooltip(canvas) {
+            if (canvas.dataset.axisTooltipBound) return;
+            canvas.dataset.axisTooltipBound = '1';
+            canvas.addEventListener('mousemove', (e) => {
+                const chart = canvas._axisChart;
+                const getFullName = canvas._axisFullNameGetter;
+                if (!chart || !getFullName || !chart.scales || !chart.scales.x || !chart.chartArea) { canvas.title = ''; return; }
+                const xScale = chart.scales.x;
+                if (e.offsetY < chart.chartArea.bottom) { canvas.title = ''; return; }
+                let closestIdx = -1, closestDist = Infinity;
+                (xScale.ticks || []).forEach((tick, i) => {
+                    const dist = Math.abs(xScale.getPixelForTick(i) - e.offsetX);
+                    if (dist < closestDist) { closestDist = dist; closestIdx = i; }
+                });
+                canvas.title = closestIdx >= 0 ? (getFullName(closestIdx) || '') : '';
+            });
+            canvas.addEventListener('mouseleave', () => { canvas.title = ''; });
         }
 
         function loadChart(rawId, view, index = null) {
@@ -1466,7 +1636,8 @@
 
             config.options.onClick = (e, elements) => {
                 if (view === 'main' && elements.length > 0) {
-                    const clickedIndex = elements[0].index;
+                    let clickedIndex = elements[0].index;
+                    if (id === 'c3' && config._officeIndexMap) clickedIndex = config._officeIndexMap[clickedIndex];
                     const baseId = rawId.replace('_clone', '');
                     const cloneId = baseId + '_clone';
 
@@ -1481,6 +1652,28 @@
 
             if (activeCharts[rawId]) activeCharts[rawId].destroy();
             activeCharts[rawId] = new Chart(ctx, config);
+
+            bindAxisTooltip(rawId, id, view, config);
+        }
+
+        // Wires (or rewires) the axis-label hover tooltip for a chart instance —
+        // shared by loadChart (new chart) and changePeriod/refresh (same chart,
+        // new data), since the latter can shift office indices without recreating
+        // the Chart.js instance.
+        function bindAxisTooltip(rawId, id, view, config) {
+            const canvasEl = document.getElementById(rawId);
+            if (!canvasEl) return;
+            if (view === 'main' && (id === 'c2' || id === 'c3')) {
+                ensureAxisLabelTooltip(canvasEl);
+                canvasEl._axisChart = activeCharts[rawId];
+                const idxMap = config._officeIndexMap;
+                canvasEl._axisFullNameGetter = id === 'c2'
+                    ? (i) => clusterFullNames[i]
+                    : (i) => officeFullNames[idxMap ? idxMap[i] : i];
+            } else {
+                canvasEl._axisChart = null;
+                canvasEl._axisFullNameGetter = null;
+            }
         }
 
         function changePeriod() {
@@ -1494,6 +1687,9 @@
                     activeCharts[rawId].config.options.elements.center = newConfig.options.elements.center;
                 }
                 activeCharts[rawId].update();
+
+                const id = rawId.replace('_clone', '');
+                bindAxisTooltip(rawId, id, state.view, newConfig);
             });
         }
 
@@ -1636,6 +1832,8 @@
                     loadChart(originalCanvas.id, 'main');
                 });
 
+                populateOfficeClusterFilter();
+
                 const firstCard = originalCards[0];
                 const firstClone = document.getElementById(firstCard.id + '_clone');
                 const resetPoint = firstClone.offsetLeft - firstCard.offsetLeft;
@@ -1654,9 +1852,8 @@
                     setX(-scrollPos);
                 }
 
-                viewport.addEventListener('mouseenter', () => isInteracting = true);
-                viewport.addEventListener('mouseleave', () => { isInteracting = false; isDragging = false; });
-
+                // Only an actual press/tap on the track stops the auto-scroll — hovering
+                // over it without pressing does not, and releasing resumes immediately.
                 viewport.addEventListener('wheel', (e) => {
                     e.preventDefault();
                     isInteracting = true;
@@ -1668,7 +1865,6 @@
 
                 viewport.addEventListener('pointerdown', (e) => {
                     isDragging = true;
-                    isInteracting = true;
                     dragStartX = e.clientX;
                     dragStartScroll = scrollPos;
                     viewport.setPointerCapture(e.pointerId);
@@ -1678,10 +1874,7 @@
                     scrollPos = dragStartScroll + (dragStartX - e.clientX);
                     wrapAndApply();
                 });
-                viewport.addEventListener('pointerup', () => {
-                    isDragging = false;
-                    setTimeout(() => isInteracting = false, 1200);
-                });
+                viewport.addEventListener('pointerup', () => { isDragging = false; });
                 viewport.addEventListener('pointercancel', () => { isDragging = false; });
 
                 // The marquee used to keep spinning — and re-triggering each chart's
