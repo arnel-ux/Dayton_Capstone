@@ -4,6 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CSM Survey - CSPC</title>
+    <% if (typeof requiresTabSession !== 'undefined' && requiresTabSession) { %>
+    <script>
+        // Per-tab login gate: sessionStorage is scoped to THIS browser tab, unlike the
+        // session cookie which every tab shares. Pasting this URL into a new tab (or one
+        // that inherited the cookie but was never logged into itself) finds no verified
+        // flag here and gets bounced to /login, even though the real session is still
+        // perfectly valid. Runs first/blocking so nothing renders before the redirect fires.
+        (function () {
+            var GATE_KEY = 'cqa_tab_verified';
+            try {
+                <% if (typeof grantTabAccess !== 'undefined' && grantTabAccess) { %>
+                    sessionStorage.setItem(GATE_KEY, '1');
+                <% } else { %>
+                    if (!sessionStorage.getItem(GATE_KEY)) {
+                        window.location.replace('/login?tabVerify=1');
+                    }
+                <% } %>
+            } catch (e) { /* sessionStorage unavailable (privacy mode, etc.) — fail open */ }
+        })();
+    </script>
+    <% } %>
     <script>
         (function () {
             try {
@@ -27,7 +48,7 @@
     <script src="/js/alerts.js"></script>
     <script src="/js/offline-db.js"></script>
     <script src="/js/pwa-client.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
 
     <style>
         :root {
@@ -59,20 +80,22 @@
             margin: 0;
             padding: 0;
             min-height: 100vh;
-            background:
-                radial-gradient(1100px 520px at 100% -8%, rgba(37,84,199,0.07), transparent 60%),
-                radial-gradient(900px 480px at -8% 0%, rgba(37,84,199,0.05), transparent 55%),
-                var(--page-bg);
-            background-attachment: fixed;
             color: var(--ink-800);
-            transition: background 0.3s ease-in-out, color 0.3s ease-in-out;
+            transition: color 0.3s ease-in-out;
         }
-        [data-bs-theme="dark"] body {
-            background:
-                radial-gradient(1100px 520px at 100% -8%, rgba(77,124,232,0.10), transparent 60%),
-                radial-gradient(900px 480px at -8% 0%, rgba(77,124,232,0.06), transparent 55%),
-                var(--page-bg);
-            background-attachment: fixed;
+
+        /* ---- Fixed, blurred campus backdrop (same treatment as the public
+           landing page) sitting behind the whole app shell ---- */
+        .survey-bg-image {
+            position: fixed; inset: 0; z-index: -2;
+            background: url('https://spims.cspc.edu.ph/assets/img/background.jpg') center/cover no-repeat;
+        }
+        .survey-bg-overlay {
+            position: fixed; inset: 0; z-index: -1;
+            background: linear-gradient(180deg, rgba(15,23,42,0.55) 0%, rgba(10,20,40,0.75) 100%);
+        }
+        [data-bs-theme="dark"] .survey-bg-overlay {
+            background: linear-gradient(180deg, rgba(4,8,18,0.78) 0%, rgba(6,14,33,0.88) 100%);
         }
 
         /* =========================================================
@@ -202,14 +225,124 @@
 
         .view-card {
             border-radius: 22px;
-            background: var(--surface) !important;
-            border: 1px solid var(--line-soft);
-            box-shadow: var(--shadow-lift);
+            background: rgba(255,255,255,0.88) !important;
+            backdrop-filter: blur(22px) saturate(140%);
+            -webkit-backdrop-filter: blur(22px) saturate(140%);
+            border: 1px solid rgba(255,255,255,0.5);
+            box-shadow: 0 24px 60px -20px rgba(10,20,40,0.5);
             max-width: 900px;
             margin: 0 auto;
             transition: background 0.3s ease-in-out, border-color 0.3s ease-in-out;
         }
-        [data-bs-theme="dark"] .view-card { box-shadow: 0 24px 48px -16px rgba(0, 0, 0, 0.5); }
+        [data-bs-theme="dark"] .view-card {
+            background: rgba(15,23,42,0.82) !important;
+            border-color: rgba(255,255,255,0.08);
+            box-shadow: 0 24px 48px -16px rgba(0, 0, 0, 0.5);
+        }
+
+        /* ---- Home view — landing screen shown right after login ---- */
+        .home-card { max-width: 1100px; position: relative; overflow: hidden; }
+        .home-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 6px;
+            background: linear-gradient(90deg, var(--brand-dark), var(--brand), var(--accent), var(--brand-light));
+            background-size: 200% 100%; animation: heroBarShift 8s linear infinite;
+        }
+        @media (prefers-reduced-motion: reduce) { .home-card::before { animation: none; } }
+        .home-hero { padding-bottom: 1.75rem; border-bottom: 1px solid var(--line-soft); }
+        .home-hero .survey-hero-logo { width: 72px; height: 72px; }
+
+        /* ---- Brand intro — round CSPC mark pops in dead-center, then the
+           name slides up into frame beneath it (~1s total), before the
+           subtitle settles in ---- */
+        .brand-intro {
+            display: flex; flex-direction: column; align-items: center; text-align: center; margin: 0 auto;
+        }
+        .brand-intro-mark {
+            opacity: 0;
+            animation: brandMarkPop 0.35s cubic-bezier(.34,1.56,.64,1) forwards;
+        }
+        .brand-intro-name {
+            opacity: 0; margin-top: 0.75rem;
+            animation: brandNameSlide 0.4s ease-out forwards;
+            animation-delay: 0.18s;
+        }
+        .brand-intro-name .survey-hero-eyebrow { justify-content: center; }
+        @keyframes brandMarkPop {
+            0% { opacity: 0; transform: scale(.5) rotate(-10deg); }
+            65% { opacity: 1; transform: scale(1.08) rotate(2deg); }
+            100% { opacity: 1; transform: scale(1) rotate(0deg); }
+        }
+        @keyframes brandNameSlide {
+            0% { opacity: 0; transform: translateY(16px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+        .home-subtitle-anim {
+            opacity: 0;
+            animation: homeFadeUp 0.3s ease-out forwards;
+            animation-delay: 0.55s;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .brand-intro-mark, .brand-intro-name, .home-subtitle-anim { animation: none; opacity: 1; }
+        }
+
+        .home-info-card {
+            height: 100%; position: relative; overflow: hidden;
+            background: #f8fafc; border: 1px solid var(--line); border-left: 4px solid var(--brand);
+            border-radius: 16px; padding: 1.75rem;
+            box-shadow: 0 6px 18px -14px rgba(15,23,42,0.25);
+            transition: box-shadow .25s ease, transform .25s ease, border-color .25s ease;
+        }
+        .home-info-card:hover {
+            box-shadow: 0 14px 34px -16px rgba(37,84,199,0.4);
+            transform: translateY(-4px);
+            border-left-color: var(--accent);
+        }
+        [data-bs-theme="dark"] .home-info-card { background: #101827; border-left-color: var(--brand-light); }
+        .home-info-icon {
+            width: 48px; height: 48px; border-radius: 12px; margin-bottom: 1rem;
+            display: flex; align-items: center; justify-content: center; font-size: 1.3rem;
+            background: var(--ring); color: var(--brand);
+            transition: transform .3s ease, background .3s ease, color .3s ease;
+        }
+        .home-info-card:hover .home-info-icon {
+            transform: scale(1.1) rotate(-4deg);
+            background: linear-gradient(135deg, var(--brand), var(--brand-light));
+            color: #fff;
+        }
+        .home-info-card h5 { font-weight: 700; color: var(--ink-900); margin-bottom: 0.6rem; }
+        .home-info-card p { color: var(--ink-600); font-size: 0.92rem; line-height: 1.65; margin-bottom: 0; }
+
+        .home-feature-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.1rem; }
+        .home-feature-chip {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            font-size: 0.72rem; font-weight: 700; padding: 0.4rem 0.8rem; border-radius: 50px;
+            background: var(--ring); color: var(--brand);
+            transition: transform .2s ease, background .2s ease, color .2s ease;
+        }
+        .home-feature-chip:hover {
+            background: var(--brand); color: #fff; transform: translateY(-2px);
+        }
+        [data-bs-theme="dark"] .home-feature-chip { background: rgba(96,141,255,0.15); }
+
+        /* ---- Entrance animation — staggered fade + rise for hero and cards ---- */
+        .home-anim { opacity: 0; animation: homeFadeUp .25s ease-out forwards; }
+        @keyframes homeFadeUp {
+            from { opacity: 0; transform: translateY(18px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @media (prefers-reduced-motion: reduce) { .home-anim { animation: none; opacity: 1; } }
+
+        /* ---- Responsive tuning for smaller screens ---- */
+        @media (max-width: 767.98px) {
+            .home-hero .survey-hero-logo { width: 60px; height: 60px; }
+            .home-hero h2 { font-size: 1.5rem; }
+            .home-info-card { padding: 1.35rem; }
+        }
+        @media (max-width: 575.98px) {
+            .home-card > .card-body { padding: 1.5rem 1.1rem !important; }
+            .home-feature-row { gap: 0.4rem; }
+            .home-feature-chip { font-size: 0.68rem; padding: 0.35rem 0.65rem; }
+        }
 
         .view-header { text-align: center; padding-bottom: 1.5rem; margin-bottom: 2rem; border-bottom: 1px solid var(--line-soft); }
         .view-header .view-icon {
@@ -469,49 +602,79 @@
         .content-body:has(#view-survey.active) { padding: 2rem 1.75rem 3.5rem; }
         .survey-card {
             border-radius: 22px;
-            background: var(--surface) !important;
-            border: 1px solid var(--line-soft);
-            box-shadow: var(--shadow-lift);
+            background: rgba(255,255,255,0.88) !important;
+            backdrop-filter: blur(22px) saturate(140%);
+            -webkit-backdrop-filter: blur(22px) saturate(140%);
+            border: 1px solid rgba(255,255,255,0.5);
+            box-shadow: 0 24px 60px -20px rgba(10,20,40,0.5);
             max-width: 940px;
             width: 100%;
             margin: 0 auto;
             min-height: 0;
             transition: background 0.3s ease-in-out, border-color 0.3s ease-in-out;
         }
+        [data-bs-theme="dark"] .survey-card {
+            background: rgba(15,23,42,0.82) !important;
+            border-color: rgba(255,255,255,0.08);
+        }
         /* Inner content still reads comfortably instead of stretching edge-to-edge on wide screens */
         .survey-card > .card-body { max-width: 820px; margin: 0 auto; width: 100%; }
 
         @media (max-width: 575.98px) {
-            .content-body:has(#view-survey.active) { padding: 0; }
-            .survey-card { border-radius: 0; border-left: none; border-right: none; }
+            .content-body:has(#view-survey.active) { padding: 0.75rem; }
+            .survey-card { border-radius: 16px; }
         }
 
-        /* ---- Full-width "in progress" survey (Stage 2 onward) ----
-           Clicking START SURVEY drops the small boxed card look in favor of
-           an edge-to-edge, full-screen form canvas. Stage 1 (Terms) keeps
-           the centered hero-card presentation. */
-        .app-shell.survey-inprogress .content-body:has(#view-survey.active) { padding: 0; }
+        /* ---- "In progress" survey (Stage 2 onward) ----
+           Clicking START SURVEY widens the card to a full working canvas, but
+           it always stays a contained, rounded card floating over the campus
+           backdrop rather than going edge-to-edge. */
         .app-shell.survey-inprogress .survey-card {
-            border-radius: 0;
-            border: none;
-            border-top: 1px solid var(--line-soft);
-            box-shadow: none;
-            max-width: 100%;
-            min-height: calc(100vh - var(--topbar-h));
+            max-width: 1180px;
+            min-height: calc(100vh - var(--topbar-h) - 4rem);
         }
         .app-shell.survey-inprogress .survey-card > .card-body { max-width: 1100px; }
 
+        /* ---- Decorative accent bar + soft color orbs on the card shell ---- */
+        .survey-card { position: relative; overflow: hidden; }
+        .survey-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 6px;
+            background: linear-gradient(90deg, var(--brand-dark), var(--brand), var(--accent), var(--brand-light));
+            background-size: 200% 100%; animation: heroBarShift 8s linear infinite;
+        }
+        @keyframes heroBarShift { 0% { background-position: 0% 0; } 100% { background-position: 200% 0; } }
+        .survey-card::after {
+            content: ''; position: absolute; top: -120px; right: -120px; width: 320px; height: 320px;
+            border-radius: 50%; background: radial-gradient(circle, rgba(37,84,199,0.16), transparent 70%);
+            pointer-events: none; z-index: 0;
+        }
+        .survey-card > .card-body { position: relative; z-index: 1; }
+        @media (prefers-reduced-motion: reduce) { .survey-card::before { animation: none; } }
+
         /* ---- Survey hero header (logo + institution + form title) ---- */
         .survey-hero { padding-bottom: 1.75rem; border-bottom: 1px solid var(--line-soft); }
-        .survey-hero-logo {
-            width: 88px; height: 88px; object-fit: contain;
+        .survey-hero-logo-wrap {
+            display: flex; align-items: center; justify-content: center;
+            width: 100%; margin-bottom: 0.75rem;
         }
+        .survey-hero-logo {
+            width: 84px; height: 84px; object-fit: contain; display: block; margin: 0 auto;
+        }
+        .survey-hero-eyebrow {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            font-size: 0.72rem; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;
+            color: var(--accent); margin-bottom: 0.35rem;
+        }
+        .survey-hero-eyebrow::before, .survey-hero-eyebrow::after { content: ''; width: 22px; height: 2px; background: var(--accent); display: inline-block; }
+        .survey-hero-title { font-family: 'Playfair Display', serif; letter-spacing: 0.01em; }
         .survey-hero-badge {
-            display: inline-block; margin-top: 1.5rem;
+            position: relative; display: inline-flex; align-items: center; gap: 0.6rem; margin-top: 1.5rem;
             background: linear-gradient(135deg, var(--brand), var(--brand-light));
             color: #fff; border-radius: 50px; padding: 0.85rem 2rem;
-            box-shadow: 0 10px 24px -10px rgba(37,84,199,0.55);
+            box-shadow: 0 10px 28px -10px rgba(37,84,199,0.6);
+            overflow: hidden;
         }
+        .survey-hero-badge i { font-size: 1.05rem; }
         .survey-hero-badge h4 { color: #fff; letter-spacing: .02em; }
 
         /* ---- Multi-step progress tracker ---- */
@@ -545,7 +708,9 @@
             text-align: center; letter-spacing: 0.2px; transition: color 0.3s ease;
         }
         .progress-step.completed .step-dot {
-            background: var(--brand); border-color: var(--brand); color: #fff;
+            background: linear-gradient(135deg, var(--brand), var(--brand-light));
+            border-color: var(--brand); color: #fff;
+            box-shadow: 0 4px 12px -4px rgba(37,84,199,0.55);
         }
         .progress-step.completed .step-dot span { display: none; }
         .progress-step.completed .step-dot i { display: inline-block; }
@@ -585,19 +750,25 @@
         .qa-block {
             background: #f8fafc;
             border: 1px solid var(--line) !important;
+            border-left: 4px solid var(--brand) !important;
             border-radius: 16px !important;
+            box-shadow: 0 6px 18px -14px rgba(15,23,42,0.25);
+            transition: box-shadow .2s ease, transform .2s ease;
         }
+        .qa-block:hover { box-shadow: 0 10px 26px -16px rgba(37,84,199,0.35); }
         .qa-block + .qa-block { margin-top: 1.1rem; }
         .qa-block > p:first-child { margin-bottom: 1.1rem; }
+        [data-bs-theme="dark"] .qa-block { border-left-color: var(--brand-light) !important; }
 
         .option-card {
             border: 1px solid var(--line);
             border-radius: 12px;
-            padding: 16px 18px;
-            transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+            padding: 16px 18px 16px 16px;
+            transition: border-color .15s ease, background .15s ease, box-shadow .15s ease, transform .15s ease;
             cursor: pointer;
             background: var(--surface);
             line-height: 1.45;
+            position: relative;
         }
 
         .option-card:hover {
@@ -613,6 +784,12 @@
             box-shadow: 0 0 0 3px var(--ring), 0 8px 20px -10px rgba(37, 84, 199, 0.4);
             transform: scale(1.01);
         }
+        .option-card:has(input:checked)::after {
+            content: '\f26e'; font-family: 'bootstrap-icons'; position: absolute; top: 10px; right: 12px;
+            color: var(--brand); font-size: 1rem; animation: optionPop .25s ease;
+        }
+        @keyframes optionPop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        [data-bs-theme="dark"] .option-card:has(input:checked) { background: rgba(37,84,199,0.16); }
 
         .option-card:active { transform: scale(0.99); }
 
@@ -660,7 +837,7 @@
 
         /* ---- Buttons ---- */
         .btn {
-            border-radius: 10px;
+            border-radius: 50px;
             font-weight: 600;
             transition: transform .12s ease, box-shadow .15s ease, background-color .15s ease, border-color .15s ease;
         }
@@ -674,9 +851,10 @@
         .btn-primary:hover, .btn-primary:focus {
             background: linear-gradient(135deg, var(--brand-dark), var(--brand-dark));
             border-color: var(--brand-dark);
-            transform: translateY(-1px);
-            box-shadow: 0 8px 20px -8px rgba(37, 84, 199, 0.55);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 24px -8px rgba(37, 84, 199, 0.6);
         }
+        .btn-primary:active { transform: translateY(0); }
 
         .btn-outline-primary, .btn-outline-secondary {
             border-color: var(--line);
@@ -778,6 +956,9 @@
 
 <body>
 
+<div class="survey-bg-image"></div>
+<div class="survey-bg-overlay"></div>
+
 <div class="app-shell">
 
     <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
@@ -792,7 +973,8 @@
         </div>
 
         <nav class="sidebar-nav">
-            <a href="#" data-view="survey" class="nav-item-link active" onclick="return switchView('survey');"><i class="bi bi-clipboard2-check-fill"></i> Take Survey</a>
+            <a href="#" data-view="home" class="nav-item-link active" onclick="return switchView('home');"><i class="bi bi-house-door-fill"></i> Home</a>
+            <a href="#" data-view="survey" class="nav-item-link" onclick="return switchView('survey');"><i class="bi bi-clipboard2-check-fill"></i> Take Survey</a>
             <a href="#" data-view="profile" class="nav-item-link" onclick="return switchView('profile');"><i class="bi bi-person-fill"></i> Profile</a>
             <a href="#" data-view="history" class="nav-item-link" onclick="return switchView('history');"><i class="bi bi-clock-history"></i> History</a>
         </nav>
@@ -812,10 +994,10 @@
                 <i class="bi bi-list"></i>
             </button>
             <button type="button" id="btn-sidebar-collapse" class="btn-sidebar-toggle" onclick="toggleSidebarCollapse()" title="Collapse sidebar — focus on the survey" aria-label="Collapse sidebar">
-                <i class="bi bi-layout-sidebar-inset"></i>
+                <i class="bi bi-list"></i>
             </button>
             <div class="topbar-title">
-                Client Satisfaction Survey
+                Home
                 <small data-i18n="gov_rep">Republic of the Philippines</small>
             </div>
             <div class="topbar-actions">
@@ -831,17 +1013,63 @@
 
         <div class="content-body">
 
-        <div class="app-view active" id="view-survey">
+        <div class="app-view active" id="view-home">
+        <div class="card border-0 view-card home-card">
+        <div class="card-body p-4 p-md-5">
+
+            <div class="home-hero text-center mb-5">
+                <div class="brand-intro">
+                    <div class="brand-intro-mark">
+                        <img src="/images/cspc-logo.png" alt="CSPC Logo" class="survey-hero-logo">
+                    </div>
+                    <div class="brand-intro-name">
+                        <div class="survey-hero-eyebrow" data-i18n="gov_rep">Republic of the Philippines</div>
+                        <h2 class="fw-bold text-heading survey-hero-title mb-0" data-i18n="home_title">Center for Quality Assurance</h2>
+                    </div>
+                </div>
+                <p class="text-secondary mb-0 mt-3 home-subtitle-anim" data-i18n="home_subtitle">Public Transparency &amp; Client Satisfaction Portal — Camarines Sur Polytechnic Colleges</p>
+            </div>
+
+            <div class="row g-4 mb-2">
+                <div class="col-12 col-lg-6">
+                    <div class="home-info-card home-anim" style="animation-delay:0.65s">
+                        <div class="home-info-icon"><i class="bi bi-patch-check-fill"></i></div>
+                        <h5 data-i18n="home_cqa_title">About the Center for Quality Assurance</h5>
+                        <p data-i18n="home_cqa_body">The Center for Quality Assurance (CQA) leads CSPC's institutional efforts to uphold service excellence, monitor compliance with quality standards, and drive continuous improvement across all academic and administrative units — ensuring that the services delivered to students, employees, and the public consistently meet the highest standards of efficiency, transparency, and accountability.</p>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="home-info-card home-anim" style="animation-delay:0.75s">
+                        <div class="home-info-icon"><i class="bi bi-clipboard2-data-fill"></i></div>
+                        <h5 data-i18n="home_csm_title">About the CSM Survey</h5>
+                        <p data-i18n="home_csm_body">The Client Satisfaction Measurement (CSM) is a short, standardized survey you complete right after availing a government service. It captures how satisfied you were with the transaction and helps CSPC identify which offices and services need improvement — supporting the College's compliance with the Ease of Doing Business and Efficient Government Service Delivery Act (Republic Act No. 11032).</p>
+                        <div class="home-feature-row">
+                            <span class="home-feature-chip"><i class="bi bi-shield-lock-fill"></i> <span data-i18n="home_chip_confidential">Confidential</span></span>
+                            <span class="home-feature-chip"><i class="bi bi-file-earmark-check-fill"></i> <span data-i18n="home_chip_arta">RA 11032 / ARTA-mandated</span></span>
+                            <span class="home-feature-chip"><i class="bi bi-clock-fill"></i> <span data-i18n="home_chip_quick">Takes only a few minutes</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        </div>
+        </div>
+
+        <div class="app-view" id="view-survey">
         <div class="card border-0 survey-card">
         <div class="card-body p-4 p-md-5 position-relative">
 
             <div class="survey-hero text-center mb-5">
-                <img src="/images/cspc-logo.png" alt="CSPC Logo" class="survey-hero-logo mb-3">
-                <p class="small text-secondary text-uppercase mb-1" style="letter-spacing:.1em;" data-i18n="gov_rep">Republic of the Philippines</p>
-                <h3 class="fw-bold text-uppercase mb-0 text-heading">Camarines Sur Polytechnic Colleges</h3>
+                <div class="survey-hero-logo-wrap">
+                    <img src="/images/cspc-logo.png" alt="CSPC Logo" class="survey-hero-logo">
+                </div>
+                <div class="survey-hero-eyebrow" data-i18n="gov_rep">Republic of the Philippines</div>
+                <h3 class="fw-bold text-uppercase mb-0 text-heading survey-hero-title">Camarines Sur Polytechnic Colleges</h3>
                 <p class="text-secondary fst-italic mb-4">Nabua, Camarines Sur</p>
 
                 <div class="survey-hero-badge">
+                    <i class="bi bi-clipboard2-check-fill"></i>
                     <h4 class="fw-semibold text-uppercase mb-0" data-i18n="form_title">Client Satisfaction Measurement (CSM) Survey</h4>
                 </div>
             </div>
@@ -919,8 +1147,8 @@
                     <div class="row g-4">
                         <!-- IDINAGDAG: Pangalan -->
                         <div class="col-12">
-                            <label class="form-label fw-semibold text-dark fs-6">Name / Pangalan (Optional)</label>
-                            <input type="text" name="respondent_name" class="form-control" placeholder="e.g. Juan Dela Cruz">
+                            <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_name">Name / Pangalan (Optional)</label>
+                            <input type="text" name="respondent_name" class="form-control" data-i18n-placeholder="ph_name" placeholder="e.g. Juan Dela Cruz">
                         </div>
 
                         <!-- Signed-in Google account (used to enforce 1 survey per office). Visually hidden
@@ -1171,32 +1399,32 @@
 
                 <div id="stage5" class="page">
                     <div class="section-title mb-4">
-                        <h4 class="fw-semibold text-heading text-uppercase mb-0">Review &amp; Confirmation</h4>
-                        <p class="text-secondary mt-2 mb-0">Please double-check your answers below before submitting. Click "Edit" on any section to make changes.</p>
+                        <h4 class="fw-semibold text-heading text-uppercase mb-0" data-i18n="rv_title">Review &amp; Confirmation</h4>
+                        <p class="text-secondary mt-2 mb-0" data-i18n="rv_desc">Please double-check your answers below before submitting. Click "Edit" on any section to make changes.</p>
                     </div>
 
                     <div class="review-section">
                         <div class="review-section-header">
-                            <h5><i class="bi bi-person-lines-fill me-1"></i> Client Profile</h5>
-                            <button type="button" class="btn-edit-section" onclick="goEditStage(2)"><i class="bi bi-pencil-fill me-1"></i> Edit / Baguhin</button>
+                            <h5><i class="bi bi-person-lines-fill me-1"></i> <span data-i18n="rv_sec_profile">Client Profile</span></h5>
+                            <button type="button" class="btn-edit-section" onclick="goEditStage(2)"><i class="bi bi-pencil-fill me-1"></i> <span data-i18n="rv_edit">Edit / Baguhin</span></button>
                         </div>
                         <div class="review-grid">
-                            <div class="review-item"><div class="label">Name</div><div class="value" id="rv-name">—</div></div>
-                            <div class="review-item"><div class="label">Google Account</div><div class="value" id="rv-email">—</div></div>
-                            <div class="review-item"><div class="label">Client Type</div><div class="value" id="rv-clienttype">—</div></div>
-                            <div class="review-item"><div class="label">Sex</div><div class="value" id="rv-gender">—</div></div>
-                            <div class="review-item"><div class="label">Age</div><div class="value" id="rv-age">—</div></div>
-                            <div class="review-item"><div class="label">Date</div><div class="value" id="rv-date">—</div></div>
-                            <div class="review-item"><div class="label">Region</div><div class="value" id="rv-region">—</div></div>
-                            <div class="review-item"><div class="label">Office Visited</div><div class="value" id="rv-office">—</div></div>
-                            <div class="review-item full"><div class="label">Service Availed</div><div class="value" id="rv-service">—</div></div>
+                            <div class="review-item"><div class="label" data-i18n="rv_lbl_name">Name</div><div class="value" id="rv-name">—</div></div>
+                            <div class="review-item"><div class="label" data-i18n="rv_lbl_email">Google Account</div><div class="value" id="rv-email">—</div></div>
+                            <div class="review-item"><div class="label" data-i18n="rv_lbl_clienttype">Client Type</div><div class="value" id="rv-clienttype">—</div></div>
+                            <div class="review-item"><div class="label" data-i18n="rv_lbl_gender">Sex</div><div class="value" id="rv-gender">—</div></div>
+                            <div class="review-item"><div class="label" data-i18n="rv_lbl_age">Age</div><div class="value" id="rv-age">—</div></div>
+                            <div class="review-item"><div class="label" data-i18n="rv_lbl_date">Date</div><div class="value" id="rv-date">—</div></div>
+                            <div class="review-item"><div class="label" data-i18n="rv_lbl_region">Region</div><div class="value" id="rv-region">—</div></div>
+                            <div class="review-item"><div class="label" data-i18n="rv_lbl_office">Office Visited</div><div class="value" id="rv-office">—</div></div>
+                            <div class="review-item full"><div class="label" data-i18n="rv_lbl_service">Service Availed</div><div class="value" id="rv-service">—</div></div>
                         </div>
                     </div>
 
                     <div class="review-section">
                         <div class="review-section-header">
-                            <h5><i class="bi bi-file-earmark-text-fill me-1"></i> Citizen's Charter</h5>
-                            <button type="button" class="btn-edit-section" onclick="goEditStage(3)"><i class="bi bi-pencil-fill me-1"></i> Edit / Baguhin</button>
+                            <h5><i class="bi bi-file-earmark-text-fill me-1"></i> <span data-i18n="rv_sec_cc">Citizen's Charter</span></h5>
+                            <button type="button" class="btn-edit-section" onclick="goEditStage(3)"><i class="bi bi-pencil-fill me-1"></i> <span data-i18n="rv_edit">Edit / Baguhin</span></button>
                         </div>
                         <div class="review-grid">
                             <div class="review-item full"><div class="label">CC1</div><div class="value" id="rv-cc1">—</div></div>
@@ -1207,15 +1435,15 @@
 
                     <div class="review-section">
                         <div class="review-section-header">
-                            <h5><i class="bi bi-star-fill me-1"></i> Service Quality Ratings</h5>
-                            <button type="button" class="btn-edit-section" onclick="goEditStage(4)"><i class="bi bi-pencil-fill me-1"></i> Edit / Baguhin</button>
+                            <h5><i class="bi bi-star-fill me-1"></i> <span data-i18n="rv_sec_sqd">Service Quality Ratings</span></h5>
+                            <button type="button" class="btn-edit-section" onclick="goEditStage(4)"><i class="bi bi-pencil-fill me-1"></i> <span data-i18n="rv_edit">Edit / Baguhin</span></button>
                         </div>
                         <div class="qa-block p-4" id="rv-sqd-list"></div>
                     </div>
 
                     <div class="review-section mb-0">
                         <div class="review-section-header">
-                            <h5><i class="bi bi-chat-left-text-fill me-1"></i> Suggestions</h5>
+                            <h5><i class="bi bi-chat-left-text-fill me-1"></i> <span data-i18n="rv_sec_sugg">Suggestions</span></h5>
                         </div>
                         <div class="review-item full"><div class="value" id="rv-comments">—</div></div>
                     </div>
@@ -1381,40 +1609,13 @@
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title fw-bold" id="termsModalLabel">Terms &amp; Conditions / Privacy Policy</h5>
+                <h5 class="modal-title fw-bold" id="termsModalLabel" data-i18n="terms_modal_title">Terms &amp; Conditions / Privacy Policy</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" title="Close"></button>
             </div>
-            <div class="modal-body" style="max-height: 60vh; overflow-y: auto; font-size: 0.85rem; line-height: 1.6;">
-                <h6 class="fw-bold">Privacy Policy</h6>
-                <p>This privacy statement discloses the privacy practices of the Unified Information System (UnIS) and its sub-modules.</p>
-
-                <h6 class="fw-bold mt-3">Information Collection and Use</h6>
-                <p>UnIS is the sole owner of the information collected on this site. We will not sell, share, or rent this information to others in ways different from what is disclosed in this statement. UnIS collects information from our users at several different points on our Web application.</p>
-                <p>In order to use some features of this web application, users must first complete the profiling form. During registration, users are required to give their personal and contact information (name and e-mail address), family background, and demographics. This information is used for academic purposes only.</p>
-
-                <h6 class="fw-bold mt-3">Cookies</h6>
-                <p>UnIS may use cookies to remember if users have logged in while on our site. This allows web site users to avoid logging in more than once, thereby saving time. Users have the option of disabling or not accepting cookies by changing the preferences on their browsers. If users opt to disable cookies, they will still be able to use our Web site. However, they will not be able to use some functionality or post to the message boards. No personally identifiable information (e-mail address, name, etc.) is collected with the cookies that we set. Accepting cookies while on the UnIS site will not put the user at risk for marketing to other sites.</p>
-
-                <h6 class="fw-bold mt-3">Web Statistics</h6>
-                <p>We use IP addresses to analyze trends, administer the site, track user movement, and gather broad demographic information for aggregate use for reporting purposes. IP addresses are not linked to personally identifiable information.</p>
-
-                <h6 class="fw-bold mt-3">Sharing</h6>
-                <p>We will not share any information to external organization except for government organization, administration and institutional researcher which is requirement for reporting and analytics purposes. This is not linked to any personal information that can identify any individual person. Data are shared to other institutional information system through a secured and authenticated API.</p>
-
-                <h6 class="fw-bold mt-3">Security</h6>
-                <p>This Web site takes every precaution to protect our users' information, and we have security measures in place to protect the loss, misuse, and alteration of the information under our control.</p>
-
-                <h6 class="fw-bold mt-3">Updates</h6>
-                <p>We may also send the user site and service announcement updates.</p>
-
-                <h6 class="fw-bold mt-3">Data Privacy</h6>
-                <p>All provisions of laws, administrative orders, circular, regulations, and other issuances inconsistent with this policy are hereby repealed or modified accordingly.</p>
-
-                <h6 class="fw-bold mt-3">Notification of Changes</h6>
-                <p>If we decide to change our privacy policy, we will post those changes on our home page so our users are always aware of what information we collect, how we use it, and under what circumstances, if any, we disclose it. If at any point we decide to use personally identifiable information in a manner different from that stated at the time it was collected, we will notify users by e-mail. Users will have a choice as to whether or not we use their information in this different manner. We will use information in accordance with the privacy policy under which the information was collected.</p>
+            <div class="modal-body" style="max-height: 60vh; overflow-y: auto; font-size: 0.85rem; line-height: 1.6;" data-i18n="terms_full">
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-primary px-4" data-bs-dismiss="modal" title="Close this dialog">I Understand</button>
+                <button type="button" class="btn btn-primary px-4" data-bs-dismiss="modal" title="Close this dialog" data-i18n="terms_modal_close">I Understand</button>
             </div>
         </div>
     </div>
@@ -1459,10 +1660,9 @@ window.addEventListener('pageshow', function (event) {
 document.getElementById('surveyDate').valueAsDate = new Date();
 let currentLang = 'en';
 
-// The "Take Survey" view is active by default on load (no switchView() call
-// fires for it), so collapse the sidebar up front for the same focus mode
-// it gets when navigated to manually.
-setSidebarCollapsed(true);
+// The "Home" view is active by default on load (no switchView() call fires
+// for it) — the sidebar stays expanded, matching switchView()'s own
+// behavior for every view other than "survey".
 
 // =====================================
 // DEPENDENT "SERVICE AVAILED" DROPDOWN
@@ -1644,9 +1844,7 @@ function setSidebarCollapsed(collapsed) {
     shell.classList.toggle('sidebar-collapsed', collapsed);
     const btn = document.getElementById('btn-sidebar-collapse');
     if (btn) {
-        btn.innerHTML = collapsed
-            ? '<i class="bi bi-layout-sidebar"></i>'
-            : '<i class="bi bi-layout-sidebar-inset"></i>';
+        btn.innerHTML = '<i class="bi bi-list"></i>';
         btn.title = collapsed ? 'Show sidebar' : 'Collapse sidebar — focus on the survey';
     }
 }
@@ -1660,6 +1858,7 @@ function toggleSidebarCollapse() {
 // SPA VIEW SWITCHING — Take Survey / Profile / History
 // =====================================
 const VIEW_TITLES = {
+    home: 'Home',
     survey: 'Client Satisfaction Survey',
     profile: 'My Profile',
     history: 'Survey History'
@@ -2138,6 +2337,15 @@ function navigate(stage) {
 const i18n = {
     en: {
         gov_rep: "Republic of the Philippines",
+        home_title: "Center for Quality Assurance",
+        home_subtitle: "Public Transparency &amp; Client Satisfaction Portal — Camarines Sur Polytechnic Colleges",
+        home_cqa_title: "About the Center for Quality Assurance",
+        home_cqa_body: "The Center for Quality Assurance (CQA) leads CSPC's institutional efforts to uphold service excellence, monitor compliance with quality standards, and drive continuous improvement across all academic and administrative units — ensuring that the services delivered to students, employees, and the public consistently meet the highest standards of efficiency, transparency, and accountability.",
+        home_csm_title: "About the CSM Survey",
+        home_csm_body: "The Client Satisfaction Measurement (CSM) is a short, standardized survey you complete right after availing a government service. It captures how satisfied you were with the transaction and helps CSPC identify which offices and services need improvement — supporting the College's compliance with the Ease of Doing Business and Efficient Government Service Delivery Act (Republic Act No. 11032).",
+        home_chip_confidential: "Confidential",
+        home_chip_arta: "RA 11032 / ARTA-mandated",
+        home_chip_quick: "Takes only a few minutes",
         form_title: "Client Satisfaction Measurement (CSM) Survey",
         s1_head: "Help us serve you better!",
         s1_desc: "This Client Satisfaction Measurement (CSM) tracks the customer experience of government offices. Your feedback on your recently concluded transaction will help this office provide a better service. Personal information shared will be kept confidential and you always have the option to not answer this form.",
@@ -2154,6 +2362,8 @@ const i18n = {
             "You may read the full Terms and Conditions / Privacy Policy at any time using the button below before agreeing."
         ],
         client_prof: "Client Profile",
+        lbl_name: "Name / Pangalan (Optional)",
+        ph_name: "e.g. Juan Dela Cruz",
         lbl_client_type: "Client Type:",
         opt_citizen: "Citizen",
         opt_business: "Business",
@@ -2171,6 +2381,7 @@ const i18n = {
         lbl_office: "Office Visited:",
         lbl_service: "Service Availed:",
         opt_select_region: "Select Region...",
+        s1_ph: "Select Office...",
         btn_back: "Back",
         btn_next: "Next",
         cc_title: "Citizen's Charter (CC)",
@@ -2214,13 +2425,69 @@ const i18n = {
             "SQD6. I feel the office was fair to everyone, or 'walang palakasan', during my transaction.",
             "SQD7. I was treated courteously by the staff.",
             "SQD8. I got what I needed from the government office."
-        ]
+        ],
+        rv_title: "Review &amp; Confirmation",
+        rv_desc: "Please double-check your answers below before submitting. Click \"Edit\" on any section to make changes.",
+        rv_edit: "Edit / Baguhin",
+        rv_sec_profile: "Client Profile",
+        rv_sec_cc: "Citizen's Charter",
+        rv_sec_sqd: "Service Quality Ratings",
+        rv_sec_sugg: "Suggestions",
+        rv_lbl_name: "Name",
+        rv_lbl_email: "Google Account",
+        rv_lbl_clienttype: "Client Type",
+        rv_lbl_gender: "Sex",
+        rv_lbl_age: "Age",
+        rv_lbl_date: "Date",
+        rv_lbl_region: "Region",
+        rv_lbl_office: "Office Visited",
+        rv_lbl_service: "Service Availed",
+        terms_modal_title: "Terms &amp; Conditions / Privacy Policy",
+        terms_modal_close: "I Understand",
+        terms_full: `
+                <h6 class="fw-bold">Privacy Policy</h6>
+                <p>This privacy statement discloses the privacy practices of the Unified Information System (UnIS) and its sub-modules.</p>
+
+                <h6 class="fw-bold mt-3">Information Collection and Use</h6>
+                <p>UnIS is the sole owner of the information collected on this site. We will not sell, share, or rent this information to others in ways different from what is disclosed in this statement. UnIS collects information from our users at several different points on our Web application.</p>
+                <p>In order to use some features of this web application, users must first complete the profiling form. During registration, users are required to give their personal and contact information (name and e-mail address), family background, and demographics. This information is used for academic purposes only.</p>
+
+                <h6 class="fw-bold mt-3">Cookies</h6>
+                <p>UnIS may use cookies to remember if users have logged in while on our site. This allows web site users to avoid logging in more than once, thereby saving time. Users have the option of disabling or not accepting cookies by changing the preferences on their browsers. If users opt to disable cookies, they will still be able to use our Web site. However, they will not be able to use some functionality or post to the message boards. No personally identifiable information (e-mail address, name, etc.) is collected with the cookies that we set. Accepting cookies while on the UnIS site will not put the user at risk for marketing to other sites.</p>
+
+                <h6 class="fw-bold mt-3">Web Statistics</h6>
+                <p>We use IP addresses to analyze trends, administer the site, track user movement, and gather broad demographic information for aggregate use for reporting purposes. IP addresses are not linked to personally identifiable information.</p>
+
+                <h6 class="fw-bold mt-3">Sharing</h6>
+                <p>We will not share any information to external organization except for government organization, administration and institutional researcher which is requirement for reporting and analytics purposes. This is not linked to any personal information that can identify any individual person. Data are shared to other institutional information system through a secured and authenticated API.</p>
+
+                <h6 class="fw-bold mt-3">Security</h6>
+                <p>This Web site takes every precaution to protect our users' information, and we have security measures in place to protect the loss, misuse, and alteration of the information under our control.</p>
+
+                <h6 class="fw-bold mt-3">Updates</h6>
+                <p>We may also send the user site and service announcement updates.</p>
+
+                <h6 class="fw-bold mt-3">Data Privacy</h6>
+                <p>All provisions of laws, administrative orders, circular, regulations, and other issuances inconsistent with this policy are hereby repealed or modified accordingly.</p>
+
+                <h6 class="fw-bold mt-3">Notification of Changes</h6>
+                <p>If we decide to change our privacy policy, we will post those changes on our home page so our users are always aware of what information we collect, how we use it, and under what circumstances, if any, we disclose it. If at any point we decide to use personally identifiable information in a manner different from that stated at the time it was collected, we will notify users by e-mail. Users will have a choice as to whether or not we use their information in this different manner. We will use information in accordance with the privacy policy under which the information was collected.</p>
+        `
     },
     tl: {
         gov_rep: "Republika ng Pilipinas",
+        home_title: "Sentro para sa Katiyakan ng Kalidad",
+        home_subtitle: "Portal ng Transparency sa Publiko at Kasiyahan ng Kliyente — Camarines Sur Polytechnic Colleges",
+        home_cqa_title: "Tungkol sa Center for Quality Assurance",
+        home_cqa_body: "Pinamumunuan ng Center for Quality Assurance (CQA) ang institusyonal na pagsisikap ng CSPC na panatilihin ang kahusayan sa serbisyo, subaybayan ang pagsunod sa mga pamantayan ng kalidad, at itaguyod ang tuloy-tuloy na pagpapabuti sa lahat ng akademiko at administratibong yunit — tinitiyak na ang mga serbisyong inihahatid sa mga estudyante, empleyado, at publiko ay patuloy na nakakatugon sa pinakamataas na pamantayan ng kahusayan, transparency, at pananagutan.",
+        home_csm_title: "Tungkol sa Sarbey ng CSM",
+        home_csm_body: "Ang Client Satisfaction Measurement (CSM) ay maikli at pamantayang sarbey na sinasagutan mo pagkatapos mong makinabang sa isang serbisyo ng pamahalaan. Nakukuha nito kung gaano ka nasiyahan sa transaksyon at tumutulong sa CSPC na matukoy kung aling mga tanggapan at serbisyo ang kailangang mapabuti — suporta ito sa pagsunod ng Kolehiyo sa Ease of Doing Business and Efficient Government Service Delivery Act (Republic Act No. 11032).",
+        home_chip_confidential: "Kompidensyal",
+        home_chip_arta: "RA 11032 / Utos ng ARTA",
+        home_chip_quick: "Ilang minuto lamang",
         form_title: "Sarbey ng Pagsusukat ng Kasiyahan ng Kliyente",
         s1_head: "Tulungan kaming mas mapaglingkuran kayo!",
-        s1_desc: "Ang Client Satisfaction Measurement (CSM) ay naglalayong masubaybayan ang karanasan ng taumbayan...",
+        s1_desc: "Sinusubaybayan ng Client Satisfaction Measurement (CSM) na ito ang karanasan ng mga kliyente sa mga tanggapan ng pamahalaan. Ang iyong puna sa transaksyong kagagawa lamang mo ay makakatulong sa opisinang ito upang mas mapaganda pa ang paglilingkod nito. Ang personal na impormasyong ibabahagi ay mananatiling kompidensyal at maaari mo pa ring piliing hindi sagutin ang porma na ito.",
         btn_start: "SIMULAN ANG SARBEY",
         terms_title: "Mga Tuntunin at Kundisyon",
         terms_summary: "Bago magsimula, pakibasa kung paano kokolektahin at gagamitin ang iyong impormasyon para sa sarbey na ito.",
@@ -2234,6 +2501,8 @@ const i18n = {
             "Maaari mong basahin ang buong Tuntunin at Kundisyon / Patakaran sa Privacy anumang oras gamit ang buton sa ibaba bago sumang-ayon."
         ],
         client_prof: "Pagkakakilanlan ng Kliyente",
+        lbl_name: "Pangalan (Opsyonal)",
+        ph_name: "hal. Juan Dela Cruz",
         lbl_client_type: "Uri ng Kliyente:",
         opt_citizen: "Mamamayan",
         opt_business: "Negosyo",
@@ -2251,15 +2520,16 @@ const i18n = {
         lbl_office: "Pinuntahang Tanggapan:",
         lbl_service: "Serbisyong Ginamit:",
         opt_select_region: "Pumili ng Rehiyon...",
+        s1_ph: "Pumili ng Tanggapan...",
         btn_back: "Bumalik",
         btn_next: "Susunod",
         cc_title: "Citizen's Charter (CC)",
-        cc_desc: "PANUTO: Lagyan ng tsek (✓) ang iyong sagot sa mga sumusunod...",
+        cc_desc: "PANUTO: Lagyan ng tsek (✓) ang iyong sagot sa mga tanong tungkol sa Citizen's Charter (CC). Ang Citizen's Charter ay opisyal na dokumento na naglalaman ng mga serbisyo ng isang ahensya/tanggapan ng pamahalaan kasama na ang mga kinakailangan, bayarin, at oras ng pagproseso, bukod sa iba pa.",
         cc1_q: "Alin sa mga sumusunod ang naglalarawan sa iyong kaalaman sa CC?",
         cc1_1: "Alam ko ang CC at nakita ko ito sa napuntahang opisina",
         cc1_2: "Alam ko ang CC pero hindi ko ito nakita sa napuntahang opisina",
         cc1_3: "Nalaman ko ang CC nang makita ko ito sa napuntahang opisina",
-        cc1_4: "Hindi ko alam kung ano ang CC at wala akong nakita...",
+        cc1_4: "Hindi ko alam kung ano ang CC at wala akong nakitang CC sa opisinang ito (Sagutin ng N/A ang CC2 at CC3)",
         cc2_q: "Kung alam ang CC, masasabi mo ba na ang CC nang napuntahang opisina ay...",
         cc2_1: "Madaling makita",
         cc2_2: "Medyo madaling makita",
@@ -2272,7 +2542,7 @@ const i18n = {
         cc3_3: "Nakatulong naman",
         cc3_4: "N/A",
         sqd_title: "Mga Dimensyon ng Kalidad ng Serbisyo",
-        sqd_desc: "Para sa SQD 0-8, lagyan ng tsek (✓) ang hanay na pinakaangkop...",
+        sqd_desc: "Para sa SQD 0-8, lagyan ng tsek (✓) ang hanay na pinakaangkop sa iyong sagot.",
         th_statement: "Pahayag",
         th_sa: "Labis na Sumasang-ayon",
         th_a: "Sumasang-ayon",
@@ -2282,19 +2552,66 @@ const i18n = {
         lbl_sugg: "Mge suhestiyon kung paano pa mapapabuti pa ang aming mga serbisyo:",
         btn_submit: "Isumite",
         ty_title: "MARAMING SALAMAT!",
-        ty_desc: "Matagumpay na naipadala ang iyong tugon.",
+        ty_desc: "Matagumpay na naipadala ang iyong tugon. Mahalaga sa amin ang iyong puna para sa",
         btn_again: "Magsumite Muli",
         sqd_items: [
             "SQD0. Nasiyahan ako sa serbisyo na aking natanggap sa napuntahan na tanggapan",
             "SQD1. Makatwiran ang oras na aking ginugol para sa pagproseso ng aking transaksyon.",
-            "SQD2. Ang opisina ay sumusunod sa mga kinakailangang dokumento at mga hakbang...",
-            "SQD3. Ang mga hakbang sa pagproseso, kasama na ang pagbayad ay madali at simple lamang.",
-            "SQD4. Mabilis at madali akong nakahanap ng impormasyon...",
+            "SQD2. Sinunod ng opisina ang mga kinakailangan at hakbang ng transaksyon batay sa impormasyong ibinigay.",
+            "SQD3. Ang mga hakbang (kasama na ang pagbayad) na kailangan ko para sa aking transaksyon ay madali at simple lamang.",
+            "SQD4. Madali akong nakahanap ng impormasyon tungkol sa aking transaksyon mula sa opisina o sa kanilang website.",
             "SQD5. Nagbayad ako ng makatwirang halaga para sa aking transaksyon.",
-            "SQD6. Pakiramdam ko ay patas ang opisina sa lahat...",
-            "SQD7. Magalang at matulungin ang mga kawani.",
+            "SQD6. Pakiramdam ko ay patas ang opisina sa lahat, o 'walang palakasan', sa aking transaksyon.",
+            "SQD7. Magalang akong pinakitunguhan ng mga kawani.",
             "SQD8. Nakuha ko ang aking kinakailangan mula sa opisina ng gobyerno."
-        ]
+        ],
+        rv_title: "Pagsusuri at Kumpirmasyon",
+        rv_desc: "Pakisuri muna ang iyong mga sagot sa ibaba bago magsumite. I-click ang \"Baguhin\" sa alinmang seksyon para gumawa ng pagbabago.",
+        rv_edit: "Edit / Baguhin",
+        rv_sec_profile: "Pagkakakilanlan ng Kliyente",
+        rv_sec_cc: "Citizen's Charter",
+        rv_sec_sqd: "Mga Rating sa Kalidad ng Serbisyo",
+        rv_sec_sugg: "Mga Suhestiyon",
+        rv_lbl_name: "Pangalan",
+        rv_lbl_email: "Google Account",
+        rv_lbl_clienttype: "Uri ng Kliyente",
+        rv_lbl_gender: "Kasarian",
+        rv_lbl_age: "Edad",
+        rv_lbl_date: "Petsa",
+        rv_lbl_region: "Rehiyon",
+        rv_lbl_office: "Pinuntahang Tanggapan",
+        rv_lbl_service: "Serbisyong Ginamit",
+        terms_modal_title: "Mga Tuntunin at Kundisyon / Patakaran sa Privacy",
+        terms_modal_close: "Nauunawaan Ko",
+        terms_full: `
+                <h6 class="fw-bold">Patakaran sa Privacy</h6>
+                <p>Inilalahad ng pahayag na ito ng privacy ang mga gawi ng Unified Information System (UnIS) at ng mga sub-module nito kaugnay ng pagprotekta ng iyong impormasyon.</p>
+
+                <h6 class="fw-bold mt-3">Pangongolekta at Paggamit ng Impormasyon</h6>
+                <p>Ang UnIS ang tanging may-ari ng impormasyong kinokolekta sa site na ito. Hindi namin ibebenta, ibabahagi, o ipaparenta ang impormasyong ito sa iba maliban sa mga paraang nakasaad sa pahayag na ito. Kinukuha ng UnIS ang impormasyon mula sa aming mga gumagamit sa iba't ibang bahagi ng aming Web application.</p>
+                <p>Upang magamit ang ilang tampok ng web application na ito, kinakailangan munang punan ng mga gumagamit ang profiling form. Sa panahon ng pagpaparehistro, hinihiling sa mga gumagamit na ibigay ang kanilang personal at contact information (pangalan at e-mail address), family background, at demograpiko. Ang impormasyong ito ay ginagamit lamang para sa layuning akademiko.</p>
+
+                <h6 class="fw-bold mt-3">Cookies</h6>
+                <p>Maaaring gumamit ang UnIS ng cookies upang matandaan kung naka-login na ang mga gumagamit sa aming site. Nakakatulong ito upang hindi na kailangang mag-login nang paulit-ulit, kaya nakakatipid ng oras. May opsyon ang mga gumagamit na i-disable o hindi tanggapin ang cookies sa pamamagitan ng pagbabago ng mga preference sa kanilang browser. Kung pipiliin ng mga gumagamit na i-disable ang cookies, magagamit pa rin nila ang aming Web site. Gayunpaman, hindi nila magagamit ang ilang function o makapag-post sa mga message board. Walang personal na impormasyong makapagpapakilala (e-mail address, pangalan, atbp.) ang kinokolekta kasama ng cookies na aming ise-set. Ang pagtanggap ng cookies habang nasa UnIS site ay hindi maglalagay sa gumagamit sa alanganin para sa marketing sa ibang site.</p>
+
+                <h6 class="fw-bold mt-3">Web Statistics</h6>
+                <p>Ginagamit namin ang mga IP address upang suriin ang mga trend, pangasiwaan ang site, subaybayan ang paggalaw ng gumagamit, at mangalap ng malawak na demograpikong impormasyon para sa layuning pag-uulat. Hindi konektado ang mga IP address sa anumang personal na impormasyong makapagpapakilala.</p>
+
+                <h6 class="fw-bold mt-3">Pagbabahagi</h6>
+                <p>Hindi namin ibabahagi ang anumang impormasyon sa panlabas na organisasyon maliban sa mga ahensya ng gobyerno, administrasyon, at mananaliksik ng institusyon na kinakailangan para sa layuning pag-uulat at analytics. Hindi ito konektado sa anumang personal na impormasyon na makapagpapakilala sa sinumang indibidwal. Ibinabahagi ang mga datos sa ibang institutional information system sa pamamagitan ng secure at authenticated API.</p>
+
+                <h6 class="fw-bold mt-3">Seguridad</h6>
+                <p>Ginagawa ng Web site na ito ang lahat ng pag-iingat upang protektahan ang impormasyon ng aming mga gumagamit, at mayroon kaming mga hakbang sa seguridad upang protektahan laban sa pagkawala, maling paggamit, at pagbabago ng impormasyong nasa ilalim ng aming kontrol.</p>
+
+                <h6 class="fw-bold mt-3">Mga Update</h6>
+                <p>Maaari din naming ipadala sa gumagamit ang mga update tungkol sa site at serbisyo.</p>
+
+                <h6 class="fw-bold mt-3">Data Privacy</h6>
+                <p>Ang lahat ng probisyon ng batas, administrative order, circular, regulasyon, at iba pang isyu na hindi kasabay ng patakarang ito ay dito na binabawi o binabago nang naaayon.</p>
+
+                <h6 class="fw-bold mt-3">Abiso ng Pagbabago</h6>
+                <p>Kung magpasya kaming baguhin ang aming patakaran sa privacy, ipopost namin ang mga pagbabagong iyon sa aming home page upang lagi kaming nalalaman ng aming mga gumagamit kung anong impormasyon ang kinokolekta namin, kung paano ito ginagamit, at sa anong mga sitwasyon, kung mayroon man, ibinubunyag namin ito. Kung sa anumang punto ay magpasya kaming gamitin ang personal na impormasyong makapagpapakilala sa paraang iba sa nakasaad noong kinolekta ito, aabisuhan namin ang mga gumagamit sa pamamagitan ng e-mail. Magkakaroon ng pagpipilian ang mga gumagamit kung gagamitin namin ang kanilang impormasyon sa ganitong ibang paraan o hindi. Gagamitin namin ang impormasyon alinsunod sa patakaran sa privacy kung saan ito kinolekta.</p>
+        `
     }
 };
 
@@ -2335,6 +2652,12 @@ function updateTranslations() {
         const key = el.getAttribute("data-i18n");
         if (i18n[currentLang][key]) {
             el.innerHTML = i18n[currentLang][key];
+        }
+    });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+        const key = el.getAttribute("data-i18n-placeholder");
+        if (i18n[currentLang][key]) {
+            el.setAttribute("placeholder", i18n[currentLang][key]);
         }
     });
 }

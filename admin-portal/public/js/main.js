@@ -32,4 +32,23 @@ document.addEventListener("DOMContentLoaded", function() {
             if(titleElement) titleElement.innerText = pageTitle;
         }
     });
+
+    // Smooth page transitions: every sidebar link is a real page load (no SPA
+    // router), so we fake a crossfade by fading #content out before letting
+    // the navigation happen, and #content fades in on arrival via CSS.
+    const content = document.getElementById('content');
+    if (content) {
+        document.querySelectorAll('#sidebar a[href]:not([data-bs-toggle])').forEach(link => {
+            link.addEventListener('click', function(e) {
+                const href = link.getAttribute('href');
+                const isSamePage = href === currentPath;
+                const isModifiedClick = e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0;
+                if (isSamePage || isModifiedClick || link.target === '_blank') return;
+
+                e.preventDefault();
+                content.classList.add('page-fade-out');
+                setTimeout(() => { window.location.href = href; }, 180);
+            });
+        });
+    }
 });

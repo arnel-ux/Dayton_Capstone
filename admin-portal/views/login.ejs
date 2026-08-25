@@ -108,7 +108,7 @@
             text-transform: uppercase;
             letter-spacing: 2.2px;
             padding: 0.3rem 0.9rem;
-            background: rgba(79, 70, 229, 0.35);
+            background: rgba(244, 180, 0, 0.35);
             border: 1px solid rgba(255, 255, 255, 0.25);
             border-radius: 50px;
             backdrop-filter: blur(6px);
@@ -179,7 +179,7 @@
         .card-custom .divider-soft {
             width: 36px;
             height: 3px;
-            background: #4f46e5;
+            background: #f4b400;
             border-radius: 50px;
             margin: 0.4rem auto 0.55rem;
         }
@@ -211,9 +211,9 @@
         }
 
         .input-modern:focus-within {
-            border-color: #4f46e5;
+            border-color: #0a1f44;
             background: #ffffff;
-            box-shadow: 0 0 0 0.2rem rgba(79, 70, 229, 0.15);
+            box-shadow: 0 0 0 0.2rem rgba(10, 31, 68, 0.15);
         }
 
         .input-modern .input-icon {
@@ -228,7 +228,7 @@
         }
 
         .input-modern:focus-within .input-icon {
-            color: #4f46e5;
+            color: #0a1f44;
         }
 
         .input-modern .form-control {
@@ -254,7 +254,7 @@
         .forgot-link {
             font-size: 0.75rem;
             font-weight: 600;
-            color: #4f46e5;
+            color: #0a1f44;
             text-decoration: none;
             transition: color 0.2s ease;
         }
@@ -266,7 +266,7 @@
 
         /* Primary login button */
         .btn-login {
-            background: linear-gradient(135deg, #4f46e5, #4338ca);
+            background: linear-gradient(135deg, #0a1f44, #12305c);
             border: none;
             border-radius: 0.75rem;
             padding: 0.6rem 1rem;
@@ -274,14 +274,14 @@
             font-size: 0.9rem;
             letter-spacing: 0.2px;
             color: #ffffff;
-            box-shadow: 0 8px 18px -6px rgba(79, 70, 229, 0.55);
+            box-shadow: 0 8px 18px -6px rgba(10, 31, 68, 0.55);
             transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
         }
 
         .btn-login:hover {
             filter: brightness(1.06);
             transform: translateY(-1px);
-            box-shadow: 0 12px 22px -6px rgba(79, 70, 229, 0.6);
+            box-shadow: 0 12px 22px -6px rgba(10, 31, 68, 0.6);
             color: #ffffff;
         }
 
@@ -329,8 +329,8 @@
 
         .btn-google:hover {
             background-color: #f8fafc;
-            border-color: #4f46e5;
-            box-shadow: 0 6px 16px -4px rgba(79, 70, 229, 0.25);
+            border-color: #0a1f44;
+            box-shadow: 0 6px 16px -4px rgba(10, 31, 68, 0.25);
             transform: translateY(-1px);
         }
 
@@ -444,7 +444,14 @@
     <script src="/js/alerts.js"></script>
     <script>
         const loginQueryParams = new URLSearchParams(window.location.search);
-        const loginErrorMsg = loginQueryParams.get('error');
+        let loginErrorMsg = loginQueryParams.get('error');
+
+        // session_expired is a plain status code (not a human-readable message) —
+        // set when login_token no longer matches admins.login_token, i.e. this
+        // account logged in from another tab/device and this session was displaced.
+        if (loginErrorMsg === 'session_expired') {
+            loginErrorMsg = 'You have been logged out because this account was signed in from another tab or device.';
+        }
 
         if (loginErrorMsg) {
             AppAlert.error(loginErrorMsg, 'Login Failed');

@@ -105,8 +105,12 @@
                         <div class="col-md-3">
                             <label class="form-label text-muted">Period Covered</label>
                             <select class="form-select bg-light" id="selectPeriod">
-                                <option value="January - June 2026">January - June 2026</option>
-                                <option value="July - December 2026">July - December 2026</option>
+                                <option value="">All Periods</option>
+                                <% if (typeof periodOptions !== 'undefined') { %>
+                                    <% periodOptions.forEach(function(opt) { %>
+                                        <option value="<%= opt.value %>"><%= opt.label %></option>
+                                    <% }); %>
+                                <% } %>
                             </select>
                         </div>
                         <div class="col-md-4">
@@ -333,8 +337,10 @@
     async function generateReport() {
         const selectedOffice = document.getElementById('selectOffice').value;
         const selectedQuarter = document.getElementById('selectQuarter').value;
-        const selectedPeriod = document.getElementById('selectPeriod').value;
-        const displayPeriodText = `${selectedQuarter}, ${selectedPeriod}`;
+        const selectedPeriodSelect = document.getElementById('selectPeriod');
+        const selectedPeriod = selectedPeriodSelect.value;
+        const selectedPeriodLabel = selectedPeriodSelect.options[selectedPeriodSelect.selectedIndex].text;
+        const displayPeriodText = `${selectedQuarter}, ${selectedPeriodLabel}`;
 
         document.getElementById('displayOfficeName1').innerText = selectedOffice;
         document.getElementById('displayPeriod1').innerText = displayPeriodText;
@@ -345,7 +351,7 @@
             const response = await fetch('/api/report-data', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ office: selectedOffice, quarter: selectedQuarter, period: selectedPeriod })
+                body: JSON.stringify({ office: selectedOffice, periodCovered: selectedPeriod })
             });
             const data = await response.json();
             
@@ -354,6 +360,7 @@
             
             document.getElementById('emptyState').style.display = 'none';
             document.getElementById('generatedReportWrapper').style.display = 'block';
+            document.getElementById('generatedReportWrapper').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
         } catch (err) {
             console.error("Error generating report:", err);

@@ -4,6 +4,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const mysql = require('mysql2');
+const crypto = require('crypto');
 const { spawn } = require('child_process'); // 🔥 ADDED THIS LINE
 const { promisify } = require('util');
 const session = require('express-session');
@@ -32,12 +33,49 @@ app.use((req, res, next) => {
 // ==========================================
 // SESSION & PASSPORT (Google OAuth for clients)
 // ==========================================
+// Named explicitly (instead of letting express-session create an anonymous default
+// store) so background code — the admin_logs "is this session still alive?" checks —
+// can query it directly via sessionStore.get(), outside of any request.
+const sessionStore = new session.MemoryStore();
+
 app.use(session({
+    store: sessionStore,
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: { maxAge: 1000 * 60 * 60 * 8 } // 8 hours
 }));
+
+// Promise wrapper so both the periodic sweep and the "Active Now" render check can
+// `await` a straight true/false instead of juggling get()'s (err, session) callback.
+const sessionStoreGet = promisify(sessionStore.get).bind(sessionStore);
+async function isSessionAlive(sessionId) {
+    if (!sessionId) return false;
+    try {
+        const sessionData = await sessionStoreGet(sessionId);
+        return !!sessionData;
+    } catch (e) {
+        console.error('❌ Error checking session store for admin_logs liveness check:', e);
+        return false;
+    }
+}
+
+// Used to force-invalidate another tab/device's still-open session when a fresh
+// login enforces "one active session per admin account" (see /auth-login below).
+const sessionStoreDestroy = promisify(sessionStore.destroy).bind(sessionStore);
+
+// One-time flag consumed immediately after a successful login (admin OR client) so
+// the very next page load — the redirect target — can mark THIS browser tab as
+// "verified" via sessionStorage (see layout/header.ejs and client-survey.ejs).
+// sessionStorage is scoped per-tab, unlike the session cookie which is shared by
+// every tab in the browser — so pasting a protected URL into a brand-new tab (or
+// one that was never explicitly logged into) finds no verified flag there and is
+// bounced back to /login, even though the cookie itself is still perfectly valid.
+app.use((req, res, next) => {
+    res.locals.grantTabAccess = !!(req.session && req.session.justLoggedIn);
+    if (req.session) delete req.session.justLoggedIn;
+    next();
+});
 
 app.use(passport.initialize());
 app.use(passport.session());
@@ -52,13 +90,14 @@ passport.deserializeUser((user, done) => done(null, user));
 // above — req.session doesn't exist yet before that.
 app.use((req, res, next) => {
     res.locals.adminLogs = [];
-    if (!(req.session && req.session.user && req.session.user.role === 'admin')) {
+    res.locals.currentAdmin = (req.session && req.session.admin) || null;
+    if (!(req.session && req.session.user && req.session.user.type === 'admin')) {
         return next();
     }
 
     db.query(`
         SELECT
-            id, username, login_time, logout_time,
+            id, username, session_id, login_time, logout_time,
             DATE_FORMAT(login_time, '%b %d, %Y') AS login_date,
             DATE_FORMAT(login_time, '%h:%i %p') AS login_time_fmt,
             DATE_FORMAT(logout_time, '%h:%i %p') AS logout_time_fmt,
@@ -66,16 +105,22 @@ app.use((req, res, next) => {
         FROM admin_logs
         ORDER BY login_time DESC
         LIMIT 20
-    `, (err, rows) => {
+    `, async (err, rows) => {
         if (err) {
             console.error('❌ Error loading admin logs:', err);
             return next();
         }
 
-        res.locals.adminLogs = (rows || []).map(r => {
+        // A row with logout_time IS NULL only counts as "Active Now" if its session_id
+        // still resolves to a live entry in the session store — this is what lets several
+        // logins for the same admin account (different tabs/devices) each show their own
+        // accurate status instead of all going stale together or staying "active" forever
+        // after an abandoned browser tab's cookie silently expires.
+        res.locals.adminLogs = await Promise.all((rows || []).map(async r => {
             const totalSeconds = r.duration_seconds || 0;
             const hrs = Math.floor(totalSeconds / 3600);
             const mins = Math.floor((totalSeconds % 3600) / 60);
+            const isActive = !r.logout_time && await isSessionAlive(r.session_id);
 
             return {
                 username: r.username,
@@ -83,10 +128,10 @@ app.use((req, res, next) => {
                 login_time_fmt: r.login_time_fmt,
                 logout_time_fmt: r.logout_time_fmt,
                 duration_text: hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`,
-                isActive: !r.logout_time,
+                isActive,
                 login_time_iso: r.login_time.toISOString()
             };
-        });
+        }));
         next();
     });
 });
@@ -117,6 +162,7 @@ function ensureClientAuth(req, res, next) {
     const email = getClientEmail(req);
     if (email) {
         req.clientEmail = email;
+        res.locals.requiresTabSession = true; // gates this page behind the per-tab sessionStorage check
         return next();
     }
     if (req.is('application/json') || req.xhr) {
@@ -128,11 +174,54 @@ function ensureClientAuth(req, res, next) {
 // Ensures only a logged-in admin (set at /auth-login) can view/use admin pages & CRUD routes.
 // Same null/undefined/destroyed-session handling as ensureClientAuth above.
 function ensureAdminAuth(req, res, next) {
-    if (req.session && req.session.user && req.session.user.role === 'admin') {
-        return next();
+    if (req.session && req.session.user && req.session.user.type === 'admin') {
+        // Tabs in the same browser share one session cookie, so a fresh login in
+        // Tab 2 can't be told apart from Tab 1 by session/cookie alone — both
+        // requests carry the exact same req.sessionID. login_token is the
+        // tie-breaker: /auth-login stamps a brand new one on admins.login_token
+        // AND req.session.login_token on every login, so whichever tab's session
+        // was NOT the most recent login (regenerate() also gives it a fresh
+        // sessionID, invalidating this copy) fails this comparison on its very
+        // next request.
+        return db.query('SELECT login_token FROM admins WHERE id = ?', [req.session.user.id], (err, rows) => {
+            if (err) {
+                console.error('❌ Error verifying login_token:', err);
+                return res.redirect(302, '/login?error=' + encodeURIComponent('Server error. Please try again.'));
+            }
+
+            const dbToken = rows && rows[0] ? rows[0].login_token : null;
+            if (!dbToken || dbToken !== req.session.login_token) {
+                return req.session.destroy((destroyErr) => {
+                    if (destroyErr) console.error('❌ Error destroying stale session:', destroyErr);
+                    res.clearCookie('connect.sid', { path: '/' });
+                    return res.redirect(302, '/login?error=session_expired');
+                });
+            }
+
+            res.locals.requiresTabSession = true; // gates this page behind the per-tab sessionStorage check
+            res.locals.loginToken = dbToken; // read by the cross-tab BroadcastChannel sync script (layout/header.ejs)
+
+            // Powers the sidebar's "All Cluster" submenu — queried per-request (rather
+            // than passed by every single route handler) so a newly added cluster
+            // shows up there immediately without touching every res.render() call.
+            db.query('SELECT id, cluster_name FROM clusters WHERE is_archived = 0 ORDER BY cluster_name', (err, clusters) => {
+                res.locals.sidebarClusters = err ? [] : clusters;
+                next();
+            });
+        });
     }
     if (req.is('application/json') || req.xhr) {
         return res.status(401).json({ success: false, message: "Please log in as admin first." });
+    }
+
+    // A session cookie was sent but no admin session was found behind it. Since
+    // /auth-login destroys every OTHER open session on an account the moment it
+    // logs in again (one active session per admin), this is exactly what that
+    // looks like from the kicked-out tab's side — surface it instead of silently
+    // bouncing to a blank login form.
+    const hadSessionCookie = !!(req.headers.cookie && req.headers.cookie.includes('connect.sid='));
+    if (hadSessionCookie) {
+        return res.redirect(302, '/login?error=' + encodeURIComponent('Your session has expired because this account was logged in from another device or tab.'));
     }
     return res.redirect(302, '/login');
 }
@@ -570,7 +659,7 @@ function sendSurveyReceiptEmail(toEmail, receipt) {
     const sqdRowsHtml = receipt.sqd.map((r, idx) => `
         <tr>
             <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};font-size:13px;color:#334155;">${sqdStatementFor(r.label)}</td>
-            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};text-align:center;font-weight:700;font-size:13px;color:#4f46e5;width:70px;">${r.value === null ? 'N/A' : (r.value === 0 ? 'N/A' : r.value + ' / 5')}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};text-align:center;font-weight:700;font-size:13px;color:#0a1f44;width:70px;">${r.value === null ? 'N/A' : (r.value === 0 ? 'N/A' : r.value + ' / 5')}</td>
         </tr>`).join('');
 
     const detailRow = (label, value) => `
@@ -623,7 +712,7 @@ function sendSurveyReceiptEmail(toEmail, receipt) {
                             <!-- Header -->
                             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                                 <tr>
-                                    <td class="receipt-header" style="background:#4f46e5;padding:32px 28px;text-align:center;">
+                                    <td class="receipt-header" style="background:#0a1f44;padding:32px 28px;text-align:center;">
                                         ${logoHtml}
                                         <p style="margin:0 0 2px;color:#dbe4fb;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;">Republic of the Philippines</p>
                                         <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">Camarines Sur Polytechnic Colleges</h1>
@@ -637,7 +726,7 @@ function sendSurveyReceiptEmail(toEmail, receipt) {
                                 <tr>
                                     <td style="padding:14px 28px;border-bottom:1px dashed #cbd5e1;background:#f8fafc;text-align:center;">
                                         <span style="font-size:11px;color:#64748b;letter-spacing:.04em;text-transform:uppercase;">Reference No.</span>
-                                        <span style="display:block;font-size:16px;font-weight:700;color:#4f46e5;font-family:'Courier New',monospace;letter-spacing:.03em;">CSM-${receipt.surveyResponseId}</span>
+                                        <span style="display:block;font-size:16px;font-weight:700;color:#0a1f44;font-family:'Courier New',monospace;letter-spacing:.03em;">CSM-${receipt.surveyResponseId}</span>
                                     </td>
                                 </tr>
                             </table>
@@ -800,6 +889,18 @@ CREATE TABLE IF NOT EXISTS client_accounts (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );`;
 
+// One row per admin user account — replaces the old hardcoded admin/admin123 login.
+const createAdminsTableQuery = `
+CREATE TABLE IF NOT EXISTS admins (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    fullname VARCHAR(255) NOT NULL,
+    gender VARCHAR(50) DEFAULT 'Male',
+    role VARCHAR(50) DEFAULT 'Admin',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);`;
+
 // One row per admin login session — closed off (logout_time filled in) on
 // /logout or when /login treats an active session as an implicit logout.
 const createAdminLogsTableQuery = `
@@ -811,23 +912,89 @@ CREATE TABLE IF NOT EXISTS admin_logs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );`;
 
-db.query(createAdminLogsTableQuery, (err) => {
+db.query(createAdminsTableQuery, (err) => {
     if (err) {
-        console.error("❌ Error creating admin_logs table:", err);
+        console.error("❌ Error creating admins table:", err);
         return;
     }
-    console.log('✅ admin_logs table verified/created successfully!');
+    console.log('✅ admins table verified/created successfully!');
 
-    // Sessions live in memory (express-session's default MemoryStore) — a server
-    // restart wipes every session, including req.session.adminLogId, so no
-    // browser can ever close these rows via /logout anymore. Left alone they'd
-    // show as "Active now" forever. Close them out at the moment of restart,
-    // since that's effectively when those sessions actually ended.
-    db.query('UPDATE admin_logs SET logout_time = NOW() WHERE logout_time IS NULL', (err, result) => {
-        if (err) console.error("❌ Error closing orphaned admin_logs rows:", err);
-        else if (result.affectedRows > 0) console.log(`✅ Closed ${result.affectedRows} orphaned admin_logs row(s) from before this restart.`);
+    // Seed the two original accounts once, so a fresh database still boots with
+    // working admin logins (existing databases keep whatever's already in there).
+    db.query('SELECT COUNT(*) AS count FROM admins', (err, result) => {
+        if (!err && result[0].count === 0) {
+            const seedAdmins = `INSERT INTO admins (username, password, fullname, gender, role) VALUES
+                ('admin1', 'francis123', 'Francis James Obis', 'Male', 'Super Admin'),
+                ('admin2', 'arnel123', 'Arnel Marquina', 'Male', 'Admin');`;
+            db.query(seedAdmins, () => console.log('✅ Default admin accounts seeded.'));
+        }
+    });
+
+    // admin_logs is created only after admins exists, so its admin_id FK below can resolve.
+    db.query(createAdminLogsTableQuery, (err) => {
+        if (err) {
+            console.error("❌ Error creating admin_logs table:", err);
+            return;
+        }
+        console.log('✅ admin_logs table verified/created successfully!');
+
+        db.query("ALTER TABLE admin_logs ADD COLUMN admin_id INT NULL", () => {
+            db.query("ALTER TABLE admin_logs ADD CONSTRAINT fk_admin_logs_admin FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE SET NULL", () => {});
+        });
+
+        // Ties each admin_logs row to the exact browser/device session (req.sessionID)
+        // that created it, instead of just a free-text username — this is what lets the
+        // same admin account log in from multiple tabs/devices and have each show up as
+        // its own independent "Active Now" row instead of overwriting one shared row.
+        db.query("ALTER TABLE admin_logs ADD COLUMN session_id VARCHAR(255) NULL", () => {});
+
+        // Lets an admin set a custom profile photo (see /api/profile/photo) instead of
+        // always falling back to the auto-generated ui-avatars.com initials avatar.
+        db.query("ALTER TABLE admins ADD COLUMN photo_url VARCHAR(500) NULL", () => {});
+
+        // Single-active-session enforcement (see ensureAdminAuth / /auth-login):
+        // stamped fresh on every admin login, compared against req.session.login_token
+        // on every request so a displaced tab/device gets caught even though it shares
+        // the same session cookie as wherever the newer login happened.
+        db.query("ALTER TABLE admins ADD COLUMN login_token VARCHAR(255) NULL", () => {});
+
+        // Sessions live in memory (express-session's default MemoryStore) — a server
+        // restart wipes every session, including req.session.adminLogId, so no
+        // browser can ever close these rows via /logout anymore. Left alone they'd
+        // show as "Active now" forever. Close them out at the moment of restart,
+        // since that's effectively when those sessions actually ended.
+        db.query('UPDATE admin_logs SET logout_time = NOW() WHERE logout_time IS NULL', (err, result) => {
+            if (err) console.error("❌ Error closing orphaned admin_logs rows:", err);
+            else if (result.affectedRows > 0) console.log(`✅ Closed ${result.affectedRows} orphaned admin_logs row(s) from before this restart.`);
+        });
     });
 });
+
+// ==========================================
+// ABANDONED ADMIN SESSION SWEEP
+// ==========================================
+// Catches the case /logout can never handle: a browser closed, laptop shut, or
+// tab left open past its 8h cookie expiry without ever hitting /logout. Every
+// few minutes, close out any admin_logs row that still claims to be open but
+// whose session_id no longer resolves to anything in the session store.
+const ADMIN_LOG_SWEEP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function sweepAbandonedAdminSessions() {
+    db.query('SELECT id, session_id FROM admin_logs WHERE logout_time IS NULL AND session_id IS NOT NULL', async (err, rows) => {
+        if (err) return console.error('❌ Error loading open admin_logs rows for the abandoned-session sweep:', err);
+
+        for (const row of (rows || [])) {
+            const alive = await isSessionAlive(row.session_id);
+            if (!alive) {
+                db.query('UPDATE admin_logs SET logout_time = NOW() WHERE id = ? AND logout_time IS NULL', [row.id], (err) => {
+                    if (err) console.error(`❌ Error auto-closing abandoned admin_logs row ${row.id}:`, err);
+                });
+            }
+        }
+    });
+}
+
+setInterval(sweepAbandonedAdminSessions, ADMIN_LOG_SWEEP_INTERVAL_MS);
 
 // SINKRONISADONG PAGGAWA NG MGA TABLE (Para maiwasan ang Foreign Key Errors)
 db.query(createClustersTableQuery, (err) => {
@@ -1045,6 +1212,27 @@ app.post('/api/content/:section/upload/:field', ensureAdminAuth, (req, res) => {
         }
     });
 });
+// Closes THIS browser session's own admin_logs row — never anyone else's. Matches
+// by id first (the fast path, set at login), falling back to session_id so a
+// session that somehow lost req.session.logId (e.g. an older cookie from before
+// this column existed) still gets closed out correctly instead of hanging open.
+function closeAdminLogRow(req, callback) {
+    const logId = req.session && (req.session.logId || req.session.adminLogId);
+    if (logId) {
+        return db.query('UPDATE admin_logs SET logout_time = NOW() WHERE id = ? AND logout_time IS NULL', [logId], (err) => {
+            if (err) console.error('❌ Error recording admin logout:', err);
+            callback();
+        });
+    }
+    if (req.sessionID) {
+        return db.query('UPDATE admin_logs SET logout_time = NOW() WHERE session_id = ? AND logout_time IS NULL', [req.sessionID], (err) => {
+            if (err) console.error('❌ Error recording admin logout (session_id fallback):', err);
+            callback();
+        });
+    }
+    callback();
+}
+
 // Landing on /login — including via the Back button — is treated as an explicit
 // logout: any active session (admin or client) is destroyed immediately, before
 // the form even renders. This is what closes the Forward-button hole: with the
@@ -1059,7 +1247,16 @@ app.get('/login', noCache, (req, res) => {
         return res.render('login');
     }
 
-    const adminLogId = req.session && req.session.adminLogId;
+    // The per-tab login gate (layout/header.ejs / client-survey.ejs) sends a brand-new
+    // tab here when it finds no sessionStorage flag for itself — even though the
+    // underlying session cookie is still perfectly valid and may be actively in use in
+    // ANOTHER tab right now. That must NOT destroy the shared session (it would log out
+    // every other tab too); just show the form so this tab can (re)prove itself.
+    if (req.query.tabVerify === '1') {
+        return res.render('login');
+    }
+
+    const isAdminSession = !!(req.session && req.session.user && req.session.user.type === 'admin');
     const finishLogout = () => {
         req.logout(() => {
             req.session.destroy((err) => {
@@ -1070,11 +1267,8 @@ app.get('/login', noCache, (req, res) => {
         });
     };
 
-    if (adminLogId) {
-        db.query('UPDATE admin_logs SET logout_time = NOW() WHERE id = ? AND logout_time IS NULL', [adminLogId], (err) => {
-            if (err) console.error('❌ Error recording admin logout:', err);
-            finishLogout();
-        });
+    if (isAdminSession) {
+        closeAdminLogRow(req, finishLogout);
     } else {
         finishLogout();
     }
@@ -1087,28 +1281,115 @@ app.get('/login', noCache, (req, res) => {
 // additionally, any email already known in client_accounts (i.e. someone who has
 // signed in with Google and submitted at least one survey) can log back in from
 // this same form instead of clicking "Sign in with Google" again.
+// Plain-text passwords are only ever seen for the original seed rows inserted
+// directly into the database (see createAdminsTableQuery above); anything added
+// or edited through Manage Admins is always stored as a bcrypt hash. Detecting
+// by the bcrypt prefix lets both kinds of rows log in through the same form.
+function isBcryptHash(value) {
+    return typeof value === 'string' && /^\$2[aby]?\$/.test(value);
+}
+
+async function verifyAdminPassword(admin, passwordInput) {
+    if (isBcryptHash(admin.password)) {
+        return bcrypt.compare(passwordInput, admin.password);
+    }
+    return admin.password === passwordInput;
+}
+
 app.post('/auth-login', (req, res) => {
     const { username, password } = req.body;
+    const usernameInput = String(username || '').trim();
 
-    if (username === 'admin' && password === 'admin123') {
-        req.session.user = { username: 'admin', role: 'admin' };
-        // Only one admin session should ever show as "Active now" — a fresh login
-        // (new tab/window, or logging back in) supersedes whatever was left open
-        // before it, so close those out first instead of letting them pile up.
-        db.query('UPDATE admin_logs SET logout_time = NOW() WHERE logout_time IS NULL', (err) => {
-            if (err) console.error('❌ Error closing previous admin_logs sessions:', err);
-            db.query('INSERT INTO admin_logs (username, login_time) VALUES (?, NOW())', [username], (err, result) => {
-                if (err) console.error('❌ Error recording admin login:', err);
-                else req.session.adminLogId = result.insertId;
-                res.redirect('/dashboard');
+    if (usernameInput && password) {
+        return db.query('SELECT * FROM admins WHERE username = ? LIMIT 1', [usernameInput], async (err, rows) => {
+            if (err) {
+                console.error('❌ Error looking up admin:', err);
+                return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
+            }
+            if (!rows || rows.length === 0) {
+                // Not an admin username — fall through to the client-account login below.
+                return handleClientLogin();
+            }
+
+            const admin = rows[0];
+            const passwordMatches = await verifyAdminPassword(admin, password);
+            if (!passwordMatches) {
+                return res.redirect('/login?error=' + encodeURIComponent('Invalid admin credentials!'));
+            }
+
+            const loginToken = crypto.randomUUID();
+
+            // regenerate() issues a brand new session ID/cookie for THIS login. This
+            // matters even for two tabs in the SAME browser sharing the same cookie
+            // jar: it's what makes the old cookie value (still sitting unused in
+            // Tab 1's rendered page) resolve to nothing once the store's old entry
+            // is gone, and it's also what invalidates session fixation from the
+            // pre-login request.
+            req.session.regenerate((regenErr) => {
+                if (regenErr) {
+                    console.error('❌ Error regenerating session on admin login:', regenErr);
+                    return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
+                }
+
+                req.session.user = {
+                    id: admin.id,
+                    username: admin.username,
+                    fullname: admin.fullname,
+                    gender: admin.gender,
+                    role: admin.role, // kept for server-side access control (ensureSuperAdmin) — not shown in the UI
+                    created_at: admin.created_at,
+                    photo_url: admin.photo_url || null,
+                    type: 'admin' // stable auth flag — distinct from the access-control `role` field
+                };
+                req.session.admin = req.session.user;
+                req.session.login_token = loginToken;
+
+                // ONE active session per admin account — including two tabs in the
+                // SAME browser (which share one cookie, so ensureAdminAuth can't tell
+                // them apart by session ID alone). admins.login_token is the source of
+                // truth: whichever tab's req.session.login_token stops matching it on
+                // its next request gets kicked to /login there. The admin_logs
+                // session_id destroy below additionally force-invalidates any OTHER
+                // browser/device immediately, without waiting for its next request.
+                db.query('UPDATE admins SET login_token = ? WHERE id = ?', [loginToken, admin.id], (tokenErr) => {
+                    if (tokenErr) console.error('❌ Error saving login_token:', tokenErr);
+                });
+
+                db.query('SELECT session_id FROM admin_logs WHERE admin_id = ? AND logout_time IS NULL', [admin.id], async (err, openRows) => {
+                    if (err) console.error('❌ Error loading this admin\'s open sessions:', err);
+
+                    const otherSessionIds = (openRows || [])
+                        .map(r => r.session_id)
+                        .filter(sid => sid && sid !== req.sessionID);
+
+                    // Destroying the session in the store is what actually forces the other
+                    // tab/device out — ensureAdminAuth will find no session there on its next
+                    // request and redirect to /login. Best-effort: a destroy failure shouldn't
+                    // block this new login.
+                    await Promise.all(otherSessionIds.map(sid =>
+                        sessionStoreDestroy(sid).catch(e => console.error(`❌ Error destroying session ${sid}:`, e))
+                    ));
+
+                    db.query('UPDATE admin_logs SET logout_time = NOW() WHERE admin_id = ? AND logout_time IS NULL', [admin.id], (err) => {
+                        if (err) console.error('❌ Error closing this admin\'s previous admin_logs rows:', err);
+                        db.query('INSERT INTO admin_logs (admin_id, username, login_time, session_id) VALUES (?, ?, NOW(), ?)', [admin.id, admin.username, req.sessionID], (err, result) => {
+                            if (err) console.error('❌ Error recording admin login:', err);
+                            else {
+                                req.session.adminLogId = result.insertId;
+                                req.session.logId = result.insertId;
+                            }
+                            req.session.justLoggedIn = true; // lets /dashboard verify THIS tab in sessionStorage
+                            res.redirect('/dashboard');
+                        });
+                    });
+                });
             });
         });
-        return;
-    } else if (username === 'admin') {
-        // Wrong admin password — clients must use the "Sign in with Google" button instead
-        return res.redirect('/login?error=' + encodeURIComponent('Invalid admin credentials!'));
     }
 
+    return handleClientLogin();
+
+    function handleClientLogin() {
     const emailInput = String(username || '').trim().toLowerCase();
     if (!emailInput || !password) {
         return res.redirect('/login?error=' + encodeURIComponent('Please enter both your email and password.'));
@@ -1133,8 +1414,10 @@ app.post('/auth-login', (req, res) => {
         }
 
         req.session.clientEmail = account.email;
+        req.session.justLoggedIn = true; // lets /client-survey verify THIS tab in sessionStorage
         return res.redirect('/client-survey');
     });
+    }
 });
 
 // Same "landing here = logout" treatment as /login above, for the client's
@@ -1194,6 +1477,7 @@ app.get('/auth/google/callback',
                 const existingAccount = rows && rows.length > 0 ? rows[0] : null;
                 if (existingAccount && existingAccount.password) {
                     req.session.clientEmail = existingAccount.email;
+                    req.session.justLoggedIn = true; // lets /client-survey verify THIS tab in sessionStorage
                     return res.redirect('/client-survey');
                 }
 
@@ -1238,6 +1522,7 @@ app.post('/complete-google-registration', async (req, res) => {
                     return res.redirect('/complete-google-registration?error=' + encodeURIComponent('Could not save your account. Please try again.'));
                 }
                 req.session.clientEmail = pending.email;
+                req.session.justLoggedIn = true; // lets /client-survey verify THIS tab in sessionStorage
                 delete req.session.pendingGoogleUser;
                 return res.redirect('/client-survey');
             }
@@ -1253,7 +1538,7 @@ app.post('/complete-google-registration', async (req, res) => {
 // response so it can never be cached, and hard-redirects (302) to /login — never
 // a client-side route change, so there is nothing for the bfcache to preserve.
 app.get('/logout', noCache, (req, res) => {
-    const adminLogId = req.session && req.session.adminLogId;
+    const isAdminSession = !!(req.session && req.session.user && req.session.user.type === 'admin');
     const finishLogout = () => {
         req.logout(() => {
             req.session.destroy((err) => {
@@ -1264,10 +1549,15 @@ app.get('/logout', noCache, (req, res) => {
         });
     };
 
-    if (adminLogId) {
-        db.query('UPDATE admin_logs SET logout_time = NOW() WHERE id = ? AND logout_time IS NULL', [adminLogId], (err) => {
-            if (err) console.error('❌ Error recording admin logout:', err);
-            finishLogout();
+    if (isAdminSession) {
+        // Only clear login_token if THIS session is still the one that owns it —
+        // a stale, already-kicked-out tab hitting /logout directly (bypassing
+        // ensureAdminAuth) must not null out a newer login made from elsewhere.
+        const adminId = req.session.user.id;
+        const ownToken = req.session.login_token;
+        db.query('UPDATE admins SET login_token = NULL WHERE id = ? AND login_token = ?', [adminId, ownToken], (err) => {
+            if (err) console.error('❌ Error clearing login_token on logout:', err);
+            closeAdminLogRow(req, finishLogout);
         });
     } else {
         finishLogout();
@@ -1277,7 +1567,7 @@ app.get('/logout', noCache, (req, res) => {
 app.get('/client-survey', ensureClientAuth, noCache, (req, res) => {
     const clientEmail = req.clientEmail;
 
-    db.query('SELECT * FROM offices ORDER BY office_name ASC', (err, offices) => {
+    db.query('SELECT * FROM offices WHERE is_archived = 0 ORDER BY office_name ASC', (err, offices) => {
         if (err) return res.render('client-survey', { offices: [], clientEmail, takenOfficeIds: [], clientProfile: null, officeServices: {} });
 
         // All active services, grouped by office_id — powers the dependent
@@ -1739,7 +2029,7 @@ app.get('/dashboard', ensureAdminAuth, noCache, (req, res) => {
                 db.query(clusterAnalyticsQuery, dateParams, (err, clusterData) => {
                     const chartData = { labels: [], respondents: [], ratings: [] };
                     const clusterCards = [];
-                    const colors = ['#4f46e5', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+                    const colors = ['#0a1f44', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
 
                     if (clusterData) {
                         clusterData.forEach((row, idx) => {
@@ -1811,6 +2101,93 @@ app.get('/dashboard', ensureAdminAuth, noCache, (req, res) => {
 
 app.get('/profile', ensureAdminAuth, noCache, (req, res) => res.render('profile'));
 app.get('/password', ensureAdminAuth, noCache, (req, res) => res.render('password'));
+
+// Lets the logged-in admin upload a custom profile photo (replaces the auto-generated
+// ui-avatars.com initials avatar). Mirrors the contentUpload pattern used for the
+// landing page CMS above.
+const profileUploadDir = path.join(__dirname, 'public', 'images', 'uploads', 'profiles');
+fs.mkdirSync(profileUploadDir, { recursive: true });
+
+const profileUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, profileUploadDir),
+        filename: (req, file, cb) => {
+            const ext = path.extname(file.originalname).toLowerCase();
+            cb(null, `admin-${req.session.user.id}-${Date.now()}${ext}`);
+        }
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    fileFilter: (req, file, cb) => {
+        if (!/^image\/(png|jpe?g|webp)$/.test(file.mimetype)) {
+            return cb(new Error('Only PNG, JPG, or WebP images are allowed.'));
+        }
+        cb(null, true);
+    }
+});
+
+app.post('/api/profile/photo', ensureAdminAuth, (req, res) => {
+    profileUpload.single('photo')(req, res, (err) => {
+        if (err) return res.status(400).json({ success: false, message: err.message });
+        if (!req.file) return res.status(400).json({ success: false, message: 'No image file received.' });
+
+        const url = `/images/uploads/profiles/${req.file.filename}`;
+        const adminId = req.session.user.id;
+        db.query('UPDATE admins SET photo_url = ? WHERE id = ?', [url, adminId], (err) => {
+            if (err) {
+                console.error('❌ Error saving profile photo URL:', err);
+                return res.status(500).json({ success: false, message: 'Photo uploaded but could not be saved.' });
+            }
+            // Keep the session in sync so the new photo shows up immediately (navbar, etc.)
+            // without needing to log out and back in.
+            req.session.user.photo_url = url;
+            req.session.admin.photo_url = url;
+            res.json({ success: true, url });
+        });
+    });
+});
+
+// Lets the logged-in admin change their OWN password (distinct from /admins/edit,
+// which is Super-Admin-only and edits OTHER admins' accounts).
+app.post('/password', ensureAdminAuth, async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+        return res.status(400).json({ success: false, message: 'Please fill in all password fields.' });
+    }
+    if (String(newPassword).length < 8) {
+        return res.status(400).json({ success: false, message: 'New password must be at least 8 characters long.' });
+    }
+
+    const adminId = req.session.user.id;
+    db.query('SELECT * FROM admins WHERE id = ? LIMIT 1', [adminId], async (err, rows) => {
+        if (err) {
+            console.error('❌ Error loading admin for password change:', err);
+            return res.status(500).json({ success: false, message: 'Server error. Please try again.' });
+        }
+        if (!rows || rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Admin account not found.' });
+        }
+
+        const admin = rows[0];
+        const currentMatches = await verifyAdminPassword(admin, currentPassword);
+        if (!currentMatches) {
+            return res.status(401).json({ success: false, message: 'Current password is incorrect.' });
+        }
+
+        try {
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+            db.query('UPDATE admins SET password = ? WHERE id = ?', [hashedPassword, adminId], (err) => {
+                if (err) {
+                    console.error('❌ Error updating admin password:', err);
+                    return res.status(500).json({ success: false, message: 'Server error. Please try again.' });
+                }
+                res.json({ success: true, message: 'Password successfully updated!' });
+            });
+        } catch (e) {
+            console.error('❌ Error hashing new admin password:', e);
+            res.status(500).json({ success: false, message: 'Server error. Please try again.' });
+        }
+    });
+});
 app.get('/print', ensureAdminAuth, noCache, (req, res) => res.render('print'));
 
 // ==========================================
@@ -1818,7 +2195,7 @@ app.get('/print', ensureAdminAuth, noCache, (req, res) => res.render('print'));
 // ==========================================
 app.get('/report', ensureAdminAuth, noCache, (req, res) => {
     db.query('SELECT office_name FROM offices ORDER BY office_name ASC', (err, offices) => {
-        res.render('report', { offices: offices || [] });
+        res.render('report', { offices: offices || [], periodOptions: PERIOD_COVERED_OPTIONS });
     });
 });
 
@@ -1901,7 +2278,7 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
         }
         
         const recordsQuery = `
-            SELECT s.respondent_name, s.topic, s.sentiment, s.comments, DATE_FORMAT(s.created_at, '%M %d, %Y') as formatted_date, o.cluster_name
+            SELECT s.id, s.respondent_name, s.topic, s.sentiment, s.comments, DATE_FORMAT(s.created_at, '%M %d, %Y') as formatted_date, o.cluster_name
             FROM survey_responses s JOIN offices o ON s.office_id = o.id ORDER BY o.cluster_name, s.created_at DESC
         `;
         db.query(recordsQuery, (err, results) => {
@@ -1932,11 +2309,39 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                     if (sentimentLower.includes('positive')) sentimentClass = 'bg-sentiment-positive';
                     else if (sentimentLower.includes('negative')) sentimentClass = 'bg-sentiment-negative';
 
-                    recordsByCluster[cluster].push({ name: row.respondent_name || 'Anonymous', topic: row.topic || 'General', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: row.comments || 'No comments provided.', date: row.formatted_date });
+                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', topic: row.topic || 'General', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: row.comments || 'No comments provided.', date: row.formatted_date });
                 });
             }
             res.render('survey-records', { recordsByCluster, clusterRatings });
         });
+    });
+});
+
+// Full answers for one survey response — powers the "View Result" button on
+// /survey-records. Unlike /api/client-history/:id (client-facing, scoped to
+// the logged-in client's own email), any logged-in admin can view any
+// respondent's answers here.
+app.get('/api/admin/survey-response/:id', ensureAdminAuth, noCache, (req, res) => {
+    const query = `
+        SELECT s.id, s.respondent_name, s.topic, s.sentiment, s.region, s.cc1, s.cc2, s.cc3,
+               s.sqd0, s.sqd1, s.sqd2, s.sqd3, s.sqd4, s.sqd5, s.sqd6, s.sqd7, s.sqd8,
+               s.comments, s.period_year_quarter,
+               DATE_FORMAT(s.created_at, '%M %d, %Y %h:%i %p') AS formatted_date,
+               o.office_name, o.cluster_name,
+               p.client_type, p.age, p.gender
+        FROM survey_responses s
+        JOIN offices o ON s.office_id = o.id
+        LEFT JOIN client_profiles p ON p.survey_response_id = s.id
+        WHERE s.id = ?
+        LIMIT 1
+    `;
+    db.query(query, [req.params.id], (err, rows) => {
+        if (err) {
+            console.error('❌ Error loading survey response for admin view:', err);
+            return res.status(500).json({ success: false, message: 'Server error loading this survey.' });
+        }
+        if (!rows || rows.length === 0) return res.status(404).json({ success: false, message: 'Survey not found.' });
+        res.json({ success: true, survey: rows[0] });
     });
 });
 
@@ -1948,9 +2353,22 @@ app.get('/offices', ensureAdminAuth, noCache, (req, res) => {
         if (err) console.error("Error loading clusters:", err);
         db.query('SELECT * FROM offices ORDER BY cluster_name ASC, office_name ASC', (err, offices) => {
             if (err) console.error("Error loading offices:", err);
-            res.render('offices', { 
-                clustersData: clusters || [],
-                officesData: offices || []
+
+            // Services grouped by office_id — powers the per-office "Services" modal below.
+            db.query('SELECT id, office_id, service_name FROM services ORDER BY office_id, id', (svcErr, serviceRows) => {
+                const officeServicesData = {};
+                if (!svcErr && serviceRows) {
+                    serviceRows.forEach(row => {
+                        if (!officeServicesData[row.office_id]) officeServicesData[row.office_id] = [];
+                        officeServicesData[row.office_id].push({ id: row.id, service_name: row.service_name });
+                    });
+                }
+
+                res.render('offices', {
+                    clustersData: clusters || [],
+                    officesData: offices || [],
+                    officeServicesData
+                });
             });
         });
     });
@@ -2025,10 +2443,44 @@ app.post('/clusters/permanent-delete/:id', ensureAdminAuth, (req, res) => {
 
 app.post('/offices/add', ensureAdminAuth, (req, res) => {
     const { cluster_name, office_name, head_director, email_address } = req.body;
-    db.query('INSERT INTO offices (cluster_name, office_name, head_director, email_address) VALUES (?, ?, ?, ?)', 
+    db.query('INSERT INTO offices (cluster_name, office_name, head_director, email_address) VALUES (?, ?, ?, ?)',
     [cluster_name, office_name, head_director || 'Not Assigned', email_address], (err, result) => {
-        if (err) console.error("❌ Error adding office:", err);
+        if (err) { console.error("❌ Error adding office:", err); return res.redirect('/offices'); }
         loadOfficeNameCache();
+
+        // "Service(s) Availed" repeatable input group — service_name comes in as
+        // either a single string or an array depending on how many rows were filled.
+        let serviceNames = req.body.service_name;
+        if (!serviceNames) return res.redirect('/offices');
+        if (!Array.isArray(serviceNames)) serviceNames = [serviceNames];
+        serviceNames = serviceNames.map(s => (s || '').trim()).filter(s => s.length > 0);
+        if (serviceNames.length === 0) return res.redirect('/offices');
+
+        const values = serviceNames.map(name => [result.insertId, name]);
+        db.query('INSERT INTO services (office_id, service_name) VALUES ?', [values], (svcErr) => {
+            if (svcErr) console.error("❌ Error adding services for new office:", svcErr);
+            res.redirect('/offices');
+        });
+    });
+});
+
+// ==========================================
+// SERVICES AVAILED — per-office CRUD (powers the client survey's dependent
+// "Service Availed" dropdown, see officeServices in /client-survey below)
+// ==========================================
+app.post('/services/add', ensureAdminAuth, (req, res) => {
+    const { office_id, service_name } = req.body;
+    const name = (service_name || '').trim();
+    if (!office_id || !name) return res.redirect('/offices');
+    db.query('INSERT INTO services (office_id, service_name) VALUES (?, ?)', [office_id, name], (err) => {
+        if (err) console.error("❌ Error adding service:", err);
+        res.redirect('/offices');
+    });
+});
+
+app.post('/services/delete/:id', ensureAdminAuth, (req, res) => {
+    db.query('DELETE FROM services WHERE id = ?', [req.params.id], (err) => {
+        if (err) console.error("❌ Error deleting service:", err);
         res.redirect('/offices');
     });
 });
@@ -2055,6 +2507,101 @@ app.post('/offices/permanent-delete/:id', ensureAdminAuth, (req, res) => {
         if (err) console.error("❌ Error permanently deleting office:", err);
         loadOfficeNameCache();
         res.redirect('/offices');
+    });
+});
+
+// ==========================================
+// MANAGE ADMINS CRUD ROUTES (Super Admin only)
+// ==========================================
+function ensureSuperAdmin(req, res, next) {
+    if (req.session && req.session.user && req.session.user.type === 'admin' && req.session.user.role === 'Super Admin') {
+        return next();
+    }
+    if (req.is('application/json') || req.xhr) {
+        return res.status(403).json({ success: false, message: "Only a Super Admin can manage admin accounts." });
+    }
+    return res.redirect('/dashboard');
+}
+
+app.get('/manage-admins', ensureAdminAuth, ensureSuperAdmin, noCache, (req, res) => {
+    db.query('SELECT id, username, fullname, gender, role, created_at FROM admins ORDER BY fullname ASC', (err, admins) => {
+        if (err) console.error("❌ Error loading admins:", err);
+        res.render('manage-admins', { adminsData: admins || [] });
+    });
+});
+
+// Role isn't exposed in the Manage Admins UI (access control only, not a user-facing
+// concept) — every admin created here defaults to the plain 'Admin' role. Promoting
+// someone to Super Admin is a direct-database action, deliberately kept out of the UI.
+app.post('/admins/add', ensureAdminAuth, ensureSuperAdmin, async (req, res) => {
+    const { username, password, fullname, gender } = req.body;
+    if (!username || !password || !fullname) {
+        return res.redirect('/manage-admins');
+    }
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        db.query(
+            'INSERT INTO admins (username, password, fullname, gender, role) VALUES (?, ?, ?, ?, ?)',
+            [username.trim(), hashedPassword, fullname.trim(), gender || 'Male', 'Admin'],
+            (err) => {
+                if (err) console.error("❌ Error adding admin:", err);
+                res.redirect('/manage-admins');
+            }
+        );
+    } catch (e) {
+        console.error("❌ Error hashing new admin password:", e);
+        res.redirect('/manage-admins');
+    }
+});
+
+app.post('/admins/edit', ensureAdminAuth, ensureSuperAdmin, async (req, res) => {
+    const { id, username, password, fullname, gender } = req.body;
+    if (!id || !username || !fullname) {
+        return res.redirect('/manage-admins');
+    }
+
+    // Password field is optional on edit — leave the existing hash alone when left blank.
+    // Role is never touched here — it isn't part of this form, and overwriting it would
+    // silently demote/promote whatever role the account already had.
+    try {
+        if (password && password.trim() !== '') {
+            const hashedPassword = await bcrypt.hash(password, 10);
+            db.query(
+                'UPDATE admins SET username = ?, password = ?, fullname = ?, gender = ? WHERE id = ?',
+                [username.trim(), hashedPassword, fullname.trim(), gender || 'Male', id],
+                (err) => {
+                    if (err) console.error("❌ Error updating admin:", err);
+                    res.redirect('/manage-admins');
+                }
+            );
+        } else {
+            db.query(
+                'UPDATE admins SET username = ?, fullname = ?, gender = ? WHERE id = ?',
+                [username.trim(), fullname.trim(), gender || 'Male', id],
+                (err) => {
+                    if (err) console.error("❌ Error updating admin:", err);
+                    res.redirect('/manage-admins');
+                }
+            );
+        }
+    } catch (e) {
+        console.error("❌ Error hashing updated admin password:", e);
+        res.redirect('/manage-admins');
+    }
+});
+
+// Hard delete: admin_logs.admin_id references this row with ON DELETE SET NULL,
+// so past login history is preserved even after the account itself is removed.
+app.post('/admins/delete/:id', ensureAdminAuth, ensureSuperAdmin, (req, res) => {
+    const targetId = parseInt(req.params.id, 10);
+    if (req.session.user.id === targetId) {
+        // Deleting your own account mid-session would leave you locked in with
+        // no valid admins row behind it — block it rather than let that happen.
+        return res.redirect('/manage-admins');
+    }
+    db.query('DELETE FROM admins WHERE id = ?', [targetId], (err) => {
+        if (err) console.error("❌ Error deleting admin:", err);
+        res.redirect('/manage-admins');
     });
 });
 
@@ -2168,98 +2715,129 @@ function getOfficesForCluster(clusterName, callback) {
 // ==========================================
 // 6. Cluster Routes
 // ==========================================
-function renderClusterPage(view, clusterName) {
-    return (req, res) => {
+// Single dynamic cluster stats page — driven entirely by the `clusters` table,
+// so a newly added cluster automatically gets its own page here (and shows up
+// in the sidebar's "All Cluster" list via res.locals.sidebarClusters).
+app.get('/cluster/:id', ensureAdminAuth, noCache, (req, res) => {
+    db.query('SELECT * FROM clusters WHERE id = ?', [req.params.id], (err, rows) => {
+        if (err || !rows || rows.length === 0) return res.redirect('/offices');
+        const cluster = rows[0];
+
         const hasQueryParam = typeof req.query.periodCovered !== 'undefined';
         const selectedPeriod = hasQueryParam ? req.query.periodCovered : getPeriodCovered();
 
-        getClusterPerformanceData(clusterName, selectedPeriod, (err, data) => {
-            getOfficesForCluster(clusterName, (officesInCluster) => {
-                res.render(view, {
+        getClusterPerformanceData(cluster.cluster_name, selectedPeriod, (err, data) => {
+            getOfficesForCluster(cluster.cluster_name, (officesInCluster) => {
+                res.render('cluster-detail', {
                     data: data || [],
                     periodOptions: PERIOD_COVERED_OPTIONS,
                     selectedPeriod: selectedPeriod || '',
                     officesInCluster: officesInCluster,
-                    clusterName: clusterName
+                    clusterName: cluster.cluster_name,
+                    clusterId: cluster.id
                 });
             });
         });
-    };
-}
-
-app.get('/cluster/office-of-the-president', ensureAdminAuth, noCache, renderClusterPage('cluster-op', 'Office of the president cluster'));
-app.get('/cluster/admin-finance', ensureAdminAuth, noCache, renderClusterPage('cluster-admin-finance', 'Administrative and Finance Cluster'));
-app.get('/cluster/research-innovation', ensureAdminAuth, noCache, renderClusterPage('cluster-research', 'Reasearch, Innovation and Collaboration Cluster'));
-app.get('/cluster/academic', ensureAdminAuth, noCache, renderClusterPage('cluster-academic', 'Academic Cluster'));
-app.get('/cluster/other-offices', ensureAdminAuth, noCache, renderClusterPage('cluster-other', 'Other Offices Cluster'));
+    });
+});
 
 // ==========================================
 // DYNAMIC PUBLIC DASHBOARD API
 // ==========================================
 app.get('/api/public-dashboard', (req, res) => {
-    const query = `
-        SELECT 
-            o.cluster_name, 
-            o.office_name,
-            s.sqd1, s.sqd2, s.sqd3, s.sqd4, s.sqd5, s.sqd6, s.sqd7, s.sqd8,
-            s.cc1, s.period_year_quarter
-        FROM survey_responses s
-        JOIN offices o ON s.office_id = o.id
-    `;
-
-
-
-    
-    db.query(query, (err, results) => {
+    // Cluster/office lists come from the offices table (all non-archived offices),
+    // not just ones with survey rows — so a cluster filter shows every office it
+    // contains, blank (0%) if it has no responses yet, instead of hiding it.
+    db.query('SELECT cluster_name, office_name FROM offices WHERE is_archived = 0 ORDER BY cluster_name, office_name', (err, officeRows) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
 
         const clustersSet = new Set();
         const officesSet = new Set();
-        results.forEach(r => {
-            if (r.cluster_name) clustersSet.add(r.cluster_name);
-            if (r.office_name) officesSet.add(r.office_name);
+        const officeToClusterMap = {};
+        officeRows.forEach(o => {
+            if (o.cluster_name) clustersSet.add(o.cluster_name);
+            if (o.office_name) officesSet.add(o.office_name);
+            if (o.office_name && o.cluster_name && !officeToClusterMap[o.office_name]) {
+                officeToClusterMap[o.office_name] = o.cluster_name;
+            }
         });
         const clusterList = Array.from(clustersSet).sort();
         const officeList = Array.from(officesSet).sort();
+        const officeCluster = officeList.map(o => officeToClusterMap[o] || null);
 
-        // Ginawang 2 periods (p1 at p2) for 2026 based sa instruction mo
+        const query = `
+            SELECT
+                o.cluster_name,
+                o.office_name,
+                s.sqd1, s.sqd2, s.sqd3, s.sqd4, s.sqd5, s.sqd6, s.sqd7, s.sqd8,
+                s.cc1, s.period_year_quarter
+            FROM survey_responses s
+            JOIN offices o ON s.office_id = o.id
+            WHERE o.is_archived = 0
+        `;
+
+        db.query(query, (err, results) => {
+        if (err) return res.status(500).json({ success: false, error: err.message });
+
+        // Keyed by the exact canonical period strings (PERIOD_COVERED_OPTIONS) —
+        // real-time and exact, instead of the old fuzzy 2-bucket p1/p2 substring
+        // match, so switching periods reflects only what's actually in the DB for
+        // that period (and shows empty once its records are gone).
         const chartData = {};
-        const periods = ['p1', 'p2']; 
-        
+        const periods = PERIOD_COVERED_OPTIONS.map(o => o.value);
+
         periods.forEach(p => {
             chartData[p] = {
-                overall: [0, 0], 
+                overall: [0, 0],
                 clusterSat: new Array(clusterList.length > 0 ? clusterList.length : 4).fill(0),
                 clusterResp: new Array(clusterList.length > 0 ? clusterList.length : 4).fill(0),
+                // SQD answers only (excludes the "N/A" = 0 option) — lets a cluster/
+                // office whose only responses marked every question N/A be reported
+                // as "no ratings yet" instead of a misleading 0% dissatisfaction.
+                clusterAnswerable: new Array(clusterList.length > 0 ? clusterList.length : 4).fill(0),
+                clusterAgree: new Array(clusterList.length > 0 ? clusterList.length : 4).fill(0),
                 officeSat: new Array(officeList.length > 0 ? officeList.length : 7).fill(0),
                 officeResp: new Array(officeList.length > 0 ? officeList.length : 7).fill(0),
-                ccAware: [0, 0, 0], 
+                officeAnswerable: new Array(officeList.length > 0 ? officeList.length : 7).fill(0),
+                officeAgree: new Array(officeList.length > 0 ? officeList.length : 7).fill(0),
+                ccAware: [0, 0, 0],
                 ccOffice: new Array(officeList.length > 0 ? officeList.length : 7).fill(0)
             };
         });
 
         results.forEach(row => {
-            // MAPPING LOGIC: Hinahati ang DB record papunta sa p1 o p2 para mag-reset at magsilbing archive ang past period
-            const periodStr = row.period_year_quarter || '';
-            const p = periodStr.includes('July to Dec') ? 'p2' : 'p1';
+            // Exact match only — a row whose period_year_quarter isn't one of the
+            // 4 canonical PERIOD_COVERED_OPTIONS values is skipped rather than
+            // guessed into the wrong bucket.
+            const p = periods.includes(row.period_year_quarter) ? row.period_year_quarter : null;
+            if (!p) return;
 
             const cIdx = clusterList.indexOf(row.cluster_name);
             const oIdx = officeList.indexOf(row.office_name);
 
             const sqdAvg = ((row.sqd1||0) + (row.sqd2||0) + (row.sqd3||0) + (row.sqd4||0) + (row.sqd5||0) + (row.sqd6||0) + (row.sqd7||0) + (row.sqd8||0)) / 8;
-            const isSatisfied = sqdAvg >= 3.5; 
+            const isSatisfied = sqdAvg >= 3.5;
 
             if (isSatisfied) chartData[p].overall[0]++;
             else chartData[p].overall[1]++;
 
+            // 0 is the survey's "N/A" option, not a real rating — excluded from both
+            // the answerable count and the agree count so an all-N/A response doesn't
+            // register as 0% dissatisfaction. Mirrors the admin dashboard's sqdScoreExpr.
+            const sqdVals = [row.sqd1, row.sqd2, row.sqd3, row.sqd4, row.sqd5, row.sqd6, row.sqd7, row.sqd8];
+            const answerableVals = sqdVals.filter(v => v !== 0 && v !== null && v !== undefined);
+            const agreeCount = answerableVals.filter(v => v === 4 || v === 5).length;
+
             if (cIdx !== -1) {
                 chartData[p].clusterResp[cIdx]++;
-                if (isSatisfied) chartData[p].clusterSat[cIdx]++;
+                chartData[p].clusterAnswerable[cIdx] += answerableVals.length;
+                chartData[p].clusterAgree[cIdx] += agreeCount;
             }
 
             if (oIdx !== -1) {
                 chartData[p].officeResp[oIdx]++;
-                if (isSatisfied) chartData[p].officeSat[oIdx]++;
+                chartData[p].officeAnswerable[oIdx] += answerableVals.length;
+                chartData[p].officeAgree[oIdx] += agreeCount;
             }
 
             const ccVal = String(row.cc1 || '').trim().toLowerCase();
@@ -2292,12 +2870,21 @@ app.get('/api/public-dashboard', (req, res) => {
         });
 
         periods.forEach(p => {
-            chartData[p].clusterSat = chartData[p].clusterSat.map((satCount, i) => {
-                return chartData[p].clusterResp[i] > 0 ? Math.round((satCount / chartData[p].clusterResp[i]) * 100) : 0;
+            // null = has respondents but every one of them marked N/A on all SQD
+            // questions, so there's nothing ratable yet — distinct from 0 (no
+            // respondents at all) and from a real, computed 0% dissatisfaction.
+            chartData[p].clusterSat = chartData[p].clusterAnswerable.map((answerable, i) => {
+                if (answerable > 0) return Math.round((chartData[p].clusterAgree[i] / answerable) * 100);
+                return chartData[p].clusterResp[i] > 0 ? null : 0;
             });
-            chartData[p].officeSat = chartData[p].officeSat.map((satCount, i) => {
-                return chartData[p].officeResp[i] > 0 ? Math.round((satCount / chartData[p].officeResp[i]) * 100) : 0;
+            chartData[p].officeSat = chartData[p].officeAnswerable.map((answerable, i) => {
+                if (answerable > 0) return Math.round((chartData[p].officeAgree[i] / answerable) * 100);
+                return chartData[p].officeResp[i] > 0 ? null : 0;
             });
+            delete chartData[p].clusterAnswerable;
+            delete chartData[p].clusterAgree;
+            delete chartData[p].officeAnswerable;
+            delete chartData[p].officeAgree;
             chartData[p].ccOffice = chartData[p].ccOffice.map((awareCount, i) => {
                 return chartData[p].officeResp[i] > 0 ? Math.round((awareCount / chartData[p].officeResp[i]) * 100) : 0;
             });
@@ -2306,7 +2893,11 @@ app.get('/api/public-dashboard', (req, res) => {
         res.json({
             chartData: chartData,
             clusterList: clusterList.length > 0 ? clusterList : undefined,
-            officeList: officeList.length > 0 ? officeList : undefined
+            officeList: officeList.length > 0 ? officeList : undefined,
+            officeCluster: officeList.length > 0 ? officeCluster : undefined,
+            periodOptions: PERIOD_COVERED_OPTIONS,
+            currentPeriod: getPeriodCovered()
+        });
         });
     });
 });
