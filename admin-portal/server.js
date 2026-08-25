@@ -2443,10 +2443,10 @@ app.post('/clusters/permanent-delete/:id', ensureAdminAuth, (req, res) => {
 
 app.post('/offices/add', ensureAdminAuth, (req, res) => {
     const { cluster_name, office_name, head_director, email_address } = req.body;
-<<<<<<< HEAD
     db.query('INSERT INTO offices (cluster_name, office_name, head_director, email_address) VALUES (?, ?, ?, ?)',
     [cluster_name, office_name, head_director || 'Not Assigned', email_address], (err, result) => {
         if (err) { console.error("❌ Error adding office:", err); return res.redirect('/offices'); }
+        loadOfficeNameCache();
 
         // "Service(s) Availed" repeatable input group — service_name comes in as
         // either a single string or an array depending on how many rows were filled.
@@ -2481,12 +2481,6 @@ app.post('/services/add', ensureAdminAuth, (req, res) => {
 app.post('/services/delete/:id', ensureAdminAuth, (req, res) => {
     db.query('DELETE FROM services WHERE id = ?', [req.params.id], (err) => {
         if (err) console.error("❌ Error deleting service:", err);
-=======
-    db.query('INSERT INTO offices (cluster_name, office_name, head_director, email_address) VALUES (?, ?, ?, ?)', 
-    [cluster_name, office_name, head_director || 'Not Assigned', email_address], (err, result) => {
-        if (err) console.error("❌ Error adding office:", err);
-        loadOfficeNameCache();
->>>>>>> 676dd150df872390e115371f4ea44c8b3f3b0d39
         res.redirect('/offices');
     });
 });
