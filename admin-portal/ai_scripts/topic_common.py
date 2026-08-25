@@ -738,20 +738,49 @@ FAST_NEGATIVE_WORDS = [
     "nakakastress", "sakit ng ulo", "kumplikado", "maraming hakbang",
     "palakasan", "may kilala", "paulit-ulit", "nawawalan ng koneksyon",
     "nawalan ng signal", "nakakalito", "nalilito", "walang kwenta",
-    "sayang",
+    "sayang", "huli na", "magulo", "naligaw",
     "poor", "bad", "slow", "broken", "rude", "worst", "terrible", "awful",
     "annoying", "frustrating", "difficult", "messy", "disappoint",
     "disappointed", "disappointing", "disappointment",
+    # English/short-descriptor gaps found in 2026-08-26 testing (~150-case
+    # multi-office suite) — plainly negative on their own, unlike the bare
+    # ambiguous descriptors this file otherwise avoids, so safe as standalone
+    # anchors: outages/outdated things, being late, and "dirty"/"confusing"
+    # which oddly only had Tagalog coverage (marumi/nalilito) before this.
+    "dirty", "confusing", "outdated", "late", "lost", "not working",
+    "brownout", "blackout", "power outage",
+    # Communication-failure phrasing: these were previously anchored only in
+    # TOPIC_KEYWORDS' Communication and Information group (a topic signal),
+    # but they are just as clearly a *negative sentiment* signal on their own
+    # and were missing from the sentiment lexicon entirely, so a plain
+    # "the office never replied" comment fell through to Neutral/the
+    # transformer instead of resolving outright like other lexicon hits.
+    "walang paalam", "walang reply", "hindi sumasagot", "hindi sinagot",
+    "hindi sumagot", "walang sagot", "no response", "no reply",
+    "never replied", "not informed", "nobody informed",
+    "no update", "walang update", "no updates", "walang updates",
+    "wala pang balita", "walang balita",
+    "walang wifi", "walang internet", "no wifi", "no internet", "no signal",
+    "walang stock", "out of stock", "no stock",
+    # Price complaints — deliberately compound/intensified phrases, not the
+    # bare word "mahal" (which also means "dear/beloved" in Tagalog and would
+    # misfire on unrelated positive text), same collision-avoidance approach
+    # as SENTIMENT_COLLISION_PHRASES below.
+    "sobrang mahal", "napakamahal", "masyadong mahal", "overpriced",
+    "too expensive",
 ]
 FAST_POSITIVE_WORDS = [
     "maganda", "magandang", "mabilis", "magaling", "mabait", "salamat",
     "masaya", "masayang", "maayos", "ayos naman", "okay naman", "ok naman",
     "walang problema", "walang reklamo", "pantay", "patas", "madali",
-    "kadali", "mahusay", "sanay", "stable",
+    "kadali", "mahusay", "sanay", "stable", "malinaw", "maalaga", "magiliw",
+    "propesyonal", "tulong", "tumulong", "tinulungan",
+    "walang abala", "walang hassle", "isang beses lang", "isang hakbang lang",
+    "one-stop", "one stop", "patient",
     "satisfied", "great", "good", "excellent", "fast", "helpful",
     "friendly", "nice", "pleasant", "malinis", "the best", "love it", "hassle-free",
     "hassle free", "streamlined", "efficient", "smooth", "convenient",
-    "fair", "equal", "commend", "professional", "professionalism",
+    "fair", "equal", "commend", "professional", "professionally", "professionalism",
     "appreciate", "appreciated",
 ]
 
