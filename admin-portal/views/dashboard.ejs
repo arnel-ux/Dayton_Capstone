@@ -99,6 +99,39 @@
 
         .count-up { font-size: 2.25rem; font-weight: 800; letter-spacing: -0.02em; }
 
+        .sentiment-badge { font-size: 0.65rem; padding: 4px 12px; border-radius: 999px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; display: inline-block; white-space: nowrap; }
+        .bg-sentiment-positive { background-color: #dcfce7; color: #15803d; }
+        .bg-sentiment-negative { background-color: #fee2e2; color: #b91c1c; }
+        .bg-sentiment-neutral { background-color: #e2e8f0; color: #334155; }
+
+        .cluster-mini-card .rating-row { display: flex; align-items: baseline; gap: 6px; margin: 6px 0 10px; }
+        .cluster-mini-card .rating-row .rating-value { font-size: 1.6rem; font-weight: 800; color: var(--text-dark); letter-spacing: -0.02em; }
+        .cluster-mini-card .rating-row .rating-pct { font-size: 0.85rem; color: var(--text-muted); }
+
+        .topic-bar-track { background: rgba(15, 23, 42, 0.06); border-radius: 999px; height: 8px; overflow: hidden; }
+        html[data-bs-theme="dark"] .topic-bar-track { background: rgba(255, 255, 255, 0.08); }
+        .topic-bar-fill { background: linear-gradient(90deg, #0a1f44, #f4b400); height: 100%; border-radius: 999px; }
+
+        .side-panel-card {
+            background: white; border: 1px solid var(--border-soft);
+            border-radius: 16px; padding: 24px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); height: 100%;
+        }
+        html[data-bs-theme="dark"] .side-panel-card { background: var(--card-bg); }
+
+        .recent-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border-soft); }
+        .recent-item:last-child { border-bottom: none; padding-bottom: 0; }
+        .recent-item .recent-office { font-weight: 700; font-size: 0.85rem; color: var(--text-dark); }
+        .recent-item .recent-topic { font-size: 0.78rem; color: var(--text-muted); }
+        .recent-item .recent-time { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
+
+        .rank-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border-soft); }
+        .rank-item:last-child { border-bottom: none; padding-bottom: 0; }
+        .rank-item .rank-name { font-weight: 600; font-size: 0.85rem; color: var(--text-dark); }
+        .rank-item .rank-sub { font-size: 0.72rem; color: var(--text-muted); }
+        .rank-score { font-weight: 800; font-size: 1rem; padding: 3px 10px; border-radius: 999px; }
+        .rank-score.good { background: #dcfce7; color: #15803d; }
+        .rank-score.bad { background: #fee2e2; color: #b91c1c; }
+
         /* --- REPORT MODAL INTERFACE STYLES --- */
         #reportModal {
             display: none;
@@ -252,24 +285,129 @@
             </div>
 
             <% if (typeof clusterCards !== 'undefined' && clusterCards.length > 0) { %>
-                <div class="row g-4">
+                <div class="row g-4 mb-4">
                     <% clusterCards.forEach(card => { %>
                         <div class="col-xl-3 col-md-6">
                             <div class="cluster-mini-card" style="border-left: 5px solid <%= card.color || '#0a1f44' %>;">
                                 <h6 class="text-muted fw-bold small text-uppercase mb-2"><%= card.name %></h6>
+                                <div class="rating-row">
+                                    <span class="rating-value"><%= card.rating %></span>
+                                    <span class="rating-pct">% satisfaction</span>
+                                </div>
                                 <span class="badge bg-light text-secondary border rounded-pill small"><i class="fas fa-users me-1"></i><%= card.respondents %> Respondents</span>
                             </div>
                         </div>
                     <% }) %>
                 </div>
             <% } else { %>
-                <div class="row g-4">
+                <div class="row g-4 mb-4">
                     <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #0a1f44;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Office of the President</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
                     <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #10b981;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Admin & Finance</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
                     <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #f59e0b;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Research & Innovation</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
                     <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #8b5cf6;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Academic Cluster</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
                 </div>
             <% } %>
+
+            <div class="row g-4 mb-4">
+                <div class="col-xl-4">
+                    <div class="side-panel-card">
+                        <h6 class="fw-bold text-dark mb-1">Sentiment Overview</h6>
+                        <p class="text-muted small mb-3">AI-classified tone of respondent comments</p>
+                        <div style="height: 190px; position: relative;">
+                            <canvas id="sentimentChart"></canvas>
+                        </div>
+                        <div class="d-flex justify-content-between mt-3 small">
+                            <span><span class="sentiment-badge bg-sentiment-positive">Positive</span> <%= sentimentBreakdown.Positive %></span>
+                            <span><span class="sentiment-badge bg-sentiment-neutral">Neutral</span> <%= sentimentBreakdown.Neutral %></span>
+                            <span><span class="sentiment-badge bg-sentiment-negative">Negative</span> <%= sentimentBreakdown.Negative %></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-xl-4">
+                    <div class="side-panel-card">
+                        <h6 class="fw-bold text-dark mb-1">Top Feedback Topics</h6>
+                        <p class="text-muted small mb-3">Most frequently mentioned themes in comments</p>
+                        <% if (typeof topTopics !== 'undefined' && topTopics.length > 0) { %>
+                            <% topTopics.forEach(t => { %>
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between small mb-1">
+                                        <span class="fw-semibold text-dark"><%= t.topic %></span>
+                                        <span class="text-muted"><%= t.count %></span>
+                                    </div>
+                                    <div class="topic-bar-track"><div class="topic-bar-fill" style="width: <%= t.pct %>%;"></div></div>
+                                </div>
+                            <% }) %>
+                        <% } else { %>
+                            <p class="text-muted small text-center py-4 mb-0">No comment topics recorded yet for this period.</p>
+                        <% } %>
+                    </div>
+                </div>
+
+                <div class="col-xl-4">
+                    <div class="side-panel-card">
+                        <h6 class="fw-bold text-dark mb-1">Recent Submissions</h6>
+                        <p class="text-muted small mb-3">Latest survey responses received</p>
+                        <% if (typeof recentSubmissions !== 'undefined' && recentSubmissions.length > 0) { %>
+                            <% recentSubmissions.forEach(r => { %>
+                                <div class="recent-item">
+                                    <div>
+                                        <div class="recent-office"><%= r.officeName %></div>
+                                        <div class="recent-topic"><%= r.topic %></div>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="sentiment-badge bg-sentiment-<%= r.sentiment.toLowerCase() %>"><%= r.sentiment %></span>
+                                        <div class="recent-time mt-1"><%= new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) %></div>
+                                    </div>
+                                </div>
+                            <% }) %>
+                        <% } else { %>
+                            <p class="text-muted small text-center py-4 mb-0">No submissions recorded yet for this period.</p>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4 mb-4">
+                <div class="col-xl-6">
+                    <div class="side-panel-card">
+                        <h6 class="fw-bold text-dark mb-1"><i class="fas fa-arrow-trend-up text-success me-1"></i> Top Performing Offices</h6>
+                        <p class="text-muted small mb-3">Highest satisfaction rating this period</p>
+                        <% if (typeof topOffices !== 'undefined' && topOffices.length > 0) { %>
+                            <% topOffices.forEach(o => { %>
+                                <div class="rank-item">
+                                    <div>
+                                        <div class="rank-name"><%= o.name %></div>
+                                        <div class="rank-sub"><%= o.cluster %> &middot; <%= o.respondents %> respondents</div>
+                                    </div>
+                                    <span class="rank-score good"><%= o.score.toFixed(2) %>%</span>
+                                </div>
+                            <% }) %>
+                        <% } else { %>
+                            <p class="text-muted small text-center py-4 mb-0">Not enough data yet.</p>
+                        <% } %>
+                    </div>
+                </div>
+                <div class="col-xl-6">
+                    <div class="side-panel-card">
+                        <h6 class="fw-bold text-dark mb-1"><i class="fas fa-arrow-trend-down text-danger me-1"></i> Offices Needing Attention</h6>
+                        <p class="text-muted small mb-3">Lowest satisfaction rating this period</p>
+                        <% if (typeof bottomOffices !== 'undefined' && bottomOffices.length > 0) { %>
+                            <% bottomOffices.forEach(o => { %>
+                                <div class="rank-item">
+                                    <div>
+                                        <div class="rank-name"><%= o.name %></div>
+                                        <div class="rank-sub"><%= o.cluster %> &middot; <%= o.respondents %> respondents</div>
+                                    </div>
+                                    <span class="rank-score bad"><%= o.score.toFixed(2) %>%</span>
+                                </div>
+                            <% }) %>
+                        <% } else { %>
+                            <p class="text-muted small text-center py-4 mb-0">Not enough data yet.</p>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
 
         </div>
     </div>
@@ -380,20 +518,33 @@ document.addEventListener("DOMContentLoaded", function() {
     // --- 2. CHART.JS CONFIGURATION & RENDER PIPELINE ---
     const chartLabels = <%- typeof chartData !== 'undefined' ? JSON.stringify(chartData.labels) : JSON.stringify(['Office of President', 'Admin & Finance', 'Research & Innov.', 'Academic Affairs', 'Other Offices']) %>;
     const chartRespondents = <%- typeof chartData !== 'undefined' ? JSON.stringify(chartData.respondents) : JSON.stringify([0, 0, 0, 0, 0]) %>;
+    const chartRatings = <%- typeof chartData !== 'undefined' ? JSON.stringify(chartData.ratings) : JSON.stringify([0, 0, 0, 0, 0]) %>;
 
     const ctx = document.getElementById('clusterAnalyticsChart').getContext('2d');
     new Chart(ctx, {
-        type: 'bar',
         data: {
             labels: chartLabels,
             datasets: [
                 {
-                    label: 'Respondents Count (Volume)',
+                    type: 'bar',
+                    label: 'Respondents (Volume)',
                     data: chartRespondents,
                     backgroundColor: 'rgba(10, 31, 68, 0.85)',
                     hoverBackgroundColor: '#f4b400',
                     borderRadius: 8,
-                    maxBarThickness: 56
+                    maxBarThickness: 56,
+                    yAxisID: 'yVolume'
+                },
+                {
+                    type: 'line',
+                    label: 'Satisfaction Rating (%)',
+                    data: chartRatings,
+                    borderColor: '#10b981',
+                    backgroundColor: '#10b981',
+                    tension: 0.35,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    yAxisID: 'yRating'
                 }
             ]
         },
@@ -401,24 +552,33 @@ document.addEventListener("DOMContentLoaded", function() {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { display: false },
+                legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 12, font: { weight: '600' } } },
                 tooltip: {
                     backgroundColor: '#0f172a',
                     padding: 12,
                     cornerRadius: 10,
-                    displayColors: false,
                     callbacks: {
                         label: function(context) {
-                            return `Respondents: ${context.raw.toLocaleString()}`;
+                            return context.dataset.yAxisID === 'yRating'
+                                ? `Rating: ${context.raw}%`
+                                : `Respondents: ${context.raw.toLocaleString()}`;
                         }
                     }
                 }
             },
             scales: {
-                y: {
+                yVolume: {
                     beginAtZero: true,
+                    position: 'left',
                     title: { display: true, text: 'Total Respondents', font: { weight: 'bold' } },
                     grid: { color: '#f1f5f9' }
+                },
+                yRating: {
+                    beginAtZero: true,
+                    max: 100,
+                    position: 'right',
+                    title: { display: true, text: 'Satisfaction Rating (%)', font: { weight: 'bold' } },
+                    grid: { display: false }
                 },
                 x: {
                     grid: { display: false },
@@ -427,9 +587,34 @@ document.addEventListener("DOMContentLoaded", function() {
             }
         }
     });
+
+    // --- 3. SENTIMENT DOUGHNUT ---
+    const sentimentCtx = document.getElementById('sentimentChart').getContext('2d');
+    new Chart(sentimentCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Positive', 'Neutral', 'Negative'],
+            datasets: [{
+                data: [
+                    <%= sentimentBreakdown.Positive %>,
+                    <%= sentimentBreakdown.Neutral %>,
+                    <%= sentimentBreakdown.Negative %>
+                ],
+                backgroundColor: ['#22c55e', '#94a3b8', '#ef4444'],
+                borderWidth: 0,
+                hoverOffset: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '68%',
+            plugins: { legend: { display: false } }
+        }
+    });
 });
 
-// --- 3. CONTROLS MANAGEMENT FUNCTIONS FOR POPUP REPORT MODAL ---
+// --- 4. CONTROLS MANAGEMENT FUNCTIONS FOR POPUP REPORT MODAL ---
 function openReportModal() {
     document.getElementById('reportModal').style.display = 'block';
     document.body.style.overflow = 'hidden'; 

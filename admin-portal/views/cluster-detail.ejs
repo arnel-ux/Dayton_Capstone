@@ -324,17 +324,22 @@
             let chartInstance;
 
             function updateDashboardUI(dataArray) {
-                let totalResp = 0, sumRating = 0, validOffices = 0;
+                let totalResp = 0, sumRating = 0, validOffices = 0, evaluatedOffices = 0;
                 dataArray.forEach(d => {
-                    totalResp += parseInt(d.resp) || 0;
+                    const resp = parseInt(d.resp) || 0;
+                    totalResp += resp;
+                    if (resp > 0) evaluatedOffices++;
                     let r = parseFloat(d.rating) || 0;
                     if(r > 0) { sumRating += r; validOffices++; }
                 });
-                
+
                 // Real-time calculation sa cards
                 document.getElementById('totalResp').innerText = totalResp.toLocaleString();
                 document.getElementById('overallRating').innerText = (validOffices > 0 ? (sumRating / validOffices).toFixed(2) : 0.00) + '%';
-                document.getElementById('totalOffices').innerText = dataArray.length;
+                // "Evaluated" means it actually received survey responses, not just
+                // that it exists in this cluster (dataArray includes every office via
+                // a LEFT JOIN, even ones with zero submissions).
+                document.getElementById('totalOffices').innerText = evaluatedOffices;
             }
 
             function renderChart(dataArray) {

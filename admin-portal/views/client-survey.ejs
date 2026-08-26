@@ -4,27 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CSM Survey - CSPC</title>
-    <% if (typeof requiresTabSession !== 'undefined' && requiresTabSession) { %>
-    <script>
-        // Per-tab login gate: sessionStorage is scoped to THIS browser tab, unlike the
-        // session cookie which every tab shares. Pasting this URL into a new tab (or one
-        // that inherited the cookie but was never logged into itself) finds no verified
-        // flag here and gets bounced to /login, even though the real session is still
-        // perfectly valid. Runs first/blocking so nothing renders before the redirect fires.
-        (function () {
-            var GATE_KEY = 'cqa_tab_verified';
-            try {
-                <% if (typeof grantTabAccess !== 'undefined' && grantTabAccess) { %>
-                    sessionStorage.setItem(GATE_KEY, '1');
-                <% } else { %>
-                    if (!sessionStorage.getItem(GATE_KEY)) {
-                        window.location.replace('/login?tabVerify=1');
-                    }
-                <% } %>
-            } catch (e) { /* sessionStorage unavailable (privacy mode, etc.) — fail open */ }
-        })();
-    </script>
-    <% } %>
     <script>
         (function () {
             try {
@@ -1732,6 +1711,52 @@ if (currentClientEmail) {
     } catch (e) { /* localStorage unavailable — offline session bypass just won't apply */ }
 }
 
+// Local, client-side fallback autofill. Independent of the server's
+// client_accounts lookup (which only has data for users whose account row
+// exists) — this simply remembers what THIS BROWSER last typed/selected for
+// Name, Client Type, Age, and Region, and reuses it on the next visit.
+const CLIENT_AUTOFILL_KEY = 'cspc_client_autofill_profile';
+
+function saveAutofillProfile(data) {
+    try {
+        localStorage.setItem(CLIENT_AUTOFILL_KEY, JSON.stringify({
+            respondent_name: data.respondent_name || '',
+            client_type: data.client_type || '',
+            age: data.age || '',
+            region: data.region || ''
+        }));
+    } catch (e) { /* localStorage unavailable — autofill just won't persist */ }
+}
+
+// Fills Name/Client Type/Age/Region from the last locally-saved answers.
+// Never overwrites a field that already has a value or is locked/disabled
+// (e.g. by applyLockedProfile from a prior server-confirmed submission).
+function applyAutofillFromLocalStorage() {
+    let saved;
+    try { saved = JSON.parse(localStorage.getItem(CLIENT_AUTOFILL_KEY)); } catch (e) { saved = null; }
+    if (!saved) return;
+
+    const nameInput = document.querySelector('input[name="respondent_name"]');
+    if (nameInput && !nameInput.disabled && !nameInput.value && saved.respondent_name) {
+        nameInput.value = saved.respondent_name;
+    }
+
+    const clientTypeSelect = document.querySelector('select[name="client_type"]');
+    if (clientTypeSelect && !clientTypeSelect.disabled && !clientTypeSelect.value && saved.client_type) {
+        clientTypeSelect.value = saved.client_type;
+    }
+
+    const ageSelect = document.querySelector('select[name="age"]');
+    if (ageSelect && !ageSelect.disabled && !ageSelect.value && saved.age) {
+        ageSelect.value = saved.age;
+    }
+
+    const regionSelect = document.querySelector('select[name="region"]');
+    if (regionSelect && !regionSelect.disabled && !regionSelect.value && saved.region) {
+        regionSelect.value = saved.region;
+    }
+}
+
 function applyLockedProfile() {
     if (!savedClientProfile) return;
 
@@ -1910,17 +1935,30 @@ function loadProfileView() {
             profileLoaded = true;
             const p = data.profile || {};
 
-            document.getElementById('pf-email').textContent = p.email || currentClientEmail || '—';
-            document.getElementById('pf-name-display').textContent = p.respondent_name || 'Not set yet';
-            document.getElementById('pf-name-input').value = p.respondent_name || '';
+            // Server has nothing yet (no client_accounts row) — fall back to what
+            // this browser last saved locally, so the page isn't stuck on
+            // "Not set yet" for someone who has, in fact, answered before.
+            let localSaved = null;
+            try { localSaved = JSON.parse(localStorage.getItem(CLIENT_AUTOFILL_KEY)); } catch (e) { /* ignore */ }
 
-            const lockedOrUnset = (value, iconTitle) => value
-                ? `<span class="profile-locked-badge" title="${iconTitle}"><i class="bi bi-lock-fill"></i> ${value}</span>`
+            const respondentName = p.respondent_name || (localSaved && localSaved.respondent_name) || '';
+            const region = p.region || (localSaved && localSaved.region) || '';
+            const age = p.age || (localSaved && localSaved.age) || '';
+            const gender = p.gender || '';
+
+            document.getElementById('pf-email').textContent = p.email || currentClientEmail || '—';
+            document.getElementById('pf-name-display').textContent = respondentName || 'Not set yet';
+            document.getElementById('pf-name-input').value = respondentName;
+
+            const lockedOrUnset = (value, locked, iconTitle) => value
+                ? (locked
+                    ? `<span class="profile-locked-badge" title="${iconTitle}"><i class="bi bi-lock-fill"></i> ${value}</span>`
+                    : `<span>${value}</span>`)
                 : `<span class="profile-unset">Not set yet — captured on your first survey submission</span>`;
 
-            document.getElementById('pf-region').innerHTML = lockedOrUnset(p.region, 'Locked after your first survey');
-            document.getElementById('pf-age').innerHTML = lockedOrUnset(p.age, 'Locked after your first survey');
-            document.getElementById('pf-gender').innerHTML = lockedOrUnset(p.gender, 'Locked after your first survey');
+            document.getElementById('pf-region').innerHTML = lockedOrUnset(region, !!p.region, 'Locked after your first survey');
+            document.getElementById('pf-age').innerHTML = lockedOrUnset(age, !!p.age, 'Locked after your first survey');
+            document.getElementById('pf-gender').innerHTML = lockedOrUnset(gender, !!p.gender, 'Locked after your first survey');
 
             document.getElementById('profileLoading').classList.add('d-none');
             document.getElementById('profileContent').classList.remove('d-none');
@@ -2779,6 +2817,7 @@ function submitAll(event) {
     // Offline: skip the network call entirely and queue the survey locally —
     // it will be replayed automatically once the connection returns.
     if (!navigator.onLine) {
+        saveAutofillProfile(data);
         queueSurveyOffline(data, data.email).then(showThankYou);
         return;
     }
@@ -2792,6 +2831,7 @@ function submitAll(event) {
     .then(response => response.json())
     .then(resData => {
         if (resData.success) {
+            saveAutofillProfile(data);
             showThankYou();
         } else {
             AppAlert.error("Nagkaroon ng problema: " + (resData.message || 'Database error'));
@@ -2801,6 +2841,7 @@ function submitAll(event) {
         // A rejected fetch here (as opposed to a JSON error response above) means
         // the request never reached the server — most likely a lost connection.
         console.error("Error submitting survey:", err);
+        saveAutofillProfile(data);
         queueSurveyOffline(data, data.email).then(showThankYou);
     });
 }
@@ -2849,6 +2890,7 @@ function startNewSurvey() {
     // already-locked profile fields, and doesn't restore today's date.
     document.getElementById('surveyDate').valueAsDate = new Date();
     applyLockedProfile();
+    applyAutofillFromLocalStorage();
     populateServiceSelect('');
 
     editReturnTarget = null;
@@ -2870,7 +2912,7 @@ async function logout(){
         // Hits the server's /logout route so the session (req.session.clientEmail /
         // passport user) is actually cleared — otherwise the Back button could
         // still land on the survey without signing in again.
-        window.location.href = '/logout';
+        window.location.href = '/logout?scope=client';
     }
 }
 
@@ -2882,6 +2924,7 @@ document.getElementById('agreeTermsStage1').addEventListener('change', function 
 // Initial Load Setup
 setLanguage('en');
 applyLockedProfile();
+applyAutofillFromLocalStorage();
 updateProgressStepper(1);
 updateFullscreenButton();
 
