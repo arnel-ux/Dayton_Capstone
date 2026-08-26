@@ -463,6 +463,8 @@
         body.dark-mode .office-cluster-select { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); color: #e2e8f0; }
         body.dark-mode .office-cluster-select option { background: var(--navy-900); color: #e2e8f0; }
         .canvas-container { position: relative; flex-grow: 1; padding: var(--sp-2) var(--sp-4) var(--sp-4); display: flex; justify-content: center; align-items: center; }
+        .canvas-container canvas { transition: opacity 0.35s ease, transform 0.35s ease; }
+        .canvas-container.chart-transitioning canvas { opacity: 0; transform: scale(0.96) translateY(8px); }
         .hint-text { font-size: var(--fs-sm); color: #a3adc2; margin-top: var(--sp-1); font-weight: 500; line-height: 1.5; }
         body.dark-mode .hint-text { color: #64748b; }
 
@@ -1359,7 +1361,17 @@
                 if (activeCharts[rawId]) {
                     const backBtn = document.getElementById(rawId + '-back');
                     if (backBtn) backBtn.classList.add('d-none');
-                    loadChart(rawId, 'main');
+                    const canvasEl = document.getElementById(rawId);
+                    const container = canvasEl ? canvasEl.closest('.canvas-container') : null;
+                    if (container) {
+                        container.classList.add('chart-transitioning');
+                        setTimeout(() => {
+                            loadChart(rawId, 'main');
+                            requestAnimationFrame(() => container.classList.remove('chart-transitioning'));
+                        }, 220);
+                    } else {
+                        loadChart(rawId, 'main');
+                    }
                 }
             });
         }

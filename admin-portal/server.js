@@ -241,14 +241,30 @@ function noCache(req, res, next) {
 // ==========================================
 // DATABASE CONNECTION (MySQL)
 // ==========================================
-const db = mysql.createConnection({
+// A pool (not a single createConnection) so a dropped connection — MySQL
+// restart, network blip, or hitting wait_timeout after sitting idle — gets
+// silently replaced on the next query instead of leaving `db` permanently
+// broken. Just as important: a pool's per-query errors surface through that
+// query's own callback, so they can never become an unhandled 'error' event
+// with zero listeners — which is what crashes the whole Node process outright.
+const db = mysql.createPool({
     host: 'localhost',
-    user: 'root',      
-    password: '',      
-    database: 'cqa_db' 
+    user: 'root',
+    password: '',
+    database: 'cqa_db',
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
 });
 
-db.connect((err) => {
+// Defense in depth: still listen for pool-level errors (e.g. a failure while
+// establishing a brand new connection) so that, too, can never crash the
+// process via an unhandled 'error' event.
+db.on('error', (err) => {
+    console.error('❌ MySQL pool error:', err);
+});
+
+db.query('SELECT 1', (err) => {
     if (err) {
         console.error('❌ Error connecting to MySQL:', err);
         return;
@@ -331,6 +347,18 @@ function stopModelServer() {
 process.on('exit', stopModelServer);
 process.on('SIGINT', () => { stopModelServer(); process.exit(0); });
 process.on('SIGTERM', () => { stopModelServer(); process.exit(0); });
+
+// Last-resort safety net: log and keep serving instead of letting one bad
+// request (a stray throw, a rejected promise nobody awaited) kill the entire
+// server for every logged-in admin and client. This does NOT replace fixing
+// the underlying bug — it just stops a single mistake from becoming a
+// full outage.
+process.on('uncaughtException', (err) => {
+    console.error('❌ [FATAL] Uncaught exception (server kept running):', err);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('❌ [FATAL] Unhandled promise rejection (server kept running):', reason);
+});
 
 // ==========================================
 // LANDING PAGE CONTENT (CMS-editable, index.ejs)
