@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <%- include('layout/header') %>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         :root {
             --primary-indigo: #0a1f44;
@@ -192,6 +193,112 @@
         .sqd-badge-3 { background: #e2e8f0; color: #334155; }
         .sqd-badge-2, .sqd-badge-1 { background: #fee2e2; color: #b91c1c; }
         .sqd-badge-na, .sqd-badge-unanswered { background: #f1f5f9; color: #94a3b8; }
+
+        /* Generate Report modal — fills the content area (same wide layout/format as the
+           official /report page) but docks to the right of the sidebar instead of covering
+           the whole viewport, so the sidebar stays visible/usable while the report is open. */
+        .client-report-dialog {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: var(--sidebar-width, 260px);
+            margin: 0;
+            max-width: none;
+            width: auto;
+            height: 100vh;
+        }
+        .client-report-dialog .modal-content {
+            height: 100%;
+            border-radius: 0;
+        }
+        .client-report-dialog .modal-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+        }
+        @media (max-width: 991.98px) {
+            .client-report-dialog { left: 0; }
+        }
+        .client-report-header {
+            justify-content: space-between;
+            padding: 16px 24px;
+            background: #fff;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        html[data-bs-theme="dark"] .client-report-header { background: #141d30; border-bottom-color: #263045; }
+        .client-report-header .modal-title { font-size: 1.05rem; color: #0a1f44; }
+        html[data-bs-theme="dark"] .client-report-header .modal-title { color: #e2e8f0; }
+        .client-report-header .vr { opacity: 0.25; align-self: stretch; }
+        .client-report-body {
+            background: #e5e9f0;
+            padding: 32px 24px;
+        }
+        html[data-bs-theme="dark"] .client-report-body { background: #0d1420; }
+        .report-container {
+            background: #fff;
+            padding: 40px;
+            color: #000;
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto 30px;
+            border: 1px solid #ccc;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #6c9bd2;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .report-header-center { text-align: center; flex-grow: 1; }
+        .report-header-center p { margin: 0; font-size: 14px; }
+        .report-header-center .inst-name { font-weight: bold; font-size: 16px; }
+        .doc-code { font-size: 12px; font-weight: bold; }
+        .report-title { text-align: center; font-weight: bold; font-size: 16px; margin: 20px 0; }
+        .office-title { text-align: center; font-weight: bold; text-decoration: underline; text-transform: uppercase; font-size: 16px; margin-bottom: 0; }
+        .meta-info { font-size: 14px; margin-bottom: 10px; }
+        .meta-info span { display: inline-block; width: 200px; }
+        .report-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px; }
+        .report-table th, .report-table td { border: 1px solid #000; padding: 5px 8px; }
+        .report-table th { text-align: center; font-weight: bold; }
+        .header-blue { background-color: #8faadc !important; -webkit-print-color-adjust: exact; }
+        .ai-summary-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #6c9bd2;
+            padding: 12px;
+            margin-bottom: 15px;
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            -webkit-print-color-adjust: exact;
+        }
+        .badge-sentiment { padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; text-transform: uppercase; }
+        .bg-pos { background-color: #dcfce7 !important; color: #166534 !important; -webkit-print-color-adjust: exact; }
+        .bg-neg { background-color: #fee2e2 !important; color: #991b1b !important; -webkit-print-color-adjust: exact; }
+        .bg-neu { background-color: #f1f5f9 !important; color: #334155 !important; -webkit-print-color-adjust: exact; }
+        .topic-pill { background-color: #e8f0fe !important; color: #0056b3 !important; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; -webkit-print-color-adjust: exact; }
+        .text-center { text-align: center; }
+        .fw-bold { font-weight: bold; }
+        .interpretation-box { font-size: 14px; margin-left: 50%; margin-bottom: 40px; }
+        .interpretation-box table { border: none; }
+        .interpretation-box td { padding: 2px 10px; border: none; }
+        .signature-section { display: flex; justify-content: space-between; margin-top: 40px; font-size: 14px; }
+        .sig-block { width: 45%; }
+        .sig-name { font-weight: bold; margin-top: 30px; margin-bottom: 0; }
+        .sig-title { margin: 0; }
+        .page-footer { margin-top: 50px; font-size: 12px; font-weight: bold; border-top: 2px solid #6c9bd2; padding-top: 5px; display: flex; justify-content: space-between; }
+        @media print {
+            body > *:not(#clientReportModal) { display: none !important; }
+            #clientReportModal { position: static !important; display: block !important; }
+            #clientReportModal .modal-dialog { max-width: 100% !important; margin: 0 !important; }
+            #clientReportModal .modal-content { border: none !important; box-shadow: none !important; }
+            .no-print { display: none !important; }
+            .report-container { border: none; box-shadow: none; max-width: 100%; padding: 0; display: block; page-break-after: always; }
+            .page-break { page-break-before: always; }
+        }
     </style>
 </head>
 <body>
@@ -294,6 +401,176 @@
                     <p class="mb-0">Loading answers...</p>
                 </div>
             </div>
+            <div class="modal-footer border-top-0" id="viewResultFooter" style="display: none;">
+                <button type="button" class="btn btn-primary" id="generateReportBtn" title="Open this client's own computed report, in the same format as the official report">
+                    <i class="fas fa-file-alt me-2"></i>Generate Report
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Generate Report modal: shows one client's computed report, same format as the
+     official /report page, but scoped to this respondent's own answers only. -->
+<div class="modal fade" id="clientReportModal" tabindex="-1" aria-labelledby="clientReportModalLabel" aria-hidden="true" data-bs-backdrop="false">
+    <div class="modal-dialog client-report-dialog">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header no-print client-report-header">
+                <h5 class="modal-title fw-bold" id="clientReportModalLabel"><i class="fas fa-file-alt me-2" style="color:#0a1f44;"></i>Client Report</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-sm btn-outline-danger" onclick="downloadClientReportPDF()"><i class="fas fa-file-pdf me-1"></i> PDF</button>
+                    <button class="btn btn-sm btn-outline-success" onclick="downloadClientReportCSV()"><i class="fas fa-file-csv me-1"></i> CSV</button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="window.print()"><i class="fas fa-print me-1"></i> Print</button>
+                    <div class="vr mx-2"></div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body client-report-body" id="clientReportBody">
+                <div class="text-center py-5 text-muted">
+                    <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                    <p class="mb-0">Computing report...</p>
+                </div>
+                <div id="clientReportContentToExport" style="display: none;">
+
+                    <!-- PAGE 1: NUMERICAL SUMMARY -->
+                    <div class="report-container">
+                        <div class="report-header">
+                            <div><img src="/images/cspc-logo.png" alt="CSPC Logo" style="width: 60px; height: 60px;"></div>
+                            <div class="report-header-center">
+                                <p>Republic of the Philippines</p>
+                                <p class="inst-name">CAMARINES SUR POLYTECHNIC COLLEGES</p>
+                                <p>Nabua, Camarines Sur</p>
+                            </div>
+                            <div class="doc-code">CSPC-F-CQA-06</div>
+                        </div>
+
+                        <div class="report-title">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
+                        <p class="office-title" id="cr_officeName1"></p>
+
+                        <div class="meta-info mt-4">
+                            <div><span>Period Covered:</span> <strong id="cr_period1"></strong></div>
+                            <div><span>Number of Respondents:</span> <strong id="cr_totalRespondents1">0</strong></div>
+                        </div>
+
+                        <table class="report-table">
+                            <thead>
+                                <tr class="header-blue">
+                                    <th rowspan="2" style="width: 60%;">SERVICE QUALITY DIMENSIONS<br><span style="font-weight: normal;">(Mga Dimensyon sa Kalidad na Serbisyo)</span></th>
+                                    <th colspan="2">COMPUTATION</th>
+                                </tr>
+                                <tr class="header-blue">
+                                    <th style="width: 20%;">PERCENTAGE</th>
+                                    <th style="width: 20%;">RATING</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td>1. Responsiveness (Pagtugon)/(Pagsimbag)</td><td class="text-center" id="cr_sqd1_score">0.00%</td><td class="text-center" id="cr_sqd1_interp">Poor</td></tr>
+                                <tr><td>2. Reliability (Quality)/Mapagkakatiwalaan</td><td class="text-center" id="cr_sqd2_score">0.00%</td><td class="text-center" id="cr_sqd2_interp">Poor</td></tr>
+                                <tr><td>3. Access & Facilities/Akses/Gamit at Pasilidad</td><td class="text-center" id="cr_sqd3_score">0.00%</td><td class="text-center" id="cr_sqd3_interp">Poor</td></tr>
+                                <tr><td>4. Communication/Komunikasyon</td><td class="text-center" id="cr_sqd4_score">0.00%</td><td class="text-center" id="cr_sqd4_interp">Poor</td></tr>
+                                <tr><td>5. Costs (Gastos)/ Kantidad</td><td class="text-center" id="cr_sqd5_score">0.00%</td><td class="text-center" id="cr_sqd5_interp">Poor</td></tr>
+                                <tr><td>6. Integrity/(Integredad)</td><td class="text-center" id="cr_sqd6_score">0.00%</td><td class="text-center" id="cr_sqd6_interp">Poor</td></tr>
+                                <tr><td>7. Assurance (Kasiguruhan)</td><td class="text-center" id="cr_sqd7_score">0.00%</td><td class="text-center" id="cr_sqd7_interp">Poor</td></tr>
+                                <tr><td>8. Outcome (Resulta)</td><td class="text-center" id="cr_sqd8_score">0.00%</td><td class="text-center" id="cr_sqd8_interp">Poor</td></tr>
+                                <tr class="header-blue fw-bold">
+                                    <td class="text-end" style="padding-right: 20px;">OVERALL SCORE</td>
+                                    <td class="text-center" id="cr_overall_score">0.00%</td>
+                                    <td class="text-center" id="cr_overall_interp">POOR</td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <div class="interpretation-box">
+                            <div class="fw-bold mb-1">INTERPRETATION OF RESULTS</div>
+                            <table>
+                                <tr><td>95.0% to 100%</td><td>Outstanding</td></tr>
+                                <tr><td>90.0 % to 94.9%</td><td>Very Satisfactory</td></tr>
+                                <tr><td>80.0% to 89.9%</td><td>Satisfactory</td></tr>
+                                <tr><td>60.0% to 79.9%</td><td>Fair</td></tr>
+                                <tr><td>Below 60.0%</td><td>Poor</td></tr>
+                            </table>
+                        </div>
+
+                        <div class="signature-section">
+                            <div class="sig-block">
+                                <div>Prepared by:</div>
+                                <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
+                                <p class="sig-title">AOV-CQA</p>
+                                <div style="margin-top: 30px;">Noted by:</div>
+                                <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
+                                <p class="sig-title">SUC President III</p>
+                            </div>
+                            <div class="sig-block">
+                                <div>Reviewed by:</div>
+                                <p class="sig-name">JOCELYN O. JINTALAN, DBA</p>
+                                <p class="sig-title">ISO Chair</p>
+                            </div>
+                        </div>
+
+                        <div class="page-footer">
+                            <div>Effectivity: June 2024</div>
+                            <div>Rev. 4</div>
+                        </div>
+                    </div>
+
+                    <!-- PAGE 2: WRITTEN COMMENTS & AI ANALYTICS -->
+                    <div class="report-container page-break">
+                        <div class="report-header">
+                            <div><img src="/images/cspc-logo.png" alt="CSPC Logo" style="width: 60px; height: 60px;"></div>
+                            <div class="report-header-center">
+                                <p>Republic of the Philippines</p>
+                                <p class="inst-name">CAMARINES SUR POLYTECHNIC COLLEGES</p>
+                                <p>Nabua, Camarines Sur</p>
+                            </div>
+                            <div class="doc-code">CSPC-F-CQA-06</div>
+                        </div>
+
+                        <div class="report-title">AI FEEDBACK SENTIMENT & TOPIC ANALYTICS</div>
+                        <p class="office-title" id="cr_officeName2"></p>
+
+                        <div class="meta-info mt-4">
+                            <div><span>Period Covered:</span> <strong id="cr_period2"></strong></div>
+                            <div><span>Analyzed Feedbacks:</span> <strong id="cr_totalRespondents2">0</strong></div>
+                        </div>
+
+                        <div class="ai-summary-box mt-3">
+                            <div><strong>AI Sentiment Breakdown:</strong></div>
+                            <div>Positive: <span id="cr_aiPos" class="fw-bold" style="color: #166534;">0</span></div>
+                            <div>Neutral: <span id="cr_aiNeu" class="fw-bold" style="color: #334155;">0</span></div>
+                            <div>Negative: <span id="cr_aiNeg" class="fw-bold" style="color: #991b1b;">0</span></div>
+                            <div>| &nbsp; Dominant Topic: <span id="cr_aiDomTopic" class="fw-bold" style="color: #0056b3;">N/A</span></div>
+                        </div>
+
+                        <table class="report-table" style="margin-bottom: 50px;">
+                            <thead>
+                                <tr class="header-blue">
+                                    <th style="width: 10%;">NO.</th>
+                                    <th style="width: 50%;">WRITTEN COMMENTS/SUGGESTIONS</th>
+                                    <th style="width: 20%;">AI MODELED TOPIC</th>
+                                    <th style="width: 20%;">AI SENTIMENT</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cr_commentsBody"></tbody>
+                        </table>
+
+                        <div class="signature-section">
+                            <div class="sig-block">
+                                <div>Prepared by:</div>
+                                <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
+                                <p class="sig-title">AOV-CQA</p>
+                                <div style="margin-top: 30px;">Noted by:</div>
+                                <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
+                                <p class="sig-title">SUC President III</p>
+                            </div>
+                            <div class="sig-block">
+                                <div>Reviewed by:</div>
+                                <p class="sig-name">JOCELYN O. JINTALAN, DBA</p>
+                                <p class="sig-title">ISO Chair</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -323,6 +600,10 @@
     function openViewResult(id) {
         const modalEl = document.getElementById('viewResultModal');
         const bodyEl = document.getElementById('viewResultBody');
+        const footerEl = document.getElementById('viewResultFooter');
+        const reportBtn = document.getElementById('generateReportBtn');
+        footerEl.style.display = 'none';
+        reportBtn.onclick = () => openClientReport(id);
         bodyEl.innerHTML = `
             <div class="text-center py-5 text-muted">
                 <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
@@ -395,6 +676,7 @@
                         </div>
                     </div>
                 `;
+                footerEl.style.display = 'flex';
             })
             .catch(err => {
                 console.error('Error loading survey result:', err);
@@ -433,6 +715,156 @@
             noResults.style.display = totalFound === 0 ? "block" : "none";
         });
     });
+
+    // Generate Report: computes and displays one client's own SQD score using the
+    // exact same formula/template as the aggregate /report page, scoped to this
+    // respondent only, right here on the Survey Records page (no page navigation).
+    function openClientReport(id) {
+        const modalEl = document.getElementById('clientReportModal');
+        const loadingEl = document.querySelector('#clientReportBody > .text-center');
+        const contentEl = document.getElementById('clientReportContentToExport');
+        loadingEl.style.display = 'block';
+        contentEl.style.display = 'none';
+
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        fetch('/api/report-data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ respondentId: id })
+        })
+            .then(res => res.json())
+            .then(data => {
+                const stats = data.stats || {};
+                const clientName = stats.respondent_name || 'Anonymous';
+                const officeName = stats.office_name || 'N/A';
+                const periodLabel = stats.period_year_quarter || 'N/A';
+                const periodText = `${periodLabel}${stats.response_date ? ' — Submitted ' + stats.response_date : ''}`;
+
+                document.getElementById('cr_officeName1').innerText = `${clientName} — ${officeName}`;
+                document.getElementById('cr_period1').innerText = periodText;
+                document.getElementById('cr_officeName2').innerText = `${clientName} — ${officeName}`;
+                document.getElementById('cr_period2').innerText = periodText;
+
+                updateClientReportTable(stats);
+                updateClientCommentsTable(data.comments);
+
+                loadingEl.style.display = 'none';
+                contentEl.style.display = 'block';
+            })
+            .catch(err => {
+                console.error('Error generating client report:', err);
+                loadingEl.innerHTML = '<p class="text-danger mb-0 text-center py-4"><i class="fas fa-exclamation-triangle me-1"></i> Could not generate this client\'s report. Please try again.</p>';
+            });
+    }
+
+    function getClientReportInterpretation(score) {
+        if (score >= 95) return "Outstanding";
+        if (score >= 90) return "Very Satisfactory";
+        if (score >= 80) return "Satisfactory";
+        if (score >= 60) return "Fair";
+        return "Poor";
+    }
+
+    function updateClientReportTable(stats) {
+        const totalResp = stats.total_respondents || 0;
+        document.getElementById('cr_totalRespondents1').innerText = totalResp;
+        document.getElementById('cr_totalRespondents2').innerText = totalResp;
+
+        for (let i = 1; i <= 8; i++) {
+            const score = parseFloat(stats[`sqd${i}`] || 0);
+            document.getElementById(`cr_sqd${i}_score`).innerText = score.toFixed(2) + '%';
+            document.getElementById(`cr_sqd${i}_interp`).innerText = getClientReportInterpretation(score);
+        }
+
+        const overall = parseFloat(stats.overall_score || 0);
+        document.getElementById('cr_overall_score').innerText = overall.toFixed(2) + '%';
+        document.getElementById('cr_overall_interp').innerText = getClientReportInterpretation(overall).toUpperCase();
+    }
+
+    function updateClientCommentsTable(comments) {
+        const tbody = document.getElementById('cr_commentsBody');
+        tbody.innerHTML = '';
+
+        let pos = 0, neu = 0, neg = 0;
+        let topics = {};
+
+        if (!comments || comments.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-muted">NO WRITTEN COMMENTS AND SUGGESTIONS REFLECTED IN ANY OF THE INSTRUMENTS</td></tr>`;
+            document.getElementById('cr_aiPos').innerText = '0';
+            document.getElementById('cr_aiNeu').innerText = '0';
+            document.getElementById('cr_aiNeg').innerText = '0';
+            document.getElementById('cr_aiDomTopic').innerText = 'N/A';
+        } else {
+            comments.forEach((c, index) => {
+                let aiSentiment = c.sentiment || 'Neutral';
+                if (aiSentiment === 'Positive') pos++;
+                else if (aiSentiment === 'Negative') neg++;
+                else neu++;
+
+                let aiTopic = c.topic || 'General';
+                topics[aiTopic] = (topics[aiTopic] || 0) + 1;
+
+                let badgeClass = 'bg-neu';
+                if (aiSentiment === 'Positive') badgeClass = 'bg-pos';
+                if (aiSentiment === 'Negative') badgeClass = 'bg-neg';
+
+                tbody.innerHTML += `<tr>
+                    <td class="text-center">${index + 1}</td>
+                    <td>${escapeHtml(c.comments)}</td>
+                    <td class="text-center"><span class="topic-pill">${escapeHtml(aiTopic)}</span></td>
+                    <td class="text-center"><span class="badge-sentiment ${badgeClass}">${escapeHtml(aiSentiment)}</span></td>
+                </tr>`;
+            });
+
+            document.getElementById('cr_aiPos').innerText = pos;
+            document.getElementById('cr_aiNeu').innerText = neu;
+            document.getElementById('cr_aiNeg').innerText = neg;
+
+            let domTopic = 'N/A';
+            let maxCount = 0;
+            for (const [key, value] of Object.entries(topics)) {
+                if (value > maxCount) { maxCount = value; domTopic = key; }
+            }
+            document.getElementById('cr_aiDomTopic').innerText = domTopic;
+        }
+    }
+
+    function downloadClientReportPDF() {
+        const element = document.getElementById('clientReportContentToExport');
+        const opt = {
+            margin: 0.2,
+            filename: 'CSM_Client_Report.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+        };
+        html2pdf().set(opt).from(element).save();
+    }
+
+    function downloadClientReportCSV() {
+        let csv = [];
+        const rows = document.querySelectorAll("#clientReportContentToExport .report-table tr");
+
+        for (let i = 0; i < rows.length; i++) {
+            let row = [], cols = rows[i].querySelectorAll("td, th");
+            for (let j = 0; j < cols.length; j++) {
+                let data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, " ").replace(/(\s\s)/gm, " ");
+                data = data.replace(/"/g, '""');
+                row.push('"' + data + '"');
+            }
+            csv.push(row.join(","));
+        }
+
+        const csvFile = new Blob([csv.join("\n")], { type: "text/csv" });
+        const downloadLink = document.createElement("a");
+        downloadLink.download = "CSM_Client_Data.csv";
+        downloadLink.href = window.URL.createObjectURL(csvFile);
+        downloadLink.style.display = "none";
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+    }
 </script>
 
 </body>

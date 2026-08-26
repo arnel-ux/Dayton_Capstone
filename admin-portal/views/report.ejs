@@ -130,7 +130,7 @@
                     </form>
                 </div>
             </div>
-            
+
             <div class="card card-custom" id="emptyState">
                 <div class="card-body p-5 text-center text-muted">
                     <i class="fas fa-chart-bar fa-3x mb-3 text-light"></i>
@@ -354,10 +354,10 @@
                 body: JSON.stringify({ office: selectedOffice, periodCovered: selectedPeriod })
             });
             const data = await response.json();
-            
+
             updateReportTable(data.stats);
             updateCommentsTable(data.comments);
-            
+
             document.getElementById('emptyState').style.display = 'none';
             document.getElementById('generatedReportWrapper').style.display = 'block';
             document.getElementById('generatedReportWrapper').scrollIntoView({ behavior: 'smooth', block: 'start' });

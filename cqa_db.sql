@@ -1,77 +1,60 @@
--- phpMyAdmin SQL Dump
--- version 5.2.1
--- https://www.phpmyadmin.net/
---
--- Host: 127.0.0.1
--- Generation Time: Aug 24, 2026 at 03:21 PM
--- Server version: 10.4.32-MariaDB
--- PHP Version: 8.2.12
+SET FOREIGN_KEY_CHECKS = 0;
+CREATE DATABASE IF NOT EXISTS `cqa_db`;
+USE `cqa_db`;
 
-SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
-START TRANSACTION;
-SET time_zone = "+00:00";
+SET FOREIGN_KEY_CHECKS = 1;
 
+-- ==========================================
+-- 1. ADMINS & ADMIN LOGS TABLES
+-- ==========================================
 
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
-/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!40101 SET NAMES utf8mb4 */;
-
---
--- Database: `cqa_db`
---
-
--- --------------------------------------------------------
-
---
--- Table structure for table `admin_logs`
---
-
-CREATE TABLE `admin_logs` (
-  `id` int(11) NOT NULL,
-  `username` varchar(255) NOT NULL DEFAULT 'admin',
-  `login_time` datetime NOT NULL,
-  `logout_time` datetime DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+CREATE TABLE `admins` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `username` VARCHAR(100) NOT NULL UNIQUE,
+  `password` VARCHAR(255) NOT NULL,
+  `fullname` VARCHAR(255) NOT NULL,
+  `gender` VARCHAR(50) DEFAULT 'Male',
+  `role` VARCHAR(50) DEFAULT 'Super Admin',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `admin_logs`
---
+-- Initial Seed Data for Admins
+INSERT INTO `admins` (`id`, `username`, `password`, `fullname`, `gender`, `role`) VALUES
+(1, 'admin1', 'francis123', 'Francis James Obis', 'Male', 'Super Admin'),
+(2, 'admin2', 'arnel123', 'Arnel Marquina', 'Male', 'Admin');
 
-INSERT INTO `admin_logs` (`id`, `username`, `login_time`, `logout_time`, `created_at`) VALUES
-(1, 'admin', '2026-08-23 23:39:24', '2026-08-23 23:39:42', '2026-08-23 15:39:24'),
-(2, 'admin', '2026-08-23 23:39:48', '2026-08-23 23:54:36', '2026-08-23 15:39:48'),
-(3, 'admin', '2026-08-23 23:41:41', '2026-08-23 23:54:36', '2026-08-23 15:41:41'),
-(4, 'admin', '2026-08-23 23:46:08', '2026-08-23 23:46:56', '2026-08-23 15:46:08'),
-(5, 'admin', '2026-08-23 23:47:01', '2026-08-23 23:47:37', '2026-08-23 15:47:01'),
-(6, 'admin', '2026-08-23 23:47:43', '2026-08-23 23:49:37', '2026-08-23 15:47:43'),
-(7, 'admin', '2026-08-23 23:49:42', '2026-08-23 23:54:36', '2026-08-23 15:49:42'),
-(8, 'admin', '2026-08-23 23:54:53', '2026-08-23 23:55:08', '2026-08-23 15:54:53'),
-(9, 'admin', '2026-08-23 23:55:14', '2026-08-23 23:56:02', '2026-08-23 15:55:14'),
-(10, 'admin', '2026-08-24 20:55:51', '2026-08-24 20:59:10', '2026-08-24 12:55:51'),
-(11, 'admin', '2026-08-24 21:07:25', NULL, '2026-08-24 13:07:25');
+DROP TABLE IF EXISTS `admin_logs`;
+CREATE TABLE `admin_logs` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `admin_id` INT(11) NULL,
+  `username` VARCHAR(255) NOT NULL,
+  `login_time` DATETIME NOT NULL,
+  `logout_time` DATETIME DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`admin_id`) REFERENCES `admins`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- --------------------------------------------------------
+INSERT INTO `admin_logs` (`id`, `admin_id`, `username`, `login_time`, `logout_time`, `created_at`) VALUES
+(1, 1, 'admin1', '2026-08-23 23:39:24', '2026-08-23 23:39:42', '2026-08-23 15:39:24'),
+(2, 2, 'admin2', '2026-08-24 20:55:51', '2026-08-24 20:59:10', '2026-08-24 12:55:51');
 
---
--- Table structure for table `client_accounts`
---
+-- ==========================================
+-- 2. CLIENT ACCOUNTS & TYPES TABLES
+-- ==========================================
 
 CREATE TABLE `client_accounts` (
-  `email` varchar(255) NOT NULL,
-  `respondent_name` varchar(255) DEFAULT NULL,
-  `region` varchar(100) DEFAULT NULL,
-  `age` varchar(50) DEFAULT NULL,
-  `gender` varchar(50) DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `password` varchar(255) DEFAULT NULL
+  `email` VARCHAR(255) NOT NULL,
+  `respondent_name` VARCHAR(255) DEFAULT NULL,
+  `region` VARCHAR(100) DEFAULT NULL,
+  `age` VARCHAR(50) DEFAULT NULL,
+  `gender` VARCHAR(50) DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP(),
+  `password` VARCHAR(255) DEFAULT NULL,
+  PRIMARY KEY (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `client_accounts`
---
 
 INSERT INTO `client_accounts` (`email`, `respondent_name`, `region`, `age`, `gender`, `created_at`, `updated_at`, `password`) VALUES
 ('arllagas@my.cspc.edu.ph', 'Anonymous', NULL, NULL, NULL, '2026-08-19 02:25:42', '2026-08-21 02:38:57', '$2b$10$wmeBWZ6S/uPIs4NT.nhhgeea0qjVSg0JpBY2zR2SHg5eMVq94U6ve'),
@@ -79,52 +62,12 @@ INSERT INTO `client_accounts` (`email`, `respondent_name`, `region`, `age`, `gen
 ('jamesobisfrancis072003@gmail.com', 'james obis', NULL, NULL, NULL, '2026-08-20 13:24:14', '2026-08-20 13:31:47', '$2b$10$kvpNwrJNDbSxkzVfQL/U6OPZw5Dv68KbWCrvZxEv5.XMEsjxSRg/i'),
 ('kechavez@my.cspc.edu.ph', 'Anonymous', NULL, NULL, NULL, '2026-08-21 01:44:43', '2026-08-21 01:47:25', '$2b$10$V3MGXz5L5QdmBJuwQM1UN.F3rVAj947rb.aKT2II3wi7x6GJa2ZYC');
 
--- --------------------------------------------------------
-
---
--- Table structure for table `client_profiles`
---
-
-CREATE TABLE `client_profiles` (
-  `id` int(11) NOT NULL,
-  `survey_response_id` int(11) NOT NULL,
-  `respondent_name` varchar(255) DEFAULT 'Anonymous',
-  `client_type` varchar(100) DEFAULT 'Citizen',
-  `age` varchar(50) DEFAULT NULL,
-  `gender` varchar(50) DEFAULT NULL,
-  `region` varchar(100) DEFAULT NULL,
-  `email` varchar(255) DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `client_profiles`
---
-
-INSERT INTO `client_profiles` (`id`, `survey_response_id`, `respondent_name`, `client_type`, `age`, `gender`, `region`, `email`, `created_at`) VALUES
-(1, 1, 'Anonymous', 'Citizen', '19-24', 'Male', 'Region V - Bicol Region', 'arllagas@my.cspc.edu.ph', '2026-08-21 02:38:57'),
-(2, 2, 'Anonymous', 'Citizen', '19-24', 'Male', 'Region VI - Western Visayas', 'kechavez@my.cspc.edu.ph', '2026-08-21 05:25:49'),
-(3, 3, 'Anonymous', 'Business', '19-24', 'Male', 'Region V - Bicol Region', 'kechavez@my.cspc.edu.ph', '2026-08-21 05:38:12'),
-(4, 4, 'Anonymous', 'Government', '19-24', 'Male', 'Region XI - Davao Region', 'kechavez@my.cspc.edu.ph', '2026-08-21 05:42:34'),
-(5, 5, 'Anonymous', 'Business', '19-24', 'Male', 'Region IX - Zamboanga Peninsula', 'kechavez@my.cspc.edu.ph', '2026-08-21 05:46:04'),
-(6, 6, 'james obis', 'Citizen', '19-24', 'Male', 'Region V - Bicol Region', 'frobis@my.cspc.edu.ph', '2026-08-21 06:22:16'),
-(7, 7, 'Anonymous', 'Citizen', '19-24', 'Male', 'Region V - Bicol Region', 'frobis@my.cspc.edu.ph', '2026-08-21 09:00:20');
-
--- --------------------------------------------------------
-
---
--- Table structure for table `client_types`
---
-
 CREATE TABLE `client_types` (
-  `id` int(11) NOT NULL,
-  `type_name` varchar(100) NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `type_name` VARCHAR(100) NOT NULL UNIQUE,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `client_types`
---
 
 INSERT INTO `client_types` (`id`, `type_name`, `created_at`) VALUES
 (1, 'Citizen', '2026-08-21 09:21:58'),
@@ -132,22 +75,17 @@ INSERT INTO `client_types` (`id`, `type_name`, `created_at`) VALUES
 (3, 'Government', '2026-08-21 09:21:58'),
 (4, 'Student', '2026-08-21 09:21:58');
 
--- --------------------------------------------------------
-
---
--- Table structure for table `clusters`
---
+-- ==========================================
+-- 3. CLUSTERS & OFFICES TABLES
+-- ==========================================
 
 CREATE TABLE `clusters` (
-  `id` int(11) NOT NULL,
-  `cluster_name` varchar(150) NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `is_archived` tinyint(1) NOT NULL DEFAULT 0
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `cluster_name` VARCHAR(150) NOT NULL UNIQUE,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  `is_archived` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `clusters`
---
 
 INSERT INTO `clusters` (`id`, `cluster_name`, `created_at`, `is_archived`) VALUES
 (1, 'Office of the President Cluster', '2026-07-13 15:02:10', 0),
@@ -155,43 +93,15 @@ INSERT INTO `clusters` (`id`, `cluster_name`, `created_at`, `is_archived`) VALUE
 (3, 'Academic Cluster', '2026-07-13 15:02:10', 0),
 (4, 'Research, Innovation and Collaboration Cluster', '2026-07-13 15:02:10', 0);
 
--- --------------------------------------------------------
-
---
--- Table structure for table `landing_content`
---
-
-CREATE TABLE `landing_content` (
-  `id` int(11) NOT NULL DEFAULT 1,
-  `data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`data`)),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `landing_content`
---
-
-INSERT INTO `landing_content` (`id`, `data`, `updated_at`) VALUES
-(1, '{\"branding\": {\"title\": \"Center For Quality Assurances\", \"subtitle\": \"Public Transparency Portal • Satisfaction Survey\", \"loginLabel\": \"Login Portal\"}, \"hero\": {\"eyebrow\": \"Camarines Sur Polytechnic Collegessss\", \"titleLine1\": \"Center for Quality Assurance\", \"titleLine2\": \"Public Transparency Portal\", \"subtext\": \"A live window into our institution\'s governance, services, and client satisfaction performance — built on data, driven by continuous quality improvement.\", \"cta1Text\": \"Explore Dashboard\", \"cta1Link\": \"#dashboard\", \"cta2Text\": \"View Our Services\", \"cta2Link\": \"#services\"}}', '2026-08-22 14:14:49');
-
--- --------------------------------------------------------
-
---
--- Table structure for table `offices`
---
-
 CREATE TABLE `offices` (
-  `id` int(11) NOT NULL,
-  `cluster_name` varchar(150) NOT NULL,
-  `office_name` varchar(255) NOT NULL,
-  `head_director` varchar(255) DEFAULT 'Not Assigned',
-  `email_address` varchar(255) NOT NULL,
-  `is_archived` tinyint(1) NOT NULL DEFAULT 0
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `cluster_name` VARCHAR(150) NOT NULL,
+  `office_name` VARCHAR(255) NOT NULL,
+  `head_director` VARCHAR(255) DEFAULT 'Not Assigned',
+  `email_address` VARCHAR(255) NOT NULL,
+  `is_archived` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `offices`
---
 
 INSERT INTO `offices` (`id`, `cluster_name`, `office_name`, `head_director`, `email_address`, `is_archived`) VALUES
 (1, 'Academic Cluster', 'Student Testing and Admission', 'Not Assigned', 'default@cspc.edu.ph', 0),
@@ -236,21 +146,17 @@ INSERT INTO `offices` (`id`, `cluster_name`, `office_name`, `head_director`, `em
 (42, 'Research, Innovation and Collaboration Cluster', 'PAxS', 'Not Assigned', 'default@cspc.edu.ph', 0),
 (43, 'Administrative and Finance Cluster', 'Project Management Unit', 'Not Assigned', 'default@cspc.edu.ph', 0);
 
--- --------------------------------------------------------
-
---
--- Table structure for table `services`
---
+-- ==========================================
+-- 4. SERVICES TABLE
+-- ==========================================
 
 CREATE TABLE `services` (
-  `id` int(11) NOT NULL,
-  `office_id` int(11) NOT NULL,
-  `service_name` varchar(255) NOT NULL
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `office_id` INT(11) NOT NULL,
+  `service_name` VARCHAR(255) NOT NULL,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`office_id`) REFERENCES `offices` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `services`
---
 
 INSERT INTO `services` (`id`, `office_id`, `service_name`) VALUES
 (1, 1, 'Applying for College Entrance Examination (Freshmen, Transferees)'),
@@ -329,40 +235,37 @@ INSERT INTO `services` (`id`, `office_id`, `service_name`) VALUES
 (77, 42, 'GENERAL SERVICES OFFERED'),
 (78, 43, 'GENERAL SERVICES OFFERED');
 
--- --------------------------------------------------------
-
---
--- Table structure for table `survey_responses`
---
+-- ==========================================
+-- 5. SURVEY RESPONSES & PROFILES TABLES
+-- ==========================================
 
 CREATE TABLE `survey_responses` (
-  `id` int(11) NOT NULL,
-  `office_id` int(11) NOT NULL,
-  `respondent_name` varchar(255) DEFAULT 'Anonymous',
-  `topic` varchar(100) DEFAULT 'General',
-  `region` varchar(100) DEFAULT NULL,
-  `cc1` varchar(50) DEFAULT NULL,
-  `cc2` varchar(50) DEFAULT NULL,
-  `cc3` varchar(50) DEFAULT NULL,
-  `sqd0` int(11) DEFAULT NULL,
-  `sqd1` int(11) DEFAULT NULL,
-  `sqd2` int(11) DEFAULT NULL,
-  `sqd3` int(11) DEFAULT NULL,
-  `sqd4` int(11) DEFAULT NULL,
-  `sqd5` int(11) DEFAULT NULL,
-  `sqd6` int(11) DEFAULT NULL,
-  `sqd7` int(11) DEFAULT NULL,
-  `sqd8` int(11) DEFAULT NULL,
-  `comments` text DEFAULT NULL,
-  `period_year_quarter` varchar(20) DEFAULT '2026-Q1',
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `sentiment` varchar(50) DEFAULT 'Neutral',
-  `google_email` varchar(255) DEFAULT NULL
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `office_id` INT(11) NOT NULL,
+  `respondent_name` VARCHAR(255) DEFAULT 'Anonymous',
+  `topic` VARCHAR(100) DEFAULT 'General',
+  `region` VARCHAR(100) DEFAULT NULL,
+  `cc1` VARCHAR(50) DEFAULT NULL,
+  `cc2` VARCHAR(50) DEFAULT NULL,
+  `cc3` VARCHAR(50) DEFAULT NULL,
+  `sqd0` INT(11) DEFAULT NULL,
+  `sqd1` INT(11) DEFAULT NULL,
+  `sqd2` INT(11) DEFAULT NULL,
+  `sqd3` INT(11) DEFAULT NULL,
+  `sqd4` INT(11) DEFAULT NULL,
+  `sqd5` INT(11) DEFAULT NULL,
+  `sqd6` INT(11) DEFAULT NULL,
+  `sqd7` INT(11) DEFAULT NULL,
+  `sqd8` INT(11) DEFAULT NULL,
+  `comments` TEXT DEFAULT NULL,
+  `period_year_quarter` VARCHAR(20) DEFAULT '2026-Q1',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  `sentiment` VARCHAR(50) DEFAULT 'Neutral',
+  `google_email` VARCHAR(255) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_office_google_email` (`office_id`,`google_email`),
+  FOREIGN KEY (`office_id`) REFERENCES `offices` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `survey_responses`
---
 
 INSERT INTO `survey_responses` (`id`, `office_id`, `respondent_name`, `topic`, `region`, `cc1`, `cc2`, `cc3`, `sqd0`, `sqd1`, `sqd2`, `sqd3`, `sqd4`, `sqd5`, `sqd6`, `sqd7`, `sqd8`, `comments`, `period_year_quarter`, `created_at`, `sentiment`, `google_email`) VALUES
 (1, 16, 'Anonymous', 'General', 'Region V - Bicol Region', 'I know what a CC is but I did not see this office\'', 'Easy to see', 'Helped very much', 4, 4, 4, 4, 4, 4, 4, 4, 4, 'N/A', 'Jul - Dec 2026', '2026-08-21 02:38:57', 'Neutral', 'arllagas@my.cspc.edu.ph'),
@@ -373,23 +276,41 @@ INSERT INTO `survey_responses` (`id`, `office_id`, `respondent_name`, `topic`, `
 (6, 5, 'james obis', 'Queueing and Waiting Time', 'Region V - Bicol Region', 'I know what a CC is and I saw this office\'s CC.', 'Easy to see', 'Helped very much', 5, 5, 5, 5, 5, 5, 5, 5, 5, 'n/a', 'Jul - Dec 2026', '2026-08-21 06:22:16', 'Neutral', 'frobis@my.cspc.edu.ph'),
 (7, 13, 'Anonymous', 'General', 'Region V - Bicol Region', 'I do not know what a CC is and I did not see one i', 'Somewhat easy to see', 'Somewhat helped', 5, 5, 5, 5, 5, 5, 5, 5, 5, 'N/A', 'July to Dec 2026', '2026-08-21 09:00:20', 'Neutral', 'frobis@my.cspc.edu.ph');
 
--- --------------------------------------------------------
-
---
--- Table structure for table `survey_settings`
---
-
-CREATE TABLE `survey_settings` (
-  `id` int(11) NOT NULL,
-  `category` varchar(50) NOT NULL,
-  `content` text NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `is_archived` tinyint(1) NOT NULL DEFAULT 0
+CREATE TABLE `client_profiles` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `survey_response_id` INT(11) NOT NULL,
+  `respondent_name` VARCHAR(255) DEFAULT 'Anonymous',
+  `client_type` VARCHAR(100) DEFAULT 'Citizen',
+  `age` VARCHAR(50) DEFAULT NULL,
+  `gender` VARCHAR(50) DEFAULT NULL,
+  `region` VARCHAR(100) DEFAULT NULL,
+  `email` VARCHAR(255) DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`survey_response_id`) REFERENCES `survey_responses` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `survey_settings`
---
+INSERT INTO `client_profiles` (`id`, `survey_response_id`, `respondent_name`, `client_type`, `age`, `gender`, `region`, `email`, `created_at`) VALUES
+(1, 1, 'Anonymous', 'Citizen', '19-24', 'Male', 'Region V - Bicol Region', 'arllagas@my.cspc.edu.ph', '2026-08-21 02:38:57'),
+(2, 2, 'Anonymous', 'Citizen', '19-24', 'Male', 'Region VI - Western Visayas', 'kechavez@my.cspc.edu.ph', '2026-08-21 05:25:49'),
+(3, 3, 'Anonymous', 'Business', '19-24', 'Male', 'Region V - Bicol Region', 'kechavez@my.cspc.edu.ph', '2026-08-21 05:38:12'),
+(4, 4, 'Anonymous', 'Government', '19-24', 'Male', 'Region XI - Davao Region', 'kechavez@my.cspc.edu.ph', '2026-08-21 05:42:34'),
+(5, 5, 'Anonymous', 'Business', '19-24', 'Male', 'Region IX - Zamboanga Peninsula', 'kechavez@my.cspc.edu.ph', '2026-08-21 05:46:04'),
+(6, 6, 'james obis', 'Citizen', '19-24', 'Male', 'Region V - Bicol Region', 'frobis@my.cspc.edu.ph', '2026-08-21 06:22:16'),
+(7, 7, 'Anonymous', 'Citizen', '19-24', 'Male', 'Region V - Bicol Region', 'frobis@my.cspc.edu.ph', '2026-08-21 09:00:20');
+
+-- ==========================================
+-- 6. SURVEY SETTINGS
+-- ==========================================
+
+CREATE TABLE `survey_settings` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `category` VARCHAR(50) NOT NULL,
+  `content` TEXT NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  `is_archived` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 INSERT INTO `survey_settings` (`id`, `category`, `content`, `created_at`, `is_archived`) VALUES
 (1, 'sqd', 'I am satisfied with the service that I availed.', '2026-07-13 13:03:02', 0),
@@ -404,152 +325,3 @@ INSERT INTO `survey_settings` (`id`, `category`, `content`, `created_at`, `is_ar
 (10, 'cc', 'Which of the following best describes your awareness of a CC?', '2026-07-13 13:03:02', 0),
 (11, 'cc', 'If aware of CC (answered 1-3 in CC1), would you say that the CC of this office was...?', '2026-07-13 13:03:02', 0),
 (12, 'cc', 'If aware of CC (answered 1-3 in CC1), how much did the CC help you in your transaction?', '2026-07-13 13:03:02', 0);
-
---
--- Indexes for dumped tables
---
-
---
--- Indexes for table `admin_logs`
---
-ALTER TABLE `admin_logs`
-  ADD PRIMARY KEY (`id`);
-
---
--- Indexes for table `client_accounts`
---
-ALTER TABLE `client_accounts`
-  ADD PRIMARY KEY (`email`);
-
---
--- Indexes for table `client_profiles`
---
-ALTER TABLE `client_profiles`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `survey_response_id` (`survey_response_id`);
-
---
--- Indexes for table `client_types`
---
-ALTER TABLE `client_types`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `type_name` (`type_name`);
-
---
--- Indexes for table `clusters`
---
-ALTER TABLE `clusters`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `cluster_name` (`cluster_name`);
-
---
--- Indexes for table `landing_content`
---
-ALTER TABLE `landing_content`
-  ADD PRIMARY KEY (`id`);
-
---
--- Indexes for table `offices`
---
-ALTER TABLE `offices`
-  ADD PRIMARY KEY (`id`);
-
---
--- Indexes for table `services`
---
-ALTER TABLE `services`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `office_id` (`office_id`);
-
---
--- Indexes for table `survey_responses`
---
-ALTER TABLE `survey_responses`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `unique_office_google_email` (`office_id`,`google_email`);
-
---
--- Indexes for table `survey_settings`
---
-ALTER TABLE `survey_settings`
-  ADD PRIMARY KEY (`id`);
-
---
--- AUTO_INCREMENT for dumped tables
---
-
---
--- AUTO_INCREMENT for table `admin_logs`
---
-ALTER TABLE `admin_logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
-
---
--- AUTO_INCREMENT for table `client_profiles`
---
-ALTER TABLE `client_profiles`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
-
---
--- AUTO_INCREMENT for table `client_types`
---
-ALTER TABLE `client_types`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
-
---
--- AUTO_INCREMENT for table `clusters`
---
-ALTER TABLE `clusters`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
-
---
--- AUTO_INCREMENT for table `offices`
---
-ALTER TABLE `offices`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=45;
-
---
--- AUTO_INCREMENT for table `services`
---
-ALTER TABLE `services`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=80;
-
---
--- AUTO_INCREMENT for table `survey_responses`
---
-ALTER TABLE `survey_responses`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
-
---
--- AUTO_INCREMENT for table `survey_settings`
---
-ALTER TABLE `survey_settings`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
-
---
--- Constraints for dumped tables
---
-
---
--- Constraints for table `client_profiles`
---
-ALTER TABLE `client_profiles`
-  ADD CONSTRAINT `client_profiles_ibfk_1` FOREIGN KEY (`survey_response_id`) REFERENCES `survey_responses` (`id`) ON DELETE CASCADE;
-
---
--- Constraints for table `services`
---
-ALTER TABLE `services`
-  ADD CONSTRAINT `services_ibfk_1` FOREIGN KEY (`office_id`) REFERENCES `offices` (`id`) ON DELETE CASCADE;
-
---
--- Constraints for table `survey_responses`
---
-ALTER TABLE `survey_responses`
-  ADD CONSTRAINT `survey_responses_ibfk_1` FOREIGN KEY (`office_id`) REFERENCES `offices` (`id`) ON DELETE CASCADE;
-COMMIT;
-
-/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
-/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
-/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
-

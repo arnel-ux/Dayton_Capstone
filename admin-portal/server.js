@@ -1293,95 +1293,6 @@ app.get('/', (req, res) => {
     res.render('index', { landingContent });
 });
 
-// ==========================================
-// CONTENT MANAGEMENT — landing page (index.ejs) sections
-// ==========================================
-const contentUploadDir = path.join(__dirname, 'public', 'images', 'uploads');
-fs.mkdirSync(contentUploadDir, { recursive: true });
-
-const contentUpload = multer({
-    storage: multer.diskStorage({
-        destination: (req, file, cb) => cb(null, contentUploadDir),
-        filename: (req, file, cb) => {
-            const ext = path.extname(file.originalname).toLowerCase();
-            cb(null, `${req.params.section}-${req.params.field}-${Date.now()}${ext}`);
-        }
-    }),
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
-    fileFilter: (req, file, cb) => {
-        if (!/^image\/(png|jpe?g|webp|svg\+xml)$/.test(file.mimetype)) {
-            return cb(new Error('Only PNG, JPG, WebP, or SVG images are allowed.'));
-        }
-        cb(null, true);
-    }
-});
-
-// Returns the full content object so the CMS can populate its form fields
-// with whatever is actually saved (instead of the hardcoded defaults baked
-// into content-management.ejs).
-app.get('/api/content', ensureAdminAuth, noCache, (req, res) => {
-    try {
-        const landingContent = loadLandingContent();
-        res.json({ success: true, content: landingContent });
-    } catch (err) {
-        console.error('❌ Error loading data/landing-data.json:', err);
-        res.status(500).json({ success: false, message: 'Could not load landing page content.' });
-    }
-});
-
-// Saves one section (branding / hero / about / org / services / footer) at a
-// time — matches how the CMS's tabs each submit their own form independently.
-app.post('/api/content/:section', ensureAdminAuth, (req, res) => {
-    const { section } = req.params;
-    if (!LANDING_SECTION_KEYS.includes(section)) {
-        return res.status(400).json({ success: false, message: 'Unknown content section.' });
-    }
-
-    // Whitelist to the known fields for this section only — never trust the
-    // request body's own key set, so an admin (or a bug in the CMS JS) can't
-    // smuggle arbitrary keys into the stored JSON.
-    const allowedFields = Object.keys(DEFAULT_LANDING_CONTENT[section]);
-    const fields = {};
-    for (const key of allowedFields) {
-        if (typeof req.body[key] === 'string') {
-            fields[key] = req.body[key].slice(0, 5000); // generous cap, still bounded
-        }
-    }
-
-    try {
-        saveLandingSection(section, fields);
-        console.log(`✅ Saved "${section}" section to data/landing-data.json`);
-        res.json({ success: true, section, fields });
-    } catch (err) {
-        console.error(`❌ Error saving landing content section "${section}" to landing-data.json:`, err);
-        res.status(500).json({ success: false, message: 'Could not save changes.' });
-    }
-});
-
-// Uploads a single image for one field (e.g. section=hero, field=imageUrl),
-// saves the resulting public URL into that field immediately, and returns it
-// so the CMS can preview it without waiting for a separate "Save Changes" click.
-app.post('/api/content/:section/upload/:field', ensureAdminAuth, (req, res) => {
-    const { section, field } = req.params;
-    if (!LANDING_SECTION_KEYS.includes(section) || !(field in DEFAULT_LANDING_CONTENT[section])) {
-        return res.status(400).json({ success: false, message: 'Unknown content field.' });
-    }
-
-    contentUpload.single('image')(req, res, (err) => {
-        if (err) return res.status(400).json({ success: false, message: err.message });
-        if (!req.file) return res.status(400).json({ success: false, message: 'No image file received.' });
-
-        const url = `/images/uploads/${req.file.filename}`;
-        try {
-            saveLandingSection(section, { [field]: url });
-            console.log(`✅ Saved uploaded image URL for ${section}.${field} to data/landing-data.json`);
-            res.json({ success: true, url });
-        } catch (writeErr) {
-            console.error('❌ Error saving uploaded image URL to landing-data.json:', writeErr);
-            res.status(500).json({ success: false, message: 'Image uploaded but could not be saved.' });
-        }
-    });
-});
 // Closes THIS browser session's own admin_logs row — never anyone else's. Matches
 // by id first (the fast path, set at login), falling back to session_id so a
 // session that somehow lost req.adminSession.logId (e.g. an older cookie from
@@ -2179,8 +2090,8 @@ app.get('/dashboard', ensureAdminAuth, noCache, (req, res) => {
 
             let interpretation = "POOR";
             if(overallAvgScore >= 95) interpretation = "OUTSTANDING";
-            else if(overallAvgScore >= 85) interpretation = "VERY SATISFACTORY";
-            else if(overallAvgScore >= 75) interpretation = "SATISFACTORY";
+            else if(overallAvgScore >= 90) interpretation = "VERY SATISFACTORY";
+            else if(overallAvgScore >= 80) interpretation = "SATISFACTORY";
             else if(overallAvgScore >= 60) interpretation = "FAIR";
 
             db.query('SELECT COUNT(*) AS total_offices FROM offices WHERE is_archived = 0', (err, officeCountRes) => {
@@ -2253,8 +2164,8 @@ app.get('/dashboard', ensureAdminAuth, noCache, (req, res) => {
                                 let score = parseFloat(row.office_score || 0);
                                 let interp = "POOR";
                                 if(score >= 95) interp = "OUTSTANDING";
-                                else if(score >= 85) interp = "VERY SATISFACTORY";
-                                else if(score >= 75) interp = "SATISFACTORY";
+                                else if(score >= 90) interp = "VERY SATISFACTORY";
+                                else if(score >= 80) interp = "SATISFACTORY";
                                 else if(score >= 60) interp = "FAIR";
 
                                 clustersMap[cName].offices.push({ name: row.office_name, score: score.toFixed(2), interpretation: interp });
@@ -2337,8 +2248,7 @@ app.get('/profile', ensureAdminAuth, noCache, (req, res) => res.render('profile'
 app.get('/password', ensureAdminAuth, noCache, (req, res) => res.render('password'));
 
 // Lets the logged-in admin upload a custom profile photo (replaces the auto-generated
-// ui-avatars.com initials avatar). Mirrors the contentUpload pattern used for the
-// landing page CMS above.
+// ui-avatars.com initials avatar).
 const profileUploadDir = path.join(__dirname, 'public', 'images', 'uploads', 'profiles');
 fs.mkdirSync(profileUploadDir, { recursive: true });
 
@@ -2422,7 +2332,104 @@ app.post('/password', ensureAdminAuth, async (req, res) => {
         }
     });
 });
-app.get('/print', ensureAdminAuth, noCache, (req, res) => res.render('print'));
+// Cluster/office analytics print view. Was previously a static mock-up with fake
+// numbers baked into the markup — now computes real figures from survey_responses
+// using the same sqdScoreExpr formula as /dashboard and /report, so what prints
+// here always matches actual submitted answers.
+app.get('/print', ensureAdminAuth, noCache, (req, res) => {
+    const hasQueryParam = typeof req.query.periodCovered !== 'undefined';
+    const selectedPeriod = hasQueryParam ? req.query.periodCovered : getPeriodCovered();
+    const hasPeriodFilter = !!selectedPeriod;
+
+    const periodCol = periodNormExpr('s.period_year_quarter');
+    const dateWhere = hasPeriodFilter ? ` WHERE ${periodCol} = ? ` : '';
+    const dateWhereAnd = hasPeriodFilter ? ` AND ${periodCol} = ? ` : '';
+    const dateParams = hasPeriodFilter ? [normalizePeriodStr(selectedPeriod)] : [];
+
+    // Matches the "INTERPRETATION OF RESULTS" legend printed on this same page
+    // (95/90/80/60), not the dashboard's own thresholds — keeps the label on
+    // every row consistent with the scale shown right below it.
+    const interpretFor = (score) => {
+        if (score >= 95) return 'Outstanding';
+        if (score >= 90) return 'Very Satisfactory';
+        if (score >= 80) return 'Satisfactory';
+        if (score >= 60) return 'Fair';
+        return 'Poor';
+    };
+
+    const logErr = (label) => (err) => { if (err) console.error(`[Print] ${label} query failed:`, err.message); };
+
+    db.query(`SELECT COUNT(*) AS total FROM survey_responses s${dateWhere}`, dateParams, (err, totalRes) => {
+        logErr('total respondents')(err);
+        const totalRespondents = (totalRes && totalRes[0]) ? totalRes[0].total : 0;
+
+        db.query(`SELECT ${sqdScoreExpr(ALL_SQD_COLS)} AS overall_avg FROM survey_responses s${dateWhere}`, dateParams, (err, avgRes) => {
+            logErr('overall average')(err);
+            const overallAvgScore = (avgRes && avgRes[0] && avgRes[0].overall_avg) ? parseFloat(avgRes[0].overall_avg) : 0;
+
+            db.query('SELECT COUNT(*) AS total_offices FROM offices WHERE is_archived = 0', (err, officeCountRes) => {
+                logErr('office count')(err);
+                const totalOffices = (officeCountRes && officeCountRes[0]) ? officeCountRes[0].total_offices : 0;
+
+                const clusterQuery = `
+                    SELECT o.cluster_name, COUNT(s.id) as cluster_volume, ${sqdScoreExpr(ALL_SQD_COLS)} as cluster_rating
+                    FROM offices o
+                    LEFT JOIN survey_responses s ON o.id = s.office_id${dateWhereAnd}
+                    WHERE o.is_archived = 0
+                    GROUP BY o.cluster_name
+                `;
+                db.query(clusterQuery, dateParams, (err, clusterRows) => {
+                    logErr('cluster analytics')(err);
+                    const colors = ['#0a1f44', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+                    const chartData = { labels: [], respondents: [], ratings: [] };
+                    const clusterCards = [];
+                    (clusterRows || []).forEach((row, idx) => {
+                        const name = row.cluster_name || 'Other Offices';
+                        const rating = parseFloat(row.cluster_rating || 0);
+                        chartData.labels.push(name);
+                        chartData.respondents.push(row.cluster_volume);
+                        chartData.ratings.push(rating);
+                        clusterCards.push({ name, rating: rating.toFixed(2), respondents: row.cluster_volume, color: colors[idx % colors.length] });
+                    });
+
+                    const officeQuery = `
+                        SELECT o.cluster_name, o.office_name, ${sqdScoreExpr(ALL_SQD_COLS)} as office_score
+                        FROM offices o
+                        LEFT JOIN survey_responses s ON o.id = s.office_id${dateWhereAnd}
+                        WHERE o.is_archived = 0
+                        GROUP BY o.id, o.cluster_name, o.office_name
+                        ORDER BY o.cluster_name, o.office_name
+                    `;
+                    db.query(officeQuery, dateParams, (err, officeRows) => {
+                        logErr('office report')(err);
+                        const reportData = [];
+                        const clustersMap = {};
+                        (officeRows || []).forEach(row => {
+                            const cName = row.cluster_name || 'Other Offices';
+                            if (!clustersMap[cName]) {
+                                clustersMap[cName] = { clusterName: cName, offices: [] };
+                                reportData.push(clustersMap[cName]);
+                            }
+                            const score = parseFloat(row.office_score || 0);
+                            clustersMap[cName].offices.push({ name: row.office_name, score: score.toFixed(2), interpretation: interpretFor(score) });
+                        });
+
+                        res.render('print', {
+                            overallRating: overallAvgScore.toFixed(2),
+                            overallInterpretation: interpretFor(overallAvgScore),
+                            totalRespondents,
+                            totalOffices,
+                            periodLabel: selectedPeriod || 'All Periods',
+                            chartData,
+                            clusterCards,
+                            reportData
+                        });
+                    });
+                });
+            });
+        });
+    });
+});
 
 // ==========================================
 // DYNAMIC REPORTS ROUTE (Modified)
@@ -2437,26 +2444,34 @@ app.get('/report', ensureAdminAuth, noCache, (req, res) => {
 // per-cluster "Select Office" drill-down (sends `cluster` + `officeId`, so "All
 // Offices" on a cluster page still scopes to that cluster instead of the whole
 // institution). `periodCovered` narrows further to one fixed date range.
+// `respondentId` (from the "Generate Report" action on one Survey Records row)
+// scopes everything to that single client instead, so admins can verify the
+// SQD computation against one respondent's own answers.
 app.post('/api/report-data', ensureAdminAuth, (req, res) => {
-    const { office, officeId, cluster, periodCovered } = req.body;
+    const { office, officeId, cluster, periodCovered, respondentId } = req.body;
 
     const conditions = [];
     const queryParams = [];
 
-    if (cluster) {
-        conditions.push('o.cluster_name = ?');
-        queryParams.push(cluster);
-    }
-    if (officeId) {
-        conditions.push('o.id = ?');
-        queryParams.push(officeId);
-    } else if (office && office !== 'ALL OFFICES') {
-        conditions.push('o.office_name = ?');
-        queryParams.push(office);
-    }
-    if (periodCovered) {
-        conditions.push('s.period_year_quarter = ?');
-        queryParams.push(periodCovered);
+    if (respondentId) {
+        conditions.push('s.id = ?');
+        queryParams.push(respondentId);
+    } else {
+        if (cluster) {
+            conditions.push('o.cluster_name = ?');
+            queryParams.push(cluster);
+        }
+        if (officeId) {
+            conditions.push('o.id = ?');
+            queryParams.push(officeId);
+        } else if (office && office !== 'ALL OFFICES') {
+            conditions.push('o.office_name = ?');
+            queryParams.push(office);
+        }
+        if (periodCovered) {
+            conditions.push('s.period_year_quarter = ?');
+            queryParams.push(periodCovered);
+        }
     }
 
     const whereClause = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
@@ -2464,6 +2479,10 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
     const query = `
         SELECT
             COUNT(s.id) as total_respondents,
+            MAX(s.respondent_name) as respondent_name,
+            MAX(o.office_name) as office_name,
+            MAX(s.period_year_quarter) as period_year_quarter,
+            MAX(DATE_FORMAT(s.created_at, '%M %d, %Y')) as response_date,
             ${sqdScoreExpr(['s.sqd1'])} as sqd1,
             ${sqdScoreExpr(['s.sqd2'])} as sqd2,
             ${sqdScoreExpr(['s.sqd3'])} as sqd3,
@@ -2842,14 +2861,6 @@ app.post('/admins/delete/:id', ensureAdminAuth, ensureSuperAdmin, (req, res) => 
 // ==========================================
 // 4. SURVEY SETTINGS CRUD
 // ==========================================
-
-app.get('/content-management', ensureAdminAuth, noCache, (req, res) => {
-    // Same synchronous read as GET '/' — the admin must always see the exact
-    // values currently live on the landing page, never the hardcoded defaults
-    // that used to be baked into content-management.ejs.
-    const landingContent = loadLandingContent();
-    res.render('content-management', { landingContent });
-});
 
 app.get('/survey', ensureAdminAuth, noCache, (req, res) => {
     db.query('SELECT * FROM survey_settings ORDER BY id ASC', (err, results) => {

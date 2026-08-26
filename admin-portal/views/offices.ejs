@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
     <%- include('layout/header') %>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <style>
         .cluster-toggle {
             cursor: pointer;
@@ -32,6 +34,77 @@
             font-size: 0.7rem;
             letter-spacing: 0.5px;
         }
+
+        /* CSM-style export table (mirrors the official "List of Services" format) */
+        #csmExportContent {
+            position: absolute;
+            left: -9999px;
+            top: 0;
+        }
+        .csm-export-container {
+            background: #fff;
+            padding: 20px 28px 30px;
+            color: #1a1a1a;
+            font-family: Arial, sans-serif;
+            width: 940px;
+            box-sizing: border-box;
+        }
+        .csm-export-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #000;
+            padding-bottom: 8px;
+            margin-bottom: 14px;
+        }
+        .csm-export-title h4 {
+            margin: 0;
+            font-weight: 700;
+            font-size: 16px;
+            letter-spacing: 0.5px;
+        }
+        .csm-table-wrap { border: 2px solid #000; }
+        .csm-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+        .csm-table th, .csm-table td {
+            border: 1px solid #000;
+            padding: 6px 10px;
+            vertical-align: middle;
+        }
+        .csm-table thead th {
+            background-color: #1F3864 !important;
+            color: #fff !important;
+            text-align: center;
+            font-weight: 700;
+            font-size: 12px;
+            padding: 9px 10px;
+            border-color: #000;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .csm-table td.csm-unit {
+            font-weight: 700;
+            color: #1F3864;
+        }
+        .csm-table td.csm-num { text-align: center; white-space: nowrap; }
+        .csm-table td.csm-empty { text-align: center; font-style: italic; color: #666; }
+
+        /* Printing: hide everything except the export table, let the browser paginate
+           the table naturally (repeats the header row, never slices a row in half) —
+           this replaced an html2pdf/html2canvas screenshot-and-slice approach that
+           corrupted the layout past the first page or two of a long table. */
+        @media print {
+            body * { visibility: hidden; }
+            #csmExportContent, #csmExportContent * { visibility: visible; }
+            #csmExportContent {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+            }
+            .csm-export-container { width: 100% !important; }
+            .csm-table thead { display: table-header-group; }
+            .csm-table tr { page-break-inside: avoid; }
+            @page { size: landscape; margin: 0.4in; }
+        }
     </style>
 </head>
 <body>
@@ -50,6 +123,15 @@
                         <div class="form-check form-switch me-2">
                             <input class="form-check-input" type="checkbox" id="showArchivedToggle" title="Show or hide archived offices">
                             <label class="form-check-label small text-muted" for="showArchivedToggle">Show Archived</label>
+                        </div>
+                        <div class="dropdown me-2">
+                            <button class="btn btn-outline-danger btn-sm dropdown-toggle" type="button" id="exportOfficesDropdown" data-bs-toggle="dropdown" aria-expanded="false" title="Export the list of offices and services">
+                                <i class="fas fa-file-export me-1"></i> Export
+                            </button>
+                            <ul class="dropdown-menu" aria-labelledby="exportOfficesDropdown">
+                                <li><a class="dropdown-item" href="#" onclick="printOfficesList(); return false;"><i class="fas fa-print me-2"></i> Print</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="downloadOfficesPDF(); return false;"><i class="fas fa-file-pdf me-2"></i> Download PDF</a></li>
+                            </ul>
                         </div>
                         <button class="btn btn-secondary btn-sm me-2" title="Add a new cluster" data-bs-toggle="modal" data-bs-target="#addClusterModal">
                             <i class="fas fa-layer-group me-1"></i> Add Cluster
@@ -198,6 +280,59 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden export table used by printOfficesList() (native print) and downloadOfficesPDF() (jsPDF-AutoTable reads this table directly) -->
+<div id="csmExportContent">
+    <div class="csm-export-container">
+        <div class="csm-export-title">
+            <h4>LIST OF OFFICES AND SERVICES OFFERED</h4>
+            <h4><%= new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) %></h4>
+        </div>
+        <div class="csm-table-wrap">
+        <table class="csm-table">
+            <thead>
+                <tr>
+                    <th style="width: 22%;">Responsible Unit</th>
+                    <th style="width: 8%;">Service #</th>
+                    <th>Services</th>
+                </tr>
+            </thead>
+            <tbody>
+                <%
+                let exportCounter = 0;
+                let exportOffices = (typeof officesData !== 'undefined') ? officesData.filter(o => !o.is_archived).sort((a, b) => a.office_name.localeCompare(b.office_name)) : [];
+                %>
+                <% if (exportOffices.length === 0) { %>
+                    <tr><td colspan="3" class="csm-empty text-center">Walang nakatalang opisina.</td></tr>
+                <% } %>
+                <% exportOffices.forEach((office) => { %>
+                    <%
+                    let svcList = (typeof officeServicesData !== 'undefined' && officeServicesData[office.id]) || [];
+                    let rowspan = svcList.length > 0 ? svcList.length : 1;
+                    %>
+                    <% if (svcList.length === 0) { %>
+                        <tr>
+                            <td class="csm-unit"><%= office.office_name %></td>
+                            <td class="csm-num">&mdash;</td>
+                            <td class="csm-empty">No services listed</td>
+                        </tr>
+                    <% } else { %>
+                        <% svcList.forEach((svc, i) => { exportCounter++; %>
+                            <tr>
+                                <% if (i === 0) { %>
+                                    <td class="csm-unit" rowspan="<%= rowspan %>"><%= office.office_name %></td>
+                                <% } %>
+                                <td class="csm-num"><%= exportCounter %></td>
+                                <td><%= svc.service_name %></td>
+                            </tr>
+                        <% }) %>
+                    <% } %>
+                <% }) %>
+            </tbody>
+        </table>
         </div>
     </div>
 </div>
@@ -567,6 +702,41 @@
 
         var editClusterModal = new bootstrap.Modal(document.getElementById('editClusterModal'));
         editClusterModal.show();
+    }
+
+    function printOfficesList() {
+        // Native print pipeline — the table paginates by real row boundaries
+        // (header repeats, rows never split mid-cell). User can pick "Save as
+        // PDF" as the print destination if they just want a file.
+        window.print();
+    }
+
+    function downloadOfficesPDF() {
+        // jsPDF-AutoTable reads the actual <table> (including rowspans) and lays
+        // it out as real PDF content — it paginates by row, never as a sliced
+        // screenshot, so long tables stay intact across pages.
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+
+        doc.autoTable({
+            html: '#csmExportContent .csm-table',
+            theme: 'grid',
+            startY: 40,
+            margin: { top: 40, left: 30, right: 30, bottom: 30 },
+            styles: { fontSize: 9, cellPadding: 5, valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.75 },
+            headStyles: { fillColor: [31, 56, 100], textColor: 255, halign: 'center', fontStyle: 'bold', fontSize: 10 },
+            columnStyles: {
+                0: { fontStyle: 'bold', textColor: [31, 78, 121], cellWidth: 170 },
+                1: { halign: 'center', cellWidth: 55 }
+            },
+            didDrawPage: function () {
+                doc.setFontSize(13);
+                doc.setFont(undefined, 'bold');
+                doc.text('LIST OF OFFICES AND SERVICES OFFERED', 30, 25);
+            }
+        });
+
+        doc.save('Offices_and_Services.pdf');
     }
 
     function openEditModal(id, cluster, officeName, head, email) {
