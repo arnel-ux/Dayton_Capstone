@@ -63,9 +63,9 @@ self.addEventListener('fetch', (event) => {
 
     const url = new URL(request.url);
 
-    // API calls always need live, authenticated data (e.g. the Content
-    // Management System's /api/content) — never a cache-first snapshot from
-    // whenever a given endpoint happened to be fetched for the first time.
+    // API calls always need live, authenticated data — never a cache-first
+    // snapshot from whenever a given endpoint happened to be fetched for
+    // the first time.
     // This service worker is registered with root scope ('/'), so without
     // this early bypass it would just as happily intercept and permanently
     // stale-cache admin-portal API calls as it does the public survey's.
