@@ -1,28 +1,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin Portal</title>
-<% if (typeof requiresTabSession !== 'undefined' && requiresTabSession) { %>
-<script>
-    // Per-tab login gate: sessionStorage is scoped to THIS browser tab, unlike the
-    // session cookie which every tab shares. Pasting a protected URL into a new tab
-    // (or one that inherited the cookie but was never logged into itself) finds no
-    // verified flag here and gets bounced to /login, even though the real session
-    // is still perfectly valid. Runs first/blocking so nothing renders before the
-    // redirect fires.
-    (function () {
-        var GATE_KEY = 'cqa_tab_verified';
-        try {
-            <% if (typeof grantTabAccess !== 'undefined' && grantTabAccess) { %>
-                sessionStorage.setItem(GATE_KEY, '1');
-            <% } else { %>
-                if (!sessionStorage.getItem(GATE_KEY)) {
-                    window.location.replace('/login?tabVerify=1');
-                }
-            <% } %>
-        } catch (e) { /* sessionStorage unavailable (privacy mode, etc.) — fail open */ }
-    })();
-</script>
-<% } %>
 <% if (typeof loginToken !== 'undefined' && loginToken && typeof currentAdmin !== 'undefined' && currentAdmin) { %>
 <script>
     // Same-browser single-tab enforcement: two tabs on the same account share one
@@ -43,7 +21,7 @@
             if (redirected) return;
             if (String(adminId) === String(myAdminId) && token && token !== myToken) {
                 redirected = true;
-                window.location.href = '/logout';
+                window.location.href = '/logout?scope=admin';
             }
         }
 

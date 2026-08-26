@@ -410,23 +410,84 @@
         /* =========================================================
            DASHBOARD SECTION — transform-driven marquee (no scrollLeft)
         ========================================================= */
-        .dashboard-section { padding: var(--sp-2) 0 var(--sp-10); scroll-margin-top: 6rem; }
-        .dashboard-toolbar { display: flex; justify-content: center; max-width: 75rem; margin: 0 auto var(--sp-4); padding: 0 var(--sp-4); }
-        .dashboard-period-select {
-            border-color: rgba(15, 23, 42, 0.2); background: rgba(15, 23, 42, 0.04); color: var(--navy-900);
+        .dashboard-section {
+            padding: var(--sp-2) 0 var(--sp-10); scroll-margin-top: 6rem; position: relative; overflow: hidden;
         }
-        .dashboard-period-select:hover { border-color: var(--gold-500); background: rgba(15, 23, 42, 0.08); }
-        .dashboard-period-select option { background: #ffffff; color: var(--navy-900); }
-        body.dark-mode .dashboard-period-select { border-color: rgba(255,255,255,0.4); background: rgba(255, 255, 255, 0.1); color: white; }
-        body.dark-mode .dashboard-period-select option { background: var(--navy-900); color: white; }
-        .dashboard-header-block { text-align: center; max-width: 43.75rem; margin: 0 auto var(--sp-4); padding: 0 var(--sp-4); }
+        .dashboard-section::before {
+            content: ''; position: absolute; top: -10%; left: 50%; transform: translateX(-50%);
+            width: 70rem; height: 40rem; pointer-events: none; z-index: 0;
+            background: radial-gradient(ellipse at center, rgba(10,31,68,0.05) 0%, transparent 70%);
+        }
+        body.dark-mode .dashboard-section::before { background: radial-gradient(ellipse at center, rgba(244,180,0,0.06) 0%, transparent 70%); }
+
+        .dashboard-live-badge {
+            display: inline-flex; align-items: center; gap: 7px; margin: 0 auto var(--sp-3); padding: 6px 16px;
+            border-radius: 999px; background: rgba(74, 222, 128, 0.12); border: 1px solid rgba(74, 222, 128, 0.35);
+            color: #15803d; font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;
+            width: fit-content;
+        }
+        body.dark-mode .dashboard-live-badge { background: rgba(74, 222, 128, 0.1); color: #4ADE80; border-color: rgba(74,222,128,0.3); }
+        .dashboard-live-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 0 rgba(34,197,94,0.6); animation: livePulse 1.8s infinite; }
+        @keyframes livePulse {
+            0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.55); }
+            70% { box-shadow: 0 0 0 7px rgba(34,197,94,0); }
+            100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+        }
+
+        .dashboard-toolbar { display: flex; justify-content: center; align-items: center; max-width: 75rem; margin: 0 auto var(--sp-5); padding: 0 var(--sp-4); position: relative; z-index: 1; }
+        .period-dropbar {
+            display: inline-flex; align-items: center; gap: 10px; position: relative;
+            padding: 10px 40px 10px 16px; border-radius: 999px;
+            background: rgba(15, 23, 42, 0.05); border: 1px solid rgba(15, 23, 42, 0.1);
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+        .period-dropbar:hover { border-color: var(--gold-500); background: rgba(15, 23, 42, 0.08); }
+        body.dark-mode .period-dropbar { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.15); }
+        body.dark-mode .period-dropbar:hover { border-color: var(--gold-500); background: rgba(255,255,255,0.1); }
+        .period-dropbar-icon { color: var(--gold-500); font-size: 0.95rem; flex-shrink: 0; }
+        .period-dropbar-caret { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-size: 0.7rem; color: #94a3b8; pointer-events: none; }
+        .period-dropbar-select {
+            appearance: none; -webkit-appearance: none; border: none; background: transparent; outline: none;
+            font-size: var(--fs-sm); font-weight: 700; color: var(--navy-900); cursor: pointer; padding-right: 4px;
+        }
+        .period-dropbar-select option { background: #ffffff; color: var(--navy-900); }
+        body.dark-mode .period-dropbar-select { color: #fff; }
+        body.dark-mode .period-dropbar-select option { background: var(--navy-900); color: #fff; }
+
+        .dashboard-header-block { text-align: center; max-width: 43.75rem; margin: 0 auto var(--sp-4); padding: 0 var(--sp-4); position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
         .dashboard-header-block p { color: #64748b; font-size: var(--fs-base); line-height: 1.7; margin: 0; }
         body.dark-mode .dashboard-header-block p { color: #94a3b8; }
 
+        /* KPI summary strip */
+        .kpi-strip {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-3);
+            max-width: 87.5rem; margin: 0 auto var(--sp-5); padding: 0 var(--sp-4); position: relative; z-index: 1;
+        }
+        .kpi-tile {
+            background: #ffffff; border: 1px solid rgba(10,31,68,0.06); border-radius: var(--sp-3);
+            padding: var(--sp-3) var(--sp-4); box-shadow: 0 6px 24px rgba(10,31,68,0.06);
+            display: flex; align-items: center; gap: var(--sp-3);
+            border-top: 3px solid var(--kpi-accent, var(--gold-400));
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+        .kpi-tile:hover { transform: translateY(-4px); box-shadow: 0 14px 32px rgba(10,31,68,0.12); }
+        body.dark-mode .kpi-tile { background: rgba(30, 41, 59, 0.9); border-color: rgba(255,255,255,0.06); box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+        .kpi-icon {
+            width: 44px; height: 44px; border-radius: var(--sp-2); flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+            background: var(--kpi-accent-soft, rgba(244,180,0,0.12)); color: var(--kpi-accent, var(--gold-500));
+        }
+        .kpi-value { font-size: 1.5rem; font-weight: 800; color: var(--navy-900); line-height: 1.15; letter-spacing: -0.02em; }
+        body.dark-mode .kpi-value { color: #f1f5f9; }
+        .kpi-label { font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #94a3b8; margin-top: 2px; }
+        @media (max-width: 62rem) { .kpi-strip { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 36rem) { .kpi-strip { grid-template-columns: 1fr; } }
+
         .dashboard-container {
-            display: flex; align-items: center; width: 100%; position: relative; overflow: hidden;
-            background: rgba(255,255,255,0.45); backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%);
+            display: flex; align-items: center; width: 100%; position: relative; overflow: hidden; z-index: 1;
+            background: rgba(255,255,255,0.5); backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%);
             border: 1px solid rgba(10,31,68,0.06); border-radius: var(--sp-4); margin: 0 auto; max-width: 87.5rem;
+            box-shadow: 0 20px 60px rgba(10,31,68,0.06);
         }
         body.dark-mode .dashboard-container { background: rgba(15, 23, 42, 0.45); border-color: rgba(244,180,0,0.08); }
 
@@ -439,17 +500,24 @@
             background: #ffffff; border: none; border-radius: var(--sp-3); box-shadow: 0 10px 40px rgba(10, 31, 68, 0.08);
             display: flex; flex-direction: column; height: 70vh; min-width: 45vw; flex-shrink: 0;
             opacity: 0; transform: translateY(60px);
-            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
-            border: 1px solid rgba(10,31,68,0.04); will-change: transform, opacity;
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out, box-shadow 0.25s ease;
+            border: 1px solid rgba(10,31,68,0.04); border-top: 4px solid var(--card-accent, var(--gold-400));
+            will-change: transform, opacity; overflow: hidden;
         }
         .chart-card.visible { opacity: 1; transform: translateY(0); }
-        .chart-card:hover { transform: translateY(-8px); }
+        .chart-card:hover { transform: translateY(-8px); box-shadow: 0 20px 50px rgba(10,31,68,0.14); }
 
-        body.dark-mode .chart-card { background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(10px); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45); border-color: rgba(244,180,0,0.06); }
+        body.dark-mode .chart-card { background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(10px); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45); border-color: rgba(244,180,0,0.06); border-top-color: var(--card-accent, var(--gold-400)); }
 
         .card-header-custom { padding: var(--sp-3) var(--sp-4) var(--sp-2); border-bottom: 1px solid rgba(10,31,68,0.04); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: var(--sp-2); }
         body.dark-mode .card-header-custom { border-bottom: 1px solid rgba(255,255,255,0.05); }
 
+        .chart-title-row { display: flex; align-items: center; gap: 10px; }
+        .chart-icon-badge {
+            width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center; font-size: 0.9rem;
+            background: var(--card-accent-soft, rgba(244,180,0,0.12)); color: var(--card-accent, var(--gold-500));
+        }
         .chart-title { font-size: var(--fs-lg); font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #52627a; margin: 0; line-height: 1.3; }
         body.dark-mode .chart-title { color: #e2e8f0; }
 
@@ -723,45 +791,90 @@
                 <span class="section-eyebrow">Data &amp; Transparency</span>
                 <h2 class="section-title">Transparency Dashboard</h2>
                 <p>Live satisfaction survey results across clusters and offices. Hover to see details, click to drill down.</p>
+                <div class="dashboard-live-badge"><span class="dashboard-live-dot"></span> Live &middot; refreshes automatically</div>
             </div>
 
             <div class="dashboard-toolbar">
-                <select id="periodSelect" class="period-select dashboard-period-select" onchange="changePeriod()">
-                    <option value="p1">Jan - Jun 2026</option>
-                    <option value="p2">Jul - Dec 2026</option>
-                </select>
+                <div class="period-dropbar">
+                    <i class="far fa-calendar-alt period-dropbar-icon"></i>
+                    <select id="periodSelect" class="period-dropbar-select" onchange="changePeriod()">
+                        <option value="p1">Jan - Jun 2026</option>
+                        <option value="p2">Jul - Dec 2026</option>
+                    </select>
+                    <i class="fas fa-chevron-down period-dropbar-caret"></i>
+                </div>
+            </div>
+
+            <div class="kpi-strip" id="kpiStrip">
+                <div class="kpi-tile" style="--kpi-accent:#0a1f44; --kpi-accent-soft:rgba(10,31,68,0.1);">
+                    <div class="kpi-icon"><i class="fas fa-users"></i></div>
+                    <div>
+                        <div class="kpi-value" id="kpiRespondents">0</div>
+                        <div class="kpi-label">Total Respondents</div>
+                    </div>
+                </div>
+                <div class="kpi-tile" style="--kpi-accent:#22c55e; --kpi-accent-soft:rgba(34,197,94,0.12);">
+                    <div class="kpi-icon"><i class="fas fa-face-smile"></i></div>
+                    <div>
+                        <div class="kpi-value" id="kpiSatisfaction">0%</div>
+                        <div class="kpi-label">Overall Satisfaction</div>
+                    </div>
+                </div>
+                <div class="kpi-tile" style="--kpi-accent:#f4b400; --kpi-accent-soft:rgba(244,180,0,0.14);">
+                    <div class="kpi-icon"><i class="fas fa-building"></i></div>
+                    <div>
+                        <div class="kpi-value" id="kpiOffices">0</div>
+                        <div class="kpi-label">Offices Evaluated</div>
+                    </div>
+                </div>
+                <div class="kpi-tile" style="--kpi-accent:#5B8DEF; --kpi-accent-soft:rgba(91,141,239,0.12);">
+                    <div class="kpi-icon"><i class="fas fa-shield-halved"></i></div>
+                    <div>
+                        <div class="kpi-value" id="kpiAware">0%</div>
+                        <div class="kpi-label">Citizen's Charter Awareness</div>
+                    </div>
+                </div>
             </div>
 
             <div class="dashboard-container">
                 <div class="charts-track" id="chartsTrack">
 
-                    <div class="chart-card" id="card-c1">
+                    <div class="chart-card" id="card-c1" style="--card-accent:#22c55e; --card-accent-soft:rgba(34,197,94,0.12);">
                         <div class="card-header-custom">
-                            <div>
-                                <h3 id="c1-title" class="chart-title" data-main="Overall Ratings" data-drill="Total Overall Rating">Overall Ratings</h3>
-                                <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
+                            <div class="chart-title-row">
+                                <div class="chart-icon-badge"><i class="fas fa-chart-pie"></i></div>
+                                <div>
+                                    <h3 id="c1-title" class="chart-title" data-main="Overall Ratings" data-drill="Total Overall Rating">Overall Ratings</h3>
+                                    <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
+                                </div>
                             </div>
                             <button id="c1-back" onclick="goBack('c1')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
                         </div>
                         <div class="canvas-container"><canvas id="c1" style="cursor: pointer;"></canvas></div>
                     </div>
 
-                    <div class="chart-card" id="card-c2">
+                    <div class="chart-card" id="card-c2" style="--card-accent:#5B7CD6; --card-accent-soft:rgba(90,124,214,0.12);">
                         <div class="card-header-custom">
-                            <div>
-                                <h3 id="c2-title" class="chart-title" data-main="Satisfaction by Cluster" data-drill="Cluster Rating">Satisfaction by Cluster</h3>
-                                <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
+                            <div class="chart-title-row">
+                                <div class="chart-icon-badge"><i class="fas fa-sitemap"></i></div>
+                                <div>
+                                    <h3 id="c2-title" class="chart-title" data-main="Satisfaction by Cluster" data-drill="Cluster Rating">Satisfaction by Cluster</h3>
+                                    <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
+                                </div>
                             </div>
                             <button id="c2-back" onclick="goBack('c2')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
                         </div>
                         <div class="canvas-container"><canvas id="c2" style="cursor: pointer;"></canvas></div>
                     </div>
 
-                    <div class="chart-card" id="card-c3">
+                    <div class="chart-card" id="card-c3" style="--card-accent:#f4b400; --card-accent-soft:rgba(244,180,0,0.14);">
                         <div class="card-header-custom">
-                            <div>
-                                <h3 id="c3-title" class="chart-title" data-main="Satisfaction By Office" data-drill="Office Rating">Satisfaction By Office</h3>
-                                <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
+                            <div class="chart-title-row">
+                                <div class="chart-icon-badge"><i class="fas fa-building-columns"></i></div>
+                                <div>
+                                    <h3 id="c3-title" class="chart-title" data-main="Satisfaction By Office" data-drill="Office Rating">Satisfaction By Office</h3>
+                                    <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
+                                </div>
                             </div>
                             <div class="chart-header-actions">
                                 <select class="office-cluster-select" onchange="setOfficeClusterFilter(this.value)">
@@ -773,11 +886,14 @@
                         <div class="canvas-container"><canvas id="c3" style="cursor: pointer;"></canvas></div>
                     </div>
 
-                    <div class="chart-card" id="card-c4">
+                    <div class="chart-card" id="card-c4" style="--card-accent:#5B8DEF; --card-accent-soft:rgba(91,141,239,0.12);">
                         <div class="card-header-custom">
-                            <div>
-                                <h3 id="c4-title" class="chart-title" data-main="CC Awareness" data-drill="CC Awareness Breakdown">CC Awareness</h3>
-                                <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Click chart for details</div>
+                            <div class="chart-title-row">
+                                <div class="chart-icon-badge"><i class="fas fa-shield-halved"></i></div>
+                                <div>
+                                    <h3 id="c4-title" class="chart-title" data-main="CC Awareness" data-drill="CC Awareness Breakdown">CC Awareness</h3>
+                                    <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Click chart for details</div>
+                                </div>
                             </div>
                             <button id="c4-back" onclick="goBack('c4')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
                         </div>
@@ -1688,8 +1804,26 @@
             }
         }
 
+        function updateKpiStrip() {
+            const dataP = datasets[activePeriod];
+            if (!dataP) return;
+
+            const sat = dataP.overall[0] || 0, dissat = dataP.overall[1] || 0;
+            const total = typeof dataP.totalRespondents === 'number' ? dataP.totalRespondents : (sat + dissat);
+            const satPct = (sat + dissat) > 0 ? Math.round((sat / (sat + dissat)) * 100) : 0;
+            const awareTotal = (dataP.ccAware[0] || 0) + (dataP.ccAware[1] || 0) + (dataP.ccAware[2] || 0);
+            const awarePct = awareTotal > 0 ? Math.round(((dataP.ccAware[0] || 0) + (dataP.ccAware[2] || 0)) / awareTotal * 100) : 0;
+            const officesEvaluated = typeof dataP.officesEvaluated === 'number' ? dataP.officesEvaluated : 0;
+
+            document.getElementById('kpiRespondents').innerText = total.toLocaleString();
+            document.getElementById('kpiSatisfaction').innerText = satPct + '%';
+            document.getElementById('kpiOffices').innerText = officesEvaluated.toLocaleString();
+            document.getElementById('kpiAware').innerText = awarePct + '%';
+        }
+
         function changePeriod() {
             activePeriod = document.getElementById('periodSelect').value;
+
             Object.keys(activeCharts).forEach(rawId => {
                 const state = chartState[rawId];
                 const newConfig = getChartConfig(rawId, state.view, state.index);
@@ -1703,6 +1837,8 @@
                 const id = rawId.replace('_clone', '');
                 bindAxisTooltip(rawId, id, state.view, newConfig);
             });
+
+            updateKpiStrip();
         }
 
         function goBack(rawId) {

@@ -190,12 +190,13 @@ TOPIC_KEYWORDS = {
     "Enrollment and Registration": [
         "enrollment", "enrolment", "pagpapatala", "registration", "rehistrasyon",
         "matriculation", "cross-enrollment", "re-admission", "shifting",
+        "mag-shift", "nag-shift",
     ],
     "Communication and Information": [
         "impormasyon", "information", "communication", "announcement", "abiso",
         "notice", "paalala", "text blast", "walang paalam", "walang reply",
         "hindi sumasagot", "no response", "not informed", "nobody informed",
-        "no update", "walang update",
+        "no update", "walang update", "no updates", "walang updates", "email",
     ],
     # "transaction" is the unambiguous object-noun anchor for comments whose
     # core driver is how fast the service itself moved (hal. "bilis ng
@@ -203,6 +204,7 @@ TOPIC_KEYWORDS = {
     # "Process Efficiency" (how simple the steps were).
     "Transaction Speed": [
         "transaction", "pag-transact", "processing time", "release ng resulta",
+        "ma-release", "na-release",
     ],
     # Compound Taglish/English phrases that unambiguously describe the
     # process itself being simple/tedious, not any specific object.
@@ -231,6 +233,7 @@ TOPIC_KEYWORDS = {
         "library", "aklatan", "librong hiniram", "libro", "book", "books",
         "dormitory", "dorm", "bed space", "boarding house",
         "transportation", "sasakyan", "service vehicle", "shuttle",
+        "printer", "computer lab", "computer laboratory", "computer shop",
     ],
     "Health and Medical Services": [
         "clinic", "klinika", "doktor", "doctor", "dentista", "dentist",
@@ -277,7 +280,9 @@ TOPIC_ITEM_KEYWORDS = {
         ]),
     ],
     "Transaction Speed": [
-        ("Transaction Speed - Processing Time", ["processing time", "release ng resulta"]),
+        ("Transaction Speed - Processing Time", [
+            "processing time", "release ng resulta", "ma-release", "na-release",
+        ]),
         ("Transaction Speed - Transaction Duration", ["transaction", "pag-transact"]),
     ],
     "Process Efficiency": [
@@ -333,7 +338,8 @@ TOPIC_ITEM_KEYWORDS = {
             "transportation", "sasakyan", "service vehicle", "shuttle",
         ]),
         ("Facilities and Equipment - Equipment/Machine", [
-            "kagamitan", "equipment", "makina", "aparatus",
+            "kagamitan", "equipment", "makina", "aparatus", "printer",
+            "computer lab", "computer laboratory", "computer shop",
         ]),
         ("Facilities and Equipment - Building/Structure", ["istruktura"]),
     ],
@@ -725,24 +731,57 @@ def keyword_topic_override(text):
 # flip "pantay").
 # ---------------------------------------------------------------------------
 FAST_NEGATIVE_WORDS = [
-    "mahina", "masama", "pangit", "sira", "sirang", "bastos", "mabagal",
-    "matagal", "tagal", "bagal", "katagal", "bobo", "reklamo", "galit",
-    "problema", "hassle", "dumi", "madumi", "marumi", "amoy-amoy", "kulang",
-    "konti", "hirap", "mahirap", "nahirapan", "nakakainis", "nakakastress",
-    "sakit ng ulo", "kumplikado", "maraming hakbang", "palakasan",
-    "may kilala", "paulit-ulit", "nawawalan ng koneksyon", "nawalan ng signal",
-    "nakakalito", "nalilito",
+    "mahina", "masama", "masamang", "pangit", "sira", "sirang", "bastos",
+    "mabagal", "matagal", "tagal", "bagal", "katagal", "bobo", "reklamo",
+    "galit", "problema", "hassle", "dumi", "madumi", "marumi", "amoy-amoy",
+    "kulang", "konti", "hirap", "mahirap", "nahirapan", "nakakainis",
+    "nakakastress", "sakit ng ulo", "kumplikado", "maraming hakbang",
+    "palakasan", "may kilala", "paulit-ulit", "nawawalan ng koneksyon",
+    "nawalan ng signal", "nakakalito", "nalilito", "walang kwenta",
+    "sayang", "huli na", "magulo", "naligaw",
     "poor", "bad", "slow", "broken", "rude", "worst", "terrible", "awful",
-    "annoying", "frustrating", "difficult", "messy",
+    "annoying", "frustrating", "difficult", "messy", "disappoint",
+    "disappointed", "disappointing", "disappointment",
+    # English/short-descriptor gaps found in 2026-08-26 testing (~150-case
+    # multi-office suite) — plainly negative on their own, unlike the bare
+    # ambiguous descriptors this file otherwise avoids, so safe as standalone
+    # anchors: outages/outdated things, being late, and "dirty"/"confusing"
+    # which oddly only had Tagalog coverage (marumi/nalilito) before this.
+    "dirty", "confusing", "outdated", "late", "lost", "not working",
+    "brownout", "blackout", "power outage",
+    # Communication-failure phrasing: these were previously anchored only in
+    # TOPIC_KEYWORDS' Communication and Information group (a topic signal),
+    # but they are just as clearly a *negative sentiment* signal on their own
+    # and were missing from the sentiment lexicon entirely, so a plain
+    # "the office never replied" comment fell through to Neutral/the
+    # transformer instead of resolving outright like other lexicon hits.
+    "walang paalam", "walang reply", "hindi sumasagot", "hindi sinagot",
+    "hindi sumagot", "walang sagot", "no response", "no reply",
+    "never replied", "not informed", "nobody informed",
+    "no update", "walang update", "no updates", "walang updates",
+    "wala pang balita", "walang balita",
+    "walang wifi", "walang internet", "no wifi", "no internet", "no signal",
+    "walang stock", "out of stock", "no stock",
+    # Price complaints — deliberately compound/intensified phrases, not the
+    # bare word "mahal" (which also means "dear/beloved" in Tagalog and would
+    # misfire on unrelated positive text), same collision-avoidance approach
+    # as SENTIMENT_COLLISION_PHRASES below.
+    "sobrang mahal", "napakamahal", "masyadong mahal", "overpriced",
+    "too expensive",
 ]
 FAST_POSITIVE_WORDS = [
-    "maganda", "mabilis", "magaling", "mabait", "salamat", "masaya",
-    "maayos", "ayos naman", "walang problema", "walang reklamo", "pantay",
-    "patas", "madali", "kadali", "mahusay", "sanay", "stable",
+    "maganda", "magandang", "mabilis", "magaling", "mabait", "salamat",
+    "masaya", "masayang", "maayos", "ayos naman", "okay naman", "ok naman",
+    "walang problema", "walang reklamo", "pantay", "patas", "madali",
+    "kadali", "mahusay", "sanay", "stable", "malinaw", "maalaga", "magiliw",
+    "propesyonal", "tulong", "tumulong", "tinulungan",
+    "walang abala", "walang hassle", "isang beses lang", "isang hakbang lang",
+    "one-stop", "one stop", "patient",
     "satisfied", "great", "good", "excellent", "fast", "helpful",
-    "friendly", "nice", "the best", "love it", "hassle-free", "hassle free",
-    "streamlined", "efficient", "smooth", "convenient", "fair", "equal",
-    "commend", "professional", "professionalism", "appreciate", "appreciated",
+    "friendly", "nice", "pleasant", "malinis", "the best", "love it", "hassle-free",
+    "hassle free", "streamlined", "efficient", "smooth", "convenient",
+    "fair", "equal", "commend", "professional", "professionally", "professionalism",
+    "appreciate", "appreciated",
 ]
 
 # Filler phrases that read as flat/neutral on their own — matched only when
@@ -764,8 +803,34 @@ SENTIMENT_COLLISION_PHRASES = ["good moral"]
 NEGATOR_WORDS = {
     "hindi", "wala", "walang", "di", "'di", "huwag", "ayaw",
     "not", "no", "never", "without",
+    "wasn't", "isn't", "doesn't", "don't", "didn't", "couldn't", "can't",
+    "cannot", "won't", "aren't", "wouldn't", "shouldn't",
 }
 NEGATION_LOOKBACK = 3
+
+# A generic complaint-filler word co-occurring in the same clause as a more
+# specific negative descriptor is redundant with it, not a second
+# independent gripe — e.g. "may kunting problema lang kasi madumi" ("there's
+# a small problem because it's dirty") is ONE complaint (dirtiness) named
+# twice, not two. Left uncorrected this double-counts and can make a
+# genuinely mixed comment (one real compliment + one real complaint) read as
+# more negative than it is purely because the complaint used two words. Only
+# dropped when a more specific negative word fires in the same clause —
+# a clause with ONLY "problema" and nothing else still counts it normally.
+GENERIC_NEGATIVE_FILLERS = {"problema", "reklamo", "issue", "concern"}
+
+# "sana" (I hope/wish) marks a positive word as aspirational rather than
+# descriptive of the current state — "sana maayos pa" ("hope it gets fixed")
+# is a complaint, not praise, even though it contains "maayos". Treated like
+# a negator for lookback purposes, but it neutralizes the keyword (drops it)
+# instead of flipping its polarity, since "sana [positive]" isn't a negative
+# claim either — it's a wish, distinct from both.
+ASPIRATIONAL_WORDS = {"sana"}
+
+
+def _is_aspirational(clause_lower, span_start):
+    words_before = clause_lower[:span_start].split()[-NEGATION_LOOKBACK:]
+    return any(w.strip("'") in ASPIRATIONAL_WORDS for w in words_before)
 
 
 def _keyword_spans(clause_lower, keywords):
@@ -813,9 +878,16 @@ def lexicon_sentiment(text):
             (s, e) for s, e in _keyword_spans(clause, FAST_NEGATIVE_WORDS)
             if not (set(range(s, e)) & covered)
         ]
+        specific_neg_spans = [
+            (s, e) for s, e in neg_spans if clause[s:e] not in GENERIC_NEGATIVE_FILLERS
+        ]
+        if specific_neg_spans:
+            neg_spans = specific_neg_spans
         for s, e in pos_spans:
             if _is_negated(clause, s):
                 neg_count += 1
+            elif _is_aspirational(clause, s):
+                pass
             else:
                 pos_count += 1
         for s, e in neg_spans:
