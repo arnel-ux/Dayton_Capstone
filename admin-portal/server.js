@@ -323,22 +323,12 @@ function noCache(req, res, next) {
 // ==========================================
 // DATABASE CONNECTION (MySQL)
 // ==========================================
-<<<<<<< HEAD
 // A pool (not a single createConnection) so a dropped connection — MySQL
 // restart, network blip, or hitting wait_timeout after sitting idle — gets
 // silently replaced on the next query instead of leaving `db` permanently
 // broken. Just as important: a pool's per-query errors surface through that
 // query's own callback, so they can never become an unhandled 'error' event
 // with zero listeners — which is what crashes the whole Node process outright.
-=======
-// A pool (not a single createConnection) so a dropped/idle-timed-out MySQL
-// connection doesn't take the whole app down with it — every db.query() grabs
-// a fresh connection from the pool instead of reusing one dead socket forever.
-// Without this, once MySQL's wait_timeout closed the one shared connection,
-// every subsequent query (including ensureAdminAuth's login_token check) would
-// error out and get treated as a session/login failure — surfacing as a
-// random forced logout on refresh, unrelated to the actual session cookie.
->>>>>>> 1f07d10b320629b153fc104f75dcf928bf7b20f2
 const db = mysql.createPool({
     host: 'localhost',
     user: 'root',
@@ -349,7 +339,6 @@ const db = mysql.createPool({
     queueLimit: 0
 });
 
-<<<<<<< HEAD
 // Defense in depth: still listen for pool-level errors (e.g. a failure while
 // establishing a brand new connection) so that, too, can never crash the
 // process via an unhandled 'error' event.
@@ -358,14 +347,10 @@ db.on('error', (err) => {
 });
 
 db.query('SELECT 1', (err) => {
-=======
-db.getConnection((err, connection) => {
->>>>>>> 1f07d10b320629b153fc104f75dcf928bf7b20f2
     if (err) {
         console.error('❌ Error connecting to MySQL:', err);
         return;
     }
-    connection.release();
     console.log('✅ Connected to cqa_db database successfully!');
     loadOfficeNameCache();
 });
