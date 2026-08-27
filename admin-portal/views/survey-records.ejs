@@ -93,6 +93,10 @@
         }
 
         .respondent-name { font-weight: 700; color: #1e293b; }
+        .office-acronym {
+            letter-spacing: 0.4px;
+            cursor: default;
+        }
         .topic-badge { font-size: 0.65rem; padding: 4px 10px; border-radius: 6px; font-weight: 700; text-transform: uppercase; }
         
         .bg-cr { background-color: #fee2e2; color: #ef4444; }
@@ -348,16 +352,18 @@
                                 <table class="table">
                                     <thead>
                                         <tr>
-                                            <th style="width: 18%;">Name</th>
-                                            <th style="width: 32%;">Comments</th>
-                                            <th style="width: 15%;">Topic</th>
-                                            <th style="width: 15%;">Sentiment</th>
+                                            <th style="width: 15%;">Office</th>
+                                            <th style="width: 15%;">Name</th>
+                                            <th style="width: 25%;">Comments</th>
+                                            <th style="width: 13%;">Topic</th>
+                                            <th style="width: 12%;">Sentiment</th>
                                             <th style="width: 20%;">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <% recordsByCluster[cluster].forEach(record => { %>
                                             <tr class="record-row">
+                                                <td class="office-name-cell text-muted small" data-full="<%= record.officeName %>"><%= record.officeName %></td>
                                                 <td><span class="respondent-name"><%= record.name %></span></td>
                                                 <td class="text-muted small"><%= record.comments %></td>
                                                 <td><span class="topic-badge <%= record.topicClass %>"><%= record.topic %></span></td>
@@ -683,6 +689,30 @@
                 bodyEl.innerHTML = '<p class="text-danger mb-0 text-center py-4"><i class="fas fa-exclamation-triangle me-1"></i> Could not load this survey\'s answers. Please try again.</p>';
             });
     }
+
+    // Long office names are shown as an acronym (e.g. "Office of the Vice President for Academic Affairs" -> "OVPAA")
+    // with the full name available as a hover tooltip, so the table stays compact and readable.
+    const OFFICE_NAME_MAX_LENGTH = 25;
+    const OFFICE_ACRONYM_STOPWORDS = ['of', 'the', 'and', 'for', 'in', 'a', 'an'];
+
+    function officeAcronym(name) {
+        return name
+            .split(/\s+/)
+            .map(w => w.replace(/[^A-Za-z]/g, ''))
+            .filter(w => w && !OFFICE_ACRONYM_STOPWORDS.includes(w.toLowerCase()))
+            .map(w => w[0].toUpperCase())
+            .join('');
+    }
+
+    document.querySelectorAll('.office-name-cell').forEach(cell => {
+        const fullName = cell.getAttribute('data-full') || '';
+        if (fullName.length > OFFICE_NAME_MAX_LENGTH) {
+            const acronym = officeAcronym(fullName);
+            if (acronym.length >= 2) {
+                cell.innerHTML = `<span class="office-acronym" title="${escapeHtml(fullName)}">${escapeHtml(acronym)}</span>`;
+            }
+        }
+    });
 
     document.addEventListener('DOMContentLoaded', function() {
         const searchInput = document.getElementById('searchInput');

@@ -1713,11 +1713,16 @@ if (currentClientEmail) {
 
 // Local, client-side fallback autofill. Independent of the server's
 // client_accounts lookup (which only has data for users whose account row
-// exists) — this simply remembers what THIS BROWSER last typed/selected for
-// Name, Client Type, Age, and Region, and reuses it on the next visit.
-const CLIENT_AUTOFILL_KEY = 'cspc_client_autofill_profile';
+// exists) — this simply remembers what THIS ACCOUNT last typed/selected for
+// Name, Client Type, Age, and Region, and reuses it the next time THIS
+// account clicks Autofill. Keyed per-account (by email) so a different
+// person signing in on the same browser never sees someone else's answers.
+const CLIENT_AUTOFILL_KEY = currentClientEmail
+    ? 'cspc_client_autofill_profile_' + currentClientEmail.toLowerCase()
+    : null;
 
 function saveAutofillProfile(data) {
+    if (!CLIENT_AUTOFILL_KEY) return;
     try {
         localStorage.setItem(CLIENT_AUTOFILL_KEY, JSON.stringify({
             respondent_name: data.respondent_name || '',
@@ -1728,10 +1733,13 @@ function saveAutofillProfile(data) {
     } catch (e) { /* localStorage unavailable — autofill just won't persist */ }
 }
 
-// Fills Name/Client Type/Age/Region from the last locally-saved answers.
-// Never overwrites a field that already has a value or is locked/disabled
-// (e.g. by applyLockedProfile from a prior server-confirmed submission).
+// Fills Name/Client Type/Age/Region from this account's last locally-saved
+// answers. Only ever called from the Autofill switch's handler — never on
+// page load — so the Name field starts blank for every sign-in. Never
+// overwrites a field that already has a value or is locked/disabled (e.g.
+// by applyLockedProfile from a prior server-confirmed submission).
 function applyAutofillFromLocalStorage() {
+    if (!CLIENT_AUTOFILL_KEY) return;
     let saved;
     try { saved = JSON.parse(localStorage.getItem(CLIENT_AUTOFILL_KEY)); } catch (e) { saved = null; }
     if (!saved) return;
@@ -1817,8 +1825,7 @@ function toggleAutofillClientProfile(enabled) {
         fetch('/api/client-profile')
             .then(res => res.json())
             .then(data => {
-                if (!data.success) return;
-                const p = data.profile || {};
+                const p = (data.success && data.profile) ? data.profile : {};
 
                 const nameInput = document.querySelector('input[name="respondent_name"]');
                 if (nameInput && !nameInput.disabled && p.respondent_name) nameInput.value = p.respondent_name;
@@ -1833,8 +1840,17 @@ function toggleAutofillClientProfile(enabled) {
                 if (genderRadios.length && !genderRadios[0].disabled && p.gender) {
                     genderRadios.forEach(radio => { radio.checked = (radio.value === p.gender); });
                 }
+
+                // Fall back to this account's own locally-remembered answers
+                // (from a past submission on this browser) for whatever the
+                // server profile didn't cover.
+                applyAutofillFromLocalStorage();
             })
-            .catch(err => console.error('Error autofilling profile:', err));
+            .catch(err => {
+                console.error('Error autofilling profile:', err);
+                // Server lookup failed — still offer this account's local fallback.
+                applyAutofillFromLocalStorage();
+            });
     } else if (autofillSnapshot) {
         const nameInput = document.querySelector('input[name="respondent_name"]');
         if (nameInput && !nameInput.disabled) nameInput.value = autofillSnapshot.respondent_name;
@@ -2890,7 +2906,6 @@ function startNewSurvey() {
     // already-locked profile fields, and doesn't restore today's date.
     document.getElementById('surveyDate').valueAsDate = new Date();
     applyLockedProfile();
-    applyAutofillFromLocalStorage();
     populateServiceSelect('');
 
     editReturnTarget = null;
@@ -2924,7 +2939,6 @@ document.getElementById('agreeTermsStage1').addEventListener('change', function 
 // Initial Load Setup
 setLanguage('en');
 applyLockedProfile();
-applyAutofillFromLocalStorage();
 updateProgressStepper(1);
 updateFullscreenButton();
 

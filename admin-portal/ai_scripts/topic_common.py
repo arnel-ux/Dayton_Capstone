@@ -100,8 +100,18 @@ candidate_topics = [
 # ---------------------------------------------------------------------------
 TOPIC_KEYWORDS = {
     "Queueing and Waiting Time": [
-        "pila", "linya", "queue", "queueing", "waiting line", "numero", "hintay",
-        "antay", "priority number", "numbering system",
+        "pila", "linya", "queue", "queueing", "waiting line", "numero",
+        # Bare "hintay"/"antay" only ever appear in real feedback with a verb
+        # affix glued directly onto the root (nag-, -in-, pina-...-an, etc.),
+        # so \bhintay\b never actually matches "naghintay"/"hinihintay" — the
+        # word boundary sits at the affix, not the root. Listing the common
+        # inflected forms explicitly is cheaper and safer than a generic
+        # affix-stripping regex (which risks false-positive stems on
+        # unrelated words).
+        "hintay", "naghintay", "naghihintay", "hinihintay", "hinintay",
+        "pinaghihintayan", "maghintay",
+        "antay", "umaantay", "inaantay", "antayin",
+        "priority number", "numbering system",
     ],
     "Internet Connection": [
         "internet", "wifi", "wi-fi", "signal", "network", "koneksyon",
@@ -122,7 +132,7 @@ TOPIC_KEYWORDS = {
     ],
     "Restroom and Cleanliness": [
         "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
-        "kalinisan", "cleanliness", "malinis", "marumi",
+        "kalinisan", "cleanliness", "malinis", "marumi", "dumi", "madumi",
     ],
     "Seating and Furniture": [
         "upuan", "silya", "mesa", "bangko", "furniture", "chairs", "seats", "muwebles",
@@ -144,7 +154,11 @@ TOPIC_KEYWORDS = {
     # opposed to bare attitude/manners complaints — also listed before the
     # generic staff bucket.
     "Staff Competence and Knowledge": [
-        "hindi marunong", "walang alam", "not knowledgeable", "incompetent",
+        # "madunong" is the dialectal/Bicol-influenced d-for-r rendering of
+        # "marunong" (same intervocalic d~r alternation as dumi/marumi ->
+        # madumi below) — CSPC is in the Bicol region, so this spelling shows
+        # up in real feedback alongside the standard form.
+        "hindi marunong", "hindi madunong", "walang alam", "not knowledgeable", "incompetent",
         "hindi sanay", "untrained", "kulang sa training", "hindi sigurado sa sagot",
         "hindi updated", "hindi na updated", "hindi pa updated", "outdated",
         # Bare "sanay" (accustomed/skilled at a job) is a real positive
@@ -174,10 +188,13 @@ TOPIC_KEYWORDS = {
         ("security", 0.5), ("clerk", 0.5), ("faculty", 0.5),
         ("professor", 0.5), ("guro", 0.5), ("adviser", 0.5),
         ("ma'am", 0.5), ("sir", 0.5),
-        "bastos",
+        "bastos", "hindi magalang", "suplado", "suplada", "masungit",
     ],
     "Payment and Fees": [
-        "bayad", "babayaran", "fee", "fees", "singil", "kabayaran", "resibo",
+        # Same affixed-root gap as "hintay" above — "nagbayad"/"magbabayad"
+        # etc. never matched bare \bbayad\b.
+        "bayad", "babayaran", "nagbayad", "nagbabayad", "magbayad", "binayaran",
+        "fee", "fees", "singil", "kabayaran", "resibo",
         "official receipt", "sobrang mahal ang bayad", "tuition", "tuition fee",
     ],
     "Document and Credential Processing": [
@@ -188,7 +205,8 @@ TOPIC_KEYWORDS = {
         "grade change", "correction of grades", "change of grade",
     ],
     "Enrollment and Registration": [
-        "enrollment", "enrolment", "pagpapatala", "registration", "rehistrasyon",
+        "enrollment", "enrolment", "pagpapatala", "nagpatala", "nagpapatala",
+        "magpapatala", "ipatala", "registration", "rehistrasyon",
         "matriculation", "cross-enrollment", "re-admission", "shifting",
         "mag-shift", "nag-shift",
     ],
@@ -211,7 +229,9 @@ TOPIC_KEYWORDS = {
     "Process Efficiency": [
         "hassle-free", "hassle free", "walang abala", "walang hassle",
         "streamlined", "isang beses lang", "isang hakbang lang", "one-stop",
-        "maraming hakbang", "kumplikado",
+        # "madaming" is the dialectal d-for-r rendering of "maraming" (see
+        # the Staff Competence "madunong" note above for the same alternation).
+        "maraming hakbang", "madaming hakbang", "kumplikado",
         # Low-weight generic fallback: "the process" alone is too vague to
         # win against a topic with a real specific anchor (e.g. "proseso ng
         # enrollment" still resolves to Enrollment), but it's better than no
@@ -276,7 +296,10 @@ TOPIC_ITEM_KEYWORDS = {
             "numero", "priority number", "numbering system",
         ]),
         ("Queueing and Waiting Time - Long Lines", [
-            "pila", "linya", "queue", "queueing", "waiting line", "hintay", "antay",
+            "pila", "linya", "queue", "queueing", "waiting line",
+            "hintay", "naghintay", "naghihintay", "hinihintay", "hinintay",
+            "pinaghihintayan", "maghintay",
+            "antay", "umaantay", "inaantay", "antayin",
         ]),
     ],
     "Transaction Speed": [
@@ -286,7 +309,9 @@ TOPIC_ITEM_KEYWORDS = {
         ("Transaction Speed - Transaction Duration", ["transaction", "pag-transact"]),
     ],
     "Process Efficiency": [
-        ("Process Efficiency - Complexity/Red Tape", ["maraming hakbang", "kumplikado"]),
+        ("Process Efficiency - Complexity/Red Tape", [
+            "maraming hakbang", "madaming hakbang", "kumplikado",
+        ]),
         ("Process Efficiency - Simplicity", [
             "hassle-free", "hassle free", "walang abala", "walang hassle",
             "streamlined", "isang beses lang", "isang hakbang lang", "one-stop",
@@ -311,7 +336,7 @@ TOPIC_ITEM_KEYWORDS = {
             "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
         ]),
         ("Restroom and Cleanliness - General Cleanliness", [
-            "kalinisan", "cleanliness", "malinis", "marumi",
+            "kalinisan", "cleanliness", "malinis", "marumi", "dumi", "madumi",
         ]),
     ],
     "Seating and Furniture": [
@@ -372,8 +397,8 @@ TOPIC_ITEM_KEYWORDS = {
             "hindi sanay", "untrained", "kulang sa training",
         ]),
         ("Staff Competence and Knowledge - Knowledge/Answer Accuracy", [
-            "hindi marunong", "walang alam", "not knowledgeable", "incompetent",
-            "hindi sigurado sa sagot",
+            "hindi marunong", "hindi madunong", "walang alam", "not knowledgeable",
+            "incompetent", "hindi sigurado sa sagot",
         ]),
     ],
     "Document and Credential Processing": [
@@ -410,15 +435,16 @@ TOPIC_ITEM_KEYWORDS = {
         ("Enrollment and Registration - Re-admission", ["re-admission"]),
         ("Enrollment and Registration - Shifting", ["shifting"]),
         ("Enrollment and Registration - Enrollment/Registration Process", [
-            "enrollment", "enrolment", "pagpapatala", "registration", "rehistrasyon",
+            "enrollment", "enrolment", "pagpapatala", "nagpatala", "nagpapatala",
+            "magpapatala", "ipatala", "registration", "rehistrasyon",
         ]),
     ],
     "Payment and Fees": [
         ("Payment and Fees - Official Receipt", ["resibo", "official receipt"]),
         ("Payment and Fees - Tuition Fee", ["tuition", "tuition fee"]),
         ("Payment and Fees - Fees", [
-            "bayad", "babayaran", "fee", "fees", "singil", "kabayaran",
-            "sobrang mahal ang bayad",
+            "bayad", "babayaran", "nagbayad", "nagbabayad", "magbayad", "binayaran",
+            "fee", "fees", "singil", "kabayaran", "sobrang mahal ang bayad",
         ]),
     ],
     "Staff Courtesy and Attitude": [
@@ -434,6 +460,34 @@ TOPIC_ITEM_KEYWORDS = {
         ]),
         ("Communication and Information - Announcements", [
             "announcement", "abiso", "notice", "paalala", "text blast",
+        ]),
+    ],
+    # Health, Guidance, and Scholarship previously had no item breakdown at
+    # all (added 2026-08-24 with only a top-level topic — see the
+    # candidate_topics comment above), so every comment landed at the plain
+    # topic label with no further specificity. Health's keyword list already
+    # spans clearly distinct services (dental vs. general consult vs.
+    # medicine vs. paperwork), so it gets the same kind of breakdown as the
+    # other topics above.
+    "Health and Medical Services": [
+        ("Health and Medical Services - Dental Services", [
+            "dentista", "dentist", "dental",
+        ]),
+        ("Health and Medical Services - Medical Certificate", [
+            "medical certificate",
+        ]),
+        ("Health and Medical Services - Medicine/Supplies", ["gamot"]),
+        ("Health and Medical Services - Consultation/Check-up", [
+            "clinic", "klinika", "doktor", "doctor", "nurse", "nars",
+            "konsultasyon", "check-up", "checkup", "medical consultation",
+        ]),
+    ],
+    "Scholarship and Financial Assistance": [
+        ("Scholarship and Financial Assistance - Financial Assistance/Grants-in-Aid", [
+            "financial assistance", "grants-in-aid",
+        ]),
+        ("Scholarship and Financial Assistance - Scholarship Application/Grant", [
+            "scholarship", "iskolarship", "iskolar", "scholar", "scholarship grant",
         ]),
     ],
 }
@@ -735,7 +789,7 @@ FAST_NEGATIVE_WORDS = [
     "mabagal", "matagal", "tagal", "bagal", "katagal", "bobo", "reklamo",
     "galit", "problema", "hassle", "dumi", "madumi", "marumi", "amoy-amoy",
     "kulang", "konti", "hirap", "mahirap", "nahirapan", "nakakainis",
-    "nakakastress", "sakit ng ulo", "kumplikado", "maraming hakbang",
+    "nakakastress", "sakit ng ulo", "kumplikado", "maraming hakbang", "madaming hakbang",
     "palakasan", "may kilala", "paulit-ulit", "nawawalan ng koneksyon",
     "nawalan ng signal", "nakakalito", "nalilito", "walang kwenta",
     "sayang", "huli na", "magulo", "naligaw",
@@ -768,12 +822,23 @@ FAST_NEGATIVE_WORDS = [
     # as SENTIMENT_COLLISION_PHRASES below.
     "sobrang mahal", "napakamahal", "masyadong mahal", "overpriced",
     "too expensive",
+    # Staff-attitude descriptors found missing from both the sentiment and
+    # topic lexicons — "bastos" was the only unambiguous negative attitude
+    # word covered before this, but these are just as common and just as
+    # unambiguous (unlike bare "mabagal"-style descriptors, they only ever
+    # describe a person's demeanor).
+    "suplado", "suplada", "masungit", "sungit", "mayabang",
 ]
 FAST_POSITIVE_WORDS = [
     "maganda", "magandang", "mabilis", "magaling", "mabait", "salamat",
     "masaya", "masayang", "maayos", "ayos naman", "okay naman", "ok naman",
     "walang problema", "walang reklamo", "pantay", "patas", "madali",
     "kadali", "mahusay", "sanay", "stable", "malinaw", "maalaga", "magiliw",
+    # "marunong"/"madunong" are the standard and dialectal (d-for-r, common in
+    # this Bicol-region school's feedback) spellings of "knowledgeable" — a
+    # bare positive here so "hindi marunong"/"hindi madunong" correctly flip
+    # to Negative via the existing negation handling below.
+    "marunong", "madunong",
     "propesyonal", "tulong", "tumulong", "tinulungan",
     "walang abala", "walang hassle", "isang beses lang", "isang hakbang lang",
     "one-stop", "one stop", "patient",
@@ -782,6 +847,11 @@ FAST_POSITIVE_WORDS = [
     "hassle free", "streamlined", "efficient", "smooth", "convenient",
     "fair", "equal", "commend", "professional", "professionally", "professionalism",
     "appreciate", "appreciated",
+    # Common attitude/manner descriptors missing before this fix — only
+    # "mabait" was covered; "magalang" (polite) is just as common and
+    # unambiguous, since (unlike bare "mabagal"-style words) it only ever
+    # describes demeanor.
+    "magalang", "matulungin", "maasikaso",
 ]
 
 # Filler phrases that read as flat/neutral on their own — matched only when

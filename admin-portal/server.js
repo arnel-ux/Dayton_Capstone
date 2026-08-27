@@ -2549,7 +2549,7 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
         }
         
         const recordsQuery = `
-            SELECT s.id, s.respondent_name, s.topic, s.sentiment, s.comments, DATE_FORMAT(s.created_at, '%M %d, %Y') as formatted_date, o.cluster_name
+            SELECT s.id, s.respondent_name, s.topic, s.sentiment, s.comments, DATE_FORMAT(s.created_at, '%M %d, %Y') as formatted_date, o.cluster_name, o.office_name
             FROM survey_responses s JOIN offices o ON s.office_id = o.id ORDER BY o.cluster_name, s.created_at DESC
         `;
         db.query(recordsQuery, (err, results) => {
@@ -2580,7 +2580,7 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                     if (sentimentLower.includes('positive')) sentimentClass = 'bg-sentiment-positive';
                     else if (sentimentLower.includes('negative')) sentimentClass = 'bg-sentiment-negative';
 
-                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', topic: row.topic || 'General', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: row.comments || 'No comments provided.', date: row.formatted_date });
+                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', officeName: row.office_name || 'N/A', topic: row.topic || 'General', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: row.comments || 'No comments provided.', date: row.formatted_date });
                 });
             }
             res.render('survey-records', { recordsByCluster, clusterRatings });
