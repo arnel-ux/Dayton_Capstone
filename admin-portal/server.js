@@ -649,7 +649,15 @@ function analyzeComment(comment, offline = false, officeId = null) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ comment: String(comment), office: officeHint || '' }),
-            signal: AbortSignal.timeout(15000)
+            // Two-stage zero-shot topic classification alone measures ~10-11s
+            // on a comment with no keyword-lexicon hit (see heavy_model.py's
+            // classify_topic), and the GIL-bound model server processes one
+            // request at a time — a second submission queued behind another
+            // can push well past that. 15s was cutting it too close: a
+            // successful-but-slow model server call would get aborted here
+            // and land in analyzeViaPythonScript's much slower disk-reload
+            // fallback instead, doubling the wait for no benefit.
+            signal: AbortSignal.timeout(45000)
         })
             .then((res) => res.ok ? res.json() : Promise.reject(new Error(`Model server responded ${res.status}`)))
             .then((aiResult) => {
@@ -2059,7 +2067,9 @@ async function syncOneSurvey(googleEmail, body) {
 // ==========================================
 // 2. Admin Dashboard Routes
 // ==========================================
-app.get('/dashboard', ensureAdminAuth, noCache, (req, res) => {
+// Shared by /dashboard and /report/dashboard so both render from the same
+// live numbers instead of maintaining two copies of this query pyramid.
+function loadDashboardData(req, callback) {
     // No periodCovered in the querystring at all -> default to the current
     // active period; an explicit "" (All Periods) is a deliberate user choice.
     const hasQueryParam = typeof req.query.periodCovered !== 'undefined';
@@ -2224,7 +2234,7 @@ app.get('/dashboard', ensureAdminAuth, noCache, (req, res) => {
                                         date: r.created_at
                                     }));
 
-                                    res.render('dashboard', {
+                                    callback({
                                         dashboardData: { overallRating: overallAvgScore, overallLevel: interpretation, periodCoveredLabel: selectedPeriod || 'All Periods' },
                                         chartData: chartData, clusterCards: clusterCards, satisfactionRate: overallAvgScore,
                                         totalRespondents: totalRespondents, totalOffices: totalOffices, reportData: reportData,
@@ -2242,6 +2252,14 @@ app.get('/dashboard', ensureAdminAuth, noCache, (req, res) => {
             });
         });
     });
+}
+
+app.get('/dashboard', ensureAdminAuth, noCache, (req, res) => {
+    loadDashboardData(req, (locals) => res.render('dashboard', locals));
+});
+
+app.get('/report/dashboard', ensureAdminAuth, noCache, (req, res) => {
+    loadDashboardData(req, (locals) => res.render('dashboard-report', locals));
 });
 
 app.get('/profile', ensureAdminAuth, noCache, (req, res) => res.render('profile'));

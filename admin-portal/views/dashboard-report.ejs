@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <%- include('layout/header') %>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <style>
+        .report-container {
+            background: #fff;
+            padding: 40px;
+            color: #000;
+            font-family: Arial, sans-serif;
+            max-width: 950px;
+            margin: 0 auto;
+            border: 1px solid #ccc;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #6c9bd2;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .report-header-center { text-align: center; flex-grow: 1; }
+        .report-header-center p { margin: 0; font-size: 14px; }
+        .report-header-center .inst-name { font-weight: bold; font-size: 16px; }
+        .doc-code { font-size: 12px; font-weight: bold; }
+
+        .report-title { text-align: center; font-weight: bold; font-size: 16px; margin: 20px 0 5px; }
+        .sub-title { text-align: center; font-style: italic; font-size: 14px; margin-bottom: 20px; color: #444; }
+
+        .meta-info { font-size: 14px; margin-bottom: 10px; }
+        .meta-info span { display: inline-block; width: 200px; }
+
+        .section-title { font-weight: bold; font-size: 14px; text-transform: uppercase; margin: 28px 0 10px; padding-bottom: 4px; border-bottom: 1px solid #ccc; }
+
+        .report-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 13px; }
+        .report-table th, .report-table td { border: 1px solid #000; padding: 5px 8px; }
+        .report-table th { text-align: center; font-weight: bold; }
+        .header-blue { background-color: #8faadc !important; -webkit-print-color-adjust: exact; }
+        .cluster-row { background-color: #D9D9D9 !important; font-weight: bold; -webkit-print-color-adjust: exact; }
+        .total-row { font-weight: bold; background-color: #f2f2f2 !important; -webkit-print-color-adjust: exact; }
+        .text-center { text-align: center; }
+        .fw-bold { font-weight: bold; }
+
+        .overall-box {
+            display: flex; justify-content: space-between; align-items: center;
+            background: #f8f9fa; border-left: 4px solid #6c9bd2; padding: 14px 18px; margin-bottom: 10px;
+            -webkit-print-color-adjust: exact;
+        }
+        .overall-box .rating { font-size: 26px; font-weight: bold; color: #0a1f44; }
+        .overall-box .level { font-size: 12px; font-weight: bold; text-transform: uppercase; color: #166534; }
+
+        .sentiment-summary { display: flex; gap: 20px; margin-bottom: 15px; font-size: 13px; }
+        .sentiment-summary .pill { padding: 4px 12px; border-radius: 12px; font-weight: bold; -webkit-print-color-adjust: exact; }
+        .pill-pos { background: #dcfce7; color: #166534; }
+        .pill-neu { background: #f1f5f9; color: #334155; }
+        .pill-neg { background: #fee2e2; color: #991b1b; }
+        .badge-sentiment { padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; text-transform: uppercase; -webkit-print-color-adjust: exact; }
+
+        .signature-section { display: flex; justify-content: space-between; margin-top: 40px; font-size: 14px; }
+        .sig-block { width: 45%; }
+        .sig-name { font-weight: bold; margin-top: 30px; margin-bottom: 0; }
+        .sig-title { margin: 0; }
+        .page-footer { margin-top: 50px; font-size: 12px; font-weight: bold; border-top: 2px solid #6c9bd2; padding-top: 5px; display: flex; justify-content: space-between; }
+
+        @media print {
+            .no-print { display: none !important; }
+            .report-container { border: none; box-shadow: none; max-width: 100%; padding: 0; }
+        }
+    </style>
+</head>
+<body>
+<div id="wrapper">
+    <%- include('layout/sidebar') %>
+    <div id="content">
+        <%- include('layout/navbar') %>
+        <div class="container-fluid p-0">
+
+            <div class="card card-custom mb-4 no-print">
+                <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div>
+                        <h6 class="fw-bold mb-1">Dashboard Report</h6>
+                        <p class="text-muted small mb-0">A printable snapshot of the current Dashboard Overview — review below, then download or print.</p>
+                    </div>
+                    <form class="d-flex align-items-end gap-2" method="GET" action="/report/dashboard">
+                        <div>
+                            <label class="form-label text-muted small mb-1">Period Covered</label>
+                            <select class="form-select bg-light" name="periodCovered" onchange="this.form.submit()">
+                                <option value="">All Periods</option>
+                                <% if (typeof periodOptions !== 'undefined') { %>
+                                    <% periodOptions.forEach(function(opt) { %>
+                                        <option value="<%= opt.value %>" <%= selectedPeriod === opt.value ? 'selected' : '' %>><%= opt.label %></option>
+                                    <% }); %>
+                                <% } %>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mb-3 px-4 no-print">
+                <button class="btn btn-danger" onclick="downloadPDF()"><i class="fas fa-file-pdf me-2"></i> Download PDF</button>
+                <button class="btn btn-outline-secondary" onclick="window.print()"><i class="fas fa-print me-2"></i> Print</button>
+            </div>
+
+            <div id="reportContentToExport">
+                <div class="report-container" style="display: block; margin-bottom: 30px;">
+                    <div class="report-header">
+                        <div><img src="/images/cspc-logo.png" alt="CSPC Logo" style="width: 60px; height: 60px;"></div>
+                        <div class="report-header-center">
+                            <p>Republic of the Philippines</p>
+                            <p class="inst-name">CAMARINES SUR POLYTECHNIC COLLEGES</p>
+                            <p>Nabua, Camarines Sur</p>
+                        </div>
+                        <div class="doc-code">CSPC-CQA-CSM-F01</div>
+                    </div>
+
+                    <div class="report-title">DASHBOARD OVERVIEW REPORT</div>
+                    <div class="sub-title">Institution-wide client satisfaction summary</div>
+
+                    <div class="meta-info mt-3">
+                        <div><span>Period Covered:</span> <strong><%= typeof dashboardData !== 'undefined' ? dashboardData.periodCoveredLabel : 'All Periods' %></strong></div>
+                        <div><span>Total Respondents:</span> <strong><%= typeof totalRespondents !== 'undefined' ? totalRespondents : 0 %></strong></div>
+                        <div><span>Registered Offices:</span> <strong><%= typeof totalOffices !== 'undefined' ? totalOffices : 0 %></strong></div>
+                    </div>
+
+                    <!-- Overall Rating -->
+                    <div class="overall-box mt-3">
+                        <div>
+                            <div class="rating"><%= typeof satisfactionRate !== 'undefined' ? satisfactionRate : '0.00' %>%</div>
+                            <div class="level">Overall Institutional Rating</div>
+                        </div>
+                        <div class="level"><%= typeof dashboardData !== 'undefined' ? dashboardData.overallLevel : 'N/A' %></div>
+                    </div>
+
+                    <!-- Cluster Performance -->
+                    <div class="section-title">Cluster Performance</div>
+                    <table class="report-table">
+                        <thead>
+                            <tr class="header-blue">
+                                <th>Cluster</th>
+                                <th style="width:20%;">Respondents</th>
+                                <th style="width:20%;">Satisfaction Rating</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (typeof clusterCards !== 'undefined' && clusterCards.length > 0) { %>
+                                <% clusterCards.forEach(c => { %>
+                                    <tr>
+                                        <td><%= c.name %></td>
+                                        <td class="text-center"><%= c.respondents %></td>
+                                        <td class="text-center"><%= c.rating %>%</td>
+                                    </tr>
+                                <% }) %>
+                            <% } else { %>
+                                <tr><td colspan="3" class="text-center text-muted py-3">No cluster data available.</td></tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+
+                    <!-- Sentiment Overview -->
+                    <div class="section-title">Sentiment Overview</div>
+                    <div class="sentiment-summary">
+                        <span class="pill pill-pos">Positive: <%= sentimentBreakdown.Positive %></span>
+                        <span class="pill pill-neu">Neutral: <%= sentimentBreakdown.Neutral %></span>
+                        <span class="pill pill-neg">Negative: <%= sentimentBreakdown.Negative %></span>
+                        <span>Total Analyzed: <strong><%= sentimentTotal %></strong></span>
+                    </div>
+
+                    <!-- Top Feedback Topics -->
+                    <div class="section-title">Top Feedback Topics</div>
+                    <table class="report-table">
+                        <thead>
+                            <tr class="header-blue">
+                                <th style="width:10%;">No.</th>
+                                <th>Topic</th>
+                                <th style="width:20%;">Mentions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (typeof topTopics !== 'undefined' && topTopics.length > 0) { %>
+                                <% topTopics.forEach((t, i) => { %>
+                                    <tr>
+                                        <td class="text-center"><%= i + 1 %></td>
+                                        <td><%= t.topic %></td>
+                                        <td class="text-center"><%= t.count %></td>
+                                    </tr>
+                                <% }) %>
+                            <% } else { %>
+                                <tr><td colspan="3" class="text-center text-muted py-3">No comment topics recorded yet for this period.</td></tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+
+                    <!-- Top Performing Offices -->
+                    <div class="section-title">Top Performing Offices</div>
+                    <table class="report-table">
+                        <thead>
+                            <tr class="header-blue">
+                                <th style="width:10%;">No.</th>
+                                <th>Office</th>
+                                <th>Cluster</th>
+                                <th style="width:15%;">Respondents</th>
+                                <th style="width:15%;">Rating</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (typeof topOffices !== 'undefined' && topOffices.length > 0) { %>
+                                <% topOffices.forEach((o, i) => { %>
+                                    <tr>
+                                        <td class="text-center"><%= i + 1 %></td>
+                                        <td><%= o.name %></td>
+                                        <td><%= o.cluster %></td>
+                                        <td class="text-center"><%= o.respondents %></td>
+                                        <td class="text-center"><%= o.score.toFixed(2) %>%</td>
+                                    </tr>
+                                <% }) %>
+                            <% } else { %>
+                                <tr><td colspan="5" class="text-center text-muted py-3">Not enough data yet.</td></tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+
+                    <!-- Offices Needing Attention -->
+                    <div class="section-title">Offices Needing Attention</div>
+                    <table class="report-table">
+                        <thead>
+                            <tr class="header-blue">
+                                <th style="width:10%;">No.</th>
+                                <th>Office</th>
+                                <th>Cluster</th>
+                                <th style="width:15%;">Respondents</th>
+                                <th style="width:15%;">Rating</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (typeof bottomOffices !== 'undefined' && bottomOffices.length > 0) { %>
+                                <% bottomOffices.forEach((o, i) => { %>
+                                    <tr>
+                                        <td class="text-center"><%= i + 1 %></td>
+                                        <td><%= o.name %></td>
+                                        <td><%= o.cluster %></td>
+                                        <td class="text-center"><%= o.respondents %></td>
+                                        <td class="text-center"><%= o.score.toFixed(2) %>%</td>
+                                    </tr>
+                                <% }) %>
+                            <% } else { %>
+                                <tr><td colspan="5" class="text-center text-muted py-3">Not enough data yet.</td></tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+
+                    <!-- Recent Submissions -->
+                    <div class="section-title">Recent Submissions</div>
+                    <table class="report-table" style="margin-bottom: 40px;">
+                        <thead>
+                            <tr class="header-blue">
+                                <th style="width:10%;">No.</th>
+                                <th>Office</th>
+                                <th>Topic</th>
+                                <th style="width:15%;">Sentiment</th>
+                                <th style="width:15%;">Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (typeof recentSubmissions !== 'undefined' && recentSubmissions.length > 0) { %>
+                                <% recentSubmissions.forEach((r, i) => {
+                                    let badgeClass = 'pill-neu';
+                                    if (r.sentiment === 'Positive') badgeClass = 'pill-pos';
+                                    if (r.sentiment === 'Negative') badgeClass = 'pill-neg';
+                                %>
+                                    <tr>
+                                        <td class="text-center"><%= i + 1 %></td>
+                                        <td><%= r.officeName %></td>
+                                        <td><%= r.topic %></td>
+                                        <td class="text-center"><span class="badge-sentiment <%= badgeClass %>"><%= r.sentiment %></span></td>
+                                        <td class="text-center"><%= new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) %></td>
+                                    </tr>
+                                <% }) %>
+                            <% } else { %>
+                                <tr><td colspan="5" class="text-center text-muted py-3">No submissions recorded yet for this period.</td></tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+
+                    <div class="signature-section">
+                        <div class="sig-block">
+                            <div>Prepared and Certified by:</div>
+                            <p class="sig-name">DR. LAILANI R. MEDINA</p>
+                            <p class="sig-title">Director, Corporate Quality Assurance (CQA)</p>
+                        </div>
+                        <div class="sig-block">
+                            <div>Noted and Approved by:</div>
+                            <p class="sig-name">DR. AMADO A. OLIVA JR.</p>
+                            <p class="sig-title">College President</p>
+                        </div>
+                    </div>
+
+                    <div class="page-footer">
+                        <div>Effectivity: June 2024</div>
+                        <div>Rev. 4</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<%- include('layout/footer') %>
+
+<script>
+    function downloadPDF() {
+        const element = document.getElementById('reportContentToExport');
+        const opt = {
+            margin:       0.2,
+            filename:     'Dashboard_Report.pdf',
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+        };
+        html2pdf().set(opt).from(element).save();
+    }
+</script>
+</body>
+</html>

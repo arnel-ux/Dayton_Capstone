@@ -133,7 +133,7 @@
         .rank-score.bad { background: #fee2e2; color: #b91c1c; }
 
         /* --- REPORT MODAL INTERFACE STYLES --- */
-        #reportModal {
+        #reportModal, #dashboardReportModal {
             display: none;
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.7); z-index: 9999; overflow-y: auto; padding: 20px;
@@ -175,7 +175,9 @@
 
         @media print {
             #wrapper, .modal-controls { display: none !important; }
-            #reportModal { display: block !important; position: absolute; background: white; padding: 0; left: 0; top: 0; width: 100%; }
+            /* Only the modal actually opened (inline display:block from JS) prints —
+               this rule repositions it for print without forcing the other one open. */
+            #reportModal, #dashboardReportModal { position: absolute; background: white; padding: 0; left: 0; top: 0; width: 100%; }
             .modal-report-container { margin: 0; box-shadow: none; max-width: 100%; padding: 0; }
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
@@ -196,9 +198,15 @@
                     <h4 class="page-heading fw-bold text-dark mb-0">Dashboard Overview</h4>
                     <p class="text-muted small mb-0">Institution-wide client satisfaction summary</p>
                 </div>
-                <button onclick="openReportModal()" class="btn btn-primary shadow-sm px-4" title="Generate a printable institutional report">
-                    <i class="fas fa-file-invoice me-2"></i> Generate Report
-                </button>
+                <div class="dropdown">
+                    <button class="btn btn-primary shadow-sm px-4 dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Generate a printable report">
+                        <i class="fas fa-file-invoice me-2"></i> Generate Report
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <li><a class="dropdown-item" href="#" onclick="openReportModal(); return false;"><i class="fas fa-file-alt me-2 text-muted"></i> Overall Report</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="openDashboardReportModal(); return false;"><i class="fas fa-chart-line me-2 text-muted"></i> Dashboard Report</a></li>
+                    </ul>
+                </div>
             </div>
 
             <form action="/dashboard" method="GET" class="filter-bar d-flex flex-wrap align-items-end gap-3 mb-4 p-3">
@@ -492,6 +500,195 @@
     </div>
 </div>
 
+<div id="dashboardReportModal">
+    <div class="modal-report-container shadow-lg">
+        <div class="modal-controls">
+            <button onclick="downloadDashboardReportPDF()" class="btn btn-danger btn-sm px-3"><i class="fas fa-file-pdf me-1"></i> Export PDF</button>
+            <button onclick="window.print()" class="btn btn-secondary btn-sm px-3"><i class="fas fa-print me-1"></i> Print</button>
+            <button onclick="closeDashboardReportModal()" class="btn btn-dark btn-sm px-3">Close</button>
+        </div>
+
+        <div id="printableDashboardReportDocument">
+            <div class="header-container">
+                <img src="/images/cspc-logo.png" alt="CSPC Logo" class="logo-img">
+                <div class="header-text">
+                    <p class="republic">Republic of the Philippines</p>
+                    <p class="college-name">Camarines Sur Polytechnic Colleges</p>
+                    <p class="address">Nabua, Camarines Sur</p>
+                </div>
+            </div>
+            <div class="header-line">
+                <span class="form-code">CSPC-CQA-CSM-F01</span>
+            </div>
+
+            <h5 class="print-title">Dashboard Overview Report</h5>
+            <p class="print-period">Period Covered: <%= typeof dashboardData !== 'undefined' ? dashboardData.periodCoveredLabel : 'All Periods' %></p>
+
+            <p style="font-size: 13px; margin: -10px 0 15px; text-align: center; color: #444;">
+                Total Respondents: <strong><%= typeof totalRespondents !== 'undefined' ? totalRespondents : 0 %></strong>
+                &nbsp;|&nbsp; Registered Offices: <strong><%= typeof totalOffices !== 'undefined' ? totalOffices : 0 %></strong>
+                &nbsp;|&nbsp; Overall Rating: <strong><%= typeof satisfactionRate !== 'undefined' ? satisfactionRate : '0.00' %>%</strong>
+                (<%= typeof dashboardData !== 'undefined' ? dashboardData.overallLevel : 'N/A' %>)
+            </p>
+
+            <h6 class="fw-bold text-uppercase small" style="border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 22px;">Cluster Performance</h6>
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th>Cluster</th>
+                        <th class="score-col">Respondents</th>
+                        <th class="score-col">Satisfaction Rating</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (typeof clusterCards !== 'undefined' && clusterCards.length > 0) { %>
+                        <% clusterCards.forEach(c => { %>
+                            <tr>
+                                <td><%= c.name %></td>
+                                <td class="text-center"><%= c.respondents %></td>
+                                <td class="text-center"><%= c.rating %>%</td>
+                            </tr>
+                        <% }) %>
+                    <% } else { %>
+                        <tr><td colspan="3" class="text-center py-3 text-muted">No cluster data available.</td></tr>
+                    <% } %>
+                </tbody>
+            </table>
+
+            <h6 class="fw-bold text-uppercase small" style="border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 22px;">Sentiment Overview</h6>
+            <p style="font-size: 13px;">
+                <span class="sentiment-badge bg-sentiment-positive">Positive <%= sentimentBreakdown.Positive %></span>
+                &nbsp;
+                <span class="sentiment-badge bg-sentiment-neutral">Neutral <%= sentimentBreakdown.Neutral %></span>
+                &nbsp;
+                <span class="sentiment-badge bg-sentiment-negative">Negative <%= sentimentBreakdown.Negative %></span>
+                &nbsp; &nbsp; Total Analyzed: <strong><%= sentimentTotal %></strong>
+            </p>
+
+            <h6 class="fw-bold text-uppercase small" style="border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 22px;">Top Feedback Topics</h6>
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th class="num-col">No.</th>
+                        <th>Topic</th>
+                        <th class="score-col">Mentions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (typeof topTopics !== 'undefined' && topTopics.length > 0) { %>
+                        <% topTopics.forEach((t, i) => { %>
+                            <tr>
+                                <td class="num-col"><%= i + 1 %></td>
+                                <td><%= t.topic %></td>
+                                <td class="text-center"><%= t.count %></td>
+                            </tr>
+                        <% }) %>
+                    <% } else { %>
+                        <tr><td colspan="3" class="text-center py-3 text-muted">No comment topics recorded yet for this period.</td></tr>
+                    <% } %>
+                </tbody>
+            </table>
+
+            <h6 class="fw-bold text-uppercase small" style="border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 22px;">Top Performing Offices</h6>
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th class="num-col">No.</th>
+                        <th>Office</th>
+                        <th>Cluster</th>
+                        <th class="score-col">Respondents</th>
+                        <th class="score-col">Rating</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (typeof topOffices !== 'undefined' && topOffices.length > 0) { %>
+                        <% topOffices.forEach((o, i) => { %>
+                            <tr>
+                                <td class="num-col"><%= i + 1 %></td>
+                                <td><%= o.name %></td>
+                                <td><%= o.cluster %></td>
+                                <td class="text-center"><%= o.respondents %></td>
+                                <td class="text-center"><%= o.score.toFixed(2) %>%</td>
+                            </tr>
+                        <% }) %>
+                    <% } else { %>
+                        <tr><td colspan="5" class="text-center py-3 text-muted">Not enough data yet.</td></tr>
+                    <% } %>
+                </tbody>
+            </table>
+
+            <h6 class="fw-bold text-uppercase small" style="border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 22px;">Offices Needing Attention</h6>
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th class="num-col">No.</th>
+                        <th>Office</th>
+                        <th>Cluster</th>
+                        <th class="score-col">Respondents</th>
+                        <th class="score-col">Rating</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (typeof bottomOffices !== 'undefined' && bottomOffices.length > 0) { %>
+                        <% bottomOffices.forEach((o, i) => { %>
+                            <tr>
+                                <td class="num-col"><%= i + 1 %></td>
+                                <td><%= o.name %></td>
+                                <td><%= o.cluster %></td>
+                                <td class="text-center"><%= o.respondents %></td>
+                                <td class="text-center"><%= o.score.toFixed(2) %>%</td>
+                            </tr>
+                        <% }) %>
+                    <% } else { %>
+                        <tr><td colspan="5" class="text-center py-3 text-muted">Not enough data yet.</td></tr>
+                    <% } %>
+                </tbody>
+            </table>
+
+            <h6 class="fw-bold text-uppercase small" style="border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 22px;">Recent Submissions</h6>
+            <table class="print-table" style="margin-bottom: 40px;">
+                <thead>
+                    <tr>
+                        <th class="num-col">No.</th>
+                        <th>Office</th>
+                        <th>Topic</th>
+                        <th class="score-col">Sentiment</th>
+                        <th class="score-col">Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (typeof recentSubmissions !== 'undefined' && recentSubmissions.length > 0) { %>
+                        <% recentSubmissions.forEach((r, i) => { %>
+                            <tr>
+                                <td class="num-col"><%= i + 1 %></td>
+                                <td><%= r.officeName %></td>
+                                <td><%= r.topic %></td>
+                                <td class="text-center"><span class="sentiment-badge bg-sentiment-<%= r.sentiment.toLowerCase() %>"><%= r.sentiment %></span></td>
+                                <td class="text-center"><%= new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) %></td>
+                            </tr>
+                        <% }) %>
+                    <% } else { %>
+                        <tr><td colspan="5" class="text-center py-3 text-muted">No submissions recorded yet for this period.</td></tr>
+                    <% } %>
+                </tbody>
+            </table>
+
+            <div class="print-footer">
+                <div class="sign-block">
+                    <p class="mb-0 text-muted">Prepared and Certified by:</p>
+                    <p class="sign-name">DR. LAILANI R. MEDINA</p>
+                    <p class="mb-0 text-secondary small">Director, Corporate Quality Assurance (CQA)</p>
+                </div>
+                <div class="sign-block text-end">
+                    <p class="mb-0 text-muted">Noted and Approved by:</p>
+                    <p class="sign-name">DR. AMADO A. OLIVA JR.</p>
+                    <p class="mb-0 text-secondary small">College President</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <%- include('layout/footer') %>
 
 <script>
@@ -630,6 +827,28 @@ function downloadPDF() {
     const opt = {
         margin:       [0.5, 0.5, 0.5, 0.5],
         filename:     'CSPC-CSM-Institutional-Report.pdf',
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+}
+
+function openDashboardReportModal() {
+    document.getElementById('dashboardReportModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeDashboardReportModal() {
+    document.getElementById('dashboardReportModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+function downloadDashboardReportPDF() {
+    const element = document.getElementById('printableDashboardReportDocument');
+    const opt = {
+        margin:       [0.5, 0.5, 0.5, 0.5],
+        filename:     'CSPC-Dashboard-Report.pdf',
         image:        { type: 'jpeg', quality: 0.98 },
         html2canvas:  { scale: 2, useCORS: true, logging: false },
         jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
