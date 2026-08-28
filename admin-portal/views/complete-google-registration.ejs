@@ -160,7 +160,11 @@
         <div class="card-custom">
 
             <div class="text-center mb-3">
-                <img src="/images/cspc-logo.png" alt="CSPC Logo" style="width: 55px; height: auto;" class="mb-2">
+                <% if (typeof photo !== 'undefined' && photo) { %>
+                    <img src="<%= photo %>" alt="Google profile photo" referrerpolicy="no-referrer" style="width: 55px; height: 55px; border-radius: 50%; object-fit: cover;" class="mb-2">
+                <% } else { %>
+                    <img src="/images/cspc-logo.png" alt="CSPC Logo" style="width: 55px; height: auto;" class="mb-2">
+                <% } %>
                 <h4 class="fw-bold text-dark mb-0">Welcome!</h4>
                 <p class="text-muted text-xsmall mb-0">We found your Google account. Set a password to finish creating your account.</p>
             </div>

@@ -233,7 +233,8 @@ passport.use(new GoogleStrategy({
 }, (accessToken, refreshToken, profile, done) => {
     const email = profile.emails && profile.emails[0] ? profile.emails[0].value : null;
     if (!email) return done(null, false);
-    return done(null, { email, name: profile.displayName });
+    const photo = profile.photos && profile.photos[0] ? profile.photos[0].value : null;
+    return done(null, { email, name: profile.displayName, photo });
 }));
 
 // Resolves the signed-in client's email from either Google OAuth (passport) or the
@@ -1208,6 +1209,11 @@ db.query(createClustersTableQuery, (err) => {
                             // existed (Google sign-in used to log clients in directly, no local
                             // password) — add it now so existing rows can be upgraded in place.
                             db.query("ALTER TABLE client_accounts ADD COLUMN password VARCHAR(255) NULL", () => {});
+                            // Captured from the Google account's own profile photo on every Google
+                            // sign-in (see /auth/google/callback and /complete-google-registration) —
+                            // there's nothing to capture for the plain email/password login path, so
+                            // this simply keeps whichever photo was last seen from Google.
+                            db.query("ALTER TABLE client_accounts ADD COLUMN google_photo_url VARCHAR(500) NULL", () => {});
 
                             // Backfill: clients who submitted surveys before client_accounts existed
                             // have no row here, so My Profile/autofill show "Not set yet" forever.
@@ -1229,33 +1235,15 @@ db.query(createClustersTableQuery, (err) => {
                                 else if (backfillResult.affectedRows > 0) console.log(`✅ Backfilled ${backfillResult.affectedRows} client_accounts row(s) from client_profiles.`);
                             });
 
-                            // Second pass: accounts that already existed (e.g. created at
-                            // registration, before any survey was taken) but still have NULL
-                            // region/age/gender because the old upsert never wrote those on an
-                            // UPDATE. Fill only the NULL columns from that email's most recent
-                            // client_profiles submission — never overwrites an already-set value.
-                            const backfillNullDemographicsQuery = `
-                                UPDATE client_accounts ca
-                                INNER JOIN (
-                                    SELECT cp.email, cp.region, cp.age, cp.gender
-                                    FROM client_profiles cp
-                                    INNER JOIN (
-                                        SELECT email, MAX(id) AS max_id
-                                        FROM client_profiles
-                                        WHERE email IS NOT NULL AND email <> ''
-                                        GROUP BY email
-                                    ) latest ON cp.id = latest.max_id
-                                ) cp ON cp.email = ca.email
-                                SET
-                                    ca.region = COALESCE(ca.region, cp.region),
-                                    ca.age = COALESCE(ca.age, cp.age),
-                                    ca.gender = COALESCE(ca.gender, cp.gender)
-                                WHERE ca.region IS NULL OR ca.age IS NULL OR ca.gender IS NULL
-                            `;
-                            db.query(backfillNullDemographicsQuery, (fillErr, fillResult) => {
-                                if (fillErr) console.error("❌ Error filling NULL client_accounts demographics:", fillErr);
-                                else if (fillResult.affectedRows > 0) console.log(`✅ Filled demographics for ${fillResult.affectedRows} existing client_accounts row(s).`);
-                            });
+                            // NOTE: a second-pass "fill any still-NULL region/age/gender from this
+                            // email's most recent client_profiles row" migration used to run here on
+                            // EVERY server startup (not just once). Removed: it kept silently stamping
+                            // a brand-new account's demographics from old/unrelated client_profiles
+                            // rows (e.g. a stale anonymous test submission under the same email) every
+                            // time the server restarted, even for accounts that had never submitted a
+                            // survey under this account system yet. Region/age/gender are now locked
+                            // in exactly once, at that account's own first real submission — see
+                            // upsertAccountQuery in /submit-survey and /sync-surveys — and nowhere else.
                         });
                     }
                 });
@@ -1598,6 +1586,7 @@ app.get('/auth/google/callback',
     (req, res) => {
         const email = req.user && req.user.email;
         const name = req.user && req.user.name;
+        const photo = req.user && req.user.photo;
 
         if (!email) {
             return req.logout(() => res.redirect('/login?error=' + encodeURIComponent('Google sign-in failed. Please try again.')));
@@ -1614,10 +1603,15 @@ app.get('/auth/google/callback',
                 const existingAccount = rows && rows.length > 0 ? rows[0] : null;
                 if (existingAccount && existingAccount.password) {
                     req.session.clientEmail = existingAccount.email;
+                    // Refresh the stored photo on every Google sign-in (Google account photos can
+                    // change) — fire-and-forget, doesn't block the redirect.
+                    if (photo) {
+                        db.query('UPDATE client_accounts SET google_photo_url = ? WHERE email = ?', [photo, existingAccount.email], () => {});
+                    }
                     return res.redirect('/client-survey?loggedin=1');
                 }
 
-                req.session.pendingGoogleUser = { email, name };
+                req.session.pendingGoogleUser = { email, name, photo };
                 return res.redirect('/complete-google-registration');
             });
         });
@@ -1629,7 +1623,8 @@ app.get('/complete-google-registration', (req, res) => {
     if (!pending) return res.redirect('/login');
     res.render('complete-google-registration', {
         name: pending.name || '',
-        email: pending.email
+        email: pending.email,
+        photo: pending.photo || null
     });
 });
 
@@ -1649,10 +1644,10 @@ app.post('/complete-google-registration', async (req, res) => {
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
         db.query(
-            `INSERT INTO client_accounts (email, respondent_name, password)
-             VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE respondent_name = VALUES(respondent_name), password = VALUES(password)`,
-            [pending.email, pending.name || null, hashedPassword],
+            `INSERT INTO client_accounts (email, respondent_name, password, google_photo_url)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE respondent_name = VALUES(respondent_name), password = VALUES(password), google_photo_url = VALUES(google_photo_url)`,
+            [pending.email, pending.name || null, hashedPassword, pending.photo || null],
             (err) => {
                 if (err) {
                     return res.redirect('/complete-google-registration?error=' + encodeURIComponent('Could not save your account. Please try again.'));
@@ -1758,11 +1753,19 @@ app.get('/client-survey', ensureClientAuth, noCache, (req, res) => {
 // not just be hidden in the UI. Only respondent_name can be changed.
 app.get('/api/client-profile', ensureClientAuth, noCache, (req, res) => {
     db.query(
-        'SELECT email, respondent_name, region, age, gender FROM client_accounts WHERE email = ? LIMIT 1',
+        'SELECT email, respondent_name, region, age, gender, google_photo_url FROM client_accounts WHERE email = ? LIMIT 1',
         [req.clientEmail],
         (err, rows) => {
             if (err) return res.status(500).json({ success: false, message: 'Server error loading your profile.' });
-            const profile = (rows && rows.length > 0) ? rows[0] : { email: req.clientEmail, respondent_name: null, region: null, age: null, gender: null };
+            const row = (rows && rows.length > 0) ? rows[0] : { email: req.clientEmail, respondent_name: null, region: null, age: null, gender: null, google_photo_url: null };
+            const profile = {
+                email: row.email,
+                respondent_name: row.respondent_name,
+                region: row.region,
+                age: row.age,
+                gender: row.gender,
+                photo_url: row.google_photo_url || null
+            };
             res.json({ success: true, profile });
         }
     );
