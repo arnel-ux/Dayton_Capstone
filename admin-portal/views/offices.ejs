@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <%- include('layout/header') %>
+    <%- include('layout/header', { forceLightMode: true }) %>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <style>
@@ -27,6 +27,14 @@
             opacity: 0.55;
             background-color: #f8fafc;
         }
+
+        /* Archived rows/clusters are hidden by default via CSS (not JS-on-load)
+           so there's no flash of the full unfiltered table before script runs —
+           the "Show Archived" toggle reveals them by adding body.show-archived. */
+        tr.office-row-archived { display: none; }
+        tbody.cluster-row-archived { display: none; }
+        body.show-archived tr.office-row-archived { display: table-row; }
+        body.show-archived tbody.cluster-row-archived { display: table-row-group; }
         .badge-archived {
             background-color: #fee2e2;
             color: #b91c1c;
@@ -271,6 +279,28 @@
                                 </tbody>
                             <% } %>
                         </table>
+                        <script>
+                            // Runs immediately as this element parses (no defer) so a full MPA
+                            // page load restores each cluster's collapsed state before first
+                            // paint, instead of flashing the fully-expanded table open and then
+                            // snapping shut once DOMContentLoaded fires (that flash was the
+                            // navigation "glitch" into this page).
+                            (function () {
+                                try {
+                                    var collapsedState = JSON.parse(localStorage.getItem('officeClusterCollapsed')) || {};
+                                } catch (e) {
+                                    var collapsedState = {};
+                                }
+                                document.querySelectorAll('.cluster-toggle').forEach(function (toggle) {
+                                    var clusterName = toggle.getAttribute('data-cluster');
+                                    if (!collapsedState[clusterName]) return;
+                                    var target = document.getElementById(toggle.getAttribute('data-target'));
+                                    if (!target) return;
+                                    target.style.display = 'none';
+                                    toggle.classList.add('collapsed');
+                                });
+                            })();
+                        </script>
                     </div>
                 </div>
             </div>
@@ -529,12 +559,9 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // Archived offices/clusters ay tinatago by default; naka-toggle lang para makita.
-        const archivedRows = document.querySelectorAll('.office-row-archived');
-        archivedRows.forEach(row => row.style.display = 'none');
-
-        const archivedClusters = document.querySelectorAll('.cluster-row-archived');
-        archivedClusters.forEach(row => row.style.display = 'none');
+        // Archived offices/clusters are hidden by default via the CSS in <head>
+        // (no flash on load) — toggling this body class is all that's needed
+        // to reveal/hide them.
 
         // Confirm before archiving an office (modern modal instead of window.confirm)
         document.querySelectorAll('.archive-office-form').forEach(form => {
@@ -587,17 +614,14 @@
         const showArchivedToggle = document.getElementById('showArchivedToggle');
         if (showArchivedToggle) {
             showArchivedToggle.addEventListener('change', function () {
-                archivedRows.forEach(row => {
-                    row.style.display = this.checked ? '' : 'none';
-                });
-                archivedClusters.forEach(row => {
-                    row.style.display = this.checked ? '' : 'none';
-                });
+                document.body.classList.toggle('show-archived', this.checked);
             });
         }
 
         // I-restore ang naka-save na collapsed state ng bawat cluster (per cluster name, hindi index)
         // para hindi na mag-reset sa "open" kapag nag-refresh o lumipat ng page.
+        // (Initial state is already applied synchronously right after the table
+        // markup above — this just wires up the click handler + persistence.)
         const COLLAPSE_KEY = 'officeClusterCollapsed';
         function loadCollapsedState() {
             try {
@@ -618,11 +642,6 @@
             const clusterName = toggle.getAttribute('data-cluster');
             const target = document.getElementById(targetId);
             if (!target) return;
-
-            if (collapsedState[clusterName]) {
-                target.style.display = 'none';
-                toggle.classList.add('collapsed');
-            }
 
             toggle.addEventListener('click', function () {
                 if (target.style.display === 'none') {

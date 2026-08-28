@@ -96,49 +96,73 @@ html[data-bs-theme="dark"] .form-control {
     border-color: var(--border-color);
 }
 
-/* --- Sidebar --- */
-#wrapper { display: flex; width: 100%; align-items: stretch; }
+/* --- App shell ---
+   #wrapper owns one fixed viewport-height box; #sidebar and #content are its
+   two panes and #content is the ONLY one that scrolls. This replaces the
+   previous position:sticky sidebar, which was silently unreliable: body's
+   `overflow-x: hidden` computes (per spec) to `overflow: hidden auto`,
+   making body itself a scroll-container-establishing ancestor even though
+   it never visibly scrolled — which is enough to make it (rather than the
+   real viewport) the sticky sidebar's containing block, so "stuck"
+   positioning could disagree with what was actually being scrolled. Giving
+   #wrapper an explicit height + overflow:hidden and letting #content scroll
+   internally sidesteps that whole class of bug and guarantees exactly one
+   scrollbar, ever.
+
+   Sidebar link colors/hover/active/collapse states live entirely in
+   layout/sidebar.ejs's own <style> block now — this file only owns the
+   shell's structural geometry (width, height, background, stacking), so
+   there is a single place that decides what a nav link looks like. */
+#wrapper {
+    display: flex;
+    width: 100%;
+    align-items: stretch;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+}
 #sidebar {
     min-width: var(--sidebar-width);
     max-width: var(--sidebar-width);
+    flex-shrink: 0;
     background: var(--sidebar-bg);
     color: var(--sidebar-text);
-    transition: all 0.3s;
-    height: 100vh;
-    position: sticky;
-    top: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     z-index: 1000;
 }
 #sidebar.active { margin-left: calc(var(--sidebar-width) * -1); }
-#sidebar .sidebar-header { padding: 20px; background: rgba(0,0,0,0.1); border-bottom: 1px solid rgba(255,255,255,0.05); }
-#sidebar ul.components { padding: 20px 0; }
-#sidebar ul li a {
-    padding: 12px 20px;
-    font-size: 1rem;
-    display: block;
-    color: var(--sidebar-text);
-    text-decoration: none;
-    transition: 0.2s;
-}
-#sidebar ul li a:hover, #sidebar ul li.active > a {
-    color: #fff;
-    background: rgba(255,255,255,0.1);
-    border-left: 4px solid var(--accent);
-}
-#sidebar ul li a i { margin-right: 12px; width: 20px; text-align: center; }
 
 /* --- Content & Navbar --- */
 #content {
     width: 100%;
+    height: 100%;
+    min-width: 0;
     padding: 20px;
-    min-height: 100vh;
-    transition: margin 0.3s ease, opacity 0.2s ease, transform 0.2s ease;
-    animation: pageFadeIn 0.35s ease;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+    transition: margin 0.3s ease, opacity 0.18s ease-out, transform 0.18s ease-out;
+    animation: pageFadeIn 0.3s ease-out;
 }
-#content.page-fade-out { opacity: 0; transform: translateY(8px); }
+/* Matches the 180ms setTimeout in main.js exactly, so the outgoing page never
+   gets cut off mid-transition (a shorter JS delay than this duration is what
+   produced the visible "jump" when navigating between pages).
+   will-change lives ONLY on this transient class, not on #content itself:
+   `will-change: transform` makes an element behave as if it had a transform,
+   which creates a new containing block for any position:fixed descendant —
+   and Bootstrap modals (like #adminLogsModal, rendered inside #content via
+   the navbar partial) use position:fixed. A permanent will-change on #content
+   was hijacking that, so modals opened clipped/mispositioned inside the
+   scrolling #content box instead of the viewport, while the backdrop (which
+   Bootstrap appends straight to <body>) still covered the full screen —
+   looking like a stuck dark screen the modal couldn't be clicked through. */
+#content.page-fade-out { opacity: 0; transform: translateY(8px); will-change: opacity, transform; }
 
 @keyframes pageFadeIn {
-    from { opacity: 0; transform: translateY(10px); }
+    from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
 }
 .top-navbar {
@@ -258,8 +282,34 @@ html[data-bs-theme="dark"] .form-control {
 
 /* Mobile */
 @media (max-width: 768px) {
-    #sidebar { margin-left: calc(var(--sidebar-width) * -1); position: fixed; }
-    #sidebar.active { margin-left: 0; }
+    /* Off-canvas drawer: fixed escapes #wrapper's overflow:hidden (no
+       transform/filter on any ancestor, so fixed positioning isn't
+       reclipped), and top/height are set explicitly since a fixed element
+       no longer participates in #wrapper's flex sizing. */
+    /* transition lives in layout/sidebar.ejs (one authoritative declaration
+       covering min-width/max-width for desktop collapse AND margin-left for
+       this drawer) so there's no cross-file cascade tie to resolve. */
+    #sidebar {
+        margin-left: calc(var(--sidebar-width) * -1);
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        height: 100dvh;
+    }
+    #sidebar.active { margin-left: 0; box-shadow: 8px 0 24px rgba(0, 0, 0, 0.25); }
+
+    /* Dim/overlay behind the drawer, click to close (wired in main.js) */
+    #sidebar-overlay {
+        display: none;
+        position: fixed; inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        z-index: 999;
+    }
+    #sidebar-overlay.active { display: block; animation: overlayIn 0.2s ease-out; }
+    @keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
+
+    body.sidebar-open { overflow: hidden; }
 }
 /* --- Cluster Report Accordion Styles --- */
 .report-section {
@@ -366,3 +416,12 @@ html[data-bs-theme="dark"] .form-control {
 /* Archived record styling shared across management pages */
 .archived-row { opacity: 0.55; background-color: #f8fafc; }
 .badge-archived { background-color: #fee2e2; color: #b91c1c; font-weight: 600; font-size: 0.7rem; letter-spacing: 0.5px; }
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+}

@@ -1,23 +1,45 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <%- include('layout/header') %>
+    <%- include('layout/header', { forceLightMode: true }) %>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    
+
     <style>
+        /* ============================================================
+           1. DESIGN TOKENS
+           ============================================================ */
         :root {
             --primary-gradient: linear-gradient(135deg, #0a1f44 0%, #12305c 100%);
             --bg-body: #f4f6fb;
             --border-soft: rgba(15, 23, 42, 0.06);
+            --border-soft-strong: rgba(15, 23, 42, 0.1);
             --text-dark: #0f172a;
             --text-muted: #64748b;
+            --text-faint: #94a3b8;
             --card-bg: #ffffff;
+
+            --navy-900: #0a1f44;
+            --navy-800: #0e2a5e;
+            --navy-700: #12305c;
+            --gold-500: #f4b400;
+            --gold-400: #ffc72c;
+
+            --radius-lg: 18px;
+            --radius-md: 14px;
+            --radius-sm: 10px;
+
+            --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.03);
+            --shadow-card-hover: 0 10px 24px -8px rgba(15, 23, 42, 0.16);
+            --shadow-hero: 0 24px 48px -16px rgba(10, 31, 68, 0.4), 0 2px 8px rgba(10, 31, 68, 0.2);
+
+            --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         html[data-bs-theme="dark"] {
             --bg-body: #0b1526;
             --border-soft: rgba(255, 255, 255, 0.08);
+            --border-soft-strong: rgba(255, 255, 255, 0.14);
             --text-dark: #e2e8f0;
             --text-muted: #94a3b8;
             --card-bg: #141d30;
@@ -28,38 +50,138 @@
         html[data-bs-theme="dark"] .stat-card,
         html[data-bs-theme="dark"] .cluster-mini-card,
         html[data-bs-theme="dark"] .chart-container-main,
-        html[data-bs-theme="dark"] .filter-bar,
+        html[data-bs-theme="dark"] .filter-bar-v2,
+        html[data-bs-theme="dark"] .side-panel-card,
+        html[data-bs-theme="dark"] .insight-chip,
         html[data-bs-theme="dark"] .modal-report-container {
             background: var(--card-bg);
         }
         html[data-bs-theme="dark"] .form-select { background-color: var(--card-bg); color: var(--text-dark); }
         html[data-bs-theme="dark"] .badge.bg-light { background-color: #1e293b !important; color: var(--text-muted) !important; }
 
-        .page-heading { letter-spacing: -0.02em; }
-
-        /* Modern Header Card */
-        .overall-header-card {
-            background: linear-gradient(135deg, #0a1f44 0%, #12305c 100%);
-            color: white; border-radius: 16px; position: relative;
-            box-shadow: 0 8px 24px -4px rgba(10, 31, 68, 0.35);
-            overflow: hidden;
+        /* ============================================================
+           2. PAGE HEADER
+           ============================================================ */
+        .dash-toolbar {
+            padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--border-soft);
         }
-        .overall-header-card::after {
+
+        .dash-eyebrow {
+            font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+            color: var(--gold-500); margin: 0 0 6px;
+        }
+        .dash-title { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.03em; color: var(--text-dark); margin: 0; }
+        .dash-subtitle { color: var(--text-muted); font-size: 0.92rem; margin: 4px 0 0; max-width: 46ch; }
+
+        .btn-generate-report {
+            background: var(--navy-900); border: none; color: #fff; font-weight: 600;
+            padding: 11px 22px; border-radius: 12px; box-shadow: 0 6px 16px -6px rgba(10, 31, 68, 0.5);
+            transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), background-color 0.2s ease;
+            white-space: nowrap;
+        }
+        .btn-generate-report:hover { background: var(--navy-700); color: #fff; transform: translateY(-2px); box-shadow: 0 10px 22px -6px rgba(10, 31, 68, 0.55); }
+        .btn-generate-report:focus-visible { outline: 2px solid var(--gold-500); outline-offset: 2px; }
+
+        /* ============================================================
+           3. FILTER ROW — period filter on the left, Generate Report
+              pinned to the right corner via ms-auto (stays right-aligned
+              even if it wraps to its own line on narrow screens).
+           ============================================================ */
+        .dash-filter-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 28px; }
+        .dash-filter-row .btn-generate-report { flex-shrink: 0; }
+        .filter-bar-v2 {
+            background: #fff; border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+            box-shadow: var(--shadow-card); padding: 10px 16px;
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+        }
+        .filter-bar-v2 .filter-icon {
+            width: 34px; height: 34px; border-radius: 9px; background: rgba(10, 31, 68, 0.07);
+            color: var(--navy-900); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .filter-bar-v2 .filter-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }
+        .filter-bar-v2 select.form-select {
+            border: 1px solid var(--border-soft-strong); border-radius: 9px; font-weight: 600; font-size: 0.85rem;
+            min-width: 190px; transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .filter-bar-v2 select.form-select:focus { border-color: var(--navy-700); box-shadow: 0 0 0 3px rgba(10, 31, 68, 0.12); }
+        .filter-clear-btn {
+            display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600;
+            color: var(--text-muted); background: rgba(15, 23, 42, 0.05); border-radius: 9px; padding: 8px 14px;
+            transition: background-color 0.15s ease, color 0.15s ease;
+        }
+        .filter-clear-btn:hover { background: rgba(239, 68, 68, 0.1); color: #b91c1c; }
+
+        /* ============================================================
+           4. HERO CARD (Institutional Satisfaction)
+           ============================================================ */
+        .hero-card {
+            position: relative; overflow: hidden; border-radius: var(--radius-lg);
+            background: linear-gradient(135deg, #0a1f44 0%, #123568 60%, #0e2a5e 100%);
+            color: #fff; box-shadow: var(--shadow-hero); padding: 34px; height: 100%;
+        }
+        .hero-card::before {
             content: ''; position: absolute; inset: 0;
-            background: radial-gradient(circle at 85% 15%, rgba(255,255,255,0.08), transparent 55%);
+            background: radial-gradient(circle at 88% 8%, rgba(244, 180, 0, 0.16), transparent 45%),
+                        radial-gradient(circle at 6% 96%, rgba(255, 255, 255, 0.08), transparent 40%);
             pointer-events: none;
         }
-
-        /* Interactive Summary Statistics Cards */
-        .stat-card {
-            background: white; border: 1px solid var(--border-soft); border-radius: 16px;
-            transition: box-shadow 0.2s ease, border-color 0.2s ease; height: 100%; text-decoration: none !important;
-            display: flex; flex-direction: column; color: inherit;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        .hero-card::after {
+            content: ''; position: absolute; inset: 0; opacity: 0.5; pointer-events: none;
+            background-image: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+            background-size: 18px 18px;
+            mask-image: linear-gradient(135deg, rgba(0,0,0,0.6), transparent 65%);
+            -webkit-mask-image: linear-gradient(135deg, rgba(0,0,0,0.6), transparent 65%);
         }
-        .stat-card:hover { border-color: rgba(10, 31, 68, 0.25); box-shadow: 0 8px 20px -6px rgba(10, 31, 68, 0.18); }
 
-        /* Makes "View Details" read as an obvious clickable pill instead of plain small text */
+        .hero-flex { position: relative; z-index: 1; display: flex; align-items: center; gap: 30px; flex-wrap: wrap; height: 100%; }
+
+        .hero-gauge-wrap { position: relative; width: 138px; height: 138px; flex-shrink: 0; }
+        .hero-gauge-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        .hero-gauge-wrap .gauge-track { fill: none; stroke: rgba(255, 255, 255, 0.14); stroke-width: 9; }
+        .hero-gauge-wrap .gauge-fill {
+            fill: none; stroke: url(#gaugeGradient); stroke-width: 9; stroke-linecap: round;
+            stroke-dasharray: 339.29; stroke-dashoffset: 339.29;
+            transition: stroke-dashoffset 1.15s var(--ease-out);
+        }
+        .hero-gauge-center {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+        }
+        .hero-gauge-center i { font-size: 1.6rem; color: var(--gold-400); opacity: 0.9; }
+
+        .hero-info { flex: 1 1 260px; min-width: 240px; }
+        .hero-info-eyebrow {
+            font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.6); margin-bottom: 10px;
+        }
+        .hero-score-line { display: flex; align-items: baseline; gap: 4px; line-height: 1; }
+        .hero-score-number { font-size: 3.1rem; font-weight: 800; letter-spacing: -0.03em; }
+        .hero-score-sign { font-size: 1.5rem; opacity: 0.55; font-weight: 700; }
+
+        .hero-badges { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+        .hero-level-badge {
+            display: inline-flex; align-items: center; gap: 7px; background: rgba(34, 197, 94, 0.18);
+            color: #86efac; border: 1px solid rgba(134, 239, 172, 0.35); font-weight: 700; font-size: 0.78rem;
+            letter-spacing: 0.03em; padding: 7px 14px; border-radius: 999px;
+        }
+        .hero-period-badge {
+            display: inline-flex; align-items: center; gap: 7px; background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.14); color: rgba(255, 255, 255, 0.9);
+            font-weight: 600; font-size: 0.78rem; padding: 7px 14px; border-radius: 999px;
+            backdrop-filter: blur(6px);
+        }
+
+        /* ============================================================
+           5. SECONDARY STAT CARD (Total Completed Surveys)
+           ============================================================ */
+        .stat-card {
+            background: white; border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
+            transition: transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out), border-color 0.22s ease;
+            height: 100%; text-decoration: none !important;
+            display: flex; flex-direction: column; color: inherit;
+            box-shadow: var(--shadow-card);
+        }
+        .stat-card:hover { border-color: rgba(10, 31, 68, 0.22); box-shadow: var(--shadow-card-hover); transform: translateY(-3px); }
+
         .view-details-pill {
             display: inline-flex; align-items: center; gap: 5px;
             background: rgba(10, 31, 68, 0.08);
@@ -68,69 +190,174 @@
             padding: 4px 12px; border-radius: 999px;
             transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
         }
-        .stat-card:hover .view-details-pill {
-            background: #0a1f44; color: #fff !important; transform: translateX(2px);
-        }
+        .stat-card:hover .view-details-pill { background: #0a1f44; color: #fff !important; transform: translateX(2px); }
         html[data-bs-theme="dark"] .view-details-pill { background: rgba(244, 180, 0, 0.12); color: #ffc72c !important; }
         html[data-bs-theme="dark"] .stat-card:hover .view-details-pill { background: #f4b400; color: #0a1f44 !important; }
 
-        /* Cluster Mini Summary Cards */
+        .count-up { font-size: 2.25rem; font-weight: 800; letter-spacing: -0.02em; }
+
+        /* ============================================================
+           6. INSIGHT CHIPS
+           ============================================================ */
+        .insight-chip {
+            background: #fff; border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+            padding: 14px 16px; display: flex; align-items: center; gap: 12px; height: 100%;
+            box-shadow: var(--shadow-card); transition: box-shadow 0.2s ease, transform 0.2s var(--ease-out);
+        }
+        .insight-chip:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-2px); }
+        .insight-chip-icon {
+            width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; font-size: 0.95rem;
+        }
+        .insight-chip-icon.good { background: rgba(16, 185, 129, 0.12); color: #059669; }
+        .insight-chip-icon.active { background: rgba(10, 31, 68, 0.08); color: var(--navy-900); }
+        .insight-chip-icon.warn { background: rgba(239, 68, 68, 0.1); color: #dc2626; }
+        .insight-chip-label { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }
+        .insight-chip-value { font-size: 0.85rem; font-weight: 700; color: var(--text-dark); line-height: 1.3; }
+        .insight-chip-sub { font-size: 0.76rem; color: var(--text-muted); }
+
+        /* ============================================================
+           7. CLUSTER KPI CARDS
+           ============================================================ */
         .cluster-mini-card {
             background: white; border: 1px solid var(--border-soft);
-            border-left: 4px solid #f4b400; border-radius: 12px;
-            padding: 20px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); height: 100%;
-            transition: box-shadow 0.2s ease;
+            border-left: 4px solid #f4b400; border-radius: var(--radius-md);
+            padding: 20px; box-shadow: var(--shadow-card); height: 100%;
+            display: flex; flex-direction: column; justify-content: space-between;
+            transition: box-shadow 0.22s var(--ease-out), transform 0.22s var(--ease-out), border-left-width 0.22s ease;
+            opacity: 0; transform: translateY(12px);
+            animation: kpiIn 0.55s var(--ease-out) forwards;
         }
-        .cluster-mini-card:hover { box-shadow: 0 6px 16px -6px rgba(15, 23, 42, 0.12); }
+        .cluster-mini-card .kpi-body { flex: 1 0 auto; }
+        .cluster-mini-card:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-3px); border-left-width: 6px; }
+        .row.g-4 > [class*="col-"]:nth-child(1) .cluster-mini-card { animation-delay: 0ms; }
+        .row.g-4 > [class*="col-"]:nth-child(2) .cluster-mini-card { animation-delay: 80ms; }
+        .row.g-4 > [class*="col-"]:nth-child(3) .cluster-mini-card { animation-delay: 160ms; }
+        .row.g-4 > [class*="col-"]:nth-child(4) .cluster-mini-card { animation-delay: 240ms; }
+        .row.g-4 > [class*="col-"]:nth-child(5) .cluster-mini-card { animation-delay: 320ms; }
+        @keyframes kpiIn { to { opacity: 1; transform: translateY(0); } }
 
+        .cluster-mini-card .rating-row { display: flex; align-items: baseline; gap: 6px; margin: 6px 0 10px; }
+        .cluster-mini-card .rating-row .rating-value { font-size: 1.6rem; font-weight: 800; color: var(--text-dark); letter-spacing: -0.02em; }
+        .cluster-mini-card .rating-row .rating-pct { font-size: 0.85rem; color: var(--text-muted); }
+        .cluster-mini-card .kpi-track { background: rgba(15, 23, 42, 0.07); border-radius: 999px; height: 6px; overflow: hidden; margin-bottom: 12px; }
+        .cluster-mini-card .kpi-fill { height: 100%; border-radius: 999px; width: 0%; transition: width 1s var(--ease-out) 0.15s; }
+
+        /* ============================================================
+           8. ANALYTICS CHART
+           ============================================================ */
         .chart-container-main {
             background: white; border: 1px solid var(--border-soft);
-            border-radius: 16px; padding: 28px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-        }
-
-        .filter-bar {
-            background: white; border: 1px solid var(--border-soft);
-            border-radius: 14px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+            border-radius: var(--radius-lg); padding: 28px; box-shadow: var(--shadow-card);
         }
 
         .section-eyebrow {
             font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; color: var(--text-muted);
         }
 
-        .count-up { font-size: 2.25rem; font-weight: 800; letter-spacing: -0.02em; }
+        /* ============================================================
+           9. SIDE PANELS (Sentiment / Topics / Recent)
+           ============================================================ */
+        .side-panel-card {
+            background: white; border: 1px solid var(--border-soft);
+            border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-card); height: 100%;
+        }
+        html[data-bs-theme="dark"] .side-panel-card { background: var(--card-bg); }
 
         .sentiment-badge { font-size: 0.65rem; padding: 4px 12px; border-radius: 999px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; display: inline-block; white-space: nowrap; }
         .bg-sentiment-positive { background-color: #dcfce7; color: #15803d; }
         .bg-sentiment-negative { background-color: #fee2e2; color: #b91c1c; }
         .bg-sentiment-neutral { background-color: #e2e8f0; color: #334155; }
 
-        .cluster-mini-card .rating-row { display: flex; align-items: baseline; gap: 6px; margin: 6px 0 10px; }
-        .cluster-mini-card .rating-row .rating-value { font-size: 1.6rem; font-weight: 800; color: var(--text-dark); letter-spacing: -0.02em; }
-        .cluster-mini-card .rating-row .rating-pct { font-size: 0.85rem; color: var(--text-muted); }
+        .sentiment-chart-wrap { position: relative; }
+        .sentiment-center-total {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-align: center; pointer-events: none;
+        }
+        .sentiment-center-total .num { display: block; font-size: 1.6rem; font-weight: 800; color: var(--text-dark); letter-spacing: -0.02em; }
+        .sentiment-center-total .lbl { display: block; font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .sentiment-legend-row { display: flex; justify-content: space-between; margin-top: 14px; }
+        .sentiment-legend-item { text-align: center; }
+        .sentiment-legend-pct { display: block; font-size: 0.7rem; color: var(--text-muted); margin-top: 4px; }
 
+        .topic-rank {
+            display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
+            border-radius: 5px; background: rgba(10, 31, 68, 0.08); color: var(--navy-900);
+            font-size: 0.62rem; font-weight: 800; margin-right: 8px; flex-shrink: 0;
+        }
         .topic-bar-track { background: rgba(15, 23, 42, 0.06); border-radius: 999px; height: 8px; overflow: hidden; }
         html[data-bs-theme="dark"] .topic-bar-track { background: rgba(255, 255, 255, 0.08); }
-        .topic-bar-fill { background: linear-gradient(90deg, #0a1f44, #f4b400); height: 100%; border-radius: 999px; }
+        .topic-bar-fill { background: linear-gradient(90deg, #0a1f44, #f4b400); height: 100%; border-radius: 999px; width: 0%; transition: width 0.9s var(--ease-out); }
 
-        .side-panel-card {
-            background: white; border: 1px solid var(--border-soft);
-            border-radius: 16px; padding: 24px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); height: 100%;
+        .empty-state-mini { text-align: center; padding: 32px 12px; color: var(--text-muted); }
+        .empty-state-mini i { font-size: 1.75rem; opacity: 0.3; margin-bottom: 10px; display: block; }
+        .empty-state-mini p { margin: 0; font-size: 0.82rem; }
+
+        /* --- Recent Submissions timeline --- */
+        .timeline-list { position: relative; margin: 0; padding: 0; list-style: none; }
+        .timeline-list::before {
+            content: ''; position: absolute; left: 5px; top: 6px; bottom: 6px; width: 1px;
+            background: var(--border-soft-strong);
         }
-        html[data-bs-theme="dark"] .side-panel-card { background: var(--card-bg); }
+        .timeline-item { position: relative; padding: 0 0 16px 24px; }
+        .timeline-item:last-child { padding-bottom: 0; }
+        .timeline-dot {
+            position: absolute; left: 0; top: 4px; width: 11px; height: 11px; border-radius: 50%;
+            border: 2px solid #fff; box-shadow: 0 0 0 1px var(--border-soft-strong);
+        }
+        .timeline-dot.positive { background: #22c55e; }
+        .timeline-dot.neutral { background: #94a3b8; }
+        .timeline-dot.negative { background: #ef4444; }
+        .timeline-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+        .timeline-office { font-weight: 700; font-size: 0.85rem; color: var(--text-dark); }
+        .timeline-topic { font-size: 0.78rem; color: var(--text-muted); }
+        .timeline-time { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
 
-        .recent-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border-soft); }
-        .recent-item:last-child { border-bottom: none; padding-bottom: 0; }
-        .recent-item .recent-office { font-weight: 700; font-size: 0.85rem; color: var(--text-dark); }
-        .recent-item .recent-topic { font-size: 0.78rem; color: var(--text-muted); }
-        .recent-item .recent-time { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
-
-        .rank-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border-soft); }
+        /* ============================================================
+           10. RANKING PANELS (Top / Attention offices)
+           ============================================================ */
+        .rank-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border-soft); }
         .rank-item:last-child { border-bottom: none; padding-bottom: 0; }
-        .rank-item .rank-name { font-weight: 600; font-size: 0.85rem; color: var(--text-dark); }
-        .rank-item .rank-sub { font-size: 0.72rem; color: var(--text-muted); }
-        .rank-score { font-weight: 800; font-size: 1rem; padding: 3px 10px; border-radius: 999px; }
+        .rank-item:first-child { padding-top: 0; }
+        .rank-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .rank-badge {
+            flex-shrink: 0; width: 30px; height: 30px; border-radius: 9px; display: flex; align-items: center;
+            justify-content: center; font-size: 0.72rem; font-weight: 800; background: rgba(15, 23, 42, 0.06); color: var(--text-muted);
+        }
+        .rank-badge.medal-1 { background: linear-gradient(135deg, #fde68a, #f59e0b); color: #78350f; }
+        .rank-badge.medal-2 { background: linear-gradient(135deg, #e2e8f0, #94a3b8); color: #1e293b; }
+        .rank-badge.medal-3 { background: linear-gradient(135deg, #fdba74, #c2703d); color: #431407; }
+        .rank-badge.warn { background: rgba(239, 68, 68, 0.12); color: #dc2626; }
+        .rank-name { font-weight: 700; font-size: 0.85rem; color: var(--text-dark); white-space: normal; word-break: break-word; }
+        .rank-sub { font-size: 0.72rem; color: var(--text-muted); }
+        .rank-score { font-weight: 800; font-size: 0.95rem; padding: 4px 12px; border-radius: 999px; flex-shrink: 0; white-space: nowrap; }
         .rank-score.good { background: #dcfce7; color: #15803d; }
         .rank-score.bad { background: #fee2e2; color: #b91c1c; }
+
+        .attention-panel { background: linear-gradient(180deg, rgba(254, 226, 226, 0.35), rgba(254, 226, 226, 0)); border-color: rgba(239, 68, 68, 0.16); }
+
+        /* ============================================================
+           11. SCROLL-REVEAL + MOTION SYSTEM
+           ============================================================ */
+        .reveal-section { opacity: 0; transform: translateY(16px); transition: opacity 0.5s var(--ease-out), transform 0.5s var(--ease-out); }
+        .reveal-section.is-visible { opacity: 1; transform: translateY(0); }
+
+        @media (prefers-reduced-motion: reduce) {
+            .stat-card, .cluster-mini-card, .count-up, [style*="animation"] { animation: none !important; }
+            .cluster-mini-card { opacity: 1 !important; transform: none !important; }
+            .reveal-section { opacity: 1 !important; transform: none !important; }
+            * { transition-duration: 0.001ms !important; }
+        }
+
+        /* ============================================================
+           12. RESPONSIVE
+           ============================================================ */
+        @media (max-width: 767.98px) {
+            .hero-card { padding: 26px; }
+            .hero-score-number { font-size: 2.4rem; }
+            .hero-gauge-wrap { width: 108px; height: 108px; }
+            .dash-title { font-size: 1.55rem; }
+        }
 
         /* --- REPORT MODAL INTERFACE STYLES --- */
         #reportModal, #dashboardReportModal {
@@ -159,7 +386,7 @@
         .form-code { font-size: 11px; font-weight: bold; color: #000; }
         .print-title { text-align: center; font-weight: bold; font-size: 16px; margin-bottom: 5px; color: #000; text-transform: uppercase; }
         .print-period { text-align: center; font-size: 14px; font-weight: bold; margin-bottom: 20px; color: #000; }
-        
+
         .print-table { width: 100%; border-collapse: collapse; font-size: 12px; color: #000; margin-top: 15px; }
         .print-table th { background-color: #5B9BD5 !important; color: white !important; border: 1px solid black; padding: 8px; text-align: center; text-transform: uppercase; }
         .print-table td { border: 1px solid black; padding: 6px 8px; vertical-align: middle; }
@@ -168,7 +395,7 @@
         .num-col { text-align: center; width: 50px; }
         .score-col { text-align: center; width: 150px; font-weight: bold; }
         .inter-col { text-align: center; width: 150px; font-weight: bold; }
-        
+
         .print-footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 13px; color: #000; }
         .sign-block { width: 45%; }
         .sign-name { font-weight: bold; text-decoration: underline; margin-top: 35px; margin-bottom: 2px; text-transform: uppercase; }
@@ -192,14 +419,48 @@
         <%- include('layout/navbar') %>
 
         <div class="container-fluid px-4 py-4">
-            
-            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
-                <div>
-                    <h4 class="page-heading fw-bold text-dark mb-0">Dashboard Overview</h4>
-                    <p class="text-muted small mb-0">Institution-wide client satisfaction summary</p>
+
+            <%
+                // Derived, non-fabricated insight pointers — computed purely from
+                // the arrays the route already provides. Rendered only when the
+                // underlying data actually exists.
+                let mostActiveCluster = null;
+                if (typeof clusterCards !== 'undefined' && clusterCards.length > 0) {
+                    mostActiveCluster = clusterCards.reduce((max, c) => (Number(c.respondents) > Number(max.respondents) ? c : max), clusterCards[0]);
+                }
+                const topOffice = (typeof topOffices !== 'undefined' && topOffices.length > 0) ? topOffices[0] : null;
+                const attentionOffice = (typeof bottomOffices !== 'undefined' && bottomOffices.length > 0) ? bottomOffices[0] : null;
+            %>
+
+            <div class="dash-toolbar">
+                <div class="dash-toolbar-title">
+                    <p class="dash-eyebrow">CQA Portal &middot; Institutional Analytics</p>
+                    <h1 class="dash-title">Dashboard</h1>
+                    <p class="dash-subtitle">Monitor client satisfaction, cluster performance, sentiment, and office-level performance.</p>
                 </div>
-                <div class="dropdown">
-                    <button class="btn btn-primary shadow-sm px-4 dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Generate a printable report">
+            </div>
+
+            <div class="dash-filter-row">
+                <form action="/dashboard" method="GET" class="filter-bar-v2">
+                    <div class="filter-icon"><i class="fas fa-sliders-h"></i></div>
+                    <div>
+                        <label for="periodCovered" class="filter-label mb-0">Period Covered</label>
+                        <select id="periodCovered" name="periodCovered" class="form-select form-select-sm" title="Filter records by period covered" onchange="this.form.submit()">
+                            <option value="">All Periods</option>
+                            <% if (typeof periodOptions !== 'undefined') { %>
+                                <% periodOptions.forEach(opt => { %>
+                                    <option value="<%= opt.value %>" <%= selectedPeriod === opt.value ? 'selected' : '' %>><%= opt.label %></option>
+                                <% }) %>
+                            <% } %>
+                        </select>
+                    </div>
+                    <% if (typeof hasQueryParam !== 'undefined' && hasQueryParam) { %>
+                        <a href="/dashboard" class="filter-clear-btn" title="Clear the period filter"><i class="fas fa-times"></i> Clear</a>
+                    <% } %>
+                </form>
+
+                <div class="dropdown ms-auto">
+                    <button class="btn btn-generate-report dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Generate a printable report">
                         <i class="fas fa-file-invoice me-2"></i> Generate Report
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end shadow-sm">
@@ -209,44 +470,32 @@
                 </div>
             </div>
 
-            <form action="/dashboard" method="GET" class="filter-bar d-flex flex-wrap align-items-end gap-3 mb-4 p-3">
-                <div>
-                    <label for="periodCovered" class="form-label section-eyebrow mb-1">Period Covered</label>
-                    <select id="periodCovered" name="periodCovered" class="form-select form-select-sm" title="Filter records by period covered" onchange="this.form.submit()">
-                        <option value="">All Periods</option>
-                        <% if (typeof periodOptions !== 'undefined') { %>
-                            <% periodOptions.forEach(opt => { %>
-                                <option value="<%= opt.value %>" <%= selectedPeriod === opt.value ? 'selected' : '' %>><%= opt.label %></option>
-                            <% }) %>
-                        <% } %>
-                    </select>
-                </div>
-                <% if (typeof hasQueryParam !== 'undefined' && hasQueryParam) { %>
-                    <a href="/dashboard" class="btn btn-outline-secondary btn-sm px-3" title="Clear the period filter"><i class="fas fa-times me-1"></i> Clear</a>
-                <% } %>
-            </form>
-
             <div class="row g-4 mb-4">
                 <div class="col-xl-8 col-lg-7">
-                    <div class="overall-header-card p-4 h-100">
-                        <div class="row align-items-center">
-                            <div class="col-md-8">
-                                <h6 class="text-uppercase text-indigo-300 fw-bold mb-2 small" style="letter-spacing: 2px;">Overall Institutional Rating</h6>
-                                <div class="d-flex align-items-baseline">
-                                    <h1 class="display-4 fw-bold mb-0"><%= typeof satisfactionRate !== 'undefined' ? satisfactionRate : '0.00' %></h1>
-                                    <span class="fs-3 ms-2 opacity-50">%</span>
-                                </div>
-                                <div class="mt-3">
-                                    <span class="badge bg-success bg-opacity-25 text-success border border-success px-3 py-2 rounded-pill fw-semibold">
-                                        <i class="fas fa-certificate me-1"></i> LEVEL 4 <%= typeof dashboardData !== 'undefined' ? dashboardData.overallLevel : 'OUTSTANDING' %>
-                                    </span>
-                                </div>
+                    <div class="hero-card">
+                        <div class="hero-flex">
+                            <div class="hero-gauge-wrap">
+                                <svg viewBox="0 0 120 120">
+                                    <defs>
+                                        <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stop-color="#ffc72c" />
+                                            <stop offset="100%" stop-color="#f4b400" />
+                                        </linearGradient>
+                                    </defs>
+                                    <circle class="gauge-track" cx="60" cy="60" r="54" />
+                                    <circle id="heroGaugeFill" class="gauge-fill" cx="60" cy="60" r="54" />
+                                </svg>
+                                <div class="hero-gauge-center"><i class="fas fa-certificate"></i></div>
                             </div>
-
-                            <div class="col-md-4 text-md-end mt-4 mt-md-0">
-                                <div class="p-3 bg-white bg-opacity-10 rounded-4 border border-white border-opacity-10">
-                                    <small class="opacity-75 d-block mb-1">Period Covered</small>
-                                    <h6 class="mb-0 fw-bold"><i class="far fa-calendar-check me-2"></i><%= typeof dashboardData !== 'undefined' ? dashboardData.periodCoveredLabel : 'All Periods' %></h6>
+                            <div class="hero-info">
+                                <p class="hero-info-eyebrow">Overall Institutional Satisfaction</p>
+                                <div class="hero-score-line">
+                                    <span id="heroScoreValue" class="hero-score-number" data-target="<%= typeof satisfactionRate !== 'undefined' ? satisfactionRate : 0 %>">0.00</span>
+                                    <span class="hero-score-sign">%</span>
+                                </div>
+                                <div class="hero-badges">
+                                    <span class="hero-level-badge"><i class="fas fa-certificate"></i> LEVEL 4 &middot; <%= typeof dashboardData !== 'undefined' ? dashboardData.overallLevel : 'OUTSTANDING' %></span>
+                                    <span class="hero-period-badge"><i class="far fa-calendar-check"></i> <%= typeof dashboardData !== 'undefined' ? dashboardData.periodCoveredLabel : 'All Periods' %></span>
                                 </div>
                             </div>
                         </div>
@@ -273,36 +522,61 @@
                 </div>
             </div>
 
-            <div class="row g-4 mb-4">
-                <div class="col-12">
-                    <div class="chart-container-main">
-                        <div class="d-md-flex justify-content-between align-items-center mb-4">
-                            <div>
-                                <h5 class="fw-bold text-dark mb-1">Cluster Performance Analytics</h5>
-                                <p class="text-muted small mb-0">Total respondents per cluster</p>
-                            </div>
-                            <div class="d-flex gap-3 small fw-bold mt-2 mt-md-0">
-                                <div><i class="fas fa-square text-primary me-1"></i> Respondents Volume</div>
+            <% if (mostActiveCluster || topOffice || attentionOffice) { %>
+                <div class="row g-3 mb-4">
+                    <% if (mostActiveCluster) { %>
+                        <div class="col-md-4">
+                            <div class="insight-chip">
+                                <div class="insight-chip-icon active"><i class="fas fa-layer-group"></i></div>
+                                <div>
+                                    <div class="insight-chip-label">Most Active Cluster</div>
+                                    <div class="insight-chip-value"><%= mostActiveCluster.name %></div>
+                                    <div class="insight-chip-sub"><%= mostActiveCluster.respondents %> respondents</div>
+                                </div>
                             </div>
                         </div>
-                        <div style="height: 350px; position: relative;">
-                            <canvas id="clusterAnalyticsChart"></canvas>
+                    <% } %>
+                    <% if (topOffice) { %>
+                        <div class="col-md-4">
+                            <div class="insight-chip">
+                                <div class="insight-chip-icon good"><i class="fas fa-trophy"></i></div>
+                                <div>
+                                    <div class="insight-chip-label">Highest Performing Office</div>
+                                    <div class="insight-chip-value"><%= topOffice.name %></div>
+                                    <div class="insight-chip-sub"><%= topOffice.cluster %> &middot; <%= topOffice.score.toFixed(2) %>%</div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    <% } %>
+                    <% if (attentionOffice) { %>
+                        <div class="col-md-4">
+                            <div class="insight-chip">
+                                <div class="insight-chip-icon warn"><i class="fas fa-triangle-exclamation"></i></div>
+                                <div>
+                                    <div class="insight-chip-label">Needs Immediate Attention</div>
+                                    <div class="insight-chip-value"><%= attentionOffice.name %></div>
+                                    <div class="insight-chip-sub"><%= attentionOffice.cluster %> &middot; <%= attentionOffice.score.toFixed(2) %>%</div>
+                                </div>
+                            </div>
+                        </div>
+                    <% } %>
                 </div>
-            </div>
+            <% } %>
 
             <% if (typeof clusterCards !== 'undefined' && clusterCards.length > 0) { %>
                 <div class="row g-4 mb-4">
                     <% clusterCards.forEach(card => { %>
                         <div class="col-xl-3 col-md-6">
-                            <div class="cluster-mini-card" style="border-left: 5px solid <%= card.color || '#0a1f44' %>;">
-                                <h6 class="text-muted fw-bold small text-uppercase mb-2"><%= card.name %></h6>
-                                <div class="rating-row">
-                                    <span class="rating-value"><%= card.rating %></span>
-                                    <span class="rating-pct">% satisfaction</span>
+                            <div class="cluster-mini-card" style="border-left-color: <%= card.color || '#0a1f44' %>;">
+                                <div class="kpi-body">
+                                    <h6 class="text-muted fw-bold small text-uppercase mb-2"><%= card.name %></h6>
+                                    <div class="rating-row">
+                                        <span class="rating-value"><%= card.rating %></span>
+                                        <span class="rating-pct">% satisfaction</span>
+                                    </div>
+                                    <div class="kpi-track"><div class="kpi-fill" data-pct="<%= card.rating %>" style="background: <%= card.color || '#0a1f44' %>;"></div></div>
                                 </div>
-                                <span class="badge bg-light text-secondary border rounded-pill small"><i class="fas fa-users me-1"></i><%= card.respondents %> Respondents</span>
+                                <span class="badge bg-light text-secondary border rounded-pill small align-self-start"><i class="fas fa-users me-1"></i><%= card.respondents %> Respondents</span>
                             </div>
                         </div>
                     <% }) %>
@@ -316,102 +590,165 @@
                 </div>
             <% } %>
 
-            <div class="row g-4 mb-4">
+            <div class="row g-4 mb-4 reveal-section">
+                <div class="col-12">
+                    <div class="chart-container-main">
+                        <div class="d-md-flex justify-content-between align-items-center mb-4">
+                            <div>
+                                <p class="section-eyebrow mb-1">ANALYTICS</p>
+                                <h5 class="fw-bold text-dark mb-1">Cluster Performance Analytics</h5>
+                                <p class="text-muted small mb-0">Respondent volume and satisfaction rating per cluster</p>
+                            </div>
+                        </div>
+                        <div style="height: 350px; position: relative;">
+                            <canvas id="clusterAnalyticsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4 mb-4 reveal-section">
                 <div class="col-xl-4">
                     <div class="side-panel-card">
+                        <p class="section-eyebrow mb-1">SENTIMENT</p>
                         <h6 class="fw-bold text-dark mb-1">Sentiment Overview</h6>
                         <p class="text-muted small mb-3">AI-classified tone of respondent comments</p>
-                        <div style="height: 190px; position: relative;">
+                        <div class="sentiment-chart-wrap" style="height: 190px;">
                             <canvas id="sentimentChart"></canvas>
+                            <div class="sentiment-center-total">
+                                <span class="num"><%= sentimentTotal %></span>
+                                <span class="lbl">Total</span>
+                            </div>
                         </div>
-                        <div class="d-flex justify-content-between mt-3 small">
-                            <span><span class="sentiment-badge bg-sentiment-positive">Positive</span> <%= sentimentBreakdown.Positive %></span>
-                            <span><span class="sentiment-badge bg-sentiment-neutral">Neutral</span> <%= sentimentBreakdown.Neutral %></span>
-                            <span><span class="sentiment-badge bg-sentiment-negative">Negative</span> <%= sentimentBreakdown.Negative %></span>
+                        <div class="sentiment-legend-row small">
+                            <div class="sentiment-legend-item">
+                                <span class="sentiment-badge bg-sentiment-positive">Positive</span>
+                                <span class="d-block fw-bold mt-1"><%= sentimentBreakdown.Positive %></span>
+                                <span class="sentiment-legend-pct"><%= sentimentTotal ? Math.round(sentimentBreakdown.Positive / sentimentTotal * 100) : 0 %>%</span>
+                            </div>
+                            <div class="sentiment-legend-item">
+                                <span class="sentiment-badge bg-sentiment-neutral">Neutral</span>
+                                <span class="d-block fw-bold mt-1"><%= sentimentBreakdown.Neutral %></span>
+                                <span class="sentiment-legend-pct"><%= sentimentTotal ? Math.round(sentimentBreakdown.Neutral / sentimentTotal * 100) : 0 %>%</span>
+                            </div>
+                            <div class="sentiment-legend-item">
+                                <span class="sentiment-badge bg-sentiment-negative">Negative</span>
+                                <span class="d-block fw-bold mt-1"><%= sentimentBreakdown.Negative %></span>
+                                <span class="sentiment-legend-pct"><%= sentimentTotal ? Math.round(sentimentBreakdown.Negative / sentimentTotal * 100) : 0 %>%</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="col-xl-4">
                     <div class="side-panel-card">
+                        <p class="section-eyebrow mb-1">INSIGHTS</p>
                         <h6 class="fw-bold text-dark mb-1">Top Feedback Topics</h6>
                         <p class="text-muted small mb-3">Most frequently mentioned themes in comments</p>
                         <% if (typeof topTopics !== 'undefined' && topTopics.length > 0) { %>
-                            <% topTopics.forEach(t => { %>
+                            <% topTopics.forEach((t, i) => { %>
                                 <div class="mb-3">
                                     <div class="d-flex justify-content-between small mb-1">
-                                        <span class="fw-semibold text-dark"><%= t.topic %></span>
+                                        <span class="fw-semibold text-dark"><span class="topic-rank"><%= i + 1 %></span><%= t.topic %></span>
                                         <span class="text-muted"><%= t.count %></span>
                                     </div>
-                                    <div class="topic-bar-track"><div class="topic-bar-fill" style="width: <%= t.pct %>%;"></div></div>
+                                    <div class="topic-bar-track"><div class="topic-bar-fill" data-pct="<%= t.pct %>"></div></div>
                                 </div>
                             <% }) %>
                         <% } else { %>
-                            <p class="text-muted small text-center py-4 mb-0">No comment topics recorded yet for this period.</p>
+                            <div class="empty-state-mini">
+                                <i class="fas fa-comment-slash"></i>
+                                <p>No comment topics recorded yet for this period.</p>
+                            </div>
                         <% } %>
                     </div>
                 </div>
 
                 <div class="col-xl-4">
                     <div class="side-panel-card">
+                        <p class="section-eyebrow mb-1">ACTIVITY</p>
                         <h6 class="fw-bold text-dark mb-1">Recent Submissions</h6>
                         <p class="text-muted small mb-3">Latest survey responses received</p>
                         <% if (typeof recentSubmissions !== 'undefined' && recentSubmissions.length > 0) { %>
-                            <% recentSubmissions.forEach(r => { %>
-                                <div class="recent-item">
-                                    <div>
-                                        <div class="recent-office"><%= r.officeName %></div>
-                                        <div class="recent-topic"><%= r.topic %></div>
-                                    </div>
-                                    <div class="text-end">
-                                        <span class="sentiment-badge bg-sentiment-<%= r.sentiment.toLowerCase() %>"><%= r.sentiment %></span>
-                                        <div class="recent-time mt-1"><%= new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) %></div>
-                                    </div>
-                                </div>
-                            <% }) %>
+                            <ul class="timeline-list">
+                                <% recentSubmissions.forEach(r => { %>
+                                    <li class="timeline-item">
+                                        <span class="timeline-dot <%= r.sentiment.toLowerCase() %>"></span>
+                                        <div class="timeline-row">
+                                            <div>
+                                                <div class="timeline-office"><%= r.officeName %></div>
+                                                <div class="timeline-topic"><%= r.topic %></div>
+                                            </div>
+                                            <div class="text-end">
+                                                <span class="sentiment-badge bg-sentiment-<%= r.sentiment.toLowerCase() %>"><%= r.sentiment %></span>
+                                                <div class="timeline-time mt-1"><%= new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) %></div>
+                                            </div>
+                                        </div>
+                                    </li>
+                                <% }) %>
+                            </ul>
                         <% } else { %>
-                            <p class="text-muted small text-center py-4 mb-0">No submissions recorded yet for this period.</p>
+                            <div class="empty-state-mini">
+                                <i class="fas fa-inbox"></i>
+                                <p>No submissions recorded yet for this period.</p>
+                            </div>
                         <% } %>
                     </div>
                 </div>
             </div>
 
-            <div class="row g-4 mb-4">
+            <div class="row g-4 mb-4 reveal-section">
                 <div class="col-xl-6">
                     <div class="side-panel-card">
+                        <p class="section-eyebrow mb-1">PERFORMANCE</p>
                         <h6 class="fw-bold text-dark mb-1"><i class="fas fa-arrow-trend-up text-success me-1"></i> Top Performing Offices</h6>
                         <p class="text-muted small mb-3">Highest satisfaction rating this period</p>
                         <% if (typeof topOffices !== 'undefined' && topOffices.length > 0) { %>
-                            <% topOffices.forEach(o => { %>
+                            <% topOffices.forEach((o, i) => { %>
                                 <div class="rank-item">
-                                    <div>
-                                        <div class="rank-name"><%= o.name %></div>
-                                        <div class="rank-sub"><%= o.cluster %> &middot; <%= o.respondents %> respondents</div>
+                                    <div class="rank-left">
+                                        <span class="rank-badge <%= i === 0 ? 'medal-1' : (i === 1 ? 'medal-2' : (i === 2 ? 'medal-3' : '')) %>">
+                                            <% if (i < 3) { %><i class="fas fa-medal"></i><% } else { %>#<%= i + 1 %><% } %>
+                                        </span>
+                                        <div>
+                                            <div class="rank-name"><%= o.name %></div>
+                                            <div class="rank-sub"><%= o.cluster %> &middot; <%= o.respondents %> respondents</div>
+                                        </div>
                                     </div>
                                     <span class="rank-score good"><%= o.score.toFixed(2) %>%</span>
                                 </div>
                             <% }) %>
                         <% } else { %>
-                            <p class="text-muted small text-center py-4 mb-0">Not enough data yet.</p>
+                            <div class="empty-state-mini">
+                                <i class="fas fa-chart-simple"></i>
+                                <p>Not enough data yet.</p>
+                            </div>
                         <% } %>
                     </div>
                 </div>
                 <div class="col-xl-6">
-                    <div class="side-panel-card">
+                    <div class="side-panel-card attention-panel">
+                        <p class="section-eyebrow mb-1">ACTIONABLE INSIGHT</p>
                         <h6 class="fw-bold text-dark mb-1"><i class="fas fa-arrow-trend-down text-danger me-1"></i> Offices Needing Attention</h6>
                         <p class="text-muted small mb-3">Lowest satisfaction rating this period</p>
                         <% if (typeof bottomOffices !== 'undefined' && bottomOffices.length > 0) { %>
                             <% bottomOffices.forEach(o => { %>
                                 <div class="rank-item">
-                                    <div>
-                                        <div class="rank-name"><%= o.name %></div>
-                                        <div class="rank-sub"><%= o.cluster %> &middot; <%= o.respondents %> respondents</div>
+                                    <div class="rank-left">
+                                        <span class="rank-badge warn"><i class="fas fa-triangle-exclamation"></i></span>
+                                        <div>
+                                            <div class="rank-name"><%= o.name %></div>
+                                            <div class="rank-sub"><%= o.cluster %> &middot; <%= o.respondents %> respondents</div>
+                                        </div>
                                     </div>
                                     <span class="rank-score bad"><%= o.score.toFixed(2) %>%</span>
                                 </div>
                             <% }) %>
                         <% } else { %>
-                            <p class="text-muted small text-center py-4 mb-0">Not enough data yet.</p>
+                            <div class="empty-state-mini">
+                                <i class="fas fa-chart-simple"></i>
+                                <p>Not enough data yet.</p>
+                            </div>
                         <% } %>
                     </div>
                 </div>
@@ -693,26 +1030,105 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
-    
-    // --- 1. NUMBER ANIMATION INCREMENT EFFECT ---
+
+    const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // --- 0. SHARED EASED NUMBER ANIMATION (rAF-driven, respects reduced motion) ---
+    function animateNumber(el, target, opts) {
+        opts = opts || {};
+        const decimals = opts.decimals || 0;
+        const duration = opts.duration || 1000;
+        const format = opts.format || function (n) { return decimals ? n.toFixed(decimals) : Math.round(n).toLocaleString(); };
+        const onUpdate = opts.onUpdate || function () {};
+
+        if (prefersReducedMotion || !(target > 0)) {
+            el.innerHTML = format(target);
+            onUpdate(target);
+            return;
+        }
+
+        const start = performance.now();
+        function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+        function tick(now) {
+            const elapsed = now - start;
+            const progress = Math.min(elapsed / duration, 1);
+            const value = target * easeOutCubic(progress);
+            el.innerHTML = format(value);
+            onUpdate(value);
+            if (progress < 1) requestAnimationFrame(tick);
+            else { el.innerHTML = format(target); onUpdate(target); }
+        }
+        requestAnimationFrame(tick);
+    }
+
+    // --- 1. TOTAL SURVEYS COUNT-UP ---
     document.querySelectorAll('.count-up').forEach(el => {
         const target = +el.innerText.replace(/[^0-9.]/g, '');
-        let curr = 0;
-        const speed = target / 40;
-        
-        const up = () => {
-            curr += speed;
-            if(curr < target) {
-                el.innerHTML = target % 1 === 0 ? Math.ceil(curr).toLocaleString() : curr.toFixed(2);
-                setTimeout(up, 20);
-            } else { 
-                el.innerHTML = target % 1 === 0 ? target.toLocaleString() : target.toFixed(2); 
-            }
-        };
-        if(target > 0) up();
+        animateNumber(el, target, { duration: 1000 });
     });
 
-    // --- 2. CHART.JS CONFIGURATION & RENDER PIPELINE ---
+    // --- 2. HERO SCORE + RADIAL GAUGE ---
+    const heroScoreEl = document.getElementById('heroScoreValue');
+    const heroGaugeFill = document.getElementById('heroGaugeFill');
+    if (heroScoreEl) {
+        const target = parseFloat(heroScoreEl.getAttribute('data-target')) || 0;
+        const circumference = 339.29;
+        const clampedPct = Math.max(0, Math.min(100, target));
+        if (heroGaugeFill) {
+            if (prefersReducedMotion) {
+                heroGaugeFill.style.transition = 'none';
+                heroGaugeFill.style.strokeDashoffset = String(circumference * (1 - clampedPct / 100));
+            } else {
+                // kick the transition after paint so it animates from the full offset
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        heroGaugeFill.style.strokeDashoffset = String(circumference * (1 - clampedPct / 100));
+                    });
+                });
+            }
+        }
+        animateNumber(heroScoreEl, target, { decimals: 2, duration: 1100 });
+    }
+
+    // --- 3. CLUSTER KPI PROGRESS BARS ---
+    document.querySelectorAll('.kpi-fill').forEach(el => {
+        const pct = Math.max(0, Math.min(100, parseFloat(el.getAttribute('data-pct')) || 0));
+        requestAnimationFrame(() => { el.style.width = pct + '%'; });
+    });
+
+    // --- 4. SCROLL REVEAL + TOPIC BAR FILL (IntersectionObserver) ---
+    const revealTargets = document.querySelectorAll('.reveal-section');
+    if ('IntersectionObserver' in window && !prefersReducedMotion) {
+        const revealObserver = new IntersectionObserver((entries, obs) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-visible');
+                    obs.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+        revealTargets.forEach(el => revealObserver.observe(el));
+
+        const topicBarObserver = new IntersectionObserver((entries, obs) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const pct = Math.max(0, Math.min(100, parseFloat(entry.target.getAttribute('data-pct')) || 0));
+                    entry.target.style.width = pct + '%';
+                    obs.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.2 });
+        document.querySelectorAll('.topic-bar-fill').forEach(el => topicBarObserver.observe(el));
+    } else {
+        revealTargets.forEach(el => el.classList.add('is-visible'));
+        document.querySelectorAll('.topic-bar-fill').forEach(el => {
+            const pct = Math.max(0, Math.min(100, parseFloat(el.getAttribute('data-pct')) || 0));
+            el.style.width = pct + '%';
+        });
+    }
+
+    // --- 5. CHART.JS CONFIGURATION & RENDER PIPELINE ---
     const chartLabels = <%- typeof chartData !== 'undefined' ? JSON.stringify(chartData.labels) : JSON.stringify(['Office of President', 'Admin & Finance', 'Research & Innov.', 'Academic Affairs', 'Other Offices']) %>;
     const chartRespondents = <%- typeof chartData !== 'undefined' ? JSON.stringify(chartData.respondents) : JSON.stringify([0, 0, 0, 0, 0]) %>;
     const chartRatings = <%- typeof chartData !== 'undefined' ? JSON.stringify(chartData.ratings) : JSON.stringify([0, 0, 0, 0, 0]) %>;
@@ -748,16 +1164,23 @@ document.addEventListener("DOMContentLoaded", function() {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: prefersReducedMotion ? false : { duration: 1000, easing: 'easeOutQuart' },
             plugins: {
-                legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 12, font: { weight: '600' } } },
+                legend: {
+                    display: true, position: 'top', align: 'end',
+                    labels: { boxWidth: 12, usePointStyle: true, pointStyle: 'rectRounded', font: { weight: '600', family: "'Plus Jakarta Sans', sans-serif" } }
+                },
                 tooltip: {
                     backgroundColor: '#0f172a',
+                    titleFont: { weight: '700', family: "'Plus Jakarta Sans', sans-serif" },
+                    bodyFont: { family: "'Plus Jakarta Sans', sans-serif" },
                     padding: 12,
                     cornerRadius: 10,
+                    displayColors: false,
                     callbacks: {
                         label: function(context) {
                             return context.dataset.yAxisID === 'yRating'
-                                ? `Rating: ${context.raw}%`
+                                ? `Satisfaction: ${context.raw}%`
                                 : `Respondents: ${context.raw.toLocaleString()}`;
                         }
                     }
@@ -785,7 +1208,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     });
 
-    // --- 3. SENTIMENT DOUGHNUT ---
+    // --- 6. SENTIMENT DOUGHNUT ---
     const sentimentCtx = document.getElementById('sentimentChart').getContext('2d');
     new Chart(sentimentCtx, {
         type: 'doughnut',
@@ -805,16 +1228,31 @@ document.addEventListener("DOMContentLoaded", function() {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            cutout: '68%',
-            plugins: { legend: { display: false } }
+            cutout: '72%',
+            animation: prefersReducedMotion ? false : { duration: 900, easing: 'easeOutQuart' },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#0f172a',
+                    padding: 10,
+                    cornerRadius: 8,
+                    callbacks: {
+                        label: function(context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const pct = total ? Math.round((context.raw / total) * 100) : 0;
+                            return `${context.label}: ${context.raw} (${pct}%)`;
+                        }
+                    }
+                }
+            }
         }
     });
 });
 
-// --- 4. CONTROLS MANAGEMENT FUNCTIONS FOR POPUP REPORT MODAL ---
+// --- 7. CONTROLS MANAGEMENT FUNCTIONS FOR POPUP REPORT MODAL ---
 function openReportModal() {
     document.getElementById('reportModal').style.display = 'block';
-    document.body.style.overflow = 'hidden'; 
+    document.body.style.overflow = 'hidden';
 }
 
 function closeReportModal() {

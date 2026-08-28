@@ -15,23 +15,69 @@ window.addEventListener('pageshow', function (event) {
 });
 
 document.addEventListener("DOMContentLoaded", function() {
-    // Sidebar Toggle
-    const sidebarCollapse = document.getElementById('sidebarCollapse');
+    const currentPath = window.location.pathname;
     const sidebar = document.getElementById('sidebar');
-    if (sidebarCollapse && sidebar) {
-        sidebarCollapse.addEventListener('click', () => sidebar.classList.toggle('active'));
+
+    // Sidebar Toggle: desktop collapses to an icon-only rail (state persisted
+    // so it survives this app's full page reloads between routes), mobile
+    // slides the sidebar in/out as an overlay drawer with a dimmed backdrop.
+    const sidebarCollapse = document.getElementById('sidebarCollapse');
+    const overlay = document.getElementById('sidebar-overlay');
+
+    function openMobileDrawer() {
+        sidebar.classList.add('active');
+        if (overlay) overlay.classList.add('active');
+        document.body.classList.add('sidebar-open');
+    }
+    function closeMobileDrawer() {
+        sidebar.classList.remove('active');
+        if (overlay) overlay.classList.remove('active');
+        document.body.classList.remove('sidebar-open');
     }
 
-    // Active Link Highlighting
-    const currentPath = window.location.pathname;
-    document.querySelectorAll('#sidebar .nav-item a').forEach(link => {
-        if(link.getAttribute('href') === currentPath) {
-            link.parentElement.classList.add('active');
-            const pageTitle = link.innerText.trim();
-            const titleElement = document.getElementById('pageTitle');
-            if(titleElement) titleElement.innerText = pageTitle;
+    if (sidebarCollapse && sidebar) {
+        if (window.innerWidth > 768) {
+            sidebarCollapse.title = sidebar.classList.contains('collapsed') ? 'Expand sidebar' : 'Collapse sidebar';
         }
-    });
+        sidebarCollapse.addEventListener('click', () => {
+            if (window.innerWidth > 768) {
+                const isCollapsed = sidebar.classList.toggle('collapsed');
+                try { localStorage.setItem('sidebarCollapsed', isCollapsed ? '1' : '0'); } catch (e) {}
+                sidebarCollapse.title = isCollapsed ? 'Expand sidebar' : 'Collapse sidebar';
+            } else if (sidebar.classList.contains('active')) {
+                closeMobileDrawer();
+            } else {
+                openMobileDrawer();
+            }
+        });
+    }
+    if (overlay) overlay.addEventListener('click', closeMobileDrawer);
+    // Tapping a nav link on mobile should close the drawer, not leave it open
+    // behind the page-transition fade.
+    if (sidebar) {
+        sidebar.querySelectorAll('a[href]:not([data-bs-toggle])').forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.innerWidth <= 768) closeMobileDrawer();
+            });
+        });
+    }
+
+    // Active link styling is fully server-rendered (layout/sidebar.ejs sets
+    // `.active` on the matching <a> from `currentPath` at render time) — that
+    // is the single source of truth, so this just reads it back to set the
+    // navbar's page title. (This used to also add `.active` to the <li>
+    // independently via a client-side href match, which could disagree with
+    // the server's own class and momentarily show two "active-looking" items
+    // at once — removed in favor of one authority.)
+    const activeLink = sidebar && sidebar.querySelector('.nav-item a.active:not(.dropdown-toggle)');
+    if (activeLink) {
+        // Read from the title attribute, not innerText: when the sidebar
+        // restores already collapsed, the label <span> is display:none and
+        // innerText would come back empty.
+        const pageTitle = (activeLink.getAttribute('title') || activeLink.innerText).trim();
+        const titleElement = document.getElementById('pageTitle');
+        if (titleElement) titleElement.innerText = pageTitle;
+    }
 
     // Smooth page transitions: every sidebar link is a real page load (no SPA
     // router), so we fake a crossfade by fading #content out before letting

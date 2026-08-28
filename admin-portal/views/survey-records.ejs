@@ -1,20 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <%- include('layout/header') %>
+    <%- include('layout/header', { forceLightMode: true }) %>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         :root {
             --primary-indigo: #0a1f44;
-            --bg-body: #f8fafc;
+            --primary-indigo-hover: #12305c;
+            --accent-indigo: #3452a5;
+            --bg-body: #f4f6fa;
             --text-main: #334155;
+            --text-heading: #0f172a;
+            --text-muted: #64748b;
+            --text-faint: #94a3b8;
             --card-bg: #ffffff;
+            --surface-subtle: #f8fafc;
+            --border-subtle: #e5e9f0;
+            --border-strong: #dde3ec;
+
+            /* 4 / 8 / 12 / 16 / 20 / 24 / 32px spacing scale */
+            --sp-1: 4px;
+            --sp-2: 8px;
+            --sp-3: 12px;
+            --sp-4: 16px;
+            --sp-5: 20px;
+            --sp-6: 24px;
+            --sp-8: 32px;
+
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+
+            --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+            --shadow-md: 0 6px 16px rgba(15, 23, 42, 0.06);
         }
 
         html[data-bs-theme="dark"] {
             --bg-body: #0b1526;
-            --text-main: #e2e8f0;
+            --text-main: #cbd5e1;
+            --text-heading: #f1f5f9;
+            --text-muted: #94a3b8;
+            --text-faint: #64748b;
             --card-bg: #141d30;
+            --surface-subtle: #1a2438;
+            --border-subtle: #263045;
+            --border-strong: #2c3a54;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.35);
         }
 
         body {
@@ -25,80 +57,182 @@
         }
 
         html[data-bs-theme="dark"] .records-card { background: var(--card-bg); }
-        html[data-bs-theme="dark"] .office-group-header { background: #1e293b; }
+        html[data-bs-theme="dark"] .office-group-header { background: var(--surface-subtle); }
 
+        /* --- Page header --- */
         .page-header {
             background: linear-gradient(135deg, #0a1f44 0%, #12305c 100%);
             color: white;
-            padding: 3rem 2rem;
-            border-radius: 0 0 40px 40px;
-            box-shadow: 0 15px 30px rgba(10, 31, 68, 0.15);
-            margin-bottom: 2rem;
+            padding: var(--sp-6) var(--sp-6);
+            border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            margin-bottom: var(--sp-6);
+        }
+        .page-header h2 { font-size: 1.4rem; letter-spacing: 0.2px; }
+        .page-header .page-subtitle { font-size: 0.85rem; color: rgba(255,255,255,0.72); }
+
+        .btn-back {
+            background: rgba(255, 255, 255, 0.08);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            padding: var(--sp-2) var(--sp-4);
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: background-color 0.15s ease, color 0.15s ease;
+        }
+        .btn-back:hover { background: white; color: var(--primary-indigo); }
+
+        /* --- Records card --- */
+        .records-card {
+            background: var(--card-bg);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            padding: var(--sp-6);
+            margin-bottom: var(--sp-8);
+            border: 1px solid var(--border-subtle);
         }
 
-        .records-card {
-            background: white;
-            border-radius: 24px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.03);
-            padding: 25px;
-            margin-bottom: 3rem;
-            border: 1px solid rgba(0,0,0,0.05);
+        /* --- Search toolbar --- */
+        .search-toolbar { margin-bottom: var(--sp-5); }
+        .search-bar {
+            max-width: 420px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-strong);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
         }
+        .search-bar .input-group-text {
+            background: var(--card-bg);
+            border: none;
+            color: var(--text-faint);
+            padding-left: var(--sp-4);
+        }
+        .search-bar .form-control {
+            background: var(--card-bg);
+            color: var(--text-main);
+            border: none;
+            padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-2);
+            font-size: 0.9rem;
+        }
+        .search-bar .form-control:focus { box-shadow: none; background: var(--card-bg); color: var(--text-main); }
+        .search-hint { color: var(--text-faint); font-size: 0.75rem; margin-top: var(--sp-3); }
 
         .scroll-container {
-            max-height: 700px; 
+            max-height: 700px;
             overflow-y: auto;
-            border-radius: 12px;
-            padding-right: 5px;
+            border-radius: var(--radius-md);
+            padding-right: var(--sp-1);
         }
 
         .scroll-container::-webkit-scrollbar { width: 8px; }
-        .scroll-container::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+        .scroll-container::-webkit-scrollbar-track { background: var(--surface-subtle); border-radius: 10px; }
         .scroll-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        html[data-bs-theme="dark"] .scroll-container::-webkit-scrollbar-thumb { background: #334155; }
 
-        .office-section { margin-bottom: 10px; }
+        /* --- Office groups --- */
+        .office-section {
+            margin-bottom: var(--sp-5);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+        }
         .office-group-header {
-            background: #f8fafc;
-            padding: 15px 20px;
+            background: var(--surface-subtle);
+            padding: var(--sp-3) var(--sp-5);
             font-weight: 800;
             color: var(--primary-indigo);
             text-transform: uppercase;
-            letter-spacing: 1px;
-            font-size: 0.85rem;
-            border-left: 5px solid var(--primary-indigo);
+            letter-spacing: 0.8px;
+            font-size: 0.78rem;
+            border-left: 4px solid var(--primary-indigo);
             position: sticky;
             top: 0;
             z-index: 10;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
         }
+        html[data-bs-theme="dark"] .office-group-header { color: #93c5fd; border-left-color: #93c5fd; }
 
-        .table { width: 100%; margin-bottom: 0; border-collapse: separate; border-spacing: 0; }
+        /* Table uses a fixed layout with deliberate column widths (set via <colgroup>) so
+           thead/tbody columns always line up and one long cell can never distort row height. */
+        .table-scroll-x { overflow-x: auto; }
+        .table { width: 100%; min-width: 800px; margin-bottom: 0; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+        /* Action column gets a hard floor so "View Result" (icon + text) can never be
+           clipped by the fixed table layout, regardless of container width — the
+           percentage in <colgroup> only governs the *extra* room on wide screens. */
+        .table th:nth-child(7),
+        .table td:nth-child(7) { min-width: 184px; }
         .table thead th {
-            background: white;
-            padding: 15px 20px;
-            font-size: 0.7rem;
-            color: #94a3b8;
+            background: var(--card-bg);
+            padding: var(--sp-3) var(--sp-5);
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: var(--text-faint);
             text-transform: uppercase;
-            border-bottom: 2px solid #f1f5f9;
+            letter-spacing: 0.4px;
+            border-bottom: 2px solid var(--border-subtle);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .table tbody td {
-            padding: 15px 20px;
-            border-bottom: 1px solid #f1f5f9;
+            padding: var(--sp-3) var(--sp-5);
+            border-bottom: 1px solid var(--border-subtle);
             vertical-align: middle;
-            font-size: 0.9rem;
+            font-size: 0.86rem;
+            color: var(--text-main);
+            height: 52px;
+            overflow: hidden;
+        }
+        .table tbody tr:last-child td { border-bottom: none; }
+        .table tbody tr.record-row:hover td { background: var(--surface-subtle); }
+
+        /* Single-line ellipsis truncation shared by any cell whose content must never
+           wrap or grow the row — the full value stays available via the title tooltip. */
+        .cell-truncate {
+            display: block;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        .respondent-name { font-weight: 700; color: #1e293b; }
+        .respondent-name { font-weight: 700; color: var(--text-heading); }
+        .name-cell { max-width: 100%; }
+        .office-name-cell { max-width: 100%; }
         .office-acronym {
             letter-spacing: 0.4px;
             cursor: default;
+            border-bottom: 1px dashed var(--border-strong);
         }
-        .topic-badge { font-size: 0.65rem; padding: 4px 10px; border-radius: 6px; font-weight: 700; text-transform: uppercase; }
-        
+
+        .comments-cell {
+            max-width: 100%;
+            color: var(--text-muted);
+            cursor: default;
+        }
+
+        .action-cell { text-align: center; white-space: nowrap; }
+
+        .topic-badge {
+            display: inline-block;
+            max-width: 100%;
+            font-size: 0.65rem;
+            padding: 4px 10px;
+            border-radius: var(--radius-sm);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: middle;
+            cursor: default;
+        }
+        .topic-cell { text-align: center; }
+
         .bg-cr { background-color: #fee2e2; color: #ef4444; }
         .bg-aircon { background-color: #e0f2fe; color: #0ea5e9; }
         .bg-general { background-color: #f1f5f9; color: #64748b; }
@@ -109,94 +243,101 @@
         .bg-online { background-color: #cffafe; color: #0891b2; }
         .bg-health { background-color: #fce7f3; color: #db2777; }
 
-        .sentiment-badge { font-size: 0.65rem; padding: 4px 12px; border-radius: 999px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; display: inline-block; }
+        .sentiment-badge { font-size: 0.65rem; padding: 4px 12px; border-radius: 999px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; display: inline-block; white-space: nowrap; }
         .bg-sentiment-positive { background-color: #dcfce7; color: #15803d; }
         .bg-sentiment-negative { background-color: #fee2e2; color: #b91c1c; }
         .bg-sentiment-neutral { background-color: #e2e8f0; color: #334155; }
 
-        #noResults { display: none; padding: 60px; text-align: center; color: #94a3b8; }
+        html[data-bs-theme="dark"] .topic-badge,
+        html[data-bs-theme="dark"] .sentiment-badge { filter: brightness(0.92) saturate(0.9); }
 
-        .btn-back {
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 8px 20px;
-            border-radius: 10px;
-            transition: 0.3s;
-        }
-        .btn-back:hover { background: white; color: var(--primary-indigo); }
+        /* Wider, left-aligned tooltip for long comments so wrapped text stays readable
+           instead of Bootstrap's default narrow 200px bubble. */
+        .tooltip-wide-comment .tooltip-inner { max-width: 320px; text-align: left; }
+
+        #noResults { display: none; padding: var(--sp-8) var(--sp-6); text-align: center; color: var(--text-faint); }
+        #noResults i { color: var(--border-strong); }
+        .empty-state { text-align: center; padding: var(--sp-8) var(--sp-6); color: var(--text-muted); }
 
         .btn-view-result,
         .btn-view-result:visited {
             background-color: var(--primary-indigo) !important;
             color: #fff !important;
             border: 1px solid var(--primary-indigo) !important;
-            font-size: 0.78rem;
+            font-size: 0.76rem;
             font-weight: 700;
-            padding: 7px 14px;
-            border-radius: 8px;
+            padding: var(--sp-2) var(--sp-3);
+            border-radius: var(--radius-sm);
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 128px;
             transition: background-color 0.15s ease, transform 0.15s ease;
         }
         .btn-view-result:hover,
         .btn-view-result:focus,
         .btn-view-result:focus-visible,
         .btn-view-result:active {
-            background-color: #12305c !important;
-            border-color: #12305c !important;
+            background-color: var(--primary-indigo-hover) !important;
+            border-color: var(--primary-indigo-hover) !important;
             color: #fff !important;
             transform: translateY(-1px);
-            box-shadow: 0 4px 10px rgba(10, 31, 68, 0.35) !important;
+            box-shadow: 0 4px 10px rgba(10, 31, 68, 0.3) !important;
         }
+
+        .modal-title-icon { color: var(--primary-indigo); }
+        html[data-bs-theme="dark"] .modal-title-icon { color: #93c5fd; }
 
         /* --- View Result modal --- */
         .result-detail-head {
-            display: flex; align-items: center; gap: 14px;
+            display: flex; align-items: center; gap: var(--sp-4);
             background: linear-gradient(135deg, #0a1f44 0%, #12305c 100%);
-            color: #fff; border-radius: 14px; padding: 18px 20px; margin-bottom: 20px;
+            color: #fff; border-radius: var(--radius-md); padding: var(--sp-4) var(--sp-5); margin-bottom: var(--sp-5);
         }
         .result-detail-icon {
-            width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
-            background: rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+            width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
+            background: rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center; font-size: 1rem;
         }
-        .result-office { font-weight: 800; font-size: 1.05rem; line-height: 1.3; }
-        .result-meta { font-size: 0.8rem; color: rgba(255,255,255,0.75); }
+        .result-office { font-weight: 800; font-size: 1rem; line-height: 1.3; }
+        .result-meta { font-size: 0.78rem; color: rgba(255,255,255,0.72); }
         .result-badge {
-            margin-left: auto; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+            margin-left: auto; font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
             background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.3);
-            padding: 5px 12px; border-radius: 999px; white-space: nowrap;
+            padding: var(--sp-1) var(--sp-3); border-radius: 999px; white-space: nowrap;
         }
 
-        .result-section { margin-bottom: 22px; }
+        .result-section { margin-bottom: var(--sp-5); }
         .result-section-header {
-            font-weight: 800; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px;
-            color: var(--primary-indigo); margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+            font-weight: 800; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.4px;
+            color: var(--primary-indigo); margin-bottom: var(--sp-3); display: flex; align-items: center; gap: var(--sp-2);
         }
         html[data-bs-theme="dark"] .result-section-header { color: #93c5fd; }
 
-        .result-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
-        .result-item {
-            background: #f8fafc; border-radius: 10px; padding: 10px 14px; border: 1px solid #eef2f7;
+        .result-grid { display: grid; grid-template-columns: 1fr; gap: var(--sp-3); }
+        @media (min-width: 576px) {
+            .result-grid { grid-template-columns: repeat(3, 1fr); }
         }
-        html[data-bs-theme="dark"] .result-item { background: #1e293b; border-color: #263045; }
-        .result-item .label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; margin-bottom: 3px; }
-        .result-item .value { font-size: 0.9rem; font-weight: 600; color: #1e293b; }
-        html[data-bs-theme="dark"] .result-item .value { color: #e2e8f0; }
+        .result-item {
+            background: var(--surface-subtle); border-radius: var(--radius-sm); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--border-subtle);
+        }
+        .result-item .label { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; color: var(--text-faint); margin-bottom: 3px; }
+        .result-item .value { font-size: 0.88rem; font-weight: 600; color: var(--text-heading); }
 
         .result-sqd-row {
-            display: flex; justify-content: space-between; align-items: center; gap: 12px;
-            padding: 10px 14px; border-radius: 10px; background: #f8fafc; border: 1px solid #eef2f7; margin-bottom: 8px;
+            display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3);
+            padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-sm); background: var(--surface-subtle); border: 1px solid var(--border-subtle); margin-bottom: var(--sp-2);
         }
-        html[data-bs-theme="dark"] .result-sqd-row { background: #1e293b; border-color: #263045; }
-        .result-sqd-statement { font-size: 0.85rem; color: #334155; flex: 1; }
-        html[data-bs-theme="dark"] .result-sqd-statement { color: #cbd5e1; }
+        .result-sqd-statement { font-size: 0.83rem; color: var(--text-main); flex: 1; }
 
         .sqd-badge {
-            flex-shrink: 0; font-size: 0.72rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+            flex-shrink: 0; font-size: 0.7rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; white-space: nowrap;
         }
         .sqd-badge-5, .sqd-badge-4 { background: #dcfce7; color: #15803d; }
         .sqd-badge-3 { background: #e2e8f0; color: #334155; }
         .sqd-badge-2, .sqd-badge-1 { background: #fee2e2; color: #b91c1c; }
         .sqd-badge-na, .sqd-badge-unanswered { background: #f1f5f9; color: #94a3b8; }
+        html[data-bs-theme="dark"] .sqd-badge { filter: brightness(0.92) saturate(0.9); }
 
         /* Generate Report modal — fills the content area (same wide layout/format as the
            official /report page) but docks to the right of the sidebar instead of covering
@@ -294,6 +435,14 @@
         .sig-name { font-weight: bold; margin-top: 30px; margin-bottom: 0; }
         .sig-title { margin: 0; }
         .page-footer { margin-top: 50px; font-size: 12px; font-weight: bold; border-top: 2px solid #6c9bd2; padding-top: 5px; display: flex; justify-content: space-between; }
+        @media (max-width: 767.98px) {
+            .page-header { padding: var(--sp-5) var(--sp-4); border-radius: 0 0 var(--radius-md) var(--radius-md); }
+            .records-card { padding: var(--sp-4); }
+            .search-bar { max-width: 100%; }
+            .result-badge { margin-left: 0; }
+            .result-detail-head { flex-wrap: wrap; }
+        }
+
         @media print {
             body > *:not(#clientReportModal) { display: none !important; }
             #clientReportModal { position: static !important; display: block !important; }
@@ -316,8 +465,8 @@
         <div class="page-header">
             <div class="container-fluid d-md-flex justify-content-between align-items-center">
                 <div>
-                    <h2 class="fw-bold mb-1 text-white"><i class="fas fa-database me-3"></i>Institutional Survey Records</h2>
-                    <p class="mb-0 opacity-75 small">Comprehensive logs sorted by Academic Colleges</p>
+                    <h2 class="fw-bold mb-1 text-white"><i class="fas fa-database me-2"></i>Institutional Survey Records</h2>
+                    <p class="mb-0 page-subtitle">Comprehensive logs sorted by Academic Colleges</p>
                 </div>
                 <div class="mt-3 mt-md-0">
                     <a href="/dashboard" class="btn btn-back">
@@ -330,11 +479,12 @@
         <div class="container-fluid px-4">
             <div class="records-card">
 
-                <div class="mb-4">
-                    <div class="input-group" style="max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-radius: 12px;">
-                        <span class="input-group-text bg-white border-0 ps-3"><i class="fas fa-search text-primary"></i></span>
-                        <input type="text" id="searchInput" class="form-control border-0 py-3" placeholder="Search by name, college, or concern..." title="Search survey records">
+                <div class="search-toolbar">
+                    <div class="input-group search-bar">
+                        <span class="input-group-text"><i class="fas fa-search text-primary"></i></span>
+                        <input type="text" id="searchInput" class="form-control" placeholder="Search by name, college, or concern..." title="Search survey records">
                     </div>
+                    <p class="search-hint mb-0">Search results filter by name, topic, or office college.</p>
                 </div>
 
                 <div class="scroll-container">
@@ -349,26 +499,38 @@
                                 <div class="office-group-header">
                                     <span><%= cluster.toUpperCase() %></span>
                                 </div>
+                                <div class="table-scroll-x">
                                 <table class="table">
+                                    <colgroup>
+                                        <col style="width: 12%;">
+                                        <col style="width: 14%;">
+                                        <col style="width: 10%;">
+                                        <col style="width: 21%;">
+                                        <col style="width: 15%;">
+                                        <col style="width: 11%;">
+                                        <col style="width: 17%;">
+                                    </colgroup>
                                     <thead>
                                         <tr>
-                                            <th style="width: 15%;">Office</th>
-                                            <th style="width: 15%;">Name</th>
-                                            <th style="width: 25%;">Comments</th>
-                                            <th style="width: 13%;">Topic</th>
-                                            <th style="width: 12%;">Sentiment</th>
-                                            <th style="width: 20%;">Action</th>
+                                            <th>Office</th>
+                                            <th>Name</th>
+                                            <th class="text-center">Time of Office Visit</th>
+                                            <th>Comments</th>
+                                            <th class="text-center">Topic</th>
+                                            <th class="text-center">Sentiment</th>
+                                            <th class="text-center">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <% recordsByCluster[cluster].forEach(record => { %>
                                             <tr class="record-row">
-                                                <td class="office-name-cell text-muted small" data-full="<%= record.officeName %>"><%= record.officeName %></td>
-                                                <td><span class="respondent-name"><%= record.name %></span></td>
-                                                <td class="text-muted small"><%= record.comments %></td>
-                                                <td><span class="topic-badge <%= record.topicClass %>"><%= record.topic %></span></td>
-                                                <td><span class="sentiment-badge <%= record.sentimentClass %>"><%= record.sentiment %></span></td>
-                                                <td>
+                                                <td class="office-name-cell text-muted small" data-full="<%= record.officeName %>" title="<%= record.officeName %>" data-bs-toggle="tooltip" data-bs-placement="top"><span class="cell-truncate"><%= record.officeName %></span></td>
+                                                <td class="name-cell" title="<%= record.name %>" data-bs-toggle="tooltip" data-bs-placement="top"><span class="respondent-name cell-truncate"><%= record.name %></span></td>
+                                                <td class="text-center text-muted small text-nowrap" title="<%= record.officeVisitedTime %>" data-bs-toggle="tooltip" data-bs-placement="top"><%= record.officeVisitedTime %></td>
+                                                <td class="comments-cell text-muted small" title="<%= record.comments %>" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="tooltip-wide-comment"><span class="cell-truncate"><%= record.comments %></span></td>
+                                                <td class="topic-cell"><span class="topic-badge <%= record.topicClass %>" title="<%= record.topic %>" data-bs-toggle="tooltip" data-bs-placement="top"><%= record.topic %></span></td>
+                                                <td class="text-center"><span class="sentiment-badge <%= record.sentimentClass %>"><%= record.sentiment %></span></td>
+                                                <td class="action-cell">
                                                     <button type="button" class="btn btn-view-result" onclick="openViewResult(<%= record.id %>)" title="View this respondent's full survey answers">
                                                         <i class="fas fa-eye me-1"></i> View Result
                                                     </button>
@@ -377,16 +539,16 @@
                                         <% }) %>
                                     </tbody>
                                 </table>
+                                </div>
                             </div>
                         <% }) %>
                     <% } else { %>
-                        <div class="text-center py-5">
-                            <p class="text-muted">No survey records available yet. Responses will dynamically load here.</p>
+                        <div class="empty-state">
+                            <i class="fas fa-inbox fa-3x mb-3 opacity-20"></i>
+                            <p class="text-muted mb-0">No survey records available yet. Responses will dynamically load here.</p>
                         </div>
                     <% } %>
 
-                </div> <div class="mt-4 pt-3 border-top text-center">
-                    <p class="text-muted x-small">Search results filter by name, topic, or office college.</p>
                 </div>
             </div>
         </div>
@@ -398,7 +560,7 @@
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow-lg">
             <div class="modal-header border-bottom-0 pb-0">
-                <h5 class="modal-title fw-bold" id="viewResultModalLabel"><i class="fas fa-poll me-2" style="color:#0a1f44;"></i>Survey Result</h5>
+                <h5 class="modal-title fw-bold" id="viewResultModalLabel"><i class="fas fa-poll me-2 modal-title-icon"></i>Survey Result</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body pt-2" id="viewResultBody">
@@ -422,7 +584,7 @@
     <div class="modal-dialog client-report-dialog">
         <div class="modal-content border-0 shadow-lg">
             <div class="modal-header no-print client-report-header">
-                <h5 class="modal-title fw-bold" id="clientReportModalLabel"><i class="fas fa-file-alt me-2" style="color:#0a1f44;"></i>Client Report</h5>
+                <h5 class="modal-title fw-bold" id="clientReportModalLabel"><i class="fas fa-file-alt me-2 modal-title-icon"></i>Client Report</h5>
                 <div class="d-flex align-items-center gap-2">
                     <button class="btn btn-sm btn-outline-danger" onclick="downloadClientReportPDF()"><i class="fas fa-file-pdf me-1"></i> PDF</button>
                     <button class="btn btn-sm btn-outline-success" onclick="downloadClientReportCSV()"><i class="fas fa-file-csv me-1"></i> CSV</button>
@@ -662,6 +824,14 @@
                     </div>
 
                     <div class="result-section">
+                        <div class="result-section-header"><i class="fas fa-clock"></i> Visit Details</div>
+                        <div class="result-grid">
+                            ${ccItem('Time of Office Visit', s.office_visited_time_formatted)}
+                            ${ccItem('Google Account', s.google_email)}
+                        </div>
+                    </div>
+
+                    <div class="result-section">
                         <div class="result-section-header"><i class="fas fa-file-alt"></i> Citizen's Charter</div>
                         <div class="result-grid">
                             ${ccItem('CC1 &mdash; Awareness', s.cc1)}
@@ -709,10 +879,24 @@
         if (fullName.length > OFFICE_NAME_MAX_LENGTH) {
             const acronym = officeAcronym(fullName);
             if (acronym.length >= 2) {
-                cell.innerHTML = `<span class="office-acronym" title="${escapeHtml(fullName)}">${escapeHtml(acronym)}</span>`;
+                // The acronym span becomes the single tooltip trigger for this cell —
+                // clear the td's own title/data-bs-toggle so hovering doesn't fire two
+                // overlapping tooltips for the same office name.
+                cell.removeAttribute('title');
+                cell.removeAttribute('data-bs-toggle');
+                cell.removeAttribute('data-bs-placement');
+                cell.innerHTML = `<span class="office-acronym" title="${escapeHtml(fullName)}" data-bs-toggle="tooltip" data-bs-placement="top">${escapeHtml(acronym)}</span>`;
             }
         }
     });
+
+    // Bootstrap tooltips for every truncatable cell (office, name, comments, topic,
+    // time). Run after the acronym pass above so dynamically-created spans are
+    // picked up too. Bootstrap reads the plain `title` attribute on init and moves
+    // it to `data-bs-original-title` (removing `title`), so there's no duplicate
+    // native browser tooltip once this runs — and if this script somehow fails,
+    // the native `title` tooltip is still there as a fallback.
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
 
     document.addEventListener('DOMContentLoaded', function() {
         const searchInput = document.getElementById('searchInput');

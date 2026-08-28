@@ -5,6 +5,8 @@ const path = require('path');
 const fs = require('fs');
 const mysql = require('mysql2');
 const crypto = require('crypto');
+const https = require('https');
+const querystring = require('querystring');
 const { spawn } = require('child_process');
 const { promisify } = require('util');
 const session = require('express-session');
@@ -761,6 +763,21 @@ function getPeriodCovered(date = new Date()) {
     return month <= 5 ? `Jan to June ${year}` : `July to Dec ${year}`;
 }
 
+// Validates/normalizes the client-submitted "Time of Office Visit" (from
+// <input type="time">, e.g. "09:35" or "09:35:00") into a MySQL TIME literal.
+// Anything that doesn't match is dropped to NULL rather than rejected outright,
+// since client_profiles.office_visited_time is nullable for legacy records.
+function cleanTime(val) {
+    if (val === undefined || val === null) return null;
+    const str = String(val).trim();
+    const match = /^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(str);
+    if (!match) return null;
+    const hh = match[1].padStart(2, '0');
+    const mm = match[2];
+    const ss = match[3] || '00';
+    return `${hh}:${mm}:${ss}`;
+}
+
 // Legacy/manually-seeded rows have used a handful of equivalent spellings for
 // the same period ("July to Dec 2026" vs "Jul - Dec 2026"). Comparing on a
 // normalized form so those rows aren't silently dropped from period-filtered
@@ -999,6 +1016,7 @@ CREATE TABLE IF NOT EXISTS client_profiles (
     gender VARCHAR(50) NULL,
     region VARCHAR(100) NULL,
     email VARCHAR(255) NULL,
+    office_visited_time TIME NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (survey_response_id) REFERENCES survey_responses(id) ON DELETE CASCADE
 );`;
@@ -1177,6 +1195,9 @@ db.query(createClustersTableQuery, (err) => {
                         db.query(createClientProfilesTableQuery, (err) => {
                             if (err) console.error("❌ Error creating client_profiles table:", err);
                             else console.log('✅ client_profiles table verified/created successfully!');
+                            // Older deployments created this table before office_visited_time
+                            // existed — add it now, nullable, so existing rows keep working.
+                            db.query("ALTER TABLE client_profiles ADD COLUMN office_visited_time TIME NULL", () => {});
                         });
 
                         // Client accounts (locked demographics + unified login lookup)
@@ -1342,8 +1363,49 @@ function closeAdminLogRow(req, callback) {
 // immune to that: if someone resubmits credentials while already logged in,
 // /auth-login just re-authenticates them, which is harmless.
 app.get('/login', noCache, (req, res) => {
-    return res.render('login');
+    return res.render('login', { recaptchaSiteKey: process.env.RECAPTCHA_SITE_KEY });
 });
+
+// Verifies a g-recaptcha-response token against Google's siteverify endpoint.
+// Used server-side so the check can't be bypassed by skipping the widget on
+// the client (e.g. a direct POST to /auth-login).
+function verifyRecaptcha(token, remoteIp) {
+    return new Promise((resolve) => {
+        if (!process.env.RECAPTCHA_SECRET_KEY || !token) {
+            return resolve(false);
+        }
+
+        const postData = querystring.stringify({
+            secret: process.env.RECAPTCHA_SECRET_KEY,
+            response: token,
+            remoteip: remoteIp
+        });
+
+        const req = https.request({
+            hostname: 'www.google.com',
+            path: '/recaptcha/api/siteverify',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Content-Length': Buffer.byteLength(postData)
+            }
+        }, (res) => {
+            let body = '';
+            res.on('data', chunk => { body += chunk; });
+            res.on('end', () => {
+                try {
+                    resolve(!!JSON.parse(body).success);
+                } catch (e) {
+                    resolve(false);
+                }
+            });
+        });
+
+        req.on('error', () => resolve(false));
+        req.write(postData);
+        req.end();
+    });
+}
 
 // ==========================================
 // UNIFIED LOGIN (Admin OR registered Client)
@@ -1367,12 +1429,23 @@ async function verifyAdminPassword(admin, passwordInput) {
     return admin.password === passwordInput;
 }
 
-app.post('/auth-login', (req, res) => {
+app.post('/auth-login', async (req, res) => {
     const { username, password } = req.body;
     const usernameInput = String(username || '').trim();
 
+    const captchaOk = await verifyRecaptcha(req.body['g-recaptcha-response'], req.ip);
+    if (!captchaOk) {
+        return res.redirect('/login?error=' + encodeURIComponent('Please complete the "I\'m not a robot" verification.'));
+    }
+
     if (usernameInput && password) {
-        return db.query('SELECT * FROM admins WHERE username = ? LIMIT 1', [usernameInput], async (err, rows) => {
+        // Not `return db.query(...)`: db.query() returns a mysql2 Query command
+        // object, and this handler is `async` — an async function's `return`
+        // resolution treats any thenable it returns as a promise to adopt, which
+        // calls .then() on that Query object. mysql2 defines .then() purely as a
+        // guard that throws (it's not a real promise), turning that call into an
+        // unhandled rejection every time a request reaches this branch.
+        db.query('SELECT * FROM admins WHERE username = ? LIMIT 1', [usernameInput], async (err, rows) => {
             if (err) {
                 console.error('❌ Error looking up admin:', err);
                 return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
@@ -1441,11 +1514,15 @@ app.post('/auth-login', (req, res) => {
                             req.adminSession.adminLogId = result.insertId;
                             req.adminSession.logId = result.insertId;
                         }
-                        res.redirect('/dashboard');
+                        // ?loggedin=1 lets layout/header.ejs's new-tab guard mark THIS
+                        // tab (via sessionStorage) as one that actually authenticated,
+                        // as opposed to a different tab merely inheriting the cookie.
+                        res.redirect('/dashboard?loggedin=1');
                     });
                 });
             });
         });
+        return;
     }
 
     return handleClientLogin();
@@ -1732,7 +1809,8 @@ app.get('/api/client-history/:id', ensureClientAuth, noCache, (req, res) => {
                s.comments, s.period_year_quarter,
                DATE_FORMAT(s.created_at, '%M %d, %Y %h:%i %p') AS formatted_date,
                o.office_name, o.cluster_name,
-               p.client_type, p.age, p.gender
+               p.client_type, p.age, p.gender,
+               TIME_FORMAT(p.office_visited_time, '%h:%i %p') AS office_visited_time_formatted
         FROM survey_responses s
         JOIN offices o ON s.office_id = o.id
         LEFT JOIN client_profiles p ON p.survey_response_id = s.id
@@ -1760,7 +1838,8 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
 
         const {
             office_id, topic, cc1, cc2, cc3,
-            sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, service_availed
+            sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, service_availed,
+            office_visited_time
         } = req.body;
 
         const respondent_name = req.body.respondent_name || req.body.respondentName || req.body.client_name || req.body.name;
@@ -1785,6 +1864,7 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
         const finalGender = cleanStr(gender) || 'Not Specified';
         const finalRegion = cleanStr(region) || 'Not Specified';
         const finalOfficeId = cleanInt(office_id);
+        const finalOfficeVisitedTime = cleanTime(office_visited_time);
 
         // 1 account can only submit ONE survey per office
         db.query(
@@ -1834,12 +1914,12 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
         const surveyResponseId = result.insertId;
         
         const insertProfileQuery = `
-            INSERT INTO client_profiles (survey_response_id, respondent_name, client_type, age, gender, region, email)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO client_profiles (survey_response_id, respondent_name, client_type, age, gender, region, email, office_visited_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `;
-        
+
         const profileValues = [
-            surveyResponseId, finalName, finalClientType, finalAge, finalGender, finalRegion, googleEmail
+            surveyResponseId, finalName, finalClientType, finalAge, finalGender, finalRegion, googleEmail, finalOfficeVisitedTime
         ];
 
         db.query(insertProfileQuery, profileValues, (profileErr) => {
@@ -1944,7 +2024,7 @@ async function syncOneSurvey(googleEmail, body) {
     const cleanInt = (val) => (val !== undefined && val !== "" && val !== null && !isNaN(val)) ? parseInt(val, 10) : null;
     const cleanStr = (val) => (val !== undefined && val !== null && String(val).trim() !== "") ? String(val).trim() : null;
 
-    const { office_id, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments } = body;
+    const { office_id, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, office_visited_time } = body;
 
     const finalOfficeId = cleanInt(office_id);
     if (!finalOfficeId) {
@@ -1971,6 +2051,7 @@ async function syncOneSurvey(googleEmail, body) {
     const finalAge = cleanStr(age) || 'Not Specified';
     const finalGender = cleanStr(gender) || 'Not Specified';
     const finalRegion = cleanStr(region) || 'Not Specified';
+    const finalOfficeVisitedTime = cleanTime(office_visited_time);
 
     try {
         const existing = await dbQuery(
@@ -2030,9 +2111,9 @@ async function syncOneSurvey(googleEmail, body) {
 
     try {
         await dbQuery(
-            `INSERT INTO client_profiles (survey_response_id, respondent_name, client_type, age, gender, region, email)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [surveyResponseId, finalName, finalClientType, finalAge, finalGender, finalRegion, googleEmail]
+            `INSERT INTO client_profiles (survey_response_id, respondent_name, client_type, age, gender, region, email, office_visited_time)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [surveyResponseId, finalName, finalClientType, finalAge, finalGender, finalRegion, googleEmail, finalOfficeVisitedTime]
         );
     } catch (profileErr) {
         console.error("❌ [Sync][Client Profile] Error inserting profile:", profileErr);
@@ -2549,8 +2630,12 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
         }
         
         const recordsQuery = `
-            SELECT s.id, s.respondent_name, s.topic, s.sentiment, s.comments, DATE_FORMAT(s.created_at, '%M %d, %Y') as formatted_date, o.cluster_name, o.office_name
-            FROM survey_responses s JOIN offices o ON s.office_id = o.id ORDER BY o.cluster_name, s.created_at DESC
+            SELECT s.id, s.respondent_name, s.topic, s.sentiment, s.comments, DATE_FORMAT(s.created_at, '%M %d, %Y') as formatted_date, o.cluster_name, o.office_name,
+                   TIME_FORMAT(p.office_visited_time, '%h:%i %p') as office_visited_time_formatted
+            FROM survey_responses s
+            JOIN offices o ON s.office_id = o.id
+            LEFT JOIN client_profiles p ON p.survey_response_id = s.id
+            ORDER BY o.cluster_name, s.created_at DESC
         `;
         db.query(recordsQuery, (err, results) => {
             const recordsByCluster = {};
@@ -2580,7 +2665,7 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                     if (sentimentLower.includes('positive')) sentimentClass = 'bg-sentiment-positive';
                     else if (sentimentLower.includes('negative')) sentimentClass = 'bg-sentiment-negative';
 
-                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', officeName: row.office_name || 'N/A', topic: row.topic || 'General', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: row.comments || 'No comments provided.', date: row.formatted_date });
+                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', officeName: row.office_name || 'N/A', topic: row.topic || 'General', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: row.comments || 'No comments provided.', date: row.formatted_date, officeVisitedTime: row.office_visited_time_formatted || 'N/A' });
                 });
             }
             res.render('survey-records', { recordsByCluster, clusterRatings });
@@ -2596,10 +2681,11 @@ app.get('/api/admin/survey-response/:id', ensureAdminAuth, noCache, (req, res) =
     const query = `
         SELECT s.id, s.respondent_name, s.topic, s.sentiment, s.region, s.cc1, s.cc2, s.cc3,
                s.sqd0, s.sqd1, s.sqd2, s.sqd3, s.sqd4, s.sqd5, s.sqd6, s.sqd7, s.sqd8,
-               s.comments, s.period_year_quarter,
+               s.comments, s.period_year_quarter, s.google_email,
                DATE_FORMAT(s.created_at, '%M %d, %Y %h:%i %p') AS formatted_date,
                o.office_name, o.cluster_name,
-               p.client_type, p.age, p.gender
+               p.client_type, p.age, p.gender,
+               TIME_FORMAT(p.office_visited_time, '%h:%i %p') AS office_visited_time_formatted
         FROM survey_responses s
         JOIN offices o ON s.office_id = o.id
         LEFT JOIN client_profiles p ON p.survey_response_id = s.id

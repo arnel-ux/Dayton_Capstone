@@ -98,14 +98,21 @@
         [data-bs-theme="dark"] .sidebar { background: linear-gradient(190deg, #0d1524 0%, #0a101c 55%, #070c16 100%); }
 
         .sidebar-brand {
-            display: flex; align-items: center; gap: 0.8rem;
-            padding: 1.6rem 1.5rem 1.35rem;
+            display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.85rem;
+            padding: 2.1rem 1.5rem 1.85rem;
             border-bottom: 1px solid rgba(255,255,255,0.08);
         }
-        .sidebar-brand img { width: 44px; height: 44px; object-fit: contain; flex-shrink: 0; }
-        .sidebar-brand-text { line-height: 1.3; }
-        .sidebar-brand-text .t1 { font-size: 0.84rem; font-weight: 700; color: #fff; letter-spacing: 0.3px; }
-        .sidebar-brand-text .t2 { font-size: 0.7rem; color: #8996ac; margin-top: 0.1rem; }
+        .sidebar-brand-logo-wrap {
+            width: 96px; height: 96px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .sidebar-brand img {
+            width: 100%; height: 100%; object-fit: contain; display: block;
+            filter: drop-shadow(0 4px 10px rgba(0,0,0,0.35));
+        }
+        .sidebar-brand-text { line-height: 1.4; }
+        .sidebar-brand-text .t1 { font-size: 1.14rem; font-weight: 800; color: #fff; letter-spacing: 0.3px; }
+        .sidebar-brand-text .t2 { font-size: 0.82rem; color: #8996ac; margin-top: 0.25rem; }
 
         .sidebar-nav { flex-grow: 1; padding: 1.5rem 1rem; display: flex; flex-direction: column; gap: 0.3rem; }
         .sidebar-nav-label {
@@ -461,31 +468,82 @@
 
         .spinner-block { text-align: center; padding: 3rem 1rem; color: var(--ink-600); }
 
-        /* ---- Review & Confirmation (Stage 5) ---- */
+        /* ---- Review & Confirmation (Stage 5) — presented as an official
+           document/report rather than a dashboard of cards: a light "page"
+           tray holds a white "paper" sheet, topped by a header that stays
+           pinned (position: sticky) just under the topbar while the paper
+           content scrolls underneath it. ---- */
+        .review-doc { background: var(--page-bg); border-radius: 18px; padding: 1.1rem; }
+        [data-bs-theme="dark"] .review-doc { background: #0b1220; }
+
+        .review-doc-paper {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            box-shadow: var(--shadow-soft);
+            max-width: 760px;
+            margin: 0 auto;
+            overflow: hidden;
+        }
+
+        .review-doc-header {
+            position: sticky;
+            top: var(--topbar-h);
+            z-index: 15;
+            background: var(--surface);
+            border-bottom: 1px solid var(--line);
+            padding: 1.5rem 1.75rem 1.15rem;
+        }
+        .review-doc-header .section-title { padding-top: 0; padding-bottom: 0; }
+
+        .review-doc-body { padding: 1.6rem 1.75rem 1.9rem; }
+
+        .review-doc-kicker {
+            text-align: center;
+            font-family: 'Playfair Display', serif;
+            font-weight: 700;
+            font-size: 1rem;
+            color: var(--ink-900);
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            padding-bottom: 1.35rem;
+            margin-bottom: 1.6rem;
+            border-bottom: 1px dashed var(--line);
+        }
+
         .review-section { margin-bottom: 1.75rem; }
         .review-section-header {
             display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 0.9rem;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.65rem;
+            border-bottom: 1.5px solid var(--line);
         }
-        .review-section-header h5 { margin: 0; font-weight: 700; color: var(--ink-900); font-size: 0.95rem; text-transform: uppercase; letter-spacing: .03em; }
+        .review-section-header h5 { margin: 0; font-weight: 700; color: var(--ink-900); font-size: 0.9rem; text-transform: uppercase; letter-spacing: .05em; }
         .btn-edit-section {
-            font-size: 0.78rem; font-weight: 700; padding: 0.3rem 0.85rem; border-radius: 50px;
-            background: var(--ring); color: var(--brand); border: 1px solid transparent; transition: all .15s ease;
+            font-size: 0.75rem; font-weight: 700; padding: 0.3rem 0.85rem; border-radius: 50px;
+            background: transparent; color: var(--brand); border: 1px solid var(--line); transition: all .15s ease;
+            flex-shrink: 0; white-space: nowrap;
         }
-        .btn-edit-section:hover { background: var(--brand); color: #fff; transform: translateY(-1px); }
+        .btn-edit-section:hover { background: var(--brand); color: #fff; border-color: var(--brand); transform: translateY(-1px); }
 
-        .review-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+        .review-grid { display: grid; grid-template-columns: repeat(2, 1fr); column-gap: 2rem; }
         .review-item {
-            background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: 0.9rem 1.1rem;
-            transition: border-color .15s ease, box-shadow .15s ease;
+            display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+            padding: 0.55rem 0;
+            border-bottom: 1px solid var(--line-soft);
         }
-        .review-item:hover { border-color: #c7d5f2; box-shadow: 0 4px 14px -10px rgba(37,84,199,0.3); }
-        #terms-box { box-shadow: var(--shadow-soft); }
-        .review-section + .review-section { padding-top: 1.75rem; border-top: 1px dashed var(--line); }
-        [data-bs-theme="dark"] .review-item { background: #101827; }
-        .review-item .label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-400); margin-bottom: 0.2rem; }
-        .review-item .value { font-weight: 600; color: var(--ink-900); font-size: 0.9rem; word-break: break-word; }
-        .review-item.full { grid-column: 1 / -1; }
+        [data-bs-theme="dark"] .review-item { border-color: var(--line-soft); }
+        .review-item .label {
+            flex: 0 0 auto; margin-bottom: 0;
+            font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-400);
+        }
+        .review-item .value { flex: 1 1 auto; text-align: right; font-weight: 600; color: var(--ink-900); font-size: 0.9rem; word-break: break-word; }
+        .review-item.full {
+            grid-column: 1 / -1;
+            flex-direction: column; align-items: flex-start; gap: 0.3rem;
+        }
+        .review-item.full .value { text-align: left; width: 100%; }
 
         .review-sqd-row {
             display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
@@ -498,8 +556,15 @@
             background: var(--ring); color: var(--brand);
         }
 
+        #terms-box { box-shadow: var(--shadow-soft); }
+
         @media (max-width: 576px) {
+            .review-doc { padding: 0.6rem; border-radius: 14px; }
+            .review-doc-header { padding: 1.1rem 1.15rem 0.9rem; }
+            .review-doc-body { padding: 1.2rem 1.15rem 1.4rem; }
             .review-grid { grid-template-columns: 1fr; }
+            .review-item { flex-direction: column; align-items: flex-start; gap: 0.2rem; }
+            .review-item .value { text-align: left; width: 100%; }
         }
 
         @media (max-width: 991.98px) {
@@ -931,8 +996,8 @@
         [data-bs-theme="dark"] .table { --bs-table-bg: transparent; --bs-table-color: var(--ink-800); border-color: var(--line); }
         [data-bs-theme="dark"] #sqd-table-wrap thead th { background: #050a13; }
         [data-bs-theme="dark"] #terms-box { background-color: var(--surface) !important; border-color: var(--line) !important; }
-        [data-bs-theme="dark"] .review-item { background: #101827; }
-        [data-bs-theme="dark"] .review-item:hover { border-color: var(--brand); }
+        [data-bs-theme="dark"] .review-doc-paper { background: var(--surface); border-color: var(--line); }
+        [data-bs-theme="dark"] .review-doc-header { background: var(--surface); }
         [data-bs-theme="dark"] .survey-progress { background: #101827; border-color: var(--line); }
 
         summary { list-style: none; outline: none; }
@@ -951,7 +1016,9 @@
 
     <aside class="sidebar" id="clientSidebar">
         <div class="sidebar-brand">
-            <img src="/images/cspc-logo.png" alt="CSPC Logo">
+            <div class="sidebar-brand-logo-wrap">
+                <img src="/images/cspc-logo.png" alt="CSPC Logo">
+            </div>
             <div class="sidebar-brand-text">
                 <div class="t1">CQA Client Portal</div>
                 <div class="t2">CSPC Nabua, Cam. Sur</div>
@@ -1192,6 +1259,11 @@
                             <input type="date" id="surveyDate" name="survey_date" class="form-control" readonly onkeydown="return false;" style="background-color: var(--line-soft); cursor: not-allowed;">
                         </div>
 
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-dark fs-6" for="officeVisitedTime" data-i18n="lbl_office_visited_time"></label>
+                            <input type="time" id="officeVisitedTime" name="office_visited_time" class="form-control" required>
+                        </div>
+
                         <div class="col-12">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_region"></label>
                             <i id="region-lock-note" class="bi bi-lock-fill lock-icon d-none" data-bs-toggle="tooltip" data-bs-placement="top" title="You have already answered this section. It is now locked."></i>
@@ -1384,54 +1456,65 @@
                 </div>
 
                 <div id="stage5" class="page">
-                    <div class="section-title mb-4">
-                        <h4 class="fw-semibold text-heading text-uppercase mb-0" data-i18n="rv_title">Review &amp; Confirmation</h4>
-                        <p class="text-secondary mt-2 mb-0" data-i18n="rv_desc">Please double-check your answers below before submitting. Click "Edit" on any section to make changes.</p>
-                    </div>
+                    <div class="review-doc">
+                        <div class="review-doc-paper">
+                            <div class="review-doc-header">
+                                <div class="section-title mb-0">
+                                    <h4 class="fw-semibold text-heading text-uppercase mb-0" data-i18n="rv_title">Review &amp; Confirmation</h4>
+                                    <p class="text-secondary mt-2 mb-0" data-i18n="rv_desc">Please double-check your answers below before submitting. Click "Edit" on any section to make changes.</p>
+                                </div>
+                            </div>
 
-                    <div class="review-section">
-                        <div class="review-section-header">
-                            <h5><i class="bi bi-person-lines-fill me-1"></i> <span data-i18n="rv_sec_profile">Client Profile</span></h5>
-                            <button type="button" class="btn-edit-section" onclick="goEditStage(2)"><i class="bi bi-pencil-fill me-1"></i> <span data-i18n="rv_edit">Edit / Baguhin</span></button>
-                        </div>
-                        <div class="review-grid">
-                            <div class="review-item"><div class="label" data-i18n="rv_lbl_name">Name</div><div class="value" id="rv-name">—</div></div>
-                            <div class="review-item"><div class="label" data-i18n="rv_lbl_email">Google Account</div><div class="value" id="rv-email">—</div></div>
-                            <div class="review-item"><div class="label" data-i18n="rv_lbl_clienttype">Client Type</div><div class="value" id="rv-clienttype">—</div></div>
-                            <div class="review-item"><div class="label" data-i18n="rv_lbl_gender">Sex</div><div class="value" id="rv-gender">—</div></div>
-                            <div class="review-item"><div class="label" data-i18n="rv_lbl_age">Age</div><div class="value" id="rv-age">—</div></div>
-                            <div class="review-item"><div class="label" data-i18n="rv_lbl_date">Date</div><div class="value" id="rv-date">—</div></div>
-                            <div class="review-item"><div class="label" data-i18n="rv_lbl_region">Region</div><div class="value" id="rv-region">—</div></div>
-                            <div class="review-item"><div class="label" data-i18n="rv_lbl_office">Office Visited</div><div class="value" id="rv-office">—</div></div>
-                            <div class="review-item full"><div class="label" data-i18n="rv_lbl_service">Service Availed</div><div class="value" id="rv-service">—</div></div>
-                        </div>
-                    </div>
+                            <div class="review-doc-body">
+                                <div class="review-doc-kicker" data-i18n="rv_kicker">Official Survey Confirmation</div>
 
-                    <div class="review-section">
-                        <div class="review-section-header">
-                            <h5><i class="bi bi-file-earmark-text-fill me-1"></i> <span data-i18n="rv_sec_cc">Citizen's Charter</span></h5>
-                            <button type="button" class="btn-edit-section" onclick="goEditStage(3)"><i class="bi bi-pencil-fill me-1"></i> <span data-i18n="rv_edit">Edit / Baguhin</span></button>
-                        </div>
-                        <div class="review-grid">
-                            <div class="review-item full"><div class="label">CC1</div><div class="value" id="rv-cc1">—</div></div>
-                            <div class="review-item full"><div class="label">CC2</div><div class="value" id="rv-cc2">—</div></div>
-                            <div class="review-item full"><div class="label">CC3</div><div class="value" id="rv-cc3">—</div></div>
-                        </div>
-                    </div>
+                                <div class="review-section">
+                                    <div class="review-section-header">
+                                        <h5><i class="bi bi-person-lines-fill me-1"></i> <span data-i18n="rv_sec_profile">Client Profile</span></h5>
+                                        <button type="button" class="btn-edit-section" onclick="goEditStage(2)"><i class="bi bi-pencil-fill me-1"></i> <span data-i18n="rv_edit">Edit</span></button>
+                                    </div>
+                                    <div class="review-grid">
+                                        <div class="review-item"><div class="label" data-i18n="rv_lbl_name">Name</div><div class="value" id="rv-name">—</div></div>
+                                        <div class="review-item"><div class="label" data-i18n="rv_lbl_email">Google Account</div><div class="value" id="rv-email">—</div></div>
+                                        <div class="review-item"><div class="label" data-i18n="rv_lbl_clienttype">Client Type</div><div class="value" id="rv-clienttype">—</div></div>
+                                        <div class="review-item"><div class="label" data-i18n="rv_lbl_gender">Sex</div><div class="value" id="rv-gender">—</div></div>
+                                        <div class="review-item"><div class="label" data-i18n="rv_lbl_age">Age</div><div class="value" id="rv-age">—</div></div>
+                                        <div class="review-item"><div class="label" data-i18n="rv_lbl_date">Date</div><div class="value" id="rv-date">—</div></div>
+                                        <div class="review-item"><div class="label" data-i18n="rv_lbl_office_visited_time">Time of Office Visit</div><div class="value" id="rv-office-visited-time">—</div></div>
+                                        <div class="review-item"><div class="label" data-i18n="rv_lbl_region">Region</div><div class="value" id="rv-region">—</div></div>
+                                        <div class="review-item"><div class="label" data-i18n="rv_lbl_office">Office Visited</div><div class="value" id="rv-office">—</div></div>
+                                        <div class="review-item full"><div class="label" data-i18n="rv_lbl_service">Service Availed</div><div class="value" id="rv-service">—</div></div>
+                                    </div>
+                                </div>
 
-                    <div class="review-section">
-                        <div class="review-section-header">
-                            <h5><i class="bi bi-star-fill me-1"></i> <span data-i18n="rv_sec_sqd">Service Quality Ratings</span></h5>
-                            <button type="button" class="btn-edit-section" onclick="goEditStage(4)"><i class="bi bi-pencil-fill me-1"></i> <span data-i18n="rv_edit">Edit / Baguhin</span></button>
-                        </div>
-                        <div class="qa-block p-4" id="rv-sqd-list"></div>
-                    </div>
+                                <div class="review-section">
+                                    <div class="review-section-header">
+                                        <h5><i class="bi bi-file-earmark-text-fill me-1"></i> <span data-i18n="rv_sec_cc">Citizen's Charter</span></h5>
+                                        <button type="button" class="btn-edit-section" onclick="goEditStage(3)"><i class="bi bi-pencil-fill me-1"></i> <span data-i18n="rv_edit">Edit</span></button>
+                                    </div>
+                                    <div class="review-grid">
+                                        <div class="review-item full"><div class="label">CC1</div><div class="value" id="rv-cc1">—</div></div>
+                                        <div class="review-item full"><div class="label">CC2</div><div class="value" id="rv-cc2">—</div></div>
+                                        <div class="review-item full"><div class="label">CC3</div><div class="value" id="rv-cc3">—</div></div>
+                                    </div>
+                                </div>
 
-                    <div class="review-section mb-0">
-                        <div class="review-section-header">
-                            <h5><i class="bi bi-chat-left-text-fill me-1"></i> <span data-i18n="rv_sec_sugg">Suggestions</span></h5>
+                                <div class="review-section">
+                                    <div class="review-section-header">
+                                        <h5><i class="bi bi-star-fill me-1"></i> <span data-i18n="rv_sec_sqd">Service Quality Ratings</span></h5>
+                                        <button type="button" class="btn-edit-section" onclick="goEditStage(4)"><i class="bi bi-pencil-fill me-1"></i> <span data-i18n="rv_edit">Edit</span></button>
+                                    </div>
+                                    <div class="qa-block p-4" id="rv-sqd-list"></div>
+                                </div>
+
+                                <div class="review-section mb-0">
+                                    <div class="review-section-header">
+                                        <h5><i class="bi bi-chat-left-text-fill me-1"></i> <span data-i18n="rv_sec_sugg">Suggestions</span></h5>
+                                    </div>
+                                    <div class="review-item full"><div class="value" id="rv-comments">—</div></div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="review-item full"><div class="value" id="rv-comments">—</div></div>
                     </div>
 
                     <div class="d-flex justify-content-between border-top pt-4 mt-5">
@@ -1644,6 +1727,12 @@ window.addEventListener('pageshow', function (event) {
 });
 
 document.getElementById('surveyDate').valueAsDate = new Date();
+(function initDefaultOfficeVisitedTime() {
+    const timeInput = document.getElementById('officeVisitedTime');
+    if (timeInput && !timeInput.value) {
+        timeInput.value = new Date().toTimeString().slice(0, 5);
+    }
+})();
 let currentLang = 'en';
 
 // The "Home" view is active by default on load (no switchView() call fires
@@ -2269,6 +2358,7 @@ function validateStage(stageNum) {
             'select[name="client_type"]',
             'select[name="age"]',
             'input[name="survey_date"]',
+            'input[name="office_visited_time"]',
             'select[name="region"]',
             'select[name="office_id"]',
             'select[name="service_availed"]'
@@ -2438,6 +2528,7 @@ const i18n = {
         opt_18_below: "18 and below",
         opt_60_above: "60 and above",
         lbl_date: "Date:",
+        lbl_office_visited_time: "Time of Office Visit:",
         lbl_region: "Region of residence:",
         lbl_office: "Office Visited:",
         lbl_service: "Service Availed:",
@@ -2489,7 +2580,8 @@ const i18n = {
         ],
         rv_title: "Review &amp; Confirmation",
         rv_desc: "Please double-check your answers below before submitting. Click \"Edit\" on any section to make changes.",
-        rv_edit: "Edit / Baguhin",
+        rv_kicker: "Official Survey Confirmation",
+        rv_edit: "Edit",
         rv_sec_profile: "Client Profile",
         rv_sec_cc: "Citizen's Charter",
         rv_sec_sqd: "Service Quality Ratings",
@@ -2500,6 +2592,7 @@ const i18n = {
         rv_lbl_gender: "Sex",
         rv_lbl_age: "Age",
         rv_lbl_date: "Date",
+        rv_lbl_office_visited_time: "Time of Office Visit",
         rv_lbl_region: "Region",
         rv_lbl_office: "Office Visited",
         rv_lbl_service: "Service Availed",
@@ -2577,6 +2670,7 @@ const i18n = {
         opt_18_below: "18 pababa",
         opt_60_above: "60 pataas",
         lbl_date: "Petsa:",
+        lbl_office_visited_time: "Oras ng Pagpunta sa Opisina:",
         lbl_region: "Rehiyon ng Paninirahan:",
         lbl_office: "Pinuntahang Tanggapan:",
         lbl_service: "Serbisyong Ginamit:",
@@ -2628,7 +2722,8 @@ const i18n = {
         ],
         rv_title: "Pagsusuri at Kumpirmasyon",
         rv_desc: "Pakisuri muna ang iyong mga sagot sa ibaba bago magsumite. I-click ang \"Baguhin\" sa alinmang seksyon para gumawa ng pagbabago.",
-        rv_edit: "Edit / Baguhin",
+        rv_kicker: "Opisyal na Kumpirmasyon ng Survey",
+        rv_edit: "Baguhin",
         rv_sec_profile: "Pagkakakilanlan ng Kliyente",
         rv_sec_cc: "Citizen's Charter",
         rv_sec_sqd: "Mga Rating sa Kalidad ng Serbisyo",
@@ -2639,6 +2734,7 @@ const i18n = {
         rv_lbl_gender: "Kasarian",
         rv_lbl_age: "Edad",
         rv_lbl_date: "Petsa",
+        rv_lbl_office_visited_time: "Oras ng Pagpunta sa Opisina",
         rv_lbl_region: "Rehiyon",
         rv_lbl_office: "Pinuntahang Tanggapan",
         rv_lbl_service: "Serbisyong Ginamit",
@@ -2738,6 +2834,21 @@ function setLanguage(lang) {
     if (activePage) updateNextButtonLabel(parseInt(activePage.id.replace('stage', ''), 10));
 }
 
+// Converts an <input type="time"> value ("HH:MM") into a human-readable
+// 12-hour string ("9:35 AM") for display on Review & Confirmation.
+function formatTimeForDisplay(rawTime) {
+    if (!rawTime) return '—';
+    const parts = rawTime.split(':');
+    if (parts.length < 2) return rawTime;
+    let hours = parseInt(parts[0], 10);
+    const minutes = parts[1];
+    if (isNaN(hours)) return rawTime;
+    const period = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    if (hours === 0) hours = 12;
+    return `${hours}:${minutes} ${period}`;
+}
+
 // =====================================
 // STAGE 5 — REVIEW & CONFIRMATION SUMMARY
 // =====================================
@@ -2763,6 +2874,7 @@ function renderReviewSummary() {
     document.getElementById('rv-gender').textContent = checkedLabelText('gender');
     document.getElementById('rv-age').textContent = selectedText('select[name="age"]');
     document.getElementById('rv-date').textContent = val('input[name="survey_date"]') || '—';
+    document.getElementById('rv-office-visited-time').textContent = formatTimeForDisplay(val('input[name="office_visited_time"]'));
     document.getElementById('rv-region').textContent = selectedText('select[name="region"]');
     document.getElementById('rv-office').textContent = selectedText('select[name="office_id"]');
     document.getElementById('rv-service').textContent = selectedText('select[name="service_availed"]');
@@ -2905,6 +3017,7 @@ function startNewSurvey() {
     // form.reset() clears values but not the `disabled` attribute on
     // already-locked profile fields, and doesn't restore today's date.
     document.getElementById('surveyDate').valueAsDate = new Date();
+    document.getElementById('officeVisitedTime').value = new Date().toTimeString().slice(0, 5);
     applyLockedProfile();
     populateServiceSelect('');
 

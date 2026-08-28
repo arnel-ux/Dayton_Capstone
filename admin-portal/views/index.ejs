@@ -90,7 +90,7 @@
         .page-content { position: relative; z-index: 1; }
 
         /* --- SITE NAV LINKS --- */
-        .site-nav { display: flex; align-items: center; justify-content: center; gap: var(--sp-3); margin: 0 var(--sp-2); }
+        .site-nav { display: flex; align-items: center; justify-content: center; gap: var(--sp-2); margin: 0 var(--sp-3); }
         .site-nav a { color: rgba(255,255,255,0.85); text-decoration: none; font-weight: 600; font-size: var(--fs-sm); letter-spacing: 0.4px; text-transform: uppercase; position: relative; padding-bottom: 4px; transition: color 0.25s ease; }
         .site-nav a::after { content: ''; position: absolute; left: 0; bottom: 0; width: 0; height: 2px; background: var(--gold-400); transition: width 0.25s ease; }
         .site-nav a:hover { color: #fff; }
@@ -108,7 +108,12 @@
             border-bottom: 1px solid rgba(244, 180, 0, 0.25);
             box-shadow: 0 4px 25px rgba(0,0,0,0.35);
             padding: var(--sp-2) var(--sp-4);
-            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--sp-2);
+            display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: var(--sp-2);
+        }
+
+        .nav-inner {
+            width: 100%; max-width: 75rem;
+            display: flex; justify-content: flex-start; align-items: center; flex-wrap: wrap; gap: var(--sp-4);
         }
 
         body.dark-mode .sticky-top-section { background: rgba(4, 8, 18, 0.92); border-bottom: 1px solid rgba(244, 180, 0, 0.15); }
@@ -119,7 +124,7 @@
         .header-title { font-size: var(--fs-lg); font-weight: 800; color: #ffffff; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; text-shadow: 0 2px 5px rgba(0,0,0,0.5); line-height: 1.3; }
         .header-subtitle { font-size: var(--fs-sm); color: var(--gold-400); font-weight: 600; margin: 0; letter-spacing: 1px; line-height: 1.4; }
 
-        .nav-right { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); }
+        .nav-right { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); margin-left: auto; }
         .period-select {
             padding: var(--sp-1) var(--sp-2); border-radius: 50px; border: 1px solid rgba(255,255,255,0.4);
             background: rgba(255, 255, 255, 0.1); color: white; font-weight: 600; font-size: var(--fs-sm);
@@ -129,7 +134,8 @@
         .period-select option { background: var(--navy-900); color: white; }
 
         .auth-buttons { display: flex; align-items: center; gap: var(--sp-2); }
-        .auth-buttons .btn { border-radius: 50px; font-weight: 700; padding: var(--sp-1) var(--sp-3); font-size: var(--fs-sm); }
+        .auth-buttons .btn { display: inline-flex; align-items: center; gap: var(--sp-1); border-radius: 50px; font-weight: 700; padding: var(--sp-1) var(--sp-3); font-size: var(--fs-sm); line-height: 1; }
+        .auth-buttons .btn i { font-size: 0.85em; line-height: 1; }
         .btn-admin { background: linear-gradient(135deg, var(--gold-500), var(--gold-400)); color: var(--navy-950); border: none; box-shadow: 0 4px 14px rgba(244, 180, 0, 0.45); position: relative; will-change: transform; transition: filter 0.25s ease, box-shadow 0.25s ease; }
         .btn-admin:hover { filter: brightness(1.08); color: var(--navy-950); box-shadow: 0 8px 22px rgba(244, 180, 0, 0.55); }
 
@@ -182,7 +188,7 @@
         ========================================================= */
         .hero-section {
             display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
-            position: relative; text-align: center; padding: var(--sp-4) var(--sp-4) var(--sp-3);
+            position: relative; text-align: center; padding: var(--sp-6) var(--sp-4) var(--sp-5);
         }
 
         @keyframes heroFadeUp {
@@ -243,7 +249,7 @@
         .profile-name { color: #fff; font-weight: 800; font-size: var(--fs-lg); margin: 0; letter-spacing: 0.4px; position: relative; z-index: 1; line-height: 1.3; }
         .profile-role { color: var(--gold-300); font-weight: 600; font-size: var(--fs-sm); margin: var(--sp-1) 0 var(--sp-2); position: relative; z-index: 1; line-height: 1.4; }
         .profile-divider { width: 60px; height: 2px; background: rgba(244,180,0,0.5); margin: 0 auto var(--sp-2); position: relative; z-index: 1; }
-        .profile-contact { display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); font-size: var(--fs-sm); color: rgba(255,255,255,0.85); position: relative; z-index: 1; }
+        .profile-contact { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); color: rgba(255,255,255,0.85); position: relative; z-index: 1; }
         .profile-contact span { display: flex; align-items: center; justify-content: center; gap: var(--sp-1); }
         .profile-contact a { color: var(--gold-300); text-decoration: none; }
         .profile-contact a:hover { text-decoration: underline; }
@@ -329,7 +335,7 @@
         .services-wrap { max-width: 50rem; margin: 0 auto; }
 
         /* --- Cluster tabs (level 1) --- */
-        .cluster-tabs { display: flex; flex-wrap: wrap; align-items: stretch; justify-content: center; gap: var(--sp-2); margin: 0 0 var(--sp-4); }
+        .cluster-tabs { display: flex; flex-wrap: wrap; align-items: stretch; justify-content: center; gap: var(--sp-3); margin: 0 0 var(--sp-5); }
         .cluster-tab-btn {
             flex: 1 1 11rem; display: flex; align-items: center; justify-content: center; gap: var(--sp-2);
             padding: var(--sp-2) var(--sp-3); border-radius: 50px; background: rgba(255,255,255,0.08);
@@ -346,7 +352,7 @@
         }
 
         /* --- Offices within the active cluster (level 2, accordion) --- */
-        .services-accordion { display: flex; flex-direction: column; gap: var(--sp-2); }
+        .services-accordion { display: flex; flex-direction: column; gap: var(--sp-3); }
 
         .accordion-item {
             background: rgba(255,255,255,0.08); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
@@ -377,7 +383,7 @@
         .accordion-item.open .accordion-panel { grid-template-rows: 1fr; }
         .accordion-panel-inner { overflow: hidden; }
 
-        .accordion-list { list-style: none; margin: 0; padding: 0 var(--sp-3) var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-1); }
+        .accordion-list { list-style: none; margin: 0; padding: 0 var(--sp-3) var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-2); }
         .accordion-list li { display: flex; align-items: flex-start; gap: var(--sp-1); font-size: var(--fs-sm); color: rgba(255,255,255,0.68); line-height: 1.6; }
         .accordion-list i { color: var(--gold-400); font-size: 0.55rem; margin-top: 0.5rem; flex-shrink: 0; }
 
@@ -427,7 +433,7 @@
         }
         .period-dropbar-select option { background: var(--navy-900); color: #fff; }
 
-        .dashboard-header-block { text-align: center; max-width: 40rem; margin: 0 auto var(--sp-2); padding: 0 var(--sp-4); position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
+        .dashboard-header-block { text-align: center; max-width: 40rem; margin: 0 auto var(--sp-4); padding: 0 var(--sp-4); position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
         .dashboard-header-block .section-eyebrow { color: var(--gold-400); margin-bottom: 0.35rem; }
         .dashboard-header-block .section-eyebrow::before { background: var(--gold-400); }
         .dashboard-header-block .section-title {
@@ -438,8 +444,8 @@
 
         /* KPI summary strip — glass tiles floating on the hero backdrop */
         .kpi-strip {
-            display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-3);
-            max-width: 87.5rem; margin: 0 auto var(--sp-3); padding: 0 var(--sp-4); position: relative; z-index: 1;
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-4);
+            max-width: 87.5rem; margin: 0 auto var(--sp-5); padding: 0 var(--sp-4); position: relative; z-index: 1;
         }
         .kpi-tile {
             background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); border-radius: var(--sp-2);
@@ -543,7 +549,7 @@
             content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
             background: linear-gradient(90deg, transparent, var(--gold-400), transparent);
         }
-        .footer-main { max-width: 75rem; margin: 0 auto; padding: var(--sp-8) var(--sp-4) var(--sp-5); display: grid; grid-template-columns: 1.4fr 1fr 1.2fr 1fr; gap: var(--sp-5); }
+        .footer-main { max-width: 75rem; margin: 0 auto; padding: var(--sp-8) var(--sp-4) var(--sp-5); display: grid; grid-template-columns: 1.4fr 1fr 1.2fr 1fr; gap: var(--sp-6); }
 
         .footer-brand-logo { display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-2); margin-bottom: var(--sp-2); }
         .footer-brand-logo img { width: 42px; height: 42px; object-fit: contain; }
@@ -618,24 +624,26 @@
     <div class="bg-overlay"></div>
 
     <div class="sticky-top-section" id="siteHeader">
-        <div class="nav-left">
-            <img src="<%= landingContent.branding.logoUrl %>" alt="Camarines Sur Polytechnic Colleges Logo">
-            <div class="header-text-container">
-                <h1 class="header-title"><%= landingContent.branding.title %></h1>
-                <p class="header-subtitle"><%= landingContent.branding.subtitle %></p>
+        <div class="nav-inner">
+            <div class="nav-left">
+                <img src="<%= landingContent.branding.logoUrl %>" alt="Camarines Sur Polytechnic Colleges Logo">
+                <div class="header-text-container">
+                    <h1 class="header-title"><%= landingContent.branding.title %></h1>
+                    <p class="header-subtitle"><%= landingContent.branding.subtitle %></p>
+                </div>
             </div>
-        </div>
 
-        <nav class="site-nav">
-            <a href="#dashboard" data-nav-link>Dashboard</a>
-            <a href="#services" data-nav-link>Services</a>
-            <a href="#about" data-nav-link>About</a>
-            <a href="#structure" data-nav-link>Structure</a>
-        </nav>
+            <nav class="site-nav">
+                <a href="#dashboard" data-nav-link>Dashboard</a>
+                <a href="#services" data-nav-link>Services</a>
+                <a href="#about" data-nav-link>About</a>
+                <a href="#structure" data-nav-link>Structure</a>
+            </nav>
 
-        <div class="nav-right">
-            <div class="auth-buttons">
-                <a href="/login" class="btn btn-admin magnetic"><i class="fas fa-sign-in-alt me-1 d-none d-sm-inline"></i> <%= landingContent.branding.loginLabel %></a>
+            <div class="nav-right">
+                <div class="auth-buttons">
+                    <a href="/login" class="btn btn-admin magnetic"><i class="fas fa-sign-in-alt d-none d-sm-inline"></i><%= landingContent.branding.loginLabel %></a>
+                </div>
             </div>
         </div>
     </div>

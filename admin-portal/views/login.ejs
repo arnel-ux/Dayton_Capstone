@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <%- include('layout/header') %>
+    <%- include('layout/header', { forceLightMode: true }) %>
     <style>
         /* Reset and Base Styles */
         html, body {
@@ -391,7 +391,7 @@
         <div class="card-custom">
 
             <div class="text-center mb-2">
-                <img src="/images/cspc-logo.png" alt="CSPC Logo" class="cqa-logo mb-1">
+                <img src="/images/cspc-logo.png" alt="CSPC Logo" class="cqa-logo mb-1" width="46" height="46">
                 <h4 class="fw-bold text-dark mb-0">CQA Portal Login</h4>
                 <div class="divider-soft"></div>
                 <p class="text-muted text-xsmall mb-0">Sign in to your account</p>
@@ -420,7 +420,11 @@
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-login w-100" title="Sign in to your account">
+                <div class="field-group d-flex justify-content-center">
+                    <div class="g-recaptcha" data-sitekey="<%= recaptchaSiteKey %>" data-callback="enableLoginSubmit" data-expired-callback="disableLoginSubmit" data-error-callback="disableLoginSubmit"></div>
+                </div>
+
+                <button type="submit" class="btn btn-login w-100" id="loginSubmitBtn" disabled title="Sign in to your account">
                     <i class="fas fa-sign-in-alt me-2"></i> Login
                 </button>
             </form>
@@ -442,6 +446,19 @@
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="/js/alerts.js"></script>
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <script>
+        // The Login button stays disabled until the "I'm not a robot" checkbox
+        // is checked (grecaptcha calls these on the global scope by name).
+        function enableLoginSubmit() {
+            const btn = document.getElementById('loginSubmitBtn');
+            if (btn) btn.disabled = false;
+        }
+        function disableLoginSubmit() {
+            const btn = document.getElementById('loginSubmitBtn');
+            if (btn) btn.disabled = true;
+        }
+    </script>
     <script>
         const loginQueryParams = new URLSearchParams(window.location.search);
         let loginErrorMsg = loginQueryParams.get('error');
@@ -508,7 +525,5 @@
             }
         })();
     </script>
-
-    <%- include('layout/theme-toggle') %>
 </body>
 </html>

@@ -3,6 +3,35 @@
 <title>Admin Portal</title>
 <% if (typeof loginToken !== 'undefined' && loginToken && typeof currentAdmin !== 'undefined' && currentAdmin) { %>
 <script>
+    // New-tab auto-login guard: 'admin.sid' is a normal browser cookie, so a brand
+    // new tab that merely inherited it (typed the URL, duplicated the tab, opened
+    // a bookmark) would otherwise land on an admin page fully "logged in" without
+    // ever having submitted credentials in THAT tab. sessionStorage is scoped per
+    // tab (never copied to a freshly opened one), so it's used here purely as a
+    // "did this tab actually authenticate" marker: /auth-login's redirect tags the
+    // very next page load with ?loggedin=1, which this script converts into the
+    // marker before the URL is cleaned up. Any other admin page load in a tab
+    // without that marker gets bounced straight back to /login.
+    // Note: this is a client-side UX guard, not a security boundary — the page
+    // markup briefly reaches the browser before this (first) script redirects it
+    // away, so it doesn't stop someone with devtools/view-source open on that same
+    // already-logged-in machine.
+    (function () {
+        try {
+            var params = new URLSearchParams(window.location.search);
+            if (params.has('loggedin')) {
+                sessionStorage.setItem('cqa_admin_tab_ok', '1');
+                params.delete('loggedin');
+                var cleanedSearch = params.toString();
+                var cleanedUrl = window.location.pathname + (cleanedSearch ? '?' + cleanedSearch : '') + window.location.hash;
+                window.history.replaceState({}, '', cleanedUrl);
+            } else if (sessionStorage.getItem('cqa_admin_tab_ok') !== '1') {
+                window.location.replace('/login?error=' + encodeURIComponent('Please log in to continue.'));
+            }
+        } catch (e) { /* sessionStorage unavailable (privacy mode, etc.) — fail open */ }
+    })();
+</script>
+<script>
     // Same-browser single-tab enforcement: two tabs on the same account share one
     // session cookie, so the server can't tell them apart until this tab's NEXT
     // request (ensureAdminAuth re-checks login_token against admins.login_token
@@ -51,6 +80,7 @@
     })();
 </script>
 <% } %>
+<% if (typeof forceLightMode === 'undefined' || !forceLightMode) { %>
 <script>
     (function () {
         try {
@@ -60,6 +90,7 @@
         } catch (e) {}
     })();
 </script>
+<% } %>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
