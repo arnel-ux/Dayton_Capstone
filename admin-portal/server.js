@@ -1002,7 +1002,7 @@ function sendSurveyReceiptEmail(toEmail, receipt) {
     const sqdRowsHtml = receipt.sqd.map((r, idx) => `
         <tr>
             <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};font-size:13px;color:#334155;">${sqdStatementFor(r.label)}</td>
-            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};text-align:center;font-weight:700;font-size:13px;color:#0a1f44;width:70px;">${r.value === null ? 'N/A' : (r.value === 0 ? 'N/A' : r.value + ' / 5')}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};text-align:center;font-weight:700;font-size:13px;color:#251d3a;width:70px;">${r.value === null ? 'N/A' : (r.value === 0 ? 'N/A' : r.value + ' / 5')}</td>
         </tr>`).join('');
 
     const detailRow = (label, value) => `
@@ -1055,7 +1055,7 @@ function sendSurveyReceiptEmail(toEmail, receipt) {
                             <!-- Header -->
                             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                                 <tr>
-                                    <td class="receipt-header" style="background:#0a1f44;padding:32px 28px;text-align:center;">
+                                    <td class="receipt-header" style="background:#251d3a;padding:32px 28px;text-align:center;">
                                         ${logoHtml}
                                         <p style="margin:0 0 2px;color:#dbe4fb;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;">Republic of the Philippines</p>
                                         <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">Camarines Sur Polytechnic Colleges</h1>
@@ -1069,7 +1069,7 @@ function sendSurveyReceiptEmail(toEmail, receipt) {
                                 <tr>
                                     <td style="padding:14px 28px;border-bottom:1px dashed #cbd5e1;background:#f8fafc;text-align:center;">
                                         <span style="font-size:11px;color:#64748b;letter-spacing:.04em;text-transform:uppercase;">Reference No.</span>
-                                        <span style="display:block;font-size:16px;font-weight:700;color:#0a1f44;font-family:'Courier New',monospace;letter-spacing:.03em;">CSM-${receipt.surveyResponseId}</span>
+                                        <span style="display:block;font-size:16px;font-weight:700;color:#251d3a;font-family:'Courier New',monospace;letter-spacing:.03em;">CSM-${receipt.surveyResponseId}</span>
                                     </td>
                                 </tr>
                             </table>
@@ -1148,7 +1148,7 @@ function sendSurveyApprovedEmail(toEmail, details) {
     const sqdRowsHtml = details.sqd.map((r, idx) => `
         <tr>
             <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};font-size:13px;color:#334155;">${sqdStatementFor(r.label)}</td>
-            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};text-align:center;font-weight:700;font-size:13px;color:#0a1f44;width:70px;">${r.value === null ? 'N/A' : (r.value === 0 ? 'N/A' : r.value + ' / 5')}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};text-align:center;font-weight:700;font-size:13px;color:#251d3a;width:70px;">${r.value === null ? 'N/A' : (r.value === 0 ? 'N/A' : r.value + ' / 5')}</td>
         </tr>`).join('');
 
     const detailRow = (label, value) => `
@@ -1164,7 +1164,7 @@ function sendSurveyApprovedEmail(toEmail, details) {
 
     const ccRowsHtml = ['cc1', 'cc2', 'cc3'].map((key, idx) => `
         <tr>
-            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};font-size:13px;font-weight:700;color:#0a1f44;width:60px;">${key.toUpperCase()}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};font-size:13px;font-weight:700;color:#251d3a;width:60px;">${key.toUpperCase()}</td>
             <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};font-size:13px;color:#334155;">${escapeHtml(details[key] || 'N/A')}</td>
         </tr>`).join('');
 
@@ -1205,7 +1205,7 @@ function sendSurveyApprovedEmail(toEmail, details) {
                             <!-- Header -->
                             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                                 <tr>
-                                    <td class="receipt-header" style="background:#0a1f44;padding:32px 28px;text-align:center;">
+                                    <td class="receipt-header" style="background:#251d3a;padding:32px 28px;text-align:center;">
                                         ${logoHtml}
                                         <p style="margin:0 0 2px;color:#dbe4fb;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;">Republic of the Philippines</p>
                                         <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">Camarines Sur Polytechnic Colleges</h1>
@@ -1303,7 +1303,7 @@ function sendPasswordResetEmail(toEmail, resetUrl) {
             <td align="center">
                 <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 8px 24px -12px rgba(15,23,42,.15);">
                     <tr>
-                        <td style="background:#0a1f44;padding:20px 28px;">
+                        <td style="background:#251d3a;padding:20px 28px;">
                             <span style="color:#ffffff;font-weight:700;font-size:16px;">CSPC Center for Quality Assurance</span>
                         </td>
                     </tr>
@@ -1315,7 +1315,7 @@ function sendPasswordResetEmail(toEmail, resetUrl) {
                                 This link is valid for 30 minutes and can only be used once.
                             </p>
                             <p style="text-align:center;margin:0 0 20px;">
-                                <a href="${resetUrl}" style="display:inline-block;background:#0a1f44;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 28px;border-radius:8px;">Reset Password</a>
+                                <a href="${resetUrl}" style="display:inline-block;background:#251d3a;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 28px;border-radius:8px;">Reset Password</a>
                             </p>
                             <p style="margin:0;color:#94a3b8;font-size:11.5px;line-height:1.6;">
                                 If you didn't request this, you can safely ignore this email — your password will not be changed.
@@ -2972,7 +2972,7 @@ function loadDashboardData(req, callback) {
                     logErr('cluster analytics')(err);
                     const chartData = { labels: [], respondents: [], ratings: [] };
                     const clusterCards = [];
-                    const colors = ['#0a1f44', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+                    const colors = ['#251d3a', '#2a2550', '#ffcc00', '#ffcc00'];
 
                     if (clusterData) {
                         clusterData.forEach((row, idx) => {
@@ -3247,7 +3247,7 @@ app.get('/print', ensureAdminAuth, noCache, (req, res) => {
                 `;
                 db.query(clusterQuery, dateParams, (err, clusterRows) => {
                     logErr('cluster analytics')(err);
-                    const colors = ['#0a1f44', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+                    const colors = ['#251d3a', '#2a2550', '#ffcc00', '#ffcc00'];
                     const chartData = { labels: [], respondents: [], ratings: [] };
                     const clusterCards = [];
                     (clusterRows || []).forEach((row, idx) => {

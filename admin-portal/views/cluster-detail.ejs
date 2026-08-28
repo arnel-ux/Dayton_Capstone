@@ -7,7 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <style>
-        :root { --primary-gradient: linear-gradient(135deg, #0a1f44 0%, #12305c 100%); --glass-bg: #ffffff; --navy: #0a1f44; }
+        :root { --primary-gradient: linear-gradient(135deg, #251d3a 0%, #2a2550 100%); --glass-bg: #ffffff; --navy: #251d3a; }
         body { background-color: #f1f5f9; font-family: 'Plus Jakarta Sans', sans-serif; color: var(--navy); overflow-x: hidden; }
         html[data-bs-theme="dark"] body { background-color: #0b1526; color: #e2e8f0; }
         html[data-bs-theme="dark"] .chart-card,
@@ -23,8 +23,21 @@
         .hero-header { text-align: center; padding: 1rem 1rem 0.5rem 1rem; }
         .status-badge { display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(90deg, #10b981, #059669); color: white; padding: 6px 20px; border-radius: 50px; font-weight: bold; font-size: 0.9rem; }
         .chart-card { background: white; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); padding: 25px; margin-top: 20px; }
+
+        /* Matches the metric-switch toggle used on the main admin dashboard's
+           Cluster Performance Analytics chart, so both pages read the same. */
+        .chart-toggle-group { display: inline-flex; background: rgba(15, 23, 42, 0.05); border-radius: 10px; padding: 4px; gap: 4px; flex-shrink: 0; }
+        html[data-bs-theme="dark"] .chart-toggle-group { background: rgba(255, 255, 255, 0.08); }
+        .chart-toggle-btn {
+            border: none; background: transparent; padding: 7px 16px; border-radius: 8px;
+            font-size: 0.78rem; font-weight: 700; color: #64748b; cursor: pointer; transition: all 0.15s ease;
+        }
+        .chart-toggle-btn:hover { color: #251d3a; }
+        .chart-toggle-btn.active { background: #251d3a; color: #fff; box-shadow: 0 2px 6px rgba(37, 29, 58, 0.25); }
+        html[data-bs-theme="dark"] .chart-toggle-btn { color: #94a3b8; }
+        html[data-bs-theme="dark"] .chart-toggle-btn:hover { color: #e2e8f0; }
         .stats-container { display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap; }
-        .stat-box { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); min-width: 200px; text-align: center; border-bottom: 4px solid #0a1f44; }
+        .stat-box { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); min-width: 200px; text-align: center; border-bottom: 4px solid #251d3a; }
         .stat-box h3 { font-size: 2rem; font-weight: 800; margin-bottom: 5px; color: #1e293b; }
         .stat-box p { margin: 0; color: #64748b; font-size: 0.9rem; text-transform: uppercase; font-weight: 600; }
 
@@ -130,11 +143,11 @@
                 </form>
 
                 <div class="stats-container">
-                    <div class="stat-box" style="border-bottom-color: #f4b400;">
+                    <div class="stat-box" style="border-bottom-color: #ffcc00;">
                         <h3 id="overallRating">0%</h3>
                         <p>Average Rating</p>
                     </div>
-                    <div class="stat-box" style="border-bottom-color: #0a1f44;">
+                    <div class="stat-box" style="border-bottom-color: #251d3a;">
                         <h3 id="totalResp">0</h3>
                         <p>Total Respondents</p>
                     </div>
@@ -145,8 +158,12 @@
                 </div>
 
                 <div class="chart-card">
-                    <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                         <h5 class="fw-bold mb-0">Office Ratings Distribution</h5>
+                        <div class="chart-toggle-group" role="group" aria-label="Switch chart metric">
+                            <button type="button" class="chart-toggle-btn active" data-metric="respondents">Respondents</button>
+                            <button type="button" class="chart-toggle-btn" data-metric="rating">Satisfaction Rating</button>
+                        </div>
                     </div>
                     <div style="height: 450px; position: relative;">
                         <canvas id="clusterChart"></canvas>
@@ -342,73 +359,86 @@
                 document.getElementById('totalOffices').innerText = evaluatedOffices;
             }
 
+            // Matches the main dashboard's Cluster Performance Analytics chart:
+            // one metric on screen at a time (toggled), instead of cramming
+            // respondent counts and a 0-100% rating onto the same bars.
+            const officeMetrics = {
+                respondents: {
+                    label: 'Total Respondents',
+                    data: (dataArray) => dataArray.map(d => parseInt(d.resp) || 0),
+                    color: 'rgba(37, 29, 58, 0.85)',
+                    border: '#251d3a',
+                    axisTitle: 'Number of Respondents',
+                    max: undefined
+                },
+                rating: {
+                    label: 'Satisfaction Rating (%)',
+                    data: (dataArray) => dataArray.map(d => parseFloat(d.rating) || 0),
+                    color: 'rgba(255, 204, 0, 0.85)',
+                    border: '#ffcc00',
+                    axisTitle: 'Satisfaction %',
+                    max: 100
+                }
+            };
+            let currentMetric = 'respondents';
+
             function renderChart(dataArray) {
                 if (chartInstance) chartInstance.destroy();
+                const metric = officeMetrics[currentMetric];
                 chartInstance = new Chart(ctx, {
                     type: 'bar',
                     data: {
                         labels: dataArray.map(d => d.label),
-                        // IDINAGDAG: 2 Datasets para makita mo kapag dumadagdag ang Total Respondents kahit di gumalaw ang Rating
-                        datasets: [
-                            {
-                                label: 'Total Respondents',
-                                data: dataArray.map(d => parseInt(d.resp) || 0),
-                                backgroundColor: 'rgba(10, 31, 68, 0.85)', // Navy
-                                borderColor: '#0a1f44',
-                                borderWidth: 1,
-                                borderRadius: 6,
-                                yAxisID: 'y' // Gagamit ng left axis
-                            },
-                            {
-                                label: 'Satisfaction Rating (%)',
-                                data: dataArray.map(d => parseFloat(d.rating) || 0),
-                                backgroundColor: 'rgba(244, 180, 0, 0.85)', // Gold
-                                borderColor: '#f4b400',
-                                borderWidth: 1,
-                                borderRadius: 6,
-                                yAxisID: 'y1' // Gagamit ng right axis (Percentage)
-                            }
-                        ]
+                        datasets: [{
+                            label: metric.label,
+                            data: metric.data(dataArray),
+                            backgroundColor: metric.color,
+                            borderColor: metric.border,
+                            borderWidth: 1,
+                            borderRadius: 6
+                        }]
                     },
                     options: {
                         responsive: true, maintainAspectRatio: false,
                         plugins: {
-                            legend: { display: true, position: 'top' }, // Pinapakita na ang legend
-                            datalabels: { 
-                                anchor: 'end', align: 'end', color: '#1e293b', 
+                            legend: { display: false },
+                            datalabels: {
+                                anchor: 'end', align: 'end', color: '#1e293b',
                                 font: { weight: '800', size: 11 },
-                                formatter: function(value, context) {
-                                    if(context.datasetIndex === 1) return '';
-                                    if(value === 0) return '';
-                                    return value;
+                                formatter: function(value) {
+                                    if (value === 0) return '';
+                                    return currentMetric === 'rating' ? value + '%' : value;
                                 }
                             },
                             tooltip: {
                                 backgroundColor: '#0f172a', padding: 12, displayColors: false,
                                 callbacks: {
-                                    title: (item) => `🏢 Office: ${dataArray[item[0].dataIndex].fullName}`
+                                    title: (item) => `🏢 Office: ${dataArray[item[0].dataIndex].fullName}`,
+                                    label: (item) => `${metric.label}: ${item.raw}${currentMetric === 'rating' ? '%' : ''}`
                                 }
                             }
                         },
                         scales: {
-                            // Left side scale para sa Volume ng Respondents
-                            y: { 
-                                type: 'linear', position: 'left', beginAtZero: true,
-                                title: { display: true, text: 'Number of Respondents', font: {weight: 'bold'} },
+                            y: {
+                                beginAtZero: true, max: metric.max,
+                                title: { display: true, text: metric.axisTitle, font: { weight: 'bold' } },
                                 grid: { borderDash: [4, 4] }
-                            },
-                            // Right side scale para sa Rating (0 - 100%)
-                            y1: { 
-                                type: 'linear', position: 'right', beginAtZero: true, max: 110,
-                                title: { display: true, text: 'Satisfaction %', font: {weight: 'bold'} },
-                                grid: { drawOnChartArea: false },
-                                ticks: { display: false }
                             },
                             x: { grid: { display: false }, ticks: { font: { weight: '700' } } }
                         }
                     }
                 });
             }
+
+            document.querySelectorAll('.chart-toggle-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (btn.classList.contains('active')) return;
+                    document.querySelectorAll('.chart-toggle-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentMetric = btn.getAttribute('data-metric');
+                    renderChart(currentData);
+                });
+            });
 
             updateDashboardUI(currentData);
             renderChart(currentData);

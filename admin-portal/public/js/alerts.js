@@ -1,7 +1,7 @@
 // Centralized SweetAlert2 helpers so every page shares the same look & feel.
 const AppAlert = {
     theme: {
-        confirmButtonColor: '#0a1f44',
+        confirmButtonColor: '#251d3a',
         cancelButtonColor: '#6b7280'
     },
 

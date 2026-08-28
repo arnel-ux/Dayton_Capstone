@@ -10,7 +10,7 @@
            1. DESIGN TOKENS
            ============================================================ */
         :root {
-            --primary-gradient: linear-gradient(135deg, #0a1f44 0%, #12305c 100%);
+            --primary-gradient: linear-gradient(135deg, #251d3a 0%, #2a2550 100%);
             --bg-body: #f4f6fb;
             --border-soft: rgba(15, 23, 42, 0.06);
             --border-soft-strong: rgba(15, 23, 42, 0.1);
@@ -19,91 +19,67 @@
             --text-faint: #94a3b8;
             --card-bg: #ffffff;
 
-            --navy-900: #0a1f44;
-            --navy-800: #0e2a5e;
-            --navy-700: #12305c;
-            --gold-500: #f4b400;
-            --gold-400: #ffc72c;
+            --navy-900: #251d3a;
+            --navy-800: #2a2550;
+            --navy-700: #2a2550;
+            --gold-500: #ffcc00;
+            --gold-400: #ffcc00;
 
-            --radius-lg: 18px;
+            --radius-lg: 20px;
             --radius-md: 14px;
             --radius-sm: 10px;
 
             --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.03);
             --shadow-card-hover: 0 10px 24px -8px rgba(15, 23, 42, 0.16);
-            --shadow-hero: 0 24px 48px -16px rgba(10, 31, 68, 0.4), 0 2px 8px rgba(10, 31, 68, 0.2);
+            --shadow-hero: 0 24px 48px -16px rgba(37, 29, 58, 0.4), 0 2px 8px rgba(37, 29, 58, 0.2);
 
             --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        html[data-bs-theme="dark"] {
-            --bg-body: #0b1526;
-            --border-soft: rgba(255, 255, 255, 0.08);
-            --border-soft-strong: rgba(255, 255, 255, 0.14);
-            --text-dark: #e2e8f0;
-            --text-muted: #94a3b8;
-            --card-bg: #141d30;
-        }
-
         body { background-color: var(--bg-body); font-family: 'Plus Jakarta Sans', sans-serif; color: var(--text-dark); }
-
-        html[data-bs-theme="dark"] .stat-card,
-        html[data-bs-theme="dark"] .cluster-mini-card,
-        html[data-bs-theme="dark"] .chart-container-main,
-        html[data-bs-theme="dark"] .filter-bar-v2,
-        html[data-bs-theme="dark"] .side-panel-card,
-        html[data-bs-theme="dark"] .insight-chip,
-        html[data-bs-theme="dark"] .modal-report-container {
-            background: var(--card-bg);
-        }
-        html[data-bs-theme="dark"] .form-select { background-color: var(--card-bg); color: var(--text-dark); }
-        html[data-bs-theme="dark"] .badge.bg-light { background-color: #1e293b !important; color: var(--text-muted) !important; }
 
         /* ============================================================
            2. PAGE HEADER
            ============================================================ */
         .dash-toolbar {
-            padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--border-soft);
+            padding-bottom: 22px; margin-bottom: 24px; border-bottom: 1px solid var(--border-soft);
         }
 
-        .dash-eyebrow {
-            font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
-            color: var(--gold-500); margin: 0 0 6px;
-        }
         .dash-title { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.03em; color: var(--text-dark); margin: 0; }
         .dash-subtitle { color: var(--text-muted); font-size: 0.92rem; margin: 4px 0 0; max-width: 46ch; }
 
         .btn-generate-report {
-            background: var(--navy-900); border: none; color: #fff; font-weight: 600;
-            padding: 11px 22px; border-radius: 12px; box-shadow: 0 6px 16px -6px rgba(10, 31, 68, 0.5);
+            background: linear-gradient(160deg, var(--navy-900), var(--navy-700)); border: none; color: #fff; font-weight: 700;
+            padding: 11px 22px; border-radius: 12px; box-shadow: 0 10px 24px -8px rgba(37, 29, 58, 0.5);
             transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), background-color 0.2s ease;
             white-space: nowrap;
         }
-        .btn-generate-report:hover { background: var(--navy-700); color: #fff; transform: translateY(-2px); box-shadow: 0 10px 22px -6px rgba(10, 31, 68, 0.55); }
-        .btn-generate-report:focus-visible { outline: 2px solid var(--gold-500); outline-offset: 2px; }
+        .btn-generate-report:hover { color: #fff; transform: translateY(-2px); box-shadow: 0 14px 30px -8px rgba(37, 29, 58, 0.55); }
+        .btn-generate-report:focus-visible { outline: 2px solid var(--navy-700); outline-offset: 2px; }
 
         /* ============================================================
            3. FILTER ROW — period filter on the left, Generate Report
               pinned to the right corner via ms-auto (stays right-aligned
               even if it wraps to its own line on narrow screens).
            ============================================================ */
-        .dash-filter-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 28px; }
+        .dash-filter-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
         .dash-filter-row .btn-generate-report { flex-shrink: 0; }
         .filter-bar-v2 {
-            background: #fff; border: 1px solid var(--border-soft); border-radius: var(--radius-md);
-            box-shadow: var(--shadow-card); padding: 10px 16px;
-            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+            background: var(--card-bg); border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+            box-shadow: var(--shadow-card); padding: 12px 18px;
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
         }
         .filter-bar-v2 .filter-icon {
-            width: 34px; height: 34px; border-radius: 9px; background: rgba(10, 31, 68, 0.07);
+            width: 34px; height: 34px; border-radius: 9px; background: rgba(37, 29, 58, 0.07);
             color: var(--navy-900); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
         }
         .filter-bar-v2 .filter-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }
         .filter-bar-v2 select.form-select {
             border: 1px solid var(--border-soft-strong); border-radius: 9px; font-weight: 600; font-size: 0.85rem;
             min-width: 190px; transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            background-color: #fff; color: var(--text-dark);
         }
-        .filter-bar-v2 select.form-select:focus { border-color: var(--navy-700); box-shadow: 0 0 0 3px rgba(10, 31, 68, 0.12); }
+        .filter-bar-v2 select.form-select:focus { border-color: var(--navy-700); box-shadow: 0 0 0 3px rgba(37, 29, 58, 0.12); }
         .filter-clear-btn {
             display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600;
             color: var(--text-muted); background: rgba(15, 23, 42, 0.05); border-radius: 9px; padding: 8px 14px;
@@ -116,12 +92,14 @@
            ============================================================ */
         .hero-card {
             position: relative; overflow: hidden; border-radius: var(--radius-lg);
-            background: linear-gradient(135deg, #0a1f44 0%, #123568 60%, #0e2a5e 100%);
-            color: #fff; box-shadow: var(--shadow-hero); padding: 34px; height: 100%;
+            background: linear-gradient(135deg, #251d3a 0%, #2a2550 60%, #2a2550 100%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #fff; box-shadow: var(--shadow-hero); padding: 18px 22px; height: 100%;
+            box-sizing: border-box;
         }
         .hero-card::before {
             content: ''; position: absolute; inset: 0;
-            background: radial-gradient(circle at 88% 8%, rgba(244, 180, 0, 0.16), transparent 45%),
+            background: radial-gradient(circle at 88% 8%, rgba(255, 204, 0, 0.08), transparent 45%),
                         radial-gradient(circle at 6% 96%, rgba(255, 255, 255, 0.08), transparent 40%);
             pointer-events: none;
         }
@@ -133,40 +111,40 @@
             -webkit-mask-image: linear-gradient(135deg, rgba(0,0,0,0.6), transparent 65%);
         }
 
-        .hero-flex { position: relative; z-index: 1; display: flex; align-items: center; gap: 30px; flex-wrap: wrap; height: 100%; }
+        .hero-flex { position: relative; z-index: 1; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; height: 100%; }
 
-        .hero-gauge-wrap { position: relative; width: 138px; height: 138px; flex-shrink: 0; }
+        .hero-gauge-wrap { position: relative; width: 74px; height: 74px; flex-shrink: 0; }
         .hero-gauge-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-        .hero-gauge-wrap .gauge-track { fill: none; stroke: rgba(255, 255, 255, 0.14); stroke-width: 9; }
+        .hero-gauge-wrap .gauge-track { fill: none; stroke: rgba(255, 255, 255, 0.14); stroke-width: 8; }
         .hero-gauge-wrap .gauge-fill {
-            fill: none; stroke: url(#gaugeGradient); stroke-width: 9; stroke-linecap: round;
+            fill: none; stroke: url(#gaugeGradient); stroke-width: 8; stroke-linecap: round;
             stroke-dasharray: 339.29; stroke-dashoffset: 339.29;
             transition: stroke-dashoffset 1.15s var(--ease-out);
         }
         .hero-gauge-center {
             position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
         }
-        .hero-gauge-center i { font-size: 1.6rem; color: var(--gold-400); opacity: 0.9; }
+        .hero-gauge-center i { font-size: 0.9rem; color: #fff; opacity: 0.9; }
 
-        .hero-info { flex: 1 1 260px; min-width: 240px; }
+        .hero-info { flex: 1 1 200px; min-width: 180px; }
         .hero-info-eyebrow {
-            font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
-            color: rgba(255, 255, 255, 0.6); margin-bottom: 10px;
+            font-size: 0.6rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.6); margin-bottom: 2px;
         }
-        .hero-score-line { display: flex; align-items: baseline; gap: 4px; line-height: 1; }
-        .hero-score-number { font-size: 3.1rem; font-weight: 800; letter-spacing: -0.03em; }
-        .hero-score-sign { font-size: 1.5rem; opacity: 0.55; font-weight: 700; }
+        .hero-score-line { display: flex; align-items: baseline; gap: 3px; line-height: 1; }
+        .hero-score-number { font-size: 1.65rem; font-weight: 800; letter-spacing: -0.03em; }
+        .hero-score-sign { font-size: 0.85rem; opacity: 0.55; font-weight: 700; }
 
-        .hero-badges { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+        .hero-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
         .hero-level-badge {
-            display: inline-flex; align-items: center; gap: 7px; background: rgba(34, 197, 94, 0.18);
-            color: #86efac; border: 1px solid rgba(134, 239, 172, 0.35); font-weight: 700; font-size: 0.78rem;
-            letter-spacing: 0.03em; padding: 7px 14px; border-radius: 999px;
+            display: inline-flex; align-items: center; gap: 5px; background: rgba(34, 197, 94, 0.18);
+            color: #86efac; border: 1px solid rgba(134, 239, 172, 0.35); font-weight: 700; font-size: 0.64rem;
+            letter-spacing: 0.02em; padding: 4px 9px; border-radius: 999px;
         }
         .hero-period-badge {
-            display: inline-flex; align-items: center; gap: 7px; background: rgba(255, 255, 255, 0.1);
+            display: inline-flex; align-items: center; gap: 5px; background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.14); color: rgba(255, 255, 255, 0.9);
-            font-weight: 600; font-size: 0.78rem; padding: 7px 14px; border-radius: 999px;
+            font-weight: 600; font-size: 0.64rem; padding: 4px 9px; border-radius: 999px;
             backdrop-filter: blur(6px);
         }
 
@@ -174,167 +152,136 @@
            5. SECONDARY STAT CARD (Total Completed Surveys)
            ============================================================ */
         .stat-card {
-            background: white; border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
+            background: var(--card-bg); border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
             transition: transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out), border-color 0.22s ease;
             height: 100%; text-decoration: none !important;
             display: flex; flex-direction: column; color: inherit;
             box-shadow: var(--shadow-card);
         }
-        .stat-card:hover { border-color: rgba(10, 31, 68, 0.22); box-shadow: var(--shadow-card-hover); transform: translateY(-3px); }
+        .stat-card:hover { border-color: rgba(37, 29, 58, 0.22); box-shadow: var(--shadow-card-hover); transform: translateY(-3px); }
+        .stat-card.p-4 { padding: 16px 20px !important; }
+        .stat-card .bg-primary.bg-opacity-10 { background: rgba(37, 29, 58, 0.08) !important; }
+        .stat-card .text-primary { color: var(--navy-900) !important; }
+        .stat-card .progress { background-color: rgba(15, 23, 42, 0.07) !important; }
+        .stat-card .progress-bar.bg-primary { background: linear-gradient(90deg, var(--navy-900), var(--navy-700)) !important; }
 
         .view-details-pill {
             display: inline-flex; align-items: center; gap: 5px;
-            background: rgba(10, 31, 68, 0.08);
-            color: #0a1f44 !important;
+            background: rgba(37, 29, 58, 0.08);
+            color: var(--navy-900) !important;
             font-weight: 700; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em;
             padding: 4px 12px; border-radius: 999px;
             transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
         }
-        .stat-card:hover .view-details-pill { background: #0a1f44; color: #fff !important; transform: translateX(2px); }
-        html[data-bs-theme="dark"] .view-details-pill { background: rgba(244, 180, 0, 0.12); color: #ffc72c !important; }
-        html[data-bs-theme="dark"] .stat-card:hover .view-details-pill { background: #f4b400; color: #0a1f44 !important; }
+        .stat-card:hover .view-details-pill { background: var(--navy-900); color: #fff !important; transform: translateX(2px); }
 
-        .count-up { font-size: 2.25rem; font-weight: 800; letter-spacing: -0.02em; }
+        .count-up { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text-dark); }
 
         /* ============================================================
            6. INSIGHT CHIPS
            ============================================================ */
         .insight-chip {
-            background: #fff; border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+            background: var(--card-bg); border: 1px solid var(--border-soft); border-radius: var(--radius-md);
             padding: 14px 16px; display: flex; align-items: center; gap: 12px; height: 100%;
             box-shadow: var(--shadow-card); transition: box-shadow 0.2s ease, transform 0.2s var(--ease-out);
         }
         .insight-chip:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-2px); }
         .insight-chip-icon {
-            width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
-            flex-shrink: 0; font-size: 0.95rem;
+            width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; font-size: 0.85rem;
         }
-        .insight-chip-icon.good { background: rgba(16, 185, 129, 0.12); color: #059669; }
-        .insight-chip-icon.active { background: rgba(10, 31, 68, 0.08); color: var(--navy-900); }
-        .insight-chip-icon.warn { background: rgba(239, 68, 68, 0.1); color: #dc2626; }
-        .insight-chip-label { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }
-        .insight-chip-value { font-size: 0.85rem; font-weight: 700; color: var(--text-dark); line-height: 1.3; }
-        .insight-chip-sub { font-size: 0.76rem; color: var(--text-muted); }
-
-        /* ============================================================
-           7. CLUSTER KPI CARDS
-           ============================================================ */
-        .cluster-mini-card {
-            background: white; border: 1px solid var(--border-soft);
-            border-left: 4px solid #f4b400; border-radius: var(--radius-md);
-            padding: 20px; box-shadow: var(--shadow-card); height: 100%;
-            display: flex; flex-direction: column; justify-content: space-between;
-            transition: box-shadow 0.22s var(--ease-out), transform 0.22s var(--ease-out), border-left-width 0.22s ease;
-            opacity: 0; transform: translateY(12px);
-            animation: kpiIn 0.55s var(--ease-out) forwards;
-        }
-        .cluster-mini-card .kpi-body { flex: 1 0 auto; }
-        .cluster-mini-card:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-3px); border-left-width: 6px; }
-        .row.g-4 > [class*="col-"]:nth-child(1) .cluster-mini-card { animation-delay: 0ms; }
-        .row.g-4 > [class*="col-"]:nth-child(2) .cluster-mini-card { animation-delay: 80ms; }
-        .row.g-4 > [class*="col-"]:nth-child(3) .cluster-mini-card { animation-delay: 160ms; }
-        .row.g-4 > [class*="col-"]:nth-child(4) .cluster-mini-card { animation-delay: 240ms; }
-        .row.g-4 > [class*="col-"]:nth-child(5) .cluster-mini-card { animation-delay: 320ms; }
-        @keyframes kpiIn { to { opacity: 1; transform: translateY(0); } }
-
-        .cluster-mini-card .rating-row { display: flex; align-items: baseline; gap: 6px; margin: 6px 0 10px; }
-        .cluster-mini-card .rating-row .rating-value { font-size: 1.6rem; font-weight: 800; color: var(--text-dark); letter-spacing: -0.02em; }
-        .cluster-mini-card .rating-row .rating-pct { font-size: 0.85rem; color: var(--text-muted); }
-        .cluster-mini-card .kpi-track { background: rgba(15, 23, 42, 0.07); border-radius: 999px; height: 6px; overflow: hidden; margin-bottom: 12px; }
-        .cluster-mini-card .kpi-fill { height: 100%; border-radius: 999px; width: 0%; transition: width 1s var(--ease-out) 0.15s; }
+        .insight-chip-icon.good { background: rgba(16, 185, 129, 0.14); color: #059669; }
+        .insight-chip-icon.active { background: rgba(37, 29, 58, 0.08); color: var(--navy-900); }
+        .insight-chip-icon.warn { background: rgba(239, 68, 68, 0.12); color: #dc2626; }
+        .insight-chip-label { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }
+        .insight-chip-value { font-size: 0.8rem; font-weight: 700; color: var(--text-dark); line-height: 1.3; }
+        .insight-chip-sub { font-size: 0.72rem; color: var(--text-muted); }
 
         /* ============================================================
            8. ANALYTICS CHART
            ============================================================ */
         .chart-container-main {
-            background: white; border: 1px solid var(--border-soft);
+            background: var(--card-bg); border: 1px solid var(--border-soft);
             border-radius: var(--radius-lg); padding: 28px; box-shadow: var(--shadow-card);
+            box-sizing: border-box;
         }
 
         .section-eyebrow {
-            font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; color: var(--text-muted);
+            font-size: 0.7rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--navy-700);
         }
+        .chart-toggle-group {
+            display: inline-flex; background: rgba(15, 23, 42, 0.05); border-radius: 10px; padding: 4px; gap: 4px;
+            flex-shrink: 0;
+        }
+        .chart-toggle-btn {
+            border: none; background: transparent; padding: 8px 16px; border-radius: 8px;
+            font-size: 0.78rem; font-weight: 700; color: var(--text-muted); cursor: pointer;
+            transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+            white-space: nowrap;
+        }
+        .chart-toggle-btn:hover:not(.active) { background: rgba(15, 23, 42, 0.06); color: var(--text-dark); }
+        .chart-toggle-btn.active { background: var(--navy-900); color: #fff; box-shadow: 0 6px 14px -6px rgba(37, 29, 58, 0.5); }
+        .chart-toggle-btn:focus-visible { outline: 2px solid var(--navy-700); outline-offset: 2px; }
 
         /* ============================================================
            9. SIDE PANELS (Sentiment / Topics / Recent)
            ============================================================ */
         .side-panel-card {
-            background: white; border: 1px solid var(--border-soft);
-            border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-card); height: 100%;
+            background: var(--card-bg); border: 1px solid var(--border-soft);
+            border-radius: var(--radius-lg); padding: 26px; box-shadow: var(--shadow-card); height: 100%;
+            box-sizing: border-box;
         }
-        html[data-bs-theme="dark"] .side-panel-card { background: var(--card-bg); }
 
         .sentiment-badge { font-size: 0.65rem; padding: 4px 12px; border-radius: 999px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; display: inline-block; white-space: nowrap; }
         .bg-sentiment-positive { background-color: #dcfce7; color: #15803d; }
         .bg-sentiment-negative { background-color: #fee2e2; color: #b91c1c; }
         .bg-sentiment-neutral { background-color: #e2e8f0; color: #334155; }
 
-        .sentiment-chart-wrap { position: relative; }
+        .sentiment-chart-wrap { position: relative; flex-shrink: 0; width: 190px; }
         .sentiment-center-total {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             text-align: center; pointer-events: none;
         }
         .sentiment-center-total .num { display: block; font-size: 1.6rem; font-weight: 800; color: var(--text-dark); letter-spacing: -0.02em; }
         .sentiment-center-total .lbl { display: block; font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-        .sentiment-legend-row { display: flex; justify-content: space-between; margin-top: 14px; }
-        .sentiment-legend-item { text-align: center; }
-        .sentiment-legend-pct { display: block; font-size: 0.7rem; color: var(--text-muted); margin-top: 4px; }
 
-        .topic-rank {
-            display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
-            border-radius: 5px; background: rgba(10, 31, 68, 0.08); color: var(--navy-900);
-            font-size: 0.62rem; font-weight: 800; margin-right: 8px; flex-shrink: 0;
-        }
-        .topic-bar-track { background: rgba(15, 23, 42, 0.06); border-radius: 999px; height: 8px; overflow: hidden; }
-        html[data-bs-theme="dark"] .topic-bar-track { background: rgba(255, 255, 255, 0.08); }
-        .topic-bar-fill { background: linear-gradient(90deg, #0a1f44, #f4b400); height: 100%; border-radius: 999px; width: 0%; transition: width 0.9s var(--ease-out); }
+        /* Shared layout for the two donut/pie panels: chart on the left,
+           a compact vertical legend on the right — avoids Chart.js's
+           auto-wrapping bottom legend, which was the main source of clutter
+           in the previous 4-across layout. */
+        .split-chart-row { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+        .chart-legend-list { flex: 1 1 160px; min-width: 140px; display: flex; flex-direction: column; gap: 12px; }
+        .chart-legend-row { display: flex; align-items: center; gap: 10px; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+        .legend-name { font-size: 0.82rem; font-weight: 600; color: var(--text-dark); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .legend-value { font-size: 0.85rem; font-weight: 800; color: var(--text-dark); }
+        .legend-pct { font-size: 0.72rem; color: var(--text-muted); min-width: 34px; text-align: right; }
 
         .empty-state-mini { text-align: center; padding: 32px 12px; color: var(--text-muted); }
         .empty-state-mini i { font-size: 1.75rem; opacity: 0.3; margin-bottom: 10px; display: block; }
         .empty-state-mini p { margin: 0; font-size: 0.82rem; }
 
-        /* --- Recent Submissions timeline --- */
-        .timeline-list { position: relative; margin: 0; padding: 0; list-style: none; }
-        .timeline-list::before {
-            content: ''; position: absolute; left: 5px; top: 6px; bottom: 6px; width: 1px;
-            background: var(--border-soft-strong);
-        }
-        .timeline-item { position: relative; padding: 0 0 16px 24px; }
-        .timeline-item:last-child { padding-bottom: 0; }
-        .timeline-dot {
-            position: absolute; left: 0; top: 4px; width: 11px; height: 11px; border-radius: 50%;
-            border: 2px solid #fff; box-shadow: 0 0 0 1px var(--border-soft-strong);
-        }
-        .timeline-dot.positive { background: #22c55e; }
-        .timeline-dot.neutral { background: #94a3b8; }
-        .timeline-dot.negative { background: #ef4444; }
-        .timeline-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-        .timeline-office { font-weight: 700; font-size: 0.85rem; color: var(--text-dark); }
-        .timeline-topic { font-size: 0.78rem; color: var(--text-muted); }
-        .timeline-time { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
 
         /* ============================================================
            10. RANKING PANELS (Top / Attention offices)
            ============================================================ */
-        .rank-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border-soft); }
+        .rank-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border-soft); }
         .rank-item:last-child { border-bottom: none; padding-bottom: 0; }
         .rank-item:first-child { padding-top: 0; }
-        .rank-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .rank-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
         .rank-badge {
-            flex-shrink: 0; width: 30px; height: 30px; border-radius: 9px; display: flex; align-items: center;
-            justify-content: center; font-size: 0.72rem; font-weight: 800; background: rgba(15, 23, 42, 0.06); color: var(--text-muted);
+            flex-shrink: 0; width: 18px; height: 18px; border-radius: 5px; display: flex; align-items: center;
+            justify-content: center; font-size: 0.52rem; font-weight: 800; background: rgba(15, 23, 42, 0.06); color: var(--text-muted);
         }
         .rank-badge.medal-1 { background: linear-gradient(135deg, #fde68a, #f59e0b); color: #78350f; }
         .rank-badge.medal-2 { background: linear-gradient(135deg, #e2e8f0, #94a3b8); color: #1e293b; }
         .rank-badge.medal-3 { background: linear-gradient(135deg, #fdba74, #c2703d); color: #431407; }
         .rank-badge.warn { background: rgba(239, 68, 68, 0.12); color: #dc2626; }
-        .rank-name { font-weight: 700; font-size: 0.85rem; color: var(--text-dark); white-space: normal; word-break: break-word; }
-        .rank-sub { font-size: 0.72rem; color: var(--text-muted); }
-        .rank-score { font-weight: 800; font-size: 0.95rem; padding: 4px 12px; border-radius: 999px; flex-shrink: 0; white-space: nowrap; }
+        .rank-name { font-weight: 700; font-size: 0.62rem; color: var(--text-dark); white-space: normal; word-break: break-word; }
+        .rank-sub { font-size: 0.54rem; color: var(--text-muted); }
+        .rank-score { font-weight: 800; font-size: 0.66rem; padding: 2px 7px; border-radius: 999px; flex-shrink: 0; white-space: nowrap; }
         .rank-score.good { background: #dcfce7; color: #15803d; }
         .rank-score.bad { background: #fee2e2; color: #b91c1c; }
-
-        .attention-panel { background: linear-gradient(180deg, rgba(254, 226, 226, 0.35), rgba(254, 226, 226, 0)); border-color: rgba(239, 68, 68, 0.16); }
 
         /* ============================================================
            11. SCROLL-REVEAL + MOTION SYSTEM
@@ -343,8 +290,7 @@
         .reveal-section.is-visible { opacity: 1; transform: translateY(0); }
 
         @media (prefers-reduced-motion: reduce) {
-            .stat-card, .cluster-mini-card, .count-up, [style*="animation"] { animation: none !important; }
-            .cluster-mini-card { opacity: 1 !important; transform: none !important; }
+            .stat-card, .count-up, [style*="animation"] { animation: none !important; }
             .reveal-section { opacity: 1 !important; transform: none !important; }
             * { transition-duration: 0.001ms !important; }
         }
@@ -432,13 +378,7 @@
                 const attentionOffice = (typeof bottomOffices !== 'undefined' && bottomOffices.length > 0) ? bottomOffices[0] : null;
             %>
 
-            <div class="dash-toolbar">
-                <div class="dash-toolbar-title">
-                    <p class="dash-eyebrow">CQA Portal &middot; Institutional Analytics</p>
-                    <h1 class="dash-title">Dashboard</h1>
-                    <p class="dash-subtitle">Monitor client satisfaction, cluster performance, sentiment, and office-level performance.</p>
-                </div>
-            </div>
+        
 
             <div class="dash-filter-row">
                 <form action="/dashboard" method="GET" class="filter-bar-v2">
@@ -478,8 +418,8 @@
                                 <svg viewBox="0 0 120 120">
                                     <defs>
                                         <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                            <stop offset="0%" stop-color="#ffc72c" />
-                                            <stop offset="100%" stop-color="#f4b400" />
+                                            <stop offset="0%" stop-color="#ffcc00" />
+                                            <stop offset="100%" stop-color="#ffcc00" />
                                         </linearGradient>
                                     </defs>
                                     <circle class="gauge-track" cx="60" cy="60" r="54" />
@@ -505,8 +445,8 @@
                 <div class="col-xl-4 col-lg-5">
                     <a href="/survey-records" class="stat-card p-4">
                         <div class="d-flex align-items-center mb-2">
-                            <div class="p-3 bg-primary bg-opacity-10 rounded-3 text-primary me-3">
-                                <i class="fas fa-clipboard-check fa-xl"></i>
+                            <div class="p-2 bg-primary bg-opacity-10 rounded-3 text-primary me-2">
+                                <i class="fas fa-clipboard-check"></i>
                             </div>
                             <div>
                                 <h6 class="text-muted fw-bold mb-0 small text-uppercase">Total Completed Surveys</h6>
@@ -514,7 +454,7 @@
                             </div>
                         </div>
                         <h2 class="count-up mb-0 text-dark"><%= typeof totalRespondents !== 'undefined' ? totalRespondents : '0' %></h2>
-                        <div class="progress mt-3" style="height: 6px;">
+                        <div class="progress mt-2" style="height: 5px;">
                             <div class="progress-bar bg-primary" style="width: 100%"></div>
                         </div>
                         <p class="text-muted small mt-2 mb-0">Aggregate data from <strong><%= typeof totalOffices !== 'undefined' ? totalOffices : '0' %> registered offices</strong></p>
@@ -563,33 +503,6 @@
                 </div>
             <% } %>
 
-            <% if (typeof clusterCards !== 'undefined' && clusterCards.length > 0) { %>
-                <div class="row g-4 mb-4">
-                    <% clusterCards.forEach(card => { %>
-                        <div class="col-xl-3 col-md-6">
-                            <div class="cluster-mini-card" style="border-left-color: <%= card.color || '#0a1f44' %>;">
-                                <div class="kpi-body">
-                                    <h6 class="text-muted fw-bold small text-uppercase mb-2"><%= card.name %></h6>
-                                    <div class="rating-row">
-                                        <span class="rating-value"><%= card.rating %></span>
-                                        <span class="rating-pct">% satisfaction</span>
-                                    </div>
-                                    <div class="kpi-track"><div class="kpi-fill" data-pct="<%= card.rating %>" style="background: <%= card.color || '#0a1f44' %>;"></div></div>
-                                </div>
-                                <span class="badge bg-light text-secondary border rounded-pill small align-self-start"><i class="fas fa-users me-1"></i><%= card.respondents %> Respondents</span>
-                            </div>
-                        </div>
-                    <% }) %>
-                </div>
-            <% } else { %>
-                <div class="row g-4 mb-4">
-                    <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #0a1f44;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Office of the President</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
-                    <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #10b981;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Admin & Finance</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
-                    <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #f59e0b;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Research & Innovation</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
-                    <div class="col-xl-3 col-md-6"><div class="cluster-mini-card" style="border-left-color: #8b5cf6;"><h6 class="text-muted small fw-bold text-uppercase mb-2">Academic Cluster</h6><span class="badge bg-light text-secondary border rounded-pill small">0 Respondents</span></div></div>
-                </div>
-            <% } %>
-
             <div class="row g-4 mb-4 reveal-section">
                 <div class="col-12">
                     <div class="chart-container-main">
@@ -597,7 +510,13 @@
                             <div>
                                 <p class="section-eyebrow mb-1">ANALYTICS</p>
                                 <h5 class="fw-bold text-dark mb-1">Cluster Performance Analytics</h5>
-                                <p class="text-muted small mb-0">Respondent volume and satisfaction rating per cluster</p>
+                                <p class="text-muted small mb-0" id="clusterChartSubtitle">Respondent volume per cluster</p>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 mt-3 mt-md-0">
+                                <div class="chart-toggle-group" role="group" aria-label="Switch chart metric">
+                                    <button type="button" class="chart-toggle-btn active" data-metric="respondents">Respondents</button>
+                                    <button type="button" class="chart-toggle-btn" data-metric="rating">Satisfaction Rating</button>
+                                </div>
                             </div>
                         </div>
                         <div style="height: 350px; position: relative;">
@@ -608,85 +527,75 @@
             </div>
 
             <div class="row g-4 mb-4 reveal-section">
-                <div class="col-xl-4">
+                <div class="col-xl-6">
                     <div class="side-panel-card">
                         <p class="section-eyebrow mb-1">SENTIMENT</p>
                         <h6 class="fw-bold text-dark mb-1">Sentiment Overview</h6>
                         <p class="text-muted small mb-3">AI-classified tone of respondent comments</p>
-                        <div class="sentiment-chart-wrap" style="height: 190px;">
-                            <canvas id="sentimentChart"></canvas>
-                            <div class="sentiment-center-total">
-                                <span class="num"><%= sentimentTotal %></span>
-                                <span class="lbl">Total</span>
+                        <div class="split-chart-row">
+                            <div class="sentiment-chart-wrap" style="height: 190px;">
+                                <canvas id="sentimentChart"></canvas>
+                                <div class="sentiment-center-total">
+                                    <span class="num"><%= sentimentTotal %></span>
+                                    <span class="lbl">Total</span>
+                                </div>
                             </div>
-                        </div>
-                        <div class="sentiment-legend-row small">
-                            <div class="sentiment-legend-item">
-                                <span class="sentiment-badge bg-sentiment-positive">Positive</span>
-                                <span class="d-block fw-bold mt-1"><%= sentimentBreakdown.Positive %></span>
-                                <span class="sentiment-legend-pct"><%= sentimentTotal ? Math.round(sentimentBreakdown.Positive / sentimentTotal * 100) : 0 %>%</span>
-                            </div>
-                            <div class="sentiment-legend-item">
-                                <span class="sentiment-badge bg-sentiment-neutral">Neutral</span>
-                                <span class="d-block fw-bold mt-1"><%= sentimentBreakdown.Neutral %></span>
-                                <span class="sentiment-legend-pct"><%= sentimentTotal ? Math.round(sentimentBreakdown.Neutral / sentimentTotal * 100) : 0 %>%</span>
-                            </div>
-                            <div class="sentiment-legend-item">
-                                <span class="sentiment-badge bg-sentiment-negative">Negative</span>
-                                <span class="d-block fw-bold mt-1"><%= sentimentBreakdown.Negative %></span>
-                                <span class="sentiment-legend-pct"><%= sentimentTotal ? Math.round(sentimentBreakdown.Negative / sentimentTotal * 100) : 0 %>%</span>
+                            <div class="chart-legend-list">
+                                <div class="chart-legend-row">
+                                    <span class="legend-dot" style="background:#ffcc00;"></span>
+                                    <span class="legend-name">Positive</span>
+                                    <span class="legend-value"><%= sentimentBreakdown.Positive %></span>
+                                    <span class="legend-pct"><%= sentimentTotal ? Math.round(sentimentBreakdown.Positive / sentimentTotal * 100) : 0 %>%</span>
+                                </div>
+                                <div class="chart-legend-row">
+                                    <span class="legend-dot" style="background:#2a2550;"></span>
+                                    <span class="legend-name">Neutral</span>
+                                    <span class="legend-value"><%= sentimentBreakdown.Neutral %></span>
+                                    <span class="legend-pct"><%= sentimentTotal ? Math.round(sentimentBreakdown.Neutral / sentimentTotal * 100) : 0 %>%</span>
+                                </div>
+                                <div class="chart-legend-row">
+                                    <span class="legend-dot" style="background:#251d3a;"></span>
+                                    <span class="legend-name">Negative</span>
+                                    <span class="legend-value"><%= sentimentBreakdown.Negative %></span>
+                                    <span class="legend-pct"><%= sentimentTotal ? Math.round(sentimentBreakdown.Negative / sentimentTotal * 100) : 0 %>%</span>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="col-xl-4">
+                <div class="col-xl-6">
                     <div class="side-panel-card">
-                        <p class="section-eyebrow mb-1">INSIGHTS</p>
-                        <h6 class="fw-bold text-dark mb-1">Top Feedback Topics</h6>
-                        <p class="text-muted small mb-3">Most frequently mentioned themes in comments</p>
-                        <% if (typeof topTopics !== 'undefined' && topTopics.length > 0) { %>
-                            <% topTopics.forEach((t, i) => { %>
-                                <div class="mb-3">
-                                    <div class="d-flex justify-content-between small mb-1">
-                                        <span class="fw-semibold text-dark"><span class="topic-rank"><%= i + 1 %></span><%= t.topic %></span>
-                                        <span class="text-muted"><%= t.count %></span>
-                                    </div>
-                                    <div class="topic-bar-track"><div class="topic-bar-fill" data-pct="<%= t.pct %>"></div></div>
+                        <p class="section-eyebrow mb-1">DISTRIBUTION</p>
+                        <h6 class="fw-bold text-dark mb-1">Respondent Share by Cluster</h6>
+                        <p class="text-muted small mb-3">Share of total respondents per cluster</p>
+                        <% if (typeof clusterCards !== 'undefined' && clusterCards.length > 0) { %>
+                            <div class="split-chart-row">
+                                <div style="height: 190px; width: 190px; position: relative; flex-shrink: 0;">
+                                    <canvas id="clusterShareChart"></canvas>
                                 </div>
-                            <% }) %>
+                                <div class="chart-legend-list" id="clusterShareLegend"></div>
+                            </div>
                         <% } else { %>
                             <div class="empty-state-mini">
-                                <i class="fas fa-comment-slash"></i>
-                                <p>No comment topics recorded yet for this period.</p>
+                                <i class="fas fa-chart-pie"></i>
+                                <p>No cluster data available.</p>
                             </div>
                         <% } %>
                     </div>
                 </div>
+            </div>
 
-                <div class="col-xl-4">
+            <div class="row g-4 mb-4 reveal-section">
+                <div class="col-12">
                     <div class="side-panel-card">
                         <p class="section-eyebrow mb-1">ACTIVITY</p>
                         <h6 class="fw-bold text-dark mb-1">Recent Submissions</h6>
-                        <p class="text-muted small mb-3">Latest survey responses received</p>
+                        <p class="text-muted small mb-3">Sentiment of the latest survey responses, by office</p>
                         <% if (typeof recentSubmissions !== 'undefined' && recentSubmissions.length > 0) { %>
-                            <ul class="timeline-list">
-                                <% recentSubmissions.forEach(r => { %>
-                                    <li class="timeline-item">
-                                        <span class="timeline-dot <%= r.sentiment.toLowerCase() %>"></span>
-                                        <div class="timeline-row">
-                                            <div>
-                                                <div class="timeline-office"><%= r.officeName %></div>
-                                                <div class="timeline-topic"><%= r.topic %></div>
-                                            </div>
-                                            <div class="text-end">
-                                                <span class="sentiment-badge bg-sentiment-<%= r.sentiment.toLowerCase() %>"><%= r.sentiment %></span>
-                                                <div class="timeline-time mt-1"><%= new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) %></div>
-                                            </div>
-                                        </div>
-                                    </li>
-                                <% }) %>
-                            </ul>
+                            <div style="height: 280px; position: relative;">
+                                <canvas id="recentSubmissionsChart"></canvas>
+                            </div>
                         <% } else { %>
                             <div class="empty-state-mini">
                                 <i class="fas fa-inbox"></i>
@@ -704,6 +613,9 @@
                         <h6 class="fw-bold text-dark mb-1"><i class="fas fa-arrow-trend-up text-success me-1"></i> Top Performing Offices</h6>
                         <p class="text-muted small mb-3">Highest satisfaction rating this period</p>
                         <% if (typeof topOffices !== 'undefined' && topOffices.length > 0) { %>
+                            <div style="height: 330px; position: relative;" class="mb-3">
+                                <canvas id="topOfficesChart"></canvas>
+                            </div>
                             <% topOffices.forEach((o, i) => { %>
                                 <div class="rank-item">
                                     <div class="rank-left">
@@ -727,11 +639,14 @@
                     </div>
                 </div>
                 <div class="col-xl-6">
-                    <div class="side-panel-card attention-panel">
+                    <div class="side-panel-card">
                         <p class="section-eyebrow mb-1">ACTIONABLE INSIGHT</p>
                         <h6 class="fw-bold text-dark mb-1"><i class="fas fa-arrow-trend-down text-danger me-1"></i> Offices Needing Attention</h6>
                         <p class="text-muted small mb-3">Lowest satisfaction rating this period</p>
                         <% if (typeof bottomOffices !== 'undefined' && bottomOffices.length > 0) { %>
+                            <div style="height: 330px; position: relative;" class="mb-3">
+                                <canvas id="bottomOfficesChart"></canvas>
+                            </div>
                             <% bottomOffices.forEach(o => { %>
                                 <div class="rank-item">
                                     <div class="rank-left">
@@ -1033,6 +948,63 @@ document.addEventListener("DOMContentLoaded", function() {
 
     const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+    // --- 0b. NATIVE HOVER TOOLTIP FOR TRUNCATED CHART AXIS LABELS ---
+    // Chart.js clips long category labels (office/cluster names) that don't
+    // fit the tick area and gives them no tooltip of their own — only bars
+    // get one. This watches mouse position over the label zone and swaps in
+    // the full text as a native title attribute so it still shows on hover.
+    function enableAxisLabelTooltips(chart, canvas, labels, axis) {
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            const area = chart.chartArea;
+            if (!area) return;
+            const inLabelZone = axis === 'y' ? mx < area.left : my > area.bottom;
+            if (!inLabelZone) { if (canvas.title) canvas.title = ''; return; }
+
+            const scale = axis === 'y' ? chart.scales.y : chart.scales.x;
+            const cursorPos = axis === 'y' ? my : mx;
+            let closestIdx = -1, minDist = Infinity;
+            labels.forEach((_, i) => {
+                const pixel = scale.getPixelForTick(i);
+                const dist = Math.abs(pixel - cursorPos);
+                if (dist < minDist) { minDist = dist; closestIdx = i; }
+            });
+            canvas.title = (closestIdx >= 0 && minDist < 18) ? labels[closestIdx] : '';
+        });
+        canvas.addEventListener('mouseleave', () => { canvas.title = ''; });
+    }
+
+    // Shortens a long axis label so Chart.js never tries to draw more text
+    // than the tick area can hold (which is what was clipping names like
+    // "Research and Development Services Office" off the left/right edge).
+    function truncateLabel(text, maxLen) {
+        if (!text || text.length <= maxLen) return text;
+        return text.slice(0, maxLen - 1).trimEnd() + '…';
+    }
+
+    // Wraps a long label into several shorter lines (returned as an array)
+    // so Chart.js's tooltip box — which sizes itself to its widest line —
+    // stays narrow enough to fit on-canvas instead of getting cut off.
+    function wrapLabel(text, maxCharsPerLine) {
+        if (!text) return text;
+        const words = text.split(' ');
+        const lines = [];
+        let current = '';
+        words.forEach(word => {
+            const candidate = current ? `${current} ${word}` : word;
+            if (candidate.length > maxCharsPerLine && current) {
+                lines.push(current);
+                current = word;
+            } else {
+                current = candidate;
+            }
+        });
+        if (current) lines.push(current);
+        return lines;
+    }
+
     // --- 0. SHARED EASED NUMBER ANIMATION (rAF-driven, respects reduced motion) ---
     function animateNumber(el, target, opts) {
         opts = opts || {};
@@ -1091,12 +1063,6 @@ document.addEventListener("DOMContentLoaded", function() {
         animateNumber(heroScoreEl, target, { decimals: 2, duration: 1100 });
     }
 
-    // --- 3. CLUSTER KPI PROGRESS BARS ---
-    document.querySelectorAll('.kpi-fill').forEach(el => {
-        const pct = Math.max(0, Math.min(100, parseFloat(el.getAttribute('data-pct')) || 0));
-        requestAnimationFrame(() => { el.style.width = pct + '%'; });
-    });
-
     // --- 4. SCROLL REVEAL + TOPIC BAR FILL (IntersectionObserver) ---
     const revealTargets = document.querySelectorAll('.reveal-section');
     if ('IntersectionObserver' in window && !prefersReducedMotion) {
@@ -1105,27 +1071,25 @@ document.addEventListener("DOMContentLoaded", function() {
                 if (entry.isIntersecting) {
                     entry.target.classList.add('is-visible');
                     obs.unobserve(entry.target);
+                    // Charts inside a .reveal-section are created (and finish
+                    // their entrance animation) at page-load time, while the
+                    // section itself still sits at opacity:0 — so the draw-in
+                    // animation happens invisibly before the user ever scrolls
+                    // here. Replaying it exactly when the section fades into
+                    // view makes it actually visible.
+                    entry.target.querySelectorAll('canvas').forEach(canvasEl => {
+                        const chartInstance = typeof Chart !== 'undefined' && Chart.getChart ? Chart.getChart(canvasEl) : null;
+                        if (chartInstance) {
+                            chartInstance.reset();
+                            chartInstance.update();
+                        }
+                    });
                 }
             });
         }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
         revealTargets.forEach(el => revealObserver.observe(el));
-
-        const topicBarObserver = new IntersectionObserver((entries, obs) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const pct = Math.max(0, Math.min(100, parseFloat(entry.target.getAttribute('data-pct')) || 0));
-                    entry.target.style.width = pct + '%';
-                    obs.unobserve(entry.target);
-                }
-            });
-        }, { threshold: 0.2 });
-        document.querySelectorAll('.topic-bar-fill').forEach(el => topicBarObserver.observe(el));
     } else {
         revealTargets.forEach(el => el.classList.add('is-visible'));
-        document.querySelectorAll('.topic-bar-fill').forEach(el => {
-            const pct = Math.max(0, Math.min(100, parseFloat(el.getAttribute('data-pct')) || 0));
-            el.style.width = pct + '%';
-        });
     }
 
     // --- 5. CHART.JS CONFIGURATION & RENDER PIPELINE ---
@@ -1134,78 +1098,118 @@ document.addEventListener("DOMContentLoaded", function() {
     const chartRatings = <%- typeof chartData !== 'undefined' ? JSON.stringify(chartData.ratings) : JSON.stringify([0, 0, 0, 0, 0]) %>;
 
     const ctx = document.getElementById('clusterAnalyticsChart').getContext('2d');
-    new Chart(ctx, {
-        data: {
-            labels: chartLabels,
-            datasets: [
-                {
-                    type: 'bar',
-                    label: 'Respondents (Volume)',
-                    data: chartRespondents,
-                    backgroundColor: 'rgba(10, 31, 68, 0.85)',
-                    hoverBackgroundColor: '#f4b400',
-                    borderRadius: 8,
-                    maxBarThickness: 56,
-                    yAxisID: 'yVolume'
-                },
-                {
-                    type: 'line',
-                    label: 'Satisfaction Rating (%)',
-                    data: chartRatings,
-                    borderColor: '#10b981',
-                    backgroundColor: '#10b981',
-                    tension: 0.35,
-                    pointRadius: 5,
-                    pointHoverRadius: 7,
-                    yAxisID: 'yRating'
-                }
-            ]
+    const barGradientGold = ctx.createLinearGradient(0, 0, 0, 320);
+    barGradientGold.addColorStop(0, '#ffcc00');
+    barGradientGold.addColorStop(1, '#ffcc00');
+    const barGradientNavy = ctx.createLinearGradient(0, 0, 0, 320);
+    barGradientNavy.addColorStop(0, '#2a2550');
+    barGradientNavy.addColorStop(1, '#251d3a');
+
+    // Cluster Performance chart: Respondents (Volume) and Satisfaction Rating
+    // are two separate metrics on very different scales (raw counts vs. a
+    // 0-100% score), so instead of cramming them into one dual-axis chart
+    // they're rendered one at a time — the toggle above the chart switches
+    // which metric is showing, re-drawing (and re-animating) the bars.
+    const clusterMetrics = {
+        respondents: {
+            label: 'Respondents (Volume)',
+            data: chartRespondents,
+            color: barGradientNavy,
+            hoverColor: '#2a2550',
+            axisTitle: 'Total Respondents',
+            max: undefined,
+            tooltip: (v) => `Respondents: ${v.toLocaleString()}`,
+            subtitle: 'Respondent volume per cluster'
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: prefersReducedMotion ? false : { duration: 1000, easing: 'easeOutQuart' },
-            plugins: {
-                legend: {
-                    display: true, position: 'top', align: 'end',
-                    labels: { boxWidth: 12, usePointStyle: true, pointStyle: 'rectRounded', font: { weight: '600', family: "'Plus Jakarta Sans', sans-serif" } }
+        rating: {
+            label: 'Satisfaction Rating (%)',
+            data: chartRatings,
+            color: barGradientGold,
+            hoverColor: '#ffcc00',
+            axisTitle: 'Satisfaction Rating (%)',
+            max: 100,
+            tooltip: (v) => `Satisfaction: ${v}%`,
+            subtitle: 'Satisfaction rating per cluster'
+        }
+    };
+
+    let clusterChart = null;
+    const clusterSubtitleEl = document.getElementById('clusterChartSubtitle');
+
+    function renderClusterChart(metricKey) {
+        const metric = clusterMetrics[metricKey];
+        if (clusterSubtitleEl) clusterSubtitleEl.textContent = metric.subtitle;
+
+        if (clusterChart) {
+            clusterChart.data.datasets[0].label = metric.label;
+            clusterChart.data.datasets[0].data = metric.data;
+            clusterChart.data.datasets[0].backgroundColor = metric.color;
+            clusterChart.data.datasets[0].hoverBackgroundColor = metric.hoverColor;
+            clusterChart.options.scales.y.title.text = metric.axisTitle;
+            clusterChart.options.scales.y.max = metric.max;
+            clusterChart.options.plugins.tooltip.callbacks.label = (context) => metric.tooltip(context.raw);
+            clusterChart.reset();
+            clusterChart.update();
+            return;
+        }
+
+        clusterChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: chartLabels,
+                datasets: [{
+                    label: metric.label,
+                    data: metric.data,
+                    backgroundColor: metric.color,
+                    hoverBackgroundColor: metric.hoverColor,
+                    borderRadius: 8,
+                    borderSkipped: false,
+                    barPercentage: 0.55,
+                    categoryPercentage: 0.6,
+                    maxBarThickness: 48
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: prefersReducedMotion ? false : { duration: 1000, easing: 'easeOutQuart' },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#0f172a',
+                        titleFont: { weight: '700', family: "'Plus Jakarta Sans', sans-serif" },
+                        bodyFont: { family: "'Plus Jakarta Sans', sans-serif" },
+                        padding: 12,
+                        cornerRadius: 10,
+                        displayColors: false,
+                        callbacks: { label: (context) => metric.tooltip(context.raw) }
+                    }
                 },
-                tooltip: {
-                    backgroundColor: '#0f172a',
-                    titleFont: { weight: '700', family: "'Plus Jakarta Sans', sans-serif" },
-                    bodyFont: { family: "'Plus Jakarta Sans', sans-serif" },
-                    padding: 12,
-                    cornerRadius: 10,
-                    displayColors: false,
-                    callbacks: {
-                        label: function(context) {
-                            return context.dataset.yAxisID === 'yRating'
-                                ? `Satisfaction: ${context.raw}%`
-                                : `Respondents: ${context.raw.toLocaleString()}`;
-                        }
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: metric.max,
+                        title: { display: true, text: metric.axisTitle, font: { weight: 'bold' } },
+                        grid: { color: '#f1f5f9' }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { weight: '600' } }
                     }
                 }
-            },
-            scales: {
-                yVolume: {
-                    beginAtZero: true,
-                    position: 'left',
-                    title: { display: true, text: 'Total Respondents', font: { weight: 'bold' } },
-                    grid: { color: '#f1f5f9' }
-                },
-                yRating: {
-                    beginAtZero: true,
-                    max: 100,
-                    position: 'right',
-                    title: { display: true, text: 'Satisfaction Rating (%)', font: { weight: 'bold' } },
-                    grid: { display: false }
-                },
-                x: {
-                    grid: { display: false },
-                    ticks: { font: { weight: '600' } }
-                }
             }
-        }
+        });
+    }
+
+    renderClusterChart('respondents');
+
+    document.querySelectorAll('.chart-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.classList.contains('active')) return;
+            document.querySelectorAll('.chart-toggle-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderClusterChart(btn.getAttribute('data-metric'));
+        });
     });
 
     // --- 6. SENTIMENT DOUGHNUT ---
@@ -1220,8 +1224,9 @@ document.addEventListener("DOMContentLoaded", function() {
                     <%= sentimentBreakdown.Neutral %>,
                     <%= sentimentBreakdown.Negative %>
                 ],
-                backgroundColor: ['#22c55e', '#94a3b8', '#ef4444'],
-                borderWidth: 0,
+                backgroundColor: ['#ffcc00', '#2a2550', '#251d3a'],
+                borderColor: '#fff',
+                borderWidth: 3,
                 hoverOffset: 6
             }]
         },
@@ -1247,6 +1252,176 @@ document.addEventListener("DOMContentLoaded", function() {
             }
         }
     });
+
+    // --- 7. PIE CHART: Respondent Share by Cluster ---
+    const clusterShareEl = document.getElementById('clusterShareChart');
+    if (clusterShareEl) {
+        const clusterShareLabels = <%- typeof clusterCards !== 'undefined' ? JSON.stringify(clusterCards.map(c => c.name)) : '[]' %>;
+        const clusterShareData = <%- typeof clusterCards !== 'undefined' ? JSON.stringify(clusterCards.map(c => Number(c.respondents) || 0)) : '[]' %>;
+        const clusterShareColors = <%- typeof clusterCards !== 'undefined' ? JSON.stringify(clusterCards.map(c => c.color || '#251d3a')) : '[]' %>;
+
+        new Chart(clusterShareEl.getContext('2d'), {
+            type: 'pie',
+            data: {
+                labels: clusterShareLabels,
+                datasets: [{
+                    data: clusterShareData,
+                    backgroundColor: clusterShareColors,
+                    borderColor: '#fff',
+                    borderWidth: 2,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: prefersReducedMotion ? false : { duration: 900, easing: 'easeOutQuart' },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#0f172a',
+                        padding: 10,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function(context) {
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const pct = total ? Math.round((context.raw / total) * 100) : 0;
+                                return `${context.label}: ${context.raw.toLocaleString()} (${pct}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Compact custom legend (dot + name + value + %) instead of Chart.js's
+        // auto-wrapping legend, which crowded this card when it sat in a
+        // narrow 4-across row.
+        const legendEl = document.getElementById('clusterShareLegend');
+        if (legendEl) {
+            const shareTotal = clusterShareData.reduce((a, b) => a + b, 0);
+            const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            legendEl.innerHTML = clusterShareLabels.map((label, i) => {
+                const value = clusterShareData[i];
+                const pct = shareTotal ? Math.round((value / shareTotal) * 100) : 0;
+                const safeLabel = escapeHtml(label);
+                return `<div class="chart-legend-row">
+                    <span class="legend-dot" style="background:${clusterShareColors[i]};"></span>
+                    <span class="legend-name" title="${safeLabel}">${safeLabel}</span>
+                    <span class="legend-value">${value.toLocaleString()}</span>
+                    <span class="legend-pct">${pct}%</span>
+                </div>`;
+            }).join('');
+        }
+    }
+
+    // --- 9. SMOOTH STACKED AREA CHART: Recent Submissions by Office ---
+    // Groups the same recent-submissions data the old timeline showed by
+    // office, keeping the sentiment breakdown (each area layer is a
+    // sentiment count) instead of a flat activity feed.
+    const recentSubEl = document.getElementById('recentSubmissionsChart');
+    if (recentSubEl) {
+        const recentOffices = <%- typeof recentSubmissions !== 'undefined' ? JSON.stringify(recentSubmissions.map(r => r.officeName)) : '[]' %>;
+        const recentSentiments = <%- typeof recentSubmissions !== 'undefined' ? JSON.stringify(recentSubmissions.map(r => r.sentiment)) : '[]' %>;
+
+        const officeTally = {};
+        recentOffices.forEach((office, i) => {
+            if (!officeTally[office]) officeTally[office] = { Positive: 0, Neutral: 0, Negative: 0 };
+            const sentiment = recentSentiments[i];
+            if (officeTally[office][sentiment] !== undefined) officeTally[office][sentiment]++;
+        });
+        const officeNames = Object.keys(officeTally);
+
+        const recentSubChart = new Chart(recentSubEl.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: officeNames,
+                datasets: [
+                    { label: 'Positive', data: officeNames.map(o => officeTally[o].Positive), borderColor: '#ffcc00', backgroundColor: 'rgba(255, 204, 0, 0.35)', fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#ffcc00', pointBorderColor: '#fff', pointBorderWidth: 1.5 },
+                    { label: 'Neutral', data: officeNames.map(o => officeTally[o].Neutral), borderColor: '#2a2550', backgroundColor: 'rgba(42, 37, 80, 0.35)', fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#2a2550', pointBorderColor: '#fff', pointBorderWidth: 1.5 },
+                    { label: 'Negative', data: officeNames.map(o => officeTally[o].Negative), borderColor: '#251d3a', backgroundColor: 'rgba(37, 29, 58, 0.35)', fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#251d3a', pointBorderColor: '#fff', pointBorderWidth: 1.5 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                animation: prefersReducedMotion ? false : { duration: 1000, easing: 'easeOutQuart' },
+                plugins: {
+                    legend: {
+                        display: true, position: 'top', align: 'end',
+                        labels: { boxWidth: 10, usePointStyle: true, pointStyle: 'circle', font: { size: 11, weight: '600', family: "'Plus Jakarta Sans', sans-serif" } }
+                    },
+                    tooltip: {
+                        backgroundColor: '#0f172a',
+                        padding: 10,
+                        cornerRadius: 8,
+                        callbacks: {
+                            title: (items) => wrapLabel(officeNames[items[0].dataIndex], 26),
+                            label: (context) => `${context.dataset.label}: ${context.raw}`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: true, grid: { display: false },
+                        ticks: { font: { size: 11, weight: '600' }, callback: (value, index) => truncateLabel(officeNames[index], 14) }
+                    },
+                    y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#f1f5f9' } }
+                }
+            }
+        });
+        enableAxisLabelTooltips(recentSubChart, recentSubEl, officeNames, 'x');
+    }
+
+    // --- 10. HORIZONTAL BAR CHARTS: Top / Bottom Performing Offices ---
+    function renderRankChart(canvasId, offices, barColor) {
+        const el = document.getElementById(canvasId);
+        if (!el || !offices.length) return;
+        const labels = offices.map(o => o.name);
+        const chart = new Chart(el.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: offices.map(o => o.score),
+                    backgroundColor: barColor,
+                    borderRadius: 4,
+                    barPercentage: 0.6,
+                    categoryPercentage: 0.7
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: prefersReducedMotion ? false : { duration: 1000, easing: 'easeOutQuart' },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#0f172a',
+                        padding: 10,
+                        cornerRadius: 8,
+                        callbacks: {
+                            title: (items) => wrapLabel(labels[items[0].dataIndex], 26),
+                            label: (context) => `${context.raw.toFixed(2)}%`
+                        }
+                    }
+                },
+                scales: {
+                    x: { beginAtZero: true, max: 100, grid: { color: '#f1f5f9' }, ticks: { callback: (v) => v + '%' } },
+                    y: {
+                        grid: { display: false },
+                        ticks: { font: { size: 11, weight: '600' }, autoSkip: false, callback: (value, index) => truncateLabel(labels[index], 20) }
+                    }
+                }
+            }
+        });
+        enableAxisLabelTooltips(chart, el, labels, 'y');
+    }
+
+    renderRankChart('topOfficesChart', <%- typeof topOffices !== 'undefined' ? JSON.stringify(topOffices.map(o => ({ name: o.name, score: o.score }))) : '[]' %>, '#ffcc00');
+    renderRankChart('bottomOfficesChart', <%- typeof bottomOffices !== 'undefined' ? JSON.stringify(bottomOffices.map(o => ({ name: o.name, score: o.score }))) : '[]' %>, '#251d3a');
 });
 
 // --- 7. CONTROLS MANAGEMENT FUNCTIONS FOR POPUP REPORT MODAL ---

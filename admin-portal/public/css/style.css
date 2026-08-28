@@ -1,18 +1,18 @@
 :root {
-    /* Brand palette — matches the public landing page (navy + gold) */
-    --navy-950: #060e21;
-    --navy-900: #0a1f44;
-    --navy-800: #0e2a5e;
-    --navy-700: #12305c;
-    --gold-500: #f4b400;
-    --gold-400: #ffc72c;
-    --gold-300: #ffdd7a;
+    /* Brand palette — matches the public landing page (4-color brand system) */
+    --navy-950: #251d3a;
+    --navy-900: #251d3a;
+    --navy-800: #2a2550;
+    --navy-700: #2a2550;
+    --gold-500: #ffcc00;
+    --gold-400: #ffcc00;
+    --gold-300: #ffcc00;
 
     --primary: var(--navy-900);
     --primary-hover: var(--navy-700);
     --accent: var(--gold-500);
     --accent-hover: var(--gold-400);
-    --accent-text: var(--navy-950); /* text color to use on top of gold backgrounds */
+    --accent-text: var(--navy-900); /* dark text reads best on both the bright-yellow accent and its orange hover state */
     --sidebar-bg: linear-gradient(160deg, var(--navy-900), var(--navy-700));
     --sidebar-text: rgba(255, 255, 255, 0.75);
     --bg-light: #f3f4f6;
@@ -165,12 +165,17 @@ html[data-bs-theme="dark"] .form-control {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
 }
+/* Breaks out of #content's own 20px padding (negative margin on three sides)
+   so the sticky bar sits flush against the real top/left/right edges of the
+   content pane instead of floating as a rounded, shadowed card 20px down —
+   that gap was what let scrolled-past content (e.g. the dashboard's hero
+   card) visually poke out above/behind it mid-scroll. */
 .top-navbar {
     background: #fff;
-    border-radius: 0.5rem;
-    padding: 10px 20px;
-    margin-bottom: 25px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    border-radius: 0;
+    margin: -20px -20px 20px -20px;
+    padding: 14px 24px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -260,7 +265,7 @@ html[data-bs-theme="dark"] .form-control {
     width: 60%;
     height: 40%;
     opacity: 0.03;
-    background-image: url("data:image/svg+xml,%3Csvg width='241' height='100' viewBox='0 0 241 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 90C40 90 80 10 120 10C160 10 200 90 241 90V100H0V90Z' fill='%230A1F44'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg width='241' height='100' viewBox='0 0 241 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 90C40 90 80 10 120 10C160 10 200 90 241 90V100H0V90Z' fill='%23251D3A'/%3E%3C/svg%3E");
     background-size: cover;
     background-position: bottom right;
     pointer-events: none;
@@ -382,7 +387,7 @@ html[data-bs-theme="dark"] .form-control {
     background: linear-gradient(135deg, var(--primary), var(--primary-hover));
     color: white;
     border-radius: 0.75rem;
-    box-shadow: 0 10px 15px -3px rgba(10, 31, 68, 0.35);
+    box-shadow: 0 10px 15px -3px rgba(37, 29, 58, 0.35);
 }
 
 /* --- Global UI/UX Consistency (placeholders, spacing) --- */
