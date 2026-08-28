@@ -1552,7 +1552,10 @@ app.post('/auth-login', async (req, res) => {
         }
 
         req.session.clientEmail = account.email;
-        return res.redirect('/client-survey');
+        // ?loggedin=1 lets client-survey.ejs's new-tab guard mark THIS tab (via
+        // sessionStorage) as one that actually authenticated, as opposed to a
+        // different tab merely inheriting the shared 'client.sid' cookie.
+        return res.redirect('/client-survey?loggedin=1');
     });
     }
 });
@@ -1611,7 +1614,7 @@ app.get('/auth/google/callback',
                 const existingAccount = rows && rows.length > 0 ? rows[0] : null;
                 if (existingAccount && existingAccount.password) {
                     req.session.clientEmail = existingAccount.email;
-                    return res.redirect('/client-survey');
+                    return res.redirect('/client-survey?loggedin=1');
                 }
 
                 req.session.pendingGoogleUser = { email, name };
@@ -1656,7 +1659,7 @@ app.post('/complete-google-registration', async (req, res) => {
                 }
                 req.session.clientEmail = pending.email;
                 delete req.session.pendingGoogleUser;
-                return res.redirect('/client-survey');
+                return res.redirect('/client-survey?loggedin=1');
             }
         );
     } catch (e) {

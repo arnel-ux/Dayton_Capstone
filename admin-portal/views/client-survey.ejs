@@ -5,6 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CSM Survey - CSPC</title>
     <script>
+        // New-tab auto-login guard: 'client.sid' is a normal browser cookie, so a
+        // brand new tab that merely inherited it (typed the URL, duplicated the
+        // tab, opened a bookmark) would otherwise land here fully "logged in"
+        // without ever having signed in in THAT tab. sessionStorage is scoped per
+        // tab (never copied to a freshly opened one), so it's used here purely as
+        // a "did this tab actually authenticate" marker: every login flow's
+        // redirect tags this page's very next load with ?loggedin=1, which this
+        // script converts into the marker before the URL is cleaned up. Loading
+        // this page in a tab without that marker bounces straight back to /login.
+        // Note: this is a client-side UX guard, not a security boundary — the
+        // page markup briefly reaches the browser before this (first) script
+        // redirects it away, so it doesn't stop someone with devtools/view-source
+        // open on that same already-logged-in machine.
+        (function () {
+            try {
+                var params = new URLSearchParams(window.location.search);
+                if (params.has('loggedin')) {
+                    sessionStorage.setItem('cqa_client_tab_ok', '1');
+                    params.delete('loggedin');
+                    var cleanedSearch = params.toString();
+                    var cleanedUrl = window.location.pathname + (cleanedSearch ? '?' + cleanedSearch : '') + window.location.hash;
+                    window.history.replaceState({}, '', cleanedUrl);
+                } else if (sessionStorage.getItem('cqa_client_tab_ok') !== '1') {
+                    window.location.replace('/login?error=' + encodeURIComponent('Please log in to continue.'));
+                }
+            } catch (e) { /* sessionStorage unavailable (privacy mode, etc.) — fail open */ }
+        })();
+    </script>
+    <script>
         (function () {
             try {
                 if (localStorage.getItem('theme') === 'dark') {
