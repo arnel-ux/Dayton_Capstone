@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <%- include('layout/header', { forceLightMode: true }) %>
+    <style>
+        html, body {
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        .bg-blurred {
+            position: fixed;
+            top: -5%; left: -5%; right: -5%; bottom: -5%;
+            background-image: url('https://spims.cspc.edu.ph/assets/img/background.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            filter: blur(1px);
+            z-index: -1;
+        }
+
+        .bg-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(15, 23, 42, 0.6);
+            z-index: -1;
+        }
+
+        .login-wrapper {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1;
+            padding: 1rem;
+        }
+
+        .header-container {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            max-width: 800px;
+        }
+
+        .main-title {
+            color: #ffffff;
+            font-weight: 800;
+            font-size: 1.6rem;
+            text-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+            margin-bottom: 0.4rem;
+        }
+
+        .portal-text {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 2.2px;
+            padding: 0.35rem 0.95rem;
+            background: rgba(37, 84, 199, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 50px;
+            backdrop-filter: blur(6px);
+        }
+
+        .card-custom {
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(18px) saturate(160%);
+            -webkit-backdrop-filter: blur(18px) saturate(160%);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: 1.75rem;
+            box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+            width: 400px;
+            padding: 1.75rem 2.25rem;
+        }
+
+        @media (max-width: 400px) {
+            .card-custom { width: 92vw; padding: 1.5rem 1.5rem; }
+        }
+
+        .field-group { margin-bottom: 0.85rem; }
+
+        .field-label {
+            display: block;
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            color: #64748b;
+            margin-bottom: 0.3rem;
+        }
+
+        .input-modern {
+            display: flex;
+            align-items: center;
+            background: #f8fafc;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 0.75rem;
+        }
+        .input-modern:focus-within {
+            border-color: #0a1f44;
+            background: #ffffff;
+            box-shadow: 0 0 0 0.2rem rgba(10, 31, 68, 0.15);
+        }
+        .input-modern .input-icon {
+            width: 2.6rem;
+            display: flex; align-items: center; justify-content: center;
+            color: #94a3b8;
+        }
+        .input-modern .form-control {
+            border: none;
+            background: transparent;
+            padding: 0.55rem 0.85rem 0.55rem 0;
+            font-size: 0.88rem;
+            box-shadow: none !important;
+        }
+
+        .btn-login {
+            background: linear-gradient(135deg, #0a1f44, #12305c);
+            border: none;
+            border-radius: 0.75rem;
+            padding: 0.6rem 1rem;
+            font-weight: 700;
+            color: #ffffff;
+        }
+        .btn-login:hover { filter: brightness(1.06); color: #ffffff; }
+
+        .btn-home {
+            position: fixed;
+            top: 1.25rem; left: 1.25rem;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.12);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 50px;
+            padding: 0.5rem 1.1rem;
+            font-weight: 600;
+            font-size: 0.85rem;
+            backdrop-filter: blur(6px);
+            text-decoration: none;
+        }
+        .btn-home:hover { background: rgba(255, 255, 255, 0.25); color: #ffffff; }
+    </style>
+</head>
+<body>
+
+    <div class="bg-blurred"></div>
+    <div class="bg-overlay"></div>
+
+    <a href="/" class="btn-home" title="Return to Home Page">
+        <i class="fas fa-home me-1"></i> Home
+    </a>
+
+    <div class="login-wrapper">
+        <div class="header-container">
+            <h1 class="main-title">Office Of Center For Quality Assurance (CQA)</h1>
+            <h2 class="portal-text">Office Staff Login</h2>
+        </div>
+
+        <div class="card-custom">
+            <div class="text-center mb-3">
+                <img src="/images/cspc-logo.png" alt="CSPC Logo" width="46" height="46" class="mb-1">
+                <h4 class="fw-bold text-dark mb-0">Office Approval Panel</h4>
+                <p class="text-muted mb-0" style="font-size: 0.8rem;">Review and verify client survey submissions for your office.</p>
+            </div>
+
+            <form action="/office-login" method="POST" id="officeLoginForm">
+                <div class="field-group">
+                    <label class="field-label" for="emailInput">Office Email</label>
+                    <div class="input-modern">
+                        <span class="input-icon"><i class="fas fa-envelope"></i></span>
+                        <input type="email" name="email" id="emailInput" class="form-control" placeholder="office@cspc.edu.ph" required autocomplete="off">
+                    </div>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label" for="passwordInput">Password</label>
+                    <div class="input-modern">
+                        <span class="input-icon"><i class="fas fa-lock"></i></span>
+                        <input type="password" name="password" id="passwordInput" class="form-control" placeholder="Enter your password" required>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-login w-100">
+                    <i class="fas fa-sign-in-alt me-2"></i> Sign In
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="/js/alerts.js"></script>
+    <script>
+        const officeLoginParams = new URLSearchParams(window.location.search);
+        const officeLoginError = officeLoginParams.get('error');
+        if (officeLoginError) {
+            AppAlert.error(officeLoginError, 'Login Failed');
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    </script>
+</body>
+</html>

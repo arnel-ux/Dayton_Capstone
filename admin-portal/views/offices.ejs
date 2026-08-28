@@ -468,6 +468,11 @@
                 <input type="email" name="email_address" class="form-control" placeholder="office@cspc.edu.ph" required>
             </div>
             <div class="mb-3">
+                <label class="form-label fw-bold">Office Login Password</label>
+                <input type="password" name="password" class="form-control" placeholder="Optional — lets this office sign in to the approval panel" autocomplete="new-password">
+                <div class="form-text">Used at /office-login to review and approve/decline survey submissions for this office. Leave blank to set it up later.</div>
+            </div>
+            <div class="mb-3">
                 <label class="form-label fw-bold">Service(s) Availed</label>
                 <div id="addServiceRows">
                     <div class="input-group mb-2">
@@ -502,6 +507,13 @@
         <form action="/services/add" method="POST" class="d-flex gap-2">
             <input type="hidden" name="office_id" id="servicesOfficeId">
             <input type="text" name="service_name" class="form-control" placeholder="E.g., Requesting for Clearance" required>
+            <select name="availability" class="form-select" style="max-width: 160px;" title="How often a client may re-survey this service">
+                <option value="">One-time only</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+            </select>
             <button type="submit" class="btn btn-primary text-nowrap"><i class="fas fa-plus me-1"></i> Add</button>
         </form>
       </div>
@@ -544,6 +556,11 @@
             <div class="mb-3">
                 <label class="form-label fw-bold">Email Address</label>
                 <input type="email" name="email_address" id="edit_email_address" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">Office Login Password</label>
+                <input type="password" name="password" class="form-control" placeholder="Leave blank to keep the current password" autocomplete="new-password">
+                <div class="form-text">Only fill this in to set or change the office's /office-login password.</div>
             </div>
           </div>
           <div class="modal-footer">
@@ -697,21 +714,51 @@
         if (!services || services.length === 0) {
             list.innerHTML = '<li class="list-group-item text-muted fst-italic">Wala pang naitalang service sa office na ito.</li>';
         } else {
+            const availabilityLabels = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
             services.forEach(svc => {
                 const li = document.createElement('li');
-                li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                li.className = 'list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2';
 
+                const nameWrap = document.createElement('div');
                 const nameSpan = document.createElement('span');
                 nameSpan.textContent = svc.service_name;
+                nameWrap.appendChild(nameSpan);
+                const availSpan = document.createElement('span');
+                availSpan.className = 'badge bg-secondary-subtle text-secondary ms-2';
+                availSpan.textContent = availabilityLabels[svc.availability] || 'One-time only';
+                nameWrap.appendChild(availSpan);
 
-                const form = document.createElement('form');
-                form.action = `/services/delete/${svc.id}`;
-                form.method = 'POST';
-                form.className = 'delete-service-form';
-                form.innerHTML = '<button type="submit" class="btn btn-sm btn-outline-danger" title="Remove this service"><i class="fas fa-trash"></i></button>';
+                const actions = document.createElement('div');
+                actions.className = 'd-flex align-items-center gap-2';
 
-                li.appendChild(nameSpan);
-                li.appendChild(form);
+                // Availability dropdown — auto-submits a rename-preserving edit the
+                // moment a new frequency is picked (see /services/edit).
+                const editForm = document.createElement('form');
+                editForm.action = '/services/edit';
+                editForm.method = 'POST';
+                editForm.className = 'd-flex align-items-center gap-1';
+                editForm.innerHTML = `
+                    <input type="hidden" name="id" value="${svc.id}">
+                    <input type="hidden" name="service_name" value="${nameSpan.textContent.replace(/"/g, '&quot;')}">
+                    <select name="availability" class="form-select form-select-sm" title="How often a client may re-survey this service" onchange="this.form.submit()">
+                        <option value="" ${!svc.availability ? 'selected' : ''}>One-time only</option>
+                        <option value="daily" ${svc.availability === 'daily' ? 'selected' : ''}>Daily</option>
+                        <option value="weekly" ${svc.availability === 'weekly' ? 'selected' : ''}>Weekly</option>
+                        <option value="monthly" ${svc.availability === 'monthly' ? 'selected' : ''}>Monthly</option>
+                        <option value="yearly" ${svc.availability === 'yearly' ? 'selected' : ''}>Yearly</option>
+                    </select>
+                `;
+                actions.appendChild(editForm);
+
+                const deleteForm = document.createElement('form');
+                deleteForm.action = `/services/delete/${svc.id}`;
+                deleteForm.method = 'POST';
+                deleteForm.className = 'delete-service-form';
+                deleteForm.innerHTML = '<button type="submit" class="btn btn-sm btn-outline-danger" title="Remove this service"><i class="fas fa-trash"></i></button>';
+                actions.appendChild(deleteForm);
+
+                li.appendChild(nameWrap);
+                li.appendChild(actions);
                 list.appendChild(li);
             });
         }

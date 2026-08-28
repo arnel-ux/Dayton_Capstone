@@ -240,6 +240,174 @@ passport.use(new GoogleStrategy({
 // Resolves the signed-in client's email from either Google OAuth (passport) or the
 // unified email/password login form (req.session.clientEmail) — the two ways a
 // registered client can end up authenticated.
+// @cspc.edu.ph accounts are institutional — trusted automatically. Any other
+// (personal) email must be verified by the office the client claims to have
+// visited before it counts as a real submission — see /submit-survey.
+function isCspcEmail(email) {
+    return typeof email === 'string' && email.toLowerCase().trim().endsWith('@cspc.edu.ph');
+}
+
+// Whether enough time has passed since `lastEventAt` (the most recent APPROVED
+// submission for a given office+service+account) for that account to submit
+// again, based on the service's configured cadence (services.availability).
+// NULL/unset availability means one-time-only — never eligible again.
+function isEligibleForResubmission(lastEventAt, availability) {
+    if (!lastEventAt) return true;
+    const diffDays = (Date.now() - new Date(lastEventAt).getTime()) / 86400000;
+    switch (availability) {
+        case 'daily':   return diffDays >= 1;
+        case 'weekly':  return diffDays >= 7;
+        case 'monthly': return diffDays >= 30;
+        case 'yearly':  return diffDays >= 365;
+        default:        return false;
+    }
+}
+
+// Human-readable date the client becomes eligible again, or null for a
+// one-time-only (or unset) service, which is never eligible again.
+function nextEligibleDateText(lastEventAt, availability) {
+    const stepDays = { daily: 1, weekly: 7, monthly: 30, yearly: 365 }[availability];
+    if (!stepDays) return null;
+    const next = new Date(new Date(lastEventAt).getTime() + stepDays * 86400000);
+    return next.toLocaleDateString('en-PH', { dateStyle: 'long' });
+}
+
+// Server-side gate for /submit-survey and syncOneSurvey: decides whether
+// `googleEmail` may submit a new survey for `serviceAvailed` at `officeId`
+// right now. A submission still awaiting office review always blocks a
+// duplicate; a DECLINED one never blocks a retry (declined means "not
+// verified," not "too soon").
+function checkResubmissionEligibility(officeId, googleEmail, serviceAvailed, callback) {
+    db.query(
+        'SELECT availability FROM services WHERE office_id = ? AND service_name <=> ? LIMIT 1',
+        [officeId, serviceAvailed],
+        (svcErr, svcRows) => {
+            const availability = (!svcErr && svcRows && svcRows[0]) ? svcRows[0].availability : null;
+
+            db.query(
+                "SELECT id FROM pending_survey_submissions WHERE office_id = ? AND google_email = ? AND service_availed <=> ? AND status = 'pending' LIMIT 1",
+                [officeId, googleEmail, serviceAvailed],
+                (pendErr, pendRows) => {
+                    if (!pendErr && pendRows && pendRows.length > 0) {
+                        return callback({ eligible: false, message: "You already have a submission for this service awaiting the office's review." });
+                    }
+
+                    db.query(
+                        'SELECT created_at FROM survey_responses WHERE office_id = ? AND google_email = ? AND service_availed <=> ? ORDER BY created_at DESC LIMIT 1',
+                        [officeId, googleEmail, serviceAvailed],
+                        (lastErr, lastRows) => {
+                            const lastEventAt = (!lastErr && lastRows && lastRows[0]) ? lastRows[0].created_at : null;
+                            if (isEligibleForResubmission(lastEventAt, availability)) {
+                                return callback({ eligible: true });
+                            }
+                            const nextDate = nextEligibleDateText(lastEventAt, availability);
+                            const message = nextDate
+                                ? `You can retake this survey for this service starting ${nextDate}.`
+                                : "You have already evaluated this service. You cannot submit again.";
+                            return callback({ eligible: false, message });
+                        }
+                    );
+                }
+            );
+        }
+    );
+}
+
+// Promise wrapper around checkResubmissionEligibility — used by the async
+// offline-sync path (syncOneSurvey) instead of the callback form above.
+function checkResubmissionEligibilityAsync(officeId, googleEmail, serviceAvailed) {
+    return new Promise((resolve) => checkResubmissionEligibility(officeId, googleEmail, serviceAvailed, resolve));
+}
+
+// Inserts a fully-verified survey (either a direct @cspc.edu.ph submission, or
+// a personal-email submission the visited office just approved) through the
+// exact same path — survey_responses + client_profiles + client_accounts
+// upsert, then (unless told to skip) a receipt email and AI sentiment/topic
+// analysis. `fields.sqdValues` is an array of the 9 SQD answers (sqd0..sqd8).
+function finalizeVerifiedSurvey(googleEmail, fields, callback) {
+    const {
+        officeId, respondentName, topic, sentiment, region, cc1, cc2, cc3,
+        sqdValues, comments, serviceAvailed, clientType, age, gender,
+        officeVisitedTime, period, skipReceiptEmail, skipAiAnalysis
+    } = fields;
+
+    const insertQuery = `
+        INSERT INTO survey_responses
+        (office_id, respondent_name, topic, sentiment, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email, service_availed)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+    const values = [
+        officeId, respondentName, topic || 'General', sentiment || 'Neutral', region,
+        cc1, cc2, cc3,
+        sqdValues[0], sqdValues[1], sqdValues[2], sqdValues[3], sqdValues[4], sqdValues[5], sqdValues[6], sqdValues[7], sqdValues[8],
+        comments || 'N/A', period, googleEmail, serviceAvailed
+    ];
+
+    db.query(insertQuery, values, (err, result) => {
+        if (err) return callback(err);
+        const surveyResponseId = result.insertId;
+
+        db.query(
+            `INSERT INTO client_profiles (survey_response_id, respondent_name, client_type, age, gender, region, email, office_visited_time)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [surveyResponseId, respondentName, clientType, age, gender, region, googleEmail, officeVisitedTime],
+            (profileErr) => { if (profileErr) console.error("❌ [Client Profile] Error inserting profile:", profileErr); }
+        );
+
+        // Lock in this account's demographics the first time they're actually answered.
+        // COALESCE only writes region/age/gender when the existing column is still NULL.
+        db.query(
+            `INSERT INTO client_accounts (email, respondent_name, region, age, gender)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                respondent_name = VALUES(respondent_name),
+                region = COALESCE(region, VALUES(region)),
+                age = COALESCE(age, VALUES(age)),
+                gender = COALESCE(gender, VALUES(gender))`,
+            [googleEmail, respondentName, region, age, gender],
+            (acctErr) => { if (acctErr) console.error("❌ [Client Account] Error upserting locked profile:", acctErr); }
+        );
+
+        callback(null, surveyResponseId);
+
+        if (!skipReceiptEmail) {
+            db.query('SELECT office_name, cluster_name FROM offices WHERE id = ? LIMIT 1', [officeId], (officeErr, officeRows) => {
+                const office = (!officeErr && officeRows && officeRows[0]) ? officeRows[0] : null;
+                sendSurveyReceiptEmail(googleEmail, {
+                    name: respondentName,
+                    officeName: office ? office.office_name : 'Selected Office',
+                    clusterName: office ? office.cluster_name : '',
+                    clientType,
+                    serviceAvailed: serviceAvailed || 'Not specified',
+                    submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
+                    surveyResponseId,
+                    sqd: sqdValues.map((v, i) => ({ label: 'SQD' + i, value: v }))
+                });
+            });
+        }
+
+        if (!skipAiAnalysis && comments && comments.trim() !== "") {
+            analyzeComment(comments, false, officeId).then(({ sentiment: aiSentiment, topic: aiTopic }) => {
+                if (aiSentiment && aiTopic) {
+                    db.query('UPDATE survey_responses SET sentiment = ?, topic = ? WHERE id = ?', [aiSentiment, aiTopic, surveyResponseId]);
+                    console.log(`✅ [AI Success] ID: ${surveyResponseId} | Sentiment: ${aiSentiment} | Topic: ${aiTopic}`);
+                }
+            });
+        }
+    });
+}
+
+// Promise wrapper around finalizeVerifiedSurvey — used by the async
+// offline-sync path (syncOneSurvey) instead of the callback form above.
+function finalizeVerifiedSurveyAsync(googleEmail, fields) {
+    return new Promise((resolve, reject) => {
+        finalizeVerifiedSurvey(googleEmail, fields, (err, surveyResponseId) => {
+            if (err) return reject(err);
+            resolve(surveyResponseId);
+        });
+    });
+}
+
 function getClientEmail(req) {
     if (req.isAuthenticated && req.isAuthenticated() && req.user && req.user.email) return req.user.email;
     if (req.session && req.session.clientEmail) return req.session.clientEmail;
@@ -309,6 +477,21 @@ function ensureAdminAuth(req, res, next) {
         return res.redirect(302, '/login?error=' + encodeURIComponent('Your session has expired because this account was logged in from another device or tab.'));
     }
     return res.redirect(302, '/login');
+}
+
+// Ensures only a logged-in office account (set at /office-login) can view/use the
+// office approval panel. Reuses the same hand-rolled admin-session infra as
+// ensureAdminAuth (req.adminSession/'admin.sid' cookie) with a distinct
+// user.type so an office login can never be mistaken for an admin login (or
+// vice versa) even though they share a session store and cookie.
+function ensureOfficeAuth(req, res, next) {
+    if (req.adminSession && req.adminSession.user && req.adminSession.user.type === 'office') {
+        return next();
+    }
+    if (req.is('application/json') || req.xhr) {
+        return res.status(401).json({ success: false, message: "Please log in as your office first." });
+    }
+    return res.redirect(302, '/office-login');
 }
 
 // Tells the browser (and any proxy/CDN in front of it) to never cache a restricted
@@ -734,6 +917,15 @@ const SQD_STATEMENTS = [
     'I was treated courteously by the staff.',
     'I got what I needed from the government office.'
 ];
+// Free-text client input (respondent name, CSM comments) lands straight in
+// email HTML below — escape it so a comment like "<img src=x onerror=...>"
+// can't inject markup into the message.
+function escapeHtml(str) {
+    return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 const sqdStatementFor = (label) => {
     const idx = parseInt(String(label).replace(/[^0-9]/g, ''), 10);
     return Number.isInteger(idx) && SQD_STATEMENTS[idx] ? `${label}. ${SQD_STATEMENTS[idx]}` : label;
@@ -940,6 +1132,161 @@ function sendSurveyReceiptEmail(toEmail, receipt) {
     });
 }
 
+// Sent instead of the generic receipt (see skipReceiptEmail in the
+// /office-approvals/:id/approve route) when a personal-email submission held
+// in pending_survey_submissions is reviewed and approved by the office the
+// client claims to have visited. Distinct from sendSurveyReceiptEmail above:
+// that one confirms "we received your answers", this one confirms "the office
+// reviewed and approved them" — and, per the client's request, shows the full
+// result INSIDE the Gmail message itself (same SQD table layout as the
+// receipt email) instead of linking out to the system, so there's no
+// redirect/login step standing between "View Result" and actually seeing it.
+// Fire-and-forget, same reasoning as sendSurveyReceiptEmail.
+function sendSurveyApprovedEmail(toEmail, details) {
+    if (!mailTransporter || !toEmail || toEmail === 'Not Specified') return;
+
+    const sqdRowsHtml = details.sqd.map((r, idx) => `
+        <tr>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};font-size:13px;color:#334155;">${sqdStatementFor(r.label)}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};text-align:center;font-weight:700;font-size:13px;color:#0a1f44;width:70px;">${r.value === null ? 'N/A' : (r.value === 0 ? 'N/A' : r.value + ' / 5')}</td>
+        </tr>`).join('');
+
+    const detailRow = (label, value) => `
+        <tr>
+            <td style="padding:10px 0;border-bottom:1px solid #eef1f6;font-size:13px;font-weight:700;color:#64748b;width:42%;vertical-align:top;">${label}</td>
+            <td style="padding:10px 0;border-bottom:1px solid #eef1f6;font-size:14px;font-weight:600;color:#0f172a;vertical-align:top;">${value}</td>
+        </tr>`;
+
+    const hasLogo = fs.existsSync(RECEIPT_LOGO_PATH);
+    const logoHtml = hasLogo
+        ? `<img src="cid:cspc-logo" alt="CSPC Logo" width="72" style="display:block;margin:0 auto 12px;max-width:72px;width:72px;height:auto;">`
+        : '';
+
+    const ccRowsHtml = ['cc1', 'cc2', 'cc3'].map((key, idx) => `
+        <tr>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};font-size:13px;font-weight:700;color:#0a1f44;width:60px;">${key.toUpperCase()}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};font-size:13px;color:#334155;">${escapeHtml(details[key] || 'N/A')}</td>
+        </tr>`).join('');
+
+    const commentsHtml = details.comments && details.comments !== 'N/A'
+        ? `<h3 style="margin:20px 0 10px;font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:.03em;">Your Comment</h3>
+           <p style="margin:0;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;font-size:13.5px;color:#334155;line-height:1.6;">${escapeHtml(details.comments)}</p>`
+        : '';
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your Survey Has Been Approved</title>
+<style>
+    body { margin:0; padding:0; background:#eef1f6; }
+    table { border-collapse:collapse; }
+    .receipt-wrap { width:100%; max-width:600px; margin:0 auto; }
+    .receipt-outer { padding:24px 16px; }
+    @media only screen and (max-width:600px) {
+        .receipt-outer { padding:16px 8px !important; }
+        .receipt-card { border-radius:0 !important; }
+        .receipt-header { padding:24px 20px !important; }
+        .receipt-body { padding:20px !important; }
+        .receipt-header h1 { font-size:18px !important; }
+        .receipt-header p { font-size:12px !important; }
+    }
+</style>
+</head>
+<body>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6;">
+        <tr>
+            <td class="receipt-outer" align="center">
+                <table role="presentation" class="receipt-wrap" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td class="receipt-card" style="background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;font-family:Arial,Helvetica,sans-serif;">
+
+                            <!-- Header -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td class="receipt-header" style="background:#0a1f44;padding:32px 28px;text-align:center;">
+                                        ${logoHtml}
+                                        <p style="margin:0 0 2px;color:#dbe4fb;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;">Republic of the Philippines</p>
+                                        <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">Camarines Sur Polytechnic Colleges</h1>
+                                        <p style="margin:6px 0 0;color:#dbe4fb;font-size:13px;">Client Satisfaction Measurement (CSM) Survey</p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Approved banner -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="padding:18px 28px;border-bottom:1px dashed #cbd5e1;background:#f0fdf4;text-align:center;">
+                                        <span style="display:inline-block;width:36px;height:36px;line-height:36px;border-radius:50%;background:#dcfce7;color:#16a34a;font-size:18px;font-weight:700;margin-bottom:6px;">&#10003;</span>
+                                        <div style="font-size:15px;font-weight:700;color:#166534;">Your survey has been approved</div>
+                                        <div style="font-size:11px;color:#64748b;letter-spacing:.04em;text-transform:uppercase;margin-top:4px;">Reference No. CSM-${details.surveyResponseId}</div>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Body -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td class="receipt-body" style="padding:28px;color:#1e293b;">
+                                        <p style="margin:0 0 8px;font-size:15px;">Hi <strong>${escapeHtml(details.name)}</strong>,</p>
+                                        <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6;"><strong>${details.officeName}</strong> has reviewed and approved the CSM survey you submitted${details.serviceAvailed ? ` for <strong>${details.serviceAvailed}</strong>` : ''}. Below is the full result of what you answered — no need to sign in anywhere to see it.</p>
+
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+                                            ${detailRow('Name', escapeHtml(details.name))}
+                                            ${detailRow('Office Visited', details.officeName)}
+                                            ${detailRow('Service Availed', details.serviceAvailed)}
+                                            ${detailRow('Date Submitted', details.submittedAt)}
+                                            ${detailRow('Cluster', details.clusterName || 'N/A')}
+                                            ${detailRow('Client Type', details.clientType)}
+                                        </table>
+
+                                        <h3 style="margin:0 0 10px;font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:.03em;">Citizen's Charter (CC)</h3>
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:24px;">
+                                            ${ccRowsHtml}
+                                        </table>
+
+                                        <h3 style="margin:0 0 10px;font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:.03em;">Service Quality Dimension Ratings</h3>
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">
+                                            ${sqdRowsHtml}
+                                        </table>
+
+                                        ${commentsHtml}
+
+                                        <p style="margin:24px 0 0;font-size:11.5px;color:#94a3b8;line-height:1.6;">This is an automated message from the CSPC Center for Quality Assurance. This email in full is your result — no further action is required.</p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>`;
+
+    const attachments = hasLogo ? [{
+        filename: 'cspc-logo.png',
+        path: RECEIPT_LOGO_PATH,
+        cid: 'cspc-logo',
+        contentDisposition: 'inline'
+    }] : [];
+
+    mailTransporter.sendMail({
+        from: process.env.MAIL_FROM || `"CSPC Center for Quality Assurance" <${process.env.MAIL_USER}>`,
+        to: toEmail,
+        subject: `Your CSM Survey Was Approved — ${details.officeName} (Ref: CSM-${details.surveyResponseId})`,
+        html,
+        attachments
+    }).then(() => {
+        console.log(`✅ [Mail] Approval notification sent to ${toEmail}`);
+    }).catch((err) => {
+        console.error(`❌ [Mail] Failed to send approval notification to ${toEmail}:`, err.message);
+    });
+}
+
 // Sends a client a one-time password-reset link (see /forgot-password below).
 // Fire-and-forget, same reasoning as sendSurveyReceiptEmail — a slow/failed
 // send should never surface as an error to the person requesting the reset
@@ -1048,6 +1395,24 @@ CREATE TABLE IF NOT EXISTS services (
     id INT AUTO_INCREMENT PRIMARY KEY,
     office_id INT NOT NULL,
     service_name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE
+);`;
+
+// Holds survey submissions from non-@cspc.edu.ph accounts until the office the
+// client claims to have visited verifies and approves them — see /office-approvals.
+// Approved rows get replayed into survey_responses (see finalizeVerifiedSurvey) and
+// this row is kept (status flipped) as an audit trail rather than deleted.
+const createPendingSurveySubmissionsTableQuery = `
+CREATE TABLE IF NOT EXISTS pending_survey_submissions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    office_id INT NOT NULL,
+    google_email VARCHAR(255) NOT NULL,
+    service_availed VARCHAR(255) NULL,
+    payload JSON NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    decline_reason VARCHAR(255) NULL,
+    reviewed_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE
 );`;
@@ -1231,11 +1596,27 @@ db.query(createClustersTableQuery, (err) => {
             } else {
                 console.log('✅ offices table verified/created successfully!');
                 db.query("ALTER TABLE offices ADD COLUMN is_archived TINYINT(1) NOT NULL DEFAULT 0", () => {});
+                // Office-side login for the approval panel (see /office-login) — bcrypt
+                // hash, set by the super admin via /offices/add or /offices/edit. NULL
+                // means this office has no login set up yet.
+                db.query("ALTER TABLE offices ADD COLUMN password VARCHAR(255) NULL", () => {});
 
                 // Services table (per office) — powers the dependent "Service Availed" dropdown
                 db.query(createServicesTableQuery, (err) => {
                     if (err) console.error("❌ Error creating services table:", err);
-                    else console.log('✅ services table verified/created successfully!');
+                    else {
+                        console.log('✅ services table verified/created successfully!');
+                        // How often the same account may re-survey this service: daily/weekly/
+                        // monthly/yearly, or NULL (default) for one-time-only — see
+                        // isEligibleForResubmission(). Existing services keep the one-time-only
+                        // default until the admin explicitly sets a frequency.
+                        db.query("ALTER TABLE services ADD COLUMN availability VARCHAR(20) NULL", () => {});
+                    }
+                });
+
+                db.query(createPendingSurveySubmissionsTableQuery, (err) => {
+                    if (err) console.error("❌ Error creating pending_survey_submissions table:", err);
+                    else console.log('✅ pending_survey_submissions table verified/created successfully!');
                 });
 
                 // Isunod ang Survey Responses Table
@@ -1248,9 +1629,21 @@ db.query(createClustersTableQuery, (err) => {
                         db.query("ALTER TABLE survey_responses ADD COLUMN sentiment VARCHAR(50) DEFAULT 'Neutral'", () => {});
                         db.query("ALTER TABLE survey_responses ADD COLUMN region VARCHAR(100) NULL", () => {});
                         db.query("ALTER TABLE survey_responses ADD COLUMN google_email VARCHAR(255) NULL", () => {
-                            // 1 Google account = 1 survey per office, enforced at the DB level too
-                            db.query("ALTER TABLE survey_responses ADD UNIQUE KEY unique_office_google_email (office_id, google_email)", () => {});
+                            // Replaced by the frequency-aware resubmission check (see
+                            // isEligibleForResubmission) — a client may now legitimately submit
+                            // more than once per office if the service allows it, so the old
+                            // "once ever per office" DB constraint no longer holds.
+                            // unique_office_google_email(office_id, google_email) is also the only
+                            // index backing the office_id -> offices FK, so MySQL refuses to drop it
+                            // until a plain index on office_id exists to take over that job.
+                            db.query("CREATE INDEX idx_survey_responses_office_id ON survey_responses(office_id)", () => {
+                                db.query("ALTER TABLE survey_responses DROP INDEX unique_office_google_email", () => {});
+                            });
                         });
+                        // Which service this submission was for — collected by the form since
+                        // day one but never persisted until now (see /submit-survey). Drives the
+                        // per-service resubmission cooldown.
+                        db.query("ALTER TABLE survey_responses ADD COLUMN service_availed VARCHAR(255) NULL", () => {});
 
                         // Pinakahuli ang Client Profiles
                         db.query(createClientProfilesTableQuery, (err) => {
@@ -1590,8 +1983,11 @@ app.post('/auth-login', async (req, res) => {
         if (err) {
             return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
         }
+        // Not a client account either — try offices before giving up, since
+        // office staff naturally try this same main login form (in addition to
+        // the dedicated /office-login page) with their office's email/password.
         if (!rows || rows.length === 0) {
-            return res.redirect('/login?error=' + encodeURIComponent('No account found for that email. Please register using the "Sign in with Google" button first.'));
+            return handleOfficeLogin();
         }
 
         const account = rows[0];
@@ -1610,6 +2006,33 @@ app.post('/auth-login', async (req, res) => {
         // different tab merely inheriting the shared 'client.sid' cookie.
         return res.redirect('/client-survey?loggedin=1');
     });
+
+    function handleOfficeLogin() {
+        db.query('SELECT id, office_name, cluster_name, email_address, password FROM offices WHERE email_address = ? LIMIT 1', [emailInput], async (officeErr, officeRows) => {
+            if (officeErr) {
+                return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
+            }
+            const office = officeRows && officeRows[0];
+            if (!office || !office.password) {
+                return res.redirect('/login?error=' + encodeURIComponent('No account found for that email. Please register using the "Sign in with Google" button first.'));
+            }
+
+            const passwordMatches = await bcrypt.compare(password, office.password);
+            if (!passwordMatches) {
+                return res.redirect('/login?error=' + encodeURIComponent('Invalid email or password.'));
+            }
+
+            regenerateAdminSession(req, res);
+            req.adminSession.user = {
+                id: office.id,
+                office_name: office.office_name,
+                cluster_name: office.cluster_name,
+                email_address: office.email_address,
+                type: 'office'
+            };
+            return res.redirect('/office-approvals');
+        });
+    }
     }
 });
 
@@ -1627,6 +2050,147 @@ app.get('/client-login', noCache, (req, res) => {
     }
 
     return res.redirect('/client-survey');
+});
+
+// ==========================================
+// OFFICE LOGIN & APPROVAL PANEL
+// ==========================================
+// A separate login for office staff (not an admin, not a client) — its whole
+// purpose is to review survey submissions from non-@cspc.edu.ph accounts that
+// claim to have visited THIS office, and approve or decline them (see
+// checkResubmissionEligibility / finalizeVerifiedSurvey for how an approved
+// submission is replayed into survey_responses). Reuses the same hand-rolled
+// admin-session cookie/store as admin logins (see ensureOfficeAuth above).
+app.get('/office-login', noCache, (req, res) => {
+    if (req.adminSession && req.adminSession.user && req.adminSession.user.type === 'office') {
+        return res.redirect('/office-approvals');
+    }
+    res.render('office-login');
+});
+
+app.post('/office-login', (req, res) => {
+    const emailInput = String(req.body.email || '').trim().toLowerCase();
+    const password = req.body.password;
+    if (!emailInput || !password) {
+        return res.redirect('/office-login?error=' + encodeURIComponent('Please enter both the office email and password.'));
+    }
+
+    db.query('SELECT id, office_name, cluster_name, email_address, password FROM offices WHERE email_address = ? LIMIT 1', [emailInput], async (err, rows) => {
+        if (err) return res.redirect('/office-login?error=' + encodeURIComponent('Server error. Please try again.'));
+
+        const office = rows && rows[0];
+        if (!office || !office.password) {
+            return res.redirect('/office-login?error=' + encodeURIComponent('Invalid office email or password.'));
+        }
+
+        const passwordMatches = await bcrypt.compare(password, office.password);
+        if (!passwordMatches) {
+            return res.redirect('/office-login?error=' + encodeURIComponent('Invalid office email or password.'));
+        }
+
+        regenerateAdminSession(req, res);
+        req.adminSession.user = {
+            id: office.id,
+            office_name: office.office_name,
+            cluster_name: office.cluster_name,
+            email_address: office.email_address,
+            type: 'office'
+        };
+        res.redirect('/office-approvals');
+    });
+});
+
+app.get('/office-logout', noCache, (req, res) => {
+    destroyAdminSession(req, res);
+    res.redirect('/office-login');
+});
+
+app.get('/office-approvals', ensureOfficeAuth, noCache, (req, res) => {
+    const officeId = req.adminSession.user.id;
+    db.query(
+        "SELECT id, google_email, service_availed, payload, created_at FROM pending_survey_submissions WHERE office_id = ? AND status = 'pending' ORDER BY created_at ASC",
+        [officeId],
+        (err, rows) => {
+            const submissions = (!err && rows) ? rows.map(r => {
+                let payload = {};
+                try { payload = JSON.parse(r.payload); } catch (e) { /* leave payload empty on corrupt JSON */ }
+                return {
+                    id: r.id,
+                    googleEmail: r.google_email,
+                    serviceAvailed: r.service_availed,
+                    respondentName: payload.respondentName || 'Anonymous',
+                    officeVisitedTime: payload.officeVisitedTime || null,
+                    createdAt: r.created_at
+                };
+            }) : [];
+            res.render('office-approvals', {
+                officeName: req.adminSession.user.office_name,
+                submissions
+            });
+        }
+    );
+});
+
+app.post('/office-approvals/:id/approve', ensureOfficeAuth, (req, res) => {
+    const officeId = req.adminSession.user.id;
+    db.query(
+        "SELECT * FROM pending_survey_submissions WHERE id = ? AND office_id = ? AND status = 'pending' LIMIT 1",
+        [req.params.id, officeId],
+        (err, rows) => {
+            if (err || !rows || rows.length === 0) {
+                return res.redirect('/office-approvals');
+            }
+            const row = rows[0];
+            let payload;
+            try { payload = JSON.parse(row.payload); } catch (e) {
+                console.error("❌ [Office Approval] Corrupt payload for pending submission", row.id, e);
+                return res.redirect('/office-approvals');
+            }
+
+            // This survey was already submitted by the client — the generic "thanks
+            // for submitting" receipt doesn't fit here. Send the dedicated approval
+            // notification (with the result embedded right in the email) below instead.
+            payload.skipReceiptEmail = true;
+
+            finalizeVerifiedSurvey(row.google_email, payload, (finalizeErr, surveyResponseId) => {
+                if (finalizeErr) {
+                    console.error("❌ [Office Approval] Error finalizing approved survey:", finalizeErr);
+                    return res.redirect('/office-approvals');
+                }
+                db.query(
+                    "UPDATE pending_survey_submissions SET status = 'approved', reviewed_at = NOW() WHERE id = ?",
+                    [row.id],
+                    () => res.redirect('/office-approvals')
+                );
+
+                db.query('SELECT office_name, cluster_name FROM offices WHERE id = ? LIMIT 1', [payload.officeId], (officeErr, officeRows) => {
+                    const office = (!officeErr && officeRows && officeRows[0]) ? officeRows[0] : null;
+                    sendSurveyApprovedEmail(row.google_email, {
+                        name: payload.respondentName,
+                        officeName: office ? office.office_name : 'Selected Office',
+                        clusterName: office ? office.cluster_name : '',
+                        clientType: payload.clientType,
+                        serviceAvailed: payload.serviceAvailed || 'Not specified',
+                        submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
+                        surveyResponseId,
+                        cc1: payload.cc1, cc2: payload.cc2, cc3: payload.cc3,
+                        sqd: (payload.sqdValues || []).map((v, i) => ({ label: 'SQD' + i, value: v })),
+                        comments: payload.comments || 'N/A'
+                    });
+                });
+            });
+        }
+    );
+});
+
+app.post('/office-approvals/:id/decline', ensureOfficeAuth, (req, res) => {
+    const officeId = req.adminSession.user.id;
+    const reason = String(req.body.decline_reason || '').trim().slice(0, 255) || null;
+    db.query(
+        "UPDATE pending_survey_submissions SET status = 'declined', reviewed_at = NOW(), decline_reason = ? WHERE id = ? AND office_id = ? AND status = 'pending'",
+        [reason, req.params.id, officeId],
+        () => res.redirect('/office-approvals')
+    );
 });
 
 // ==========================================
@@ -1942,29 +2506,60 @@ app.get('/client-survey', ensureClientAuth, noCache, (req, res) => {
     const clientEmail = req.clientEmail;
 
     db.query('SELECT * FROM offices WHERE is_archived = 0 ORDER BY office_name ASC', (err, offices) => {
-        if (err) return res.render('client-survey', { offices: [], clientEmail, takenOfficeIds: [], clientProfile: null, officeServices: {} });
+        if (err) return res.render('client-survey', { offices: [], clientEmail, blockedCombos: {}, clientProfile: null, officeServices: {} });
 
         // All active services, grouped by office_id — powers the dependent
-        // "Service Availed" dropdown (#serviceSelect) on the client side.
-        db.query('SELECT office_id, service_name FROM services ORDER BY office_id, id', (errServices, serviceRows) => {
+        // "Service Availed" dropdown (#serviceSelect) on the client side. Also
+        // carries each service's resubmission cadence (see isEligibleForResubmission).
+        db.query('SELECT office_id, service_name, availability FROM services ORDER BY office_id, id', (errServices, serviceRows) => {
             const officeServices = {};
+            const serviceAvailability = {}; // "officeId::serviceName" -> availability
             if (!errServices && serviceRows) {
                 serviceRows.forEach(row => {
                     if (!officeServices[row.office_id]) officeServices[row.office_id] = [];
                     officeServices[row.office_id].push(row.service_name);
+                    serviceAvailability[row.office_id + '::' + row.service_name] = row.availability;
                 });
             }
 
-            // Offices this account has already submitted a survey for — disabled in the dropdown
-            db.query('SELECT office_id FROM survey_responses WHERE google_email = ?', [clientEmail], (err2, rows) => {
-                const takenOfficeIds = err2 ? [] : rows.map(r => r.office_id);
+            // Most recent APPROVED submission per (office, service) this account has —
+            // combined with still-pending requests below to build the set of combos
+            // currently blocked from resubmission (see isEligibleForResubmission).
+            db.query(
+                'SELECT office_id, service_availed, MAX(created_at) AS last_at FROM survey_responses WHERE google_email = ? GROUP BY office_id, service_availed',
+                [clientEmail],
+                (err2, approvedRows) => {
+                    db.query(
+                        "SELECT office_id, service_availed FROM pending_survey_submissions WHERE google_email = ? AND status = 'pending'",
+                        [clientEmail],
+                        (err4, pendingRows) => {
+                            const blockedCombos = {};
 
-                // Saved/locked demographics from this account's first-ever submission (if any)
-                db.query('SELECT region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [clientEmail], (err3, profileRows) => {
-                    const clientProfile = (!err3 && profileRows && profileRows.length > 0) ? profileRows[0] : null;
-                    res.render('client-survey', { offices, clientEmail, takenOfficeIds, clientProfile, officeServices });
-                });
-            });
+                            (pendingRows || []).forEach(row => {
+                                blockedCombos[row.office_id + '::' + row.service_availed] = "Awaiting the office's review.";
+                            });
+
+                            (!err2 && approvedRows ? approvedRows : []).forEach(row => {
+                                const key = row.office_id + '::' + row.service_availed;
+                                if (blockedCombos[key]) return; // already blocked by a pending request
+                                const availability = serviceAvailability[key];
+                                if (!isEligibleForResubmission(row.last_at, availability)) {
+                                    const nextDate = nextEligibleDateText(row.last_at, availability);
+                                    blockedCombos[key] = nextDate
+                                        ? `You can retake this survey starting ${nextDate}.`
+                                        : 'You have already evaluated this service.';
+                                }
+                            });
+
+                            // Saved/locked demographics from this account's first-ever submission (if any)
+                            db.query('SELECT region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [clientEmail], (err3, profileRows) => {
+                                const clientProfile = (!err3 && profileRows && profileRows.length > 0) ? profileRows[0] : null;
+                                res.render('client-survey', { offices, clientEmail, blockedCombos, clientProfile, officeServices });
+                            });
+                        }
+                    );
+                }
+            );
         });
     });
 });
@@ -2015,18 +2610,44 @@ app.post('/api/client-profile', ensureClientAuth, (req, res) => {
 // ==========================================
 // CLIENT ACCOUNT — History tab (past submitted surveys)
 // ==========================================
+// History = approved (survey_responses) + still-pending/declined submissions
+// (pending_survey_submissions) for @cspc-exempt accounts, merged and sorted by
+// date. Pending-table rows use a "p"-prefixed id (their own auto-increment
+// column is a separate namespace from survey_responses.id) and are never
+// clickable into /api/client-history/:id — there's no reviewed answer detail
+// to show yet.
 app.get('/api/client-history', ensureClientAuth, noCache, (req, res) => {
-    const query = `
+    const approvedQuery = `
         SELECT s.id, o.office_name, o.cluster_name, s.topic, s.sentiment,
-               DATE_FORMAT(s.created_at, '%M %d, %Y') AS formatted_date
+               s.created_at, DATE_FORMAT(s.created_at, '%M %d, %Y') AS formatted_date
         FROM survey_responses s
         JOIN offices o ON s.office_id = o.id
         WHERE s.google_email = ?
-        ORDER BY s.created_at DESC
     `;
-    db.query(query, [req.clientEmail], (err, rows) => {
+    db.query(approvedQuery, [req.clientEmail], (err, approvedRows) => {
         if (err) return res.status(500).json({ success: false, message: 'Server error loading your survey history.', history: [] });
-        res.json({ success: true, history: rows || [] });
+
+        const pendingQuery = `
+            SELECT p.id, o.office_name, o.cluster_name, p.service_availed, p.status, p.decline_reason,
+                   p.created_at, DATE_FORMAT(p.created_at, '%M %d, %Y') AS formatted_date
+            FROM pending_survey_submissions p
+            JOIN offices o ON p.office_id = o.id
+            WHERE p.google_email = ?
+        `;
+        db.query(pendingQuery, [req.clientEmail], (err2, pendingRows) => {
+            const approved = (approvedRows || []).map(r => ({
+                id: r.id, office_name: r.office_name, cluster_name: r.cluster_name,
+                topic: r.topic, sentiment: r.sentiment, formatted_date: r.formatted_date,
+                created_at: r.created_at, status: 'approved'
+            }));
+            const pending = (!err2 && pendingRows ? pendingRows : []).map(r => ({
+                id: 'p' + r.id, office_name: r.office_name, cluster_name: r.cluster_name,
+                service_availed: r.service_availed, decline_reason: r.decline_reason,
+                formatted_date: r.formatted_date, created_at: r.created_at, status: r.status
+            }));
+            const history = approved.concat(pending).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            res.json({ success: true, history });
+        });
     });
 });
 
@@ -2095,120 +2716,51 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
         const finalRegion = cleanStr(region) || 'Not Specified';
         const finalOfficeId = cleanInt(office_id);
         const finalOfficeVisitedTime = cleanTime(office_visited_time);
+        const finalServiceAvailed = cleanStr(service_availed);
 
-        // 1 account can only submit ONE survey per office
-        db.query(
-            'SELECT id FROM survey_responses WHERE office_id = ? AND google_email = ? LIMIT 1',
-            [finalOfficeId, googleEmail],
-            (checkErr, existing) => {
-                if (checkErr) {
-                    console.error("❌ [Survey] Duplicate-check error:", checkErr);
-                    return res.status(500).json({ success: false, message: "Database error while checking previous submissions." });
-                }
-
-                if (existing && existing.length > 0) {
-                    return res.status(409).json({ success: false, message: "You have already evaluated this office. You cannot submit again." });
-                }
-
-                submitSurveyResponse();
+        checkResubmissionEligibility(finalOfficeId, googleEmail, finalServiceAvailed, (eligibility) => {
+            if (!eligibility.eligible) {
+                return res.status(409).json({ success: false, message: eligibility.message });
             }
-        );
 
-    function submitSurveyResponse() {
-    // DYNAMIC 6-MONTH PERIOD LOGIC (BASED ON CURRENT DATE OF SUBMISSION)
-    const currentPeriod = getPeriodCovered();
+            const sqdValues = [sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8].map(cleanInt);
+            const fields = {
+                officeId: finalOfficeId, respondentName: finalName, topic: cleanStr(topic),
+                region: finalRegion, cc1: cleanStr(cc1), cc2: cleanStr(cc2), cc3: cleanStr(cc3),
+                sqdValues, comments: cleanStr(comments), serviceAvailed: finalServiceAvailed,
+                clientType: finalClientType, age: finalAge, gender: finalGender,
+                officeVisitedTime: finalOfficeVisitedTime, period: getPeriodCovered()
+            };
 
-    const insertQuery = `
-        INSERT INTO survey_responses
-        (office_id, respondent_name, topic, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const values = [
-        finalOfficeId, finalName, cleanStr(topic) || 'General', finalRegion,
-        cleanStr(cc1), cleanStr(cc2), cleanStr(cc3),
-        cleanInt(sqd0), cleanInt(sqd1), cleanInt(sqd2), cleanInt(sqd3),
-        cleanInt(sqd4), cleanInt(sqd5), cleanInt(sqd6), cleanInt(sqd7), cleanInt(sqd8),
-        cleanStr(comments) || 'N/A', currentPeriod, googleEmail
-    ];
-
-    db.query(insertQuery, values, (err, result) => {
-        if (err) {
-            if (err.code === 'ER_DUP_ENTRY') {
-                return res.status(409).json({ success: false, message: "You have already evaluated this office. You cannot submit again." });
-            }
-            console.error("❌ [Survey] Database insertion error:", err);
-            return res.status(500).json({ success: false, message: "Database insertion error: " + err.message });
-        }
-
-        const surveyResponseId = result.insertId;
-        
-        const insertProfileQuery = `
-            INSERT INTO client_profiles (survey_response_id, respondent_name, client_type, age, gender, region, email, office_visited_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-
-        const profileValues = [
-            surveyResponseId, finalName, finalClientType, finalAge, finalGender, finalRegion, googleEmail, finalOfficeVisitedTime
-        ];
-
-        db.query(insertProfileQuery, profileValues, (profileErr) => {
-            if (profileErr) console.error("❌ [Client Profile] Error inserting profile:", profileErr);
-
-            // Lock in this account's demographics the first time they're actually answered.
-            // COALESCE only writes region/age/gender when the existing column is still NULL —
-            // once a value is set (whether the account row was created here or earlier, e.g.
-            // at registration with no demographics yet) it's never overwritten again.
-            const upsertAccountQuery = `
-                INSERT INTO client_accounts (email, respondent_name, region, age, gender)
-                VALUES (?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                    respondent_name = VALUES(respondent_name),
-                    region = COALESCE(region, VALUES(region)),
-                    age = COALESCE(age, VALUES(age)),
-                    gender = COALESCE(gender, VALUES(gender))
-            `;
-            db.query(upsertAccountQuery, [googleEmail, finalName, finalRegion, finalAge, finalGender], (acctErr) => {
-                if (acctErr) console.error("❌ [Client Account] Error upserting locked profile:", acctErr);
-            });
-
-            // 1. Instantly respond to the frontend so the client sees "Thank You" without waiting
-            res.json({ success: true, message: "Survey recorded successfully!" });
-
-            // 1b. Fire-and-forget proof-of-completion receipt to the client's Gmail.
-            // Looks up the office's display name first since only office_id is on hand here.
-            db.query('SELECT office_name, cluster_name FROM offices WHERE id = ? LIMIT 1', [finalOfficeId], (officeErr, officeRows) => {
-                const office = (!officeErr && officeRows && officeRows[0]) ? officeRows[0] : null;
-                sendSurveyReceiptEmail(googleEmail, {
-                    name: finalName,
-                    officeName: office ? office.office_name : 'Selected Office',
-                    clusterName: office ? office.cluster_name : '',
-                    clientType: finalClientType,
-                    serviceAvailed: cleanStr(service_availed) || 'Not specified',
-                    submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
-                    surveyResponseId,
-                    sqd: [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => ({
-                        label: 'SQD' + i,
-                        value: cleanInt(req.body['sqd' + i])
-                    }))
-                });
-            });
-
-            // 2. 🔥 BACKGROUND AI PROCESS START 🔥
-            // Fire-and-forget: the client already has its response, so this just
-            // patches sentiment/topic onto the row once analyze.py finishes.
-            if (comments && comments.trim() !== "") {
-                analyzeComment(comments, false, finalOfficeId).then(({ sentiment, topic }) => {
-                    if (sentiment && topic) {
-                        const updateQuery = 'UPDATE survey_responses SET sentiment = ?, topic = ? WHERE id = ?';
-                        db.query(updateQuery, [sentiment, topic, surveyResponseId]);
-                        console.log(`✅ [AI Success] ID: ${surveyResponseId} | Sentiment: ${sentiment} | Topic: ${topic}`);
+            // @cspc.edu.ph accounts are trusted automatically and land straight in
+            // survey_responses, exactly as before. Any other email must first be
+            // verified by the office the client says they visited — see /office-approvals.
+            if (isCspcEmail(googleEmail)) {
+                finalizeVerifiedSurvey(googleEmail, fields, (err) => {
+                    if (err) {
+                        if (err.code === 'ER_DUP_ENTRY') {
+                            return res.status(409).json({ success: false, message: "You have already evaluated this office. You cannot submit again." });
+                        }
+                        console.error("❌ [Survey] Database insertion error:", err);
+                        return res.status(500).json({ success: false, message: "Database insertion error: " + err.message });
                     }
+                    res.json({ success: true, message: "Survey recorded successfully!" });
                 });
+                return;
             }
+
+            db.query(
+                'INSERT INTO pending_survey_submissions (office_id, google_email, service_availed, payload) VALUES (?, ?, ?, ?)',
+                [finalOfficeId, googleEmail, finalServiceAvailed, JSON.stringify(fields)],
+                (pendingErr) => {
+                    if (pendingErr) {
+                        console.error("❌ [Survey] Error queuing submission for office review:", pendingErr);
+                        return res.status(500).json({ success: false, message: "Database error while submitting your survey." });
+                    }
+                    res.json({ success: true, pending: true, message: "Submitted! The office you visited will verify your visit before this is recorded." });
+                }
+            );
         });
-    });
-    }
     });
 });
 
@@ -2254,7 +2806,7 @@ async function syncOneSurvey(googleEmail, body) {
     const cleanInt = (val) => (val !== undefined && val !== "" && val !== null && !isNaN(val)) ? parseInt(val, 10) : null;
     const cleanStr = (val) => (val !== undefined && val !== null && String(val).trim() !== "") ? String(val).trim() : null;
 
-    const { office_id, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, office_visited_time } = body;
+    const { office_id, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, office_visited_time, service_availed } = body;
 
     const finalOfficeId = cleanInt(office_id);
     if (!finalOfficeId) {
@@ -2282,18 +2834,35 @@ async function syncOneSurvey(googleEmail, body) {
     const finalGender = cleanStr(gender) || 'Not Specified';
     const finalRegion = cleanStr(region) || 'Not Specified';
     const finalOfficeVisitedTime = cleanTime(office_visited_time);
+    const finalServiceAvailed = cleanStr(service_availed);
 
-    try {
-        const existing = await dbQuery(
-            'SELECT id FROM survey_responses WHERE office_id = ? AND google_email = ? LIMIT 1',
-            [finalOfficeId, googleEmail]
-        );
-        if (existing && existing.length > 0) {
-            return { success: false, message: "You have already evaluated this office. You cannot submit again." };
+    const eligibility = await checkResubmissionEligibilityAsync(finalOfficeId, googleEmail, finalServiceAvailed);
+    if (!eligibility.eligible) {
+        return { success: false, message: eligibility.message };
+    }
+
+    const sqdValues = [sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8].map(cleanInt);
+    const currentPeriod = getPeriodCovered();
+
+    // @cspc.edu.ph accounts are trusted automatically; anything else waits for
+    // the visited office to approve it — see /submit-survey for the same logic.
+    if (!isCspcEmail(googleEmail)) {
+        try {
+            await dbQuery(
+                'INSERT INTO pending_survey_submissions (office_id, google_email, service_availed, payload) VALUES (?, ?, ?, ?)',
+                [finalOfficeId, googleEmail, finalServiceAvailed, JSON.stringify({
+                    officeId: finalOfficeId, respondentName: finalName, topic: null, region: finalRegion,
+                    cc1: cleanStr(cc1), cc2: cleanStr(cc2), cc3: cleanStr(cc3), sqdValues,
+                    comments: cleanStr(comments), serviceAvailed: finalServiceAvailed,
+                    clientType: finalClientType, age: finalAge, gender: finalGender,
+                    officeVisitedTime: finalOfficeVisitedTime, period: currentPeriod
+                })]
+            );
+        } catch (err) {
+            console.error("❌ [Sync] Error queuing submission for office review:", err);
+            return { success: false, message: "Database error while submitting your survey." };
         }
-    } catch (err) {
-        console.error("❌ [Sync] Duplicate-check error:", err);
-        return { success: false, message: "Database error while checking previous submissions." };
+        return { success: true, pending: true, message: "Submitted! The office you visited will verify your visit before this is recorded." };
     }
 
     // Await the AI analysis BEFORE inserting — analyzeComment() never throws,
@@ -2313,55 +2882,24 @@ async function syncOneSurvey(googleEmail, body) {
         topic = 'General Feedback';
     }
 
-    const currentPeriod = getPeriodCovered();
-
-    let insertResult;
+    let surveyResponseId;
     try {
-        insertResult = await dbQuery(
-            `INSERT INTO survey_responses
-             (office_id, respondent_name, topic, sentiment, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                finalOfficeId, finalName, topic || 'General', sentiment || 'Neutral', finalRegion,
-                cleanStr(cc1), cleanStr(cc2), cleanStr(cc3),
-                cleanInt(sqd0), cleanInt(sqd1), cleanInt(sqd2), cleanInt(sqd3),
-                cleanInt(sqd4), cleanInt(sqd5), cleanInt(sqd6), cleanInt(sqd7), cleanInt(sqd8),
-                cleanStr(comments) || 'N/A', currentPeriod, googleEmail
-            ]
-        );
+        surveyResponseId = await finalizeVerifiedSurveyAsync(googleEmail, {
+            officeId: finalOfficeId, respondentName: finalName, topic, sentiment, region: finalRegion,
+            cc1: cleanStr(cc1), cc2: cleanStr(cc2), cc3: cleanStr(cc3), sqdValues,
+            comments: cleanStr(comments), serviceAvailed: finalServiceAvailed,
+            clientType: finalClientType, age: finalAge, gender: finalGender,
+            officeVisitedTime: finalOfficeVisitedTime, period: currentPeriod,
+            // The offline sync path has never sent a receipt email, and AI analysis
+            // was already awaited above — don't repeat either.
+            skipReceiptEmail: true, skipAiAnalysis: true
+        });
     } catch (err) {
         if (err.code === 'ER_DUP_ENTRY') {
             return { success: false, message: "You have already evaluated this office. You cannot submit again." };
         }
         console.error("❌ [Sync] Database insertion error:", err);
         return { success: false, message: "Database insertion error: " + err.message };
-    }
-
-    const surveyResponseId = insertResult.insertId;
-
-    try {
-        await dbQuery(
-            `INSERT INTO client_profiles (survey_response_id, respondent_name, client_type, age, gender, region, email, office_visited_time)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [surveyResponseId, finalName, finalClientType, finalAge, finalGender, finalRegion, googleEmail, finalOfficeVisitedTime]
-        );
-    } catch (profileErr) {
-        console.error("❌ [Sync][Client Profile] Error inserting profile:", profileErr);
-    }
-
-    try {
-        await dbQuery(
-            `INSERT INTO client_accounts (email, respondent_name, region, age, gender)
-             VALUES (?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE
-                respondent_name = VALUES(respondent_name),
-                region = COALESCE(region, VALUES(region)),
-                age = COALESCE(age, VALUES(age)),
-                gender = COALESCE(gender, VALUES(gender))`,
-            [googleEmail, finalName, finalRegion, finalAge, finalGender]
-        );
-    } catch (acctErr) {
-        console.error("❌ [Sync][Client Account] Error upserting locked profile:", acctErr);
     }
 
     console.log(`✅ [Sync Success] ID: ${surveyResponseId} | Sentiment: ${sentiment || 'Neutral'} | Topic: ${topic || 'General'}`);
@@ -2942,12 +3480,12 @@ app.get('/offices', ensureAdminAuth, noCache, (req, res) => {
             if (err) console.error("Error loading offices:", err);
 
             // Services grouped by office_id — powers the per-office "Services" modal below.
-            db.query('SELECT id, office_id, service_name FROM services ORDER BY office_id, id', (svcErr, serviceRows) => {
+            db.query('SELECT id, office_id, service_name, availability FROM services ORDER BY office_id, id', (svcErr, serviceRows) => {
                 const officeServicesData = {};
                 if (!svcErr && serviceRows) {
                     serviceRows.forEach(row => {
                         if (!officeServicesData[row.office_id]) officeServicesData[row.office_id] = [];
-                        officeServicesData[row.office_id].push({ id: row.id, service_name: row.service_name });
+                        officeServicesData[row.office_id].push({ id: row.id, service_name: row.service_name, availability: row.availability });
                     });
                 }
 
@@ -3028,10 +3566,13 @@ app.post('/clusters/permanent-delete/:id', ensureAdminAuth, (req, res) => {
     });
 });
 
-app.post('/offices/add', ensureAdminAuth, (req, res) => {
-    const { cluster_name, office_name, head_director, email_address } = req.body;
-    db.query('INSERT INTO offices (cluster_name, office_name, head_director, email_address) VALUES (?, ?, ?, ?)',
-    [cluster_name, office_name, head_director || 'Not Assigned', email_address], (err, result) => {
+app.post('/offices/add', ensureAdminAuth, async (req, res) => {
+    const { cluster_name, office_name, head_director, email_address, password } = req.body;
+    // Login for the office approval panel (/office-login) — optional at creation
+    // time; a super admin can also set/change it later via /offices/edit.
+    const passwordHash = password ? await bcrypt.hash(password, 10) : null;
+    db.query('INSERT INTO offices (cluster_name, office_name, head_director, email_address, password) VALUES (?, ?, ?, ?, ?)',
+    [cluster_name, office_name, head_director || 'Not Assigned', email_address, passwordHash], (err, result) => {
         if (err) { console.error("❌ Error adding office:", err); return res.redirect('/offices'); }
         loadOfficeNameCache();
 
@@ -3055,12 +3596,30 @@ app.post('/offices/add', ensureAdminAuth, (req, res) => {
 // SERVICES AVAILED — per-office CRUD (powers the client survey's dependent
 // "Service Availed" dropdown, see officeServices in /client-survey below)
 // ==========================================
+const VALID_SERVICE_AVAILABILITY = ['daily', 'weekly', 'monthly', 'yearly'];
+// Normalizes the Availability dropdown's posted value to a valid enum or NULL
+// (blank/unrecognized => one-time-only — see isEligibleForResubmission).
+function cleanAvailability(val) {
+    const v = (val || '').trim().toLowerCase();
+    return VALID_SERVICE_AVAILABILITY.includes(v) ? v : null;
+}
+
 app.post('/services/add', ensureAdminAuth, (req, res) => {
-    const { office_id, service_name } = req.body;
+    const { office_id, service_name, availability } = req.body;
     const name = (service_name || '').trim();
     if (!office_id || !name) return res.redirect('/offices');
-    db.query('INSERT INTO services (office_id, service_name) VALUES (?, ?)', [office_id, name], (err) => {
+    db.query('INSERT INTO services (office_id, service_name, availability) VALUES (?, ?, ?)', [office_id, name, cleanAvailability(availability)], (err) => {
         if (err) console.error("❌ Error adding service:", err);
+        res.redirect('/offices');
+    });
+});
+
+app.post('/services/edit', ensureAdminAuth, (req, res) => {
+    const { id, service_name, availability } = req.body;
+    const name = (service_name || '').trim();
+    if (!id || !name) return res.redirect('/offices');
+    db.query('UPDATE services SET service_name = ?, availability = ? WHERE id = ?', [name, cleanAvailability(availability), id], (err) => {
+        if (err) console.error("❌ Error editing service:", err);
         res.redirect('/offices');
     });
 });
@@ -3072,8 +3631,16 @@ app.post('/services/delete/:id', ensureAdminAuth, (req, res) => {
     });
 });
 
-app.post('/offices/edit', ensureAdminAuth, (req, res) => {
-    const { id, cluster_name, office_name, head_director, email_address } = req.body;
+app.post('/offices/edit', ensureAdminAuth, async (req, res) => {
+    const { id, cluster_name, office_name, head_director, email_address, password } = req.body;
+    // Blank password field on edit = leave the existing login untouched (mirrors
+    // how the admin edit forms already treat a blank password field).
+    if (password) {
+        const passwordHash = await bcrypt.hash(password, 10);
+        db.query('UPDATE offices SET cluster_name = ?, office_name = ?, head_director = ?, email_address = ?, password = ? WHERE id = ?',
+        [cluster_name, office_name, head_director, email_address, passwordHash, id], (err, result) => { loadOfficeNameCache(); res.redirect('/offices'); });
+        return;
+    }
     db.query('UPDATE offices SET cluster_name = ?, office_name = ?, head_director = ?, email_address = ? WHERE id = ?',
     [cluster_name, office_name, head_director, email_address, id], (err, result) => { loadOfficeNameCache(); res.redirect('/offices'); });
 });
@@ -3500,5 +4067,6 @@ app.get('/api/public-dashboard', (req, res) => {
 const listenPort = process.env.PORT || port;
 app.listen(listenPort, '0.0.0.0', () => {
     console.log(`🚀 Server is running on port ${listenPort}`);
+    console.log(`🔗 Open: http://localhost:${listenPort}`);
     startModelServer();
 });

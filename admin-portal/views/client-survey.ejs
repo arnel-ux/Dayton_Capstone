@@ -1328,13 +1328,8 @@
                             <select id="officeSelect" name="office_id" class="form-select fs-6" required>
                                 <option value="" selected disabled data-i18n="s1_ph">Select Office...</option>
                                 <% if (typeof offices !== 'undefined') { %>
-                                    <% const taken = typeof takenOfficeIds !== 'undefined' ? takenOfficeIds : []; %>
                                     <% offices.forEach(office => { %>
-                                        <% const isTaken = taken.includes(office.id); %>
-                                        <option
-                                            value="<%= office.id %>"
-                                            <% if (isTaken) { %>disabled title="Survey already completed for this office"<% } %>
-                                        ><%= isTaken ? '✓ ' : '' %><%= office.office_name %> (<%= office.cluster_name %>)</option>
+                                        <option value="<%= office.id %>"><%= office.office_name %> (<%= office.cluster_name %>)</option>
                                     <% }); %>
                                 <% } %>
                             </select>
@@ -1778,6 +1773,10 @@ let currentLang = 'en';
 // Built server-side in the /client-survey route (server.js) from the
 // `services` table, keyed by office_id — e.g. { "3": ["Service A", ...] }.
 const officeServices = <%- JSON.stringify(typeof officeServices !== 'undefined' ? officeServices : {}) %>;
+// "officeId::serviceName" -> message, for services this account can't (yet)
+// re-survey — built server-side from each service's resubmission cadence
+// (see isEligibleForResubmission in server.js). Not blocked = not in this map.
+const blockedCombos = <%- JSON.stringify(typeof blockedCombos !== 'undefined' ? blockedCombos : {}) %>;
 
 function populateServiceSelect(officeId) {
     const serviceSelect = document.getElementById('serviceSelect');
@@ -1796,7 +1795,14 @@ function populateServiceSelect(officeId) {
     services.forEach(service => {
         const opt = document.createElement('option');
         opt.value = service;
-        opt.textContent = service;
+        const blockedMessage = blockedCombos[officeId + '::' + service];
+        if (blockedMessage) {
+            opt.disabled = true;
+            opt.title = blockedMessage;
+            opt.textContent = '✓ ' + service;
+        } else {
+            opt.textContent = service;
+        }
         serviceSelect.appendChild(opt);
     });
 
@@ -2192,16 +2198,30 @@ function loadHistoryView() {
             }
 
             const listEl = document.getElementById('historyList');
-            listEl.innerHTML = history.map(row => `
-                <div class="history-item" role="button" tabindex="0" title="Click to view your answers"
-                     onclick="openHistoryDetail(${row.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHistoryDetail(${row.id});}">
+            listEl.innerHTML = history.map(row => {
+                const isApproved = row.status === 'approved';
+                const isDeclined = row.status === 'declined';
+                const badge = isApproved
+                    ? '<span class="history-badge"><i class="bi bi-check-circle-fill me-1"></i> Completed</span>'
+                    : isDeclined
+                        ? '<span class="history-badge bg-danger-subtle text-danger"><i class="bi bi-x-circle-fill me-1"></i> Declined</span>'
+                        : '<span class="history-badge bg-warning-subtle text-warning"><i class="bi bi-hourglass-split me-1"></i> Pending Review</span>';
+                // Only approved submissions have reviewed answers to show —
+                // pending/declined rows aren't clickable into the detail modal.
+                const clickAttrs = isApproved
+                    ? `role="button" tabindex="0" title="Click to view your answers" onclick="openHistoryDetail(${row.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHistoryDetail(${row.id});}"`
+                    : '';
+                return `
+                <div class="history-item" ${clickAttrs}>
                     <div>
                         <div class="history-office"><i class="bi bi-building me-1"></i> ${escapeHtml(row.office_name)}</div>
                         <div class="history-meta">${escapeHtml(row.cluster_name || 'General')} &middot; ${escapeHtml(row.formatted_date)}</div>
+                        ${isDeclined && row.decline_reason ? `<div class="history-meta text-danger">${escapeHtml(row.decline_reason)}</div>` : ''}
                     </div>
-                    <span class="history-badge"><i class="bi bi-check-circle-fill me-1"></i> Completed</span>
+                    ${badge}
                 </div>
-            `).join('');
+            `;
+            }).join('');
             listEl.classList.remove('d-none');
         })
         .catch(err => {
@@ -2987,10 +3007,10 @@ function submitAll(event) {
         data[`sqd${i}`] = parseInt(data[`sqd${i}`] || 5);
     }
 
-    // Lock the just-submitted office in the dropdown right away so a
+    // Lock the just-submitted office+service in the dropdown right away so a
     // "Submit Again" run in the same session can't target it a second time
-    // (mirrors the server-rendered takenOfficeIds disabling on page load).
-    markOfficeAsTaken(data.office_id);
+    // (mirrors the server-rendered blockedCombos disabling on page load).
+    markServiceAsTaken(data.office_id, data.service_availed);
 
     // Offline: skip the network call entirely and queue the survey locally —
     // it will be replayed automatically once the connection returns.
@@ -3010,6 +3030,12 @@ function submitAll(event) {
     .then(resData => {
         if (resData.success) {
             saveAutofillProfile(data);
+            // Personal-email accounts land in the office's approval queue instead
+            // of being recorded immediately — let the client know before the
+            // normal Thank You screen (see /submit-survey's isCspcEmail branch).
+            if (resData.pending) {
+                AppAlert.info(resData.message || "Submitted! The office you visited will verify your visit before this is recorded.", 'Awaiting Verification');
+            }
             showThankYou();
         } else {
             AppAlert.error("Nagkaroon ng problema: " + (resData.message || 'Database error'));
@@ -3047,13 +3073,15 @@ function showThankYou() {
     exitFullscreen();
 }
 
-function markOfficeAsTaken(officeId) {
-    if (!officeId) return;
-    const opt = document.querySelector('#officeSelect option[value="' + CSS.escape(officeId) + '"]');
-    if (!opt) return;
-    opt.disabled = true;
-    opt.title = 'Survey already completed for this office';
-    if (!opt.textContent.startsWith('✓ ')) opt.textContent = '✓ ' + opt.textContent;
+function markServiceAsTaken(officeId, serviceName) {
+    if (!officeId || !serviceName) return;
+    blockedCombos[officeId + '::' + serviceName] = "Awaiting the office's review, or already evaluated.";
+    // Re-render the service dropdown if it's currently showing this office's
+    // services, so the just-submitted one shows disabled immediately.
+    const officeSelect = document.getElementById('officeSelect');
+    if (officeSelect && String(officeSelect.value) === String(officeId)) {
+        populateServiceSelect(officeId);
+    }
 }
 
 // "Submit Again" from the Thank You page — resets the form and drops the

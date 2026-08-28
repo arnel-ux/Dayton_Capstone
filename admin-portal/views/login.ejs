@@ -13,23 +13,25 @@
             -webkit-font-smoothing: antialiased;
         }
 
-        /* 1. The Blurred Background Image */
+        /* 1. Background Image — same photo + treatment as the public landing
+           page (index.ejs .bg-image): full-bleed, no blur, so the two pages
+           read as one consistent backdrop. */
         .bg-blurred {
-            position: fixed; 
-            top: -5%; left: -5%; right: -5%; bottom: -5%; 
-            background-image: url('https://spims.cspc.edu.ph/assets/img/background.jpg'); 
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background-image: url('https://spims.cspc.edu.ph/assets/img/background.jpg');
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
-            filter: blur(1px);
-            z-index: -1;
+            z-index: -2;
         }
 
-        /* 2. The Dark Overlay */
+        /* 2. Overlay — same navy gradient as the landing page's .bg-overlay,
+           instead of a flat tint, so the two pages match. */
         .bg-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(15, 23, 42, 0.6); /* Dark navy tint */
+            background: linear-gradient(180deg, rgba(6,14,33,0.92) 0%, rgba(10,31,68,0.85) 100%);
             z-index: -1;
         }
 
@@ -163,6 +165,8 @@
             flex-direction: column;
             justify-content: center;
             padding: 1.5rem 2.25rem;
+            opacity: 0;
+            animation: fadeSlideUp 0.7s ease-out 0.15s forwards;
         }
 
         /* Responsive para sa mobile card */
