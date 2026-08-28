@@ -333,12 +333,16 @@ function noCache(req, res, next) {
 // query's own callback, so they can never become an unhandled 'error' event
 // with zero listeners — which is what crashes the whole Node process outright.
 const db = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: '',
-    database: 'cqa_db',
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 3306,
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'cqa_db',
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
     waitForConnections: true,
-    connectionLimit: 10,
+    // Clever Cloud's free DEV MySQL plan caps max_user_connections at 5 total
+    // — a pool of 10 would routinely exceed that under any concurrent load.
+    connectionLimit: process.env.DB_CONNECTION_LIMIT ? parseInt(process.env.DB_CONNECTION_LIMIT, 10) : 4,
     queueLimit: 0
 });
 
@@ -3493,7 +3497,8 @@ app.get('/api/public-dashboard', (req, res) => {
 // ==========================================
 // SERVER START
 // ==========================================
-app.listen(3000, '0.0.0.0', () => {
-    console.log(`🚀 Server is running at http://localhost:${port}`);
+const listenPort = process.env.PORT || port;
+app.listen(listenPort, '0.0.0.0', () => {
+    console.log(`🚀 Server is running on port ${listenPort}`);
     startModelServer();
 });
