@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <%- include('layout/header') %>
+    <%- include('layout/header', { forceLightMode: true }) %>
     <style>
         html, body {
             height: 100vh;
             margin: 0;
             padding: 0;
             overflow: hidden;
-            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-family: 'Inter', 'Plus Jakarta Sans', sans-serif;
+            -webkit-font-smoothing: antialiased;
         }
 
         .bg-blurred {
@@ -35,12 +36,15 @@
             left: 0;
             width: 100vw;
             height: 100vh;
+            max-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            z-index: 1;
+            justify-content: flex-start;
             padding: 1rem;
+            padding-top: clamp(1.5rem, 9vh, 4rem);
+            z-index: 1;
+            overflow-y: auto; /* safety fallback: scroll instead of clipping on short viewports */
         }
 
         .header-container {
@@ -51,11 +55,12 @@
 
         .main-title {
             color: #ffffff;
+            font-family: 'Plus Jakarta Sans', sans-serif;
             font-weight: 800;
             font-size: 2rem;
             text-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
             margin-bottom: 0.5rem;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.3px;
         }
 
         .sub-title {
@@ -89,19 +94,48 @@
             border: 1px solid rgba(255, 255, 255, 0.5);
             border-radius: 1.5rem;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            width: 400px;
+            width: 440px;
             height: auto;
             display: flex;
             flex-direction: column;
             justify-content: center;
-            padding: 1.5rem 2rem;
+            padding: 2rem 2.25rem;
         }
 
-        @media (max-width: 420px) {
+        @media (max-width: 460px) {
             .card-custom {
                 width: 90vw;
-                padding: 1.5rem;
+                padding: 1.75rem;
             }
+        }
+
+        .card-custom h4 {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: -0.2px;
+        }
+
+        .card-custom label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #334155 !important;
+            letter-spacing: 0.1px;
+        }
+
+        .card-custom .form-control {
+            font-size: 0.95rem;
+            padding-top: 0.6rem;
+            padding-bottom: 0.6rem;
+        }
+
+        .card-custom .input-group-text {
+            font-size: 0.95rem;
+        }
+
+        .card-custom .btn {
+            font-size: 0.95rem;
+            letter-spacing: 0.1px;
         }
 
         .form-control:focus {
@@ -115,7 +149,9 @@
         }
 
         .text-xsmall {
-            font-size: 0.75rem;
+            font-size: 0.85rem;
+            color: #64748b;
+            line-height: 1.6;
         }
 
         .btn-home {
@@ -172,7 +208,7 @@
             <form action="/complete-google-registration" method="POST" id="completeRegistrationForm">
                 <div class="mb-2">
                     <label class="text-muted text-xsmall fw-semibold mb-1">Name</label>
-                    <div class="input-group input-group-sm">
+                    <div class="input-group">
                         <span class="input-group-text bg-light border-end-0"><i class="fas fa-user text-muted"></i></span>
                         <input type="text" class="form-control bg-light border-start-0 ps-0" value="<%= name %>" readonly title="Name from your Google account">
                     </div>
@@ -180,7 +216,7 @@
 
                 <div class="mb-2">
                     <label class="text-muted text-xsmall fw-semibold mb-1">Email</label>
-                    <div class="input-group input-group-sm">
+                    <div class="input-group">
                         <span class="input-group-text bg-light border-end-0"><i class="fas fa-envelope text-muted"></i></span>
                         <input type="text" class="form-control bg-light border-start-0 ps-0" value="<%= email %>" readonly title="Email from your Google account">
                     </div>
@@ -188,7 +224,7 @@
 
                 <div class="mb-2">
                     <label class="text-muted text-xsmall fw-semibold mb-1">Create Password</label>
-                    <div class="input-group input-group-sm">
+                    <div class="input-group">
                         <span class="input-group-text bg-light border-end-0"><i class="fas fa-lock text-muted"></i></span>
                         <input type="password" name="password" class="form-control bg-light border-start-0 ps-0" placeholder="At least 8 characters" minlength="8" required title="Create a password for future logins">
                     </div>
@@ -196,13 +232,13 @@
 
                 <div class="mb-3">
                     <label class="text-muted text-xsmall fw-semibold mb-1">Confirm Password</label>
-                    <div class="input-group input-group-sm">
+                    <div class="input-group">
                         <span class="input-group-text bg-light border-end-0"><i class="fas fa-lock text-muted"></i></span>
                         <input type="password" name="confirmPassword" class="form-control bg-light border-start-0 ps-0" placeholder="Re-enter your password" minlength="8" required title="Confirm your password">
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold py-2" style="background-color: #0a1f44; border-color: #0a1f44;" title="Create your account">
+                <button type="submit" class="btn btn-primary w-100 fw-bold py-2" style="background-color: #0a1f44; border-color: #0a1f44;" title="Create your account">
                     <i class="fas fa-user-plus me-2"></i> Create Account
                 </button>
 
@@ -237,7 +273,5 @@
             }
         });
     </script>
-
-    <%- include('layout/theme-toggle') %>
 </body>
 </html>

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <%- include('layout/header') %>
+    <%- include('layout/header', { forceLightMode: true }) %>
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#2554c7">
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
@@ -279,7 +279,5 @@
             });
         }
     </script>
-
-    <%- include('layout/theme-toggle') %>
 </body>
 </html>

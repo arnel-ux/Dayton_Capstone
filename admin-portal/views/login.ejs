@@ -33,7 +33,15 @@
             z-index: -1;
         }
 
-        /* 3. Perfect Centering Wrapper */
+        /* 3. Header-anchored wrapper — the header sits at a FIXED offset from the
+           top of the viewport (not vertically centered as one block with the
+           card below it). Centering the whole [header + card] group made the
+           header land at a different height on every auth page depending on
+           how tall that page's card happened to be (e.g. login's card with
+           reCAPTCHA vs. forgot-password's shorter card) — pinning the header
+           instead is what keeps it at the exact same spot across every page
+           that shares this block (login.ejs, forgot-password.ejs,
+           reset-password.ejs, complete-google-registration.ejs). */
         .login-wrapper {
             position: absolute;
             top: 0;
@@ -43,10 +51,11 @@
             max-height: 100vh;
             display: flex;
             flex-direction: column; /* Para magpatong ang titles at card */
-            align-items: center;    /* Centers vertically/horizontally */
-            justify-content: center;
-            z-index: 1;
+            align-items: center;    /* Centers horizontally */
+            justify-content: flex-start;
             padding: 1rem;
+            padding-top: clamp(1.5rem, 9vh, 4rem);
+            z-index: 1;
             overflow-y: auto; /* Safety fallback: scroll instead of clipping on short viewports */
         }
 
@@ -412,7 +421,7 @@
                 <div class="field-group">
                     <div class="d-flex justify-content-between align-items-center mb-1">
                         <label class="field-label mb-0" for="passwordInput">Password</label>
-                        <a href="#" class="forgot-link" title="Reset your password">Forgot Password?</a>
+                        <a href="/forgot-password" class="forgot-link" title="Reset your password">Forgot Password?</a>
                     </div>
                     <div class="input-modern">
                         <span class="input-icon"><i class="fas fa-lock"></i></span>

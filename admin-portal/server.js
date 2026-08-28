@@ -936,6 +936,62 @@ function sendSurveyReceiptEmail(toEmail, receipt) {
     });
 }
 
+// Sends a client a one-time password-reset link (see /forgot-password below).
+// Fire-and-forget, same reasoning as sendSurveyReceiptEmail — a slow/failed
+// send should never surface as an error to the person requesting the reset
+// (that response is intentionally generic either way, to avoid confirming
+// whether a given email has an account at all).
+function sendPasswordResetEmail(toEmail, resetUrl) {
+    if (!mailTransporter || !toEmail) return;
+
+    const html = `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#eef1f6;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6;padding:32px 0;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 8px 24px -12px rgba(15,23,42,.15);">
+                    <tr>
+                        <td style="background:#0a1f44;padding:20px 28px;">
+                            <span style="color:#ffffff;font-weight:700;font-size:16px;">CSPC Center for Quality Assurance</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:28px;">
+                            <h2 style="margin:0 0 12px;color:#0f172a;font-size:18px;">Reset your password</h2>
+                            <p style="margin:0 0 20px;color:#475569;font-size:13.5px;line-height:1.6;">
+                                We received a request to reset the password for your CQA Client Satisfaction Survey account (${toEmail}).
+                                This link is valid for 30 minutes and can only be used once.
+                            </p>
+                            <p style="text-align:center;margin:0 0 20px;">
+                                <a href="${resetUrl}" style="display:inline-block;background:#0a1f44;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 28px;border-radius:8px;">Reset Password</a>
+                            </p>
+                            <p style="margin:0;color:#94a3b8;font-size:11.5px;line-height:1.6;">
+                                If you didn't request this, you can safely ignore this email — your password will not be changed.
+                                If the button above doesn't work, copy and paste this link into your browser:<br>
+                                <span style="word-break:break-all;">${resetUrl}</span>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>`;
+
+    mailTransporter.sendMail({
+        from: process.env.MAIL_FROM || `"CSPC Center for Quality Assurance" <${process.env.MAIL_USER}>`,
+        to: toEmail,
+        subject: 'Reset your CQA Survey account password',
+        html
+    }).then(() => {
+        console.log(`✅ [Mail] Password reset link sent to ${toEmail}`);
+    }).catch((err) => {
+        console.error(`❌ [Mail] Failed to send password reset link to ${toEmail}:`, err.message);
+    });
+}
+
 // ==========================================
 // AUTO-CREATE TABLES & AUTO-UPDATE
 // ==========================================
@@ -1214,6 +1270,11 @@ db.query(createClustersTableQuery, (err) => {
                             // there's nothing to capture for the plain email/password login path, so
                             // this simply keeps whichever photo was last seen from Google.
                             db.query("ALTER TABLE client_accounts ADD COLUMN google_photo_url VARCHAR(500) NULL", () => {});
+                            // "Forgot Password" (email link) support: a short-lived, single-use
+                            // token, stored only as a SHA-256 hash (never the raw token — the raw
+                            // value only ever exists in the emailed link itself) plus its expiry.
+                            db.query("ALTER TABLE client_accounts ADD COLUMN reset_token_hash VARCHAR(255) NULL", () => {});
+                            db.query("ALTER TABLE client_accounts ADD COLUMN reset_token_expires DATETIME NULL", () => {});
 
                             // Backfill: clients who submitted surveys before client_accounts existed
                             // have no row here, so My Profile/autofill show "Not set yet" forever.
@@ -1569,14 +1630,29 @@ app.get('/client-login', noCache, (req, res) => {
 // ==========================================
 // `prompt: 'select_account'` forces Google's account chooser on every click instead of
 // silently re-authenticating whichever Google account is already signed in on this device.
-app.get('/auth/google', passport.authenticate('google', {
+// `?intent=reset` marks this trip through Google as "verify my identity to reset my
+// password" rather than a normal login/registration — stashed in session because
+// Google's own redirect back to /auth/google/callback only echoes `code`/`state`,
+// not any of our own query params.
+app.get('/auth/google', (req, res, next) => {
+    if (req.query.intent === 'reset') {
+        req.session.googleResetIntent = true;
+    } else {
+        delete req.session.googleResetIntent;
+    }
+    next();
+}, passport.authenticate('google', {
     scope: ['profile', 'email'],
     prompt: 'select_account'
 }));
 
-// Google handles both registration AND recurring login for clients:
-//   - New email  -> stash the Google name/email in session and send them to set a local
-//                   password (they are NOT logged in yet).
+// Google handles registration, recurring login, AND (with googleResetIntent set)
+// password-reset identity verification for clients:
+//   - Reset intent + account exists -> Google just verified them; let them set a new
+//     local password directly (no e-mailed token needed) via GET/POST /reset-password.
+//   - Reset intent + no account for that email -> nothing to reset, send them to register.
+//   - New email (no reset intent) -> stash the Google name/email in session and send
+//     them to set a local password (they are NOT logged in yet).
 //   - Existing email with a password already set -> log them straight in with Google,
 //     no need to type the password again.
 //   - Existing email with no password (legacy accounts created before this flow existed)
@@ -1587,6 +1663,8 @@ app.get('/auth/google/callback',
         const email = req.user && req.user.email;
         const name = req.user && req.user.name;
         const photo = req.user && req.user.photo;
+        const isResetIntent = !!req.session.googleResetIntent;
+        delete req.session.googleResetIntent;
 
         if (!email) {
             return req.logout(() => res.redirect('/login?error=' + encodeURIComponent('Google sign-in failed. Please try again.')));
@@ -1601,6 +1679,17 @@ app.get('/auth/google/callback',
                 }
 
                 const existingAccount = rows && rows.length > 0 ? rows[0] : null;
+
+                if (isResetIntent) {
+                    if (!existingAccount) {
+                        return res.redirect('/login?error=' + encodeURIComponent('No account found for that Google email. Please register using the "Sign in with Google" button first.'));
+                    }
+                    // Google already verified this identity in this same request — no
+                    // separate e-mailed token is needed, just let them set a new password.
+                    req.session.googleVerifiedResetEmail = existingAccount.email;
+                    return res.redirect('/reset-password?verified=1');
+                }
+
                 if (existingAccount && existingAccount.password) {
                     req.session.clientEmail = existingAccount.email;
                     // Refresh the stored photo on every Google sign-in (Google account photos can
@@ -1659,6 +1748,137 @@ app.post('/complete-google-registration', async (req, res) => {
         );
     } catch (e) {
         return res.redirect('/complete-google-registration?error=' + encodeURIComponent('Server error. Please try again.'));
+    }
+});
+
+// ==========================================
+// CLIENT ACCOUNT — Forgot / Reset Password
+// ==========================================
+// Two independent ways to prove "this is really the account owner" before a new
+// local password is accepted, both landing on the same /reset-password form:
+//   1. Emailed link — a random token, stored only as its SHA-256 hash (the raw
+//      token exists nowhere but the emailed URL and the requester's inbox),
+//      valid for 30 minutes, single-use (cleared the moment it's redeemed).
+//   2. "Verify with Google instead" — re-runs real Google sign-in (see
+//      /auth/google?intent=reset above); success there already proves identity,
+//      so no separate token is needed, only the server-side session flag it sets.
+const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
+function hashResetToken(token) {
+    return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+app.get('/forgot-password', noCache, (req, res) => {
+    res.render('forgot-password', { sent: req.query.sent === '1' });
+});
+
+// Always redirects with the same generic "check your email" outcome whether or
+// not the address has an account — confirming account existence to an anonymous
+// requester is exactly what a "forgot password" form should never do.
+app.post('/forgot-password', (req, res) => {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (!email) return res.redirect('/forgot-password');
+
+    db.query('SELECT email FROM client_accounts WHERE email = ? LIMIT 1', [email], (err, rows) => {
+        if (!err && rows && rows.length > 0) {
+            const token = crypto.randomBytes(32).toString('hex');
+            const tokenHash = hashResetToken(token);
+            const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+
+            db.query(
+                'UPDATE client_accounts SET reset_token_hash = ?, reset_token_expires = ? WHERE email = ?',
+                [tokenHash, expiresAt, email],
+                (updateErr) => {
+                    if (updateErr) return console.error('❌ [Password Reset] Error saving reset token:', updateErr);
+                    const resetUrl = `${req.protocol}://${req.get('host')}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
+                    sendPasswordResetEmail(email, resetUrl);
+                }
+            );
+        }
+        return res.redirect('/forgot-password?sent=1');
+    });
+});
+
+app.get('/reset-password', noCache, (req, res) => {
+    // Path 1: just came back from Google with identity already verified this request.
+    if (req.query.verified === '1' && req.session.googleVerifiedResetEmail) {
+        return res.render('reset-password', { mode: 'google', email: req.session.googleVerifiedResetEmail, token: null, error: null });
+    }
+
+    // Path 2: emailed token link — validate it now so an expired/used/garbage
+    // link shows a clear error instead of a form that will just fail on submit.
+    const { token, email } = req.query;
+    if (token && email) {
+        const tokenHash = hashResetToken(String(token));
+        db.query(
+            'SELECT reset_token_hash, reset_token_expires FROM client_accounts WHERE email = ? LIMIT 1',
+            [String(email).trim().toLowerCase()],
+            (err, rows) => {
+                const row = (!err && rows && rows.length > 0) ? rows[0] : null;
+                const valid = row && row.reset_token_hash === tokenHash && row.reset_token_expires && new Date(row.reset_token_expires) > new Date();
+                if (!valid) {
+                    return res.render('reset-password', { mode: 'invalid', email: null, token: null, error: 'This reset link is invalid or has expired. Please request a new one.' });
+                }
+                return res.render('reset-password', { mode: 'token', email: String(email).trim().toLowerCase(), token: String(token), error: null });
+            }
+        );
+        return;
+    }
+
+    return res.redirect('/forgot-password');
+});
+
+app.post('/reset-password', async (req, res) => {
+    const { mode, token, password, confirmPassword } = req.body;
+    const email = String(req.body.email || '').trim().toLowerCase();
+
+    const fail = (msg) => res.redirect('/reset-password?' + new URLSearchParams({
+        ...(mode === 'token' ? { token: token || '', email } : { verified: '1' }),
+        error: msg
+    }).toString());
+
+    if (!password || password.length < 8) return fail('Password must be at least 8 characters long.');
+    if (password !== confirmPassword) return fail('Passwords do not match.');
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        if (mode === 'google') {
+            const verifiedEmail = req.session.googleVerifiedResetEmail;
+            if (!verifiedEmail) return res.redirect('/forgot-password');
+
+            db.query('UPDATE client_accounts SET password = ? WHERE email = ?', [hashedPassword, verifiedEmail], (err) => {
+                if (err) return fail('Could not update your password. Please try again.');
+                delete req.session.googleVerifiedResetEmail;
+                req.session.clientEmail = verifiedEmail;
+                return res.redirect('/client-survey?loggedin=1');
+            });
+            return;
+        }
+
+        // mode === 'token': re-validate the token server-side (never trust the
+        // hidden form fields alone) before actually changing the password.
+        if (!email || !token) return res.redirect('/forgot-password');
+        const tokenHash = hashResetToken(String(token));
+
+        db.query('SELECT reset_token_hash, reset_token_expires FROM client_accounts WHERE email = ? LIMIT 1', [email], (err, rows) => {
+            const row = (!err && rows && rows.length > 0) ? rows[0] : null;
+            const valid = row && row.reset_token_hash === tokenHash && row.reset_token_expires && new Date(row.reset_token_expires) > new Date();
+            if (!valid) {
+                return res.render('reset-password', { mode: 'invalid', email: null, token: null, error: 'This reset link is invalid or has expired. Please request a new one.' });
+            }
+
+            db.query(
+                'UPDATE client_accounts SET password = ?, reset_token_hash = NULL, reset_token_expires = NULL WHERE email = ?',
+                [hashedPassword, email],
+                (updateErr) => {
+                    if (updateErr) return fail('Could not update your password. Please try again.');
+                    req.session.clientEmail = email;
+                    return res.redirect('/client-survey?loggedin=1');
+                }
+            );
+        });
+    } catch (e) {
+        return fail('Server error. Please try again.');
     }
 });
 

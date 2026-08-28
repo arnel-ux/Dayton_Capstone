@@ -1090,7 +1090,7 @@
                 <button id="btn-fullscreen" type="button" onclick="toggleFullscreen()" class="btn-fullscreen" title="Toggle full screen" aria-label="Toggle full screen">
                     <i class="bi bi-arrows-fullscreen"></i>
                 </button>
-                <div class="lang-toggle-group">
+                <div class="lang-toggle-group d-none" id="lang-toggle-group">
                     <button id="btn-en" type="button" onclick="setLanguage('en')" class="btn btn-primary btn-sm fw-semibold shadow-sm">English</button>
                     <button id="btn-tl" type="button" onclick="setLanguage('tl')" class="btn bg-transparent border btn-sm fw-semibold shadow-sm text-body">Tagalog</button>
                 </div>
@@ -1233,7 +1233,7 @@
                     <div class="row g-4">
                         <!-- IDINAGDAG: Pangalan -->
                         <div class="col-12">
-                            <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_name">Name / Pangalan (Optional)</label>
+                            <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_name">Name (Optional)</label>
                             <input type="text" name="respondent_name" class="form-control" data-i18n-placeholder="ph_name" placeholder="e.g. Juan Dela Cruz">
                         </div>
 
@@ -1611,7 +1611,7 @@
                                     <div class="profile-info-card profile-info-card-name">
                                         <div class="profile-info-icon"><i class="bi bi-person-fill"></i></div>
                                         <div class="profile-info-text">
-                                            <div class="profile-info-label">Name / Pangalan</div>
+                                            <div class="profile-info-label" data-i18n="pf_lbl_name">Name</div>
                                             <div class="profile-info-value" id="pf-name-display">—</div>
                                         </div>
                                     </div>
@@ -1654,7 +1654,7 @@
                             <div id="profileEditMode" class="d-none">
                                 <div class="profile-section-label">Edit Details</div>
                                 <form id="profileForm" onsubmit="return saveProfile(event);" class="profile-edit-card">
-                                    <label class="form-label fw-semibold text-dark fs-6" for="pf-name-input">Name / Pangalan</label>
+                                    <label class="form-label fw-semibold text-dark fs-6" for="pf-name-input" data-i18n="pf_lbl_name">Name</label>
                                     <input type="text" id="pf-name-input" class="form-control mb-3" placeholder="e.g. Juan Dela Cruz">
                                     <div class="d-flex gap-2">
                                         <button type="submit" id="pf-save-btn" class="btn btn-primary fw-semibold px-4">
@@ -2055,6 +2055,11 @@ function switchView(view) {
 
     if (view === 'profile' && !profileLoaded) loadProfileView();
     if (view === 'history' && !historyLoaded) loadHistoryView();
+
+    // The English/Tagalog toggle only affects the Take Survey form's wording,
+    // so only show it while that view is active.
+    const langToggle = document.getElementById('lang-toggle-group');
+    if (langToggle) langToggle.classList.toggle('d-none', view !== 'survey');
 
     // Auto-hide the sidebar while taking the survey (topbar stays visible);
     // auto-restore it on Profile/History.
@@ -2556,7 +2561,8 @@ const i18n = {
             "You may read the full Terms and Conditions / Privacy Policy at any time using the button below before agreeing."
         ],
         client_prof: "Client Profile",
-        lbl_name: "Name / Pangalan (Optional)",
+        pf_lbl_name: "Name",
+        lbl_name: "Name (Optional)",
         ph_name: "e.g. Juan Dela Cruz",
         lbl_client_type: "Client Type:",
         opt_citizen: "Citizen",
@@ -2698,6 +2704,7 @@ const i18n = {
             "Maaari mong basahin ang buong Tuntunin at Kundisyon / Patakaran sa Privacy anumang oras gamit ang buton sa ibaba bago sumang-ayon."
         ],
         client_prof: "Pagkakakilanlan ng Kliyente",
+        pf_lbl_name: "Pangalan",
         lbl_name: "Pangalan (Opsyonal)",
         ph_name: "hal. Juan Dela Cruz",
         lbl_client_type: "Uri ng Kliyente:",
