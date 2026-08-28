@@ -340,7 +340,9 @@ const db = mysql.createPool({
     database: process.env.DB_NAME || 'cqa_db',
     ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
     waitForConnections: true,
-    connectionLimit: 10,
+    // Clever Cloud's free DEV MySQL plan caps max_user_connections at 5 total
+    // — a pool of 10 would routinely exceed that under any concurrent load.
+    connectionLimit: process.env.DB_CONNECTION_LIMIT ? parseInt(process.env.DB_CONNECTION_LIMIT, 10) : 4,
     queueLimit: 0
 });
 
