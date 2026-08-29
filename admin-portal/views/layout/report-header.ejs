@@ -1,0 +1,23 @@
+<%
+/* Shared CQA official-document letterhead — logo + institution block left-aligned,
+   then a row with a shortened blue rule and the form/document code aligned to its
+   right on the same line. Used by every SQD-related printable report (report.ejs,
+   cluster-detail.ejs) so they all share one letterhead instead of each keeping its
+   own copy that can drift out of sync.
+   Pass `docCode` (e.g. "CSPC-F-CQA-06"); defaults to the CSM survey result form. */
+const _docCode = typeof docCode !== 'undefined' ? docCode : 'CSPC-F-CQA-06';
+%>
+<div class="report-header-block">
+    <div class="report-header-top">
+        <img src="/images/cspc-logo.png" alt="CSPC Logo" class="report-logo">
+        <div class="report-header-text">
+            <p>Republic of the Philippines</p>
+            <p class="inst-name">CAMARINES SUR POLYTECHNIC COLLEGES</p>
+            <p>Nabua, Camarines Sur</p>
+        </div>
+    </div>
+    <div class="report-header-bottom">
+        <div class="report-header-rule"></div>
+        <div class="doc-code"><%= _docCode %></div>
+    </div>
+</div>

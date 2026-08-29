@@ -1,0 +1,79 @@
+/* Shared CQA official report letterhead, footer, and print/PDF pagination rules.
+   Used by every SQD-related report page (report.ejs, cluster-detail.ejs,
+   survey-records.ejs, print.ejs) together with views/layout/report-header.ejs
+   and views/layout/report-footer.ejs, so the letterhead/footer and page setup
+   never drift out of sync between reports. Link this file only on pages that
+   render one of those reports.
+
+   Page setup follows the client's official Letter-size spec (not A4):
+     Paper:   Letter, 8.5in x 11in, portrait
+     Margins: top 0.5in, right 0.25in, bottom 0.25in, left 0.5in
+     Header/footer clearance: ~0.3in each, folded into report-header-block's
+       bottom margin and page-footer's top margin below rather than a separate
+       browser header/footer band (this is one continuous printed document, not
+       a running header/footer repeated by the browser on every page).
+   "83% scale" is applied as reduced font-size/spacing (a real layout shrink
+   that page-break math still accounts for) rather than a CSS transform: scale()
+   — a transform doesn't shrink the box's contribution to print pagination, so
+   it can leave trailing blank pages instead of actually helping content fit. */
+
+/* ---- Letterhead (views/layout/report-header.ejs) ---- */
+.report-header-block { margin-bottom: 16px; }
+.report-header-top { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 8px; }
+.report-logo { width: 50px; height: 50px; flex-shrink: 0; }
+.report-header-text p { margin: 0; font-size: 12px; line-height: 1.3; text-align: left; }
+.report-header-text .inst-name { font-weight: bold; font-size: 14px; }
+.report-header-bottom { display: flex; align-items: center; width: 100%; gap: 10px; }
+.report-header-rule { flex: 1; border-bottom: 3px solid #1e88e5; }
+.doc-code { flex-shrink: 0; white-space: nowrap; text-align: right; font-size: 11px; font-weight: bold; line-height: 1; }
+
+/* ---- Footer (views/layout/report-footer.ejs) ---- */
+.page-footer { margin-top: 22px; font-size: 11px; font-weight: bold; border-top: 2px solid #6c9bd2; padding-top: 4px; display: flex; justify-content: space-between; }
+
+/* ---- Letter-size print / PDF page setup ----
+   Applies to both native browser print (window.print()) and html2pdf's CSS
+   pagebreak mode (`pagebreak: { mode: ['css','legacy'] }`), so report preview,
+   print preview, and the downloaded PDF all share the same page geometry. */
+@media print {
+    html, body {
+        width: auto;
+        height: auto;
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+    }
+
+    .report-header-block { break-inside: avoid; page-break-inside: avoid; }
+    .report-header-bottom { display: flex !important; align-items: center !important; }
+    .report-header-rule { flex: 1 !important; }
+    .doc-code { flex-shrink: 0 !important; white-space: nowrap !important; }
+
+    .page-footer { break-inside: avoid; page-break-inside: avoid; }
+    .signature-section { break-inside: avoid; page-break-inside: avoid; }
+
+    .report-table, .print-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+    }
+    .report-table thead, .print-table thead { display: table-header-group; }
+    .report-table tfoot, .print-table tfoot { display: table-footer-group; }
+    .report-table tr, .print-table tr { break-inside: avoid; page-break-inside: avoid; }
+    .report-table td, .print-table td, .report-table th, .print-table th {
+        overflow-wrap: break-word;
+        word-break: normal;
+    }
+
+    .report-page, .report-container {
+        width: 100%;
+        max-width: 100%;
+        margin: 0 auto;
+        box-sizing: border-box;
+        overflow: visible;
+    }
+}
+
+@page {
+    size: Letter portrait;
+    margin: 0.5in 0.25in 0.25in 0.5in;
+}

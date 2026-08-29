@@ -3,6 +3,9 @@
 <head>
     <%- include('layout/header', { forceLightMode: true }) %>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
+         views/layout/report-footer.ejs) — see public/css/report.css. -->
+    <link rel="stylesheet" href="/css/report.css">
 
     <style>
         .report-container {
@@ -15,18 +18,6 @@
             border: 1px solid #ccc;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
-        .report-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            border-bottom: 2px solid #6c9bd2;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-        }
-        .report-header-center { text-align: center; flex-grow: 1; }
-        .report-header-center p { margin: 0; font-size: 14px; }
-        .report-header-center .inst-name { font-weight: bold; font-size: 16px; }
-        .doc-code { font-size: 12px; font-weight: bold; }
 
         .report-title { text-align: center; font-weight: bold; font-size: 16px; margin: 20px 0 5px; }
         .sub-title { text-align: center; font-style: italic; font-size: 14px; margin-bottom: 20px; color: #444; }
@@ -64,11 +55,12 @@
         .sig-block { width: 45%; }
         .sig-name { font-weight: bold; margin-top: 30px; margin-bottom: 0; }
         .sig-title { margin: 0; }
-        .page-footer { margin-top: 50px; font-size: 12px; font-weight: bold; border-top: 2px solid #6c9bd2; padding-top: 5px; display: flex; justify-content: space-between; }
 
+        /* Letterhead/footer/table pagination rules live in public/css/report.css so
+           they stay identical across every SQD report. */
         @media print {
             .no-print { display: none !important; }
-            .report-container { border: none; box-shadow: none; max-width: 100%; padding: 0; }
+            .report-container { border: none; box-shadow: none; max-width: 100%; padding: 0; display: block; page-break-after: always; }
         }
     </style>
 </head>
@@ -108,15 +100,7 @@
 
             <div id="reportContentToExport">
                 <div class="report-container" style="display: block; margin-bottom: 30px;">
-                    <div class="report-header">
-                        <div><img src="/images/cspc-logo.png" alt="CSPC Logo" style="width: 60px; height: 60px;"></div>
-                        <div class="report-header-center">
-                            <p>Republic of the Philippines</p>
-                            <p class="inst-name">CAMARINES SUR POLYTECHNIC COLLEGES</p>
-                            <p>Nabua, Camarines Sur</p>
-                        </div>
-                        <div class="doc-code">CSPC-CQA-CSM-F01</div>
-                    </div>
+                    <%- include('layout/report-header', { docCode: 'CSPC-CQA-CSM-F01' }) %>
 
                     <div class="report-title">DASHBOARD OVERVIEW REPORT</div>
                     <div class="sub-title">Institution-wide client satisfaction summary</div>
@@ -298,11 +282,6 @@
                             <p class="sig-title">College President</p>
                         </div>
                     </div>
-
-                    <div class="page-footer">
-                        <div>Effectivity: June 2024</div>
-                        <div>Rev. 4</div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -313,12 +292,15 @@
 <script>
     function downloadPDF() {
         const element = document.getElementById('reportContentToExport');
+        // Letter (8.5in x 11in) portrait, matching CSPC's official print spec.
+        // html2pdf's margin array is [top, left, bottom, right] (not CSS order).
         const opt = {
-            margin:       0.2,
+            margin:       [0.5, 0.5, 0.25, 0.25],
             filename:     'Dashboard_Report.pdf',
             image:        { type: 'jpeg', quality: 0.98 },
-            html2canvas:  { scale: 2, useCORS: true },
-            jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+            html2canvas:  { scale: 2, useCORS: true, letterRendering: true, scrollY: 0 },
+            jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
+            pagebreak:    { mode: ['css', 'legacy'], avoid: ['.report-header-block', '.page-footer', '.signature-section', 'tr'] }
         };
         html2pdf().set(opt).from(element).save();
     }
