@@ -154,6 +154,10 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        // Show the result of the last create/edit/delete redirect as a toast
+        // (?success=... / ?error=... set by server.js), then clean the URL.
+        AppAlert.autoShowFromQuery();
+
         document.querySelectorAll('.delete-admin-form').forEach(form => {
             form.addEventListener('submit', async function (e) {
                 e.preventDefault();
@@ -161,7 +165,10 @@
                     title: 'Delete this admin account?',
                     confirmText: 'Yes, delete it!'
                 });
-                if (confirmed) form.submit();
+                if (confirmed) {
+                    AppAlert.setButtonLoading(form.querySelector('button[type="submit"]'), 'Deleting...');
+                    form.submit();
+                }
             });
         });
     });

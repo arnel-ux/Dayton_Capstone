@@ -2,144 +2,725 @@
 <html lang="en">
 <head>
     <%- include('layout/header', { forceLightMode: true }) %>
-    <style>
-        body {
-            background: #f1f5f9;
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            min-height: 100vh;
+    <%
+        // Display-only helpers. These never touch the underlying DB values —
+        // they only format sub.officeVisitedTime / officeName for presentation.
+
+        // MySQL TIME columns arrive as "HH:mm:ss" (sometimes "HH:mm"). Convert
+        // to a 12-hour "h:mm AM/PM" string for the UI; raw value is untouched.
+        function formatVisitedTime12h(value) {
+            if (!value) return null;
+            var match = String(value).trim().match(/^(\d{1,2}):(\d{2})/);
+            if (!match) return null;
+            var hours = parseInt(match[1], 10);
+            var minutes = match[2];
+            if (isNaN(hours)) return null;
+            var suffix = hours >= 12 ? 'PM' : 'AM';
+            var hours12 = hours % 12;
+            if (hours12 === 0) hours12 = 12;
+            return hours12 + ':' + minutes + ' ' + suffix;
         }
 
+        // Office names are sometimes stored as "Full Name (CODE)". Pull the
+        // parenthesized short code, when present, for a small office badge.
+        // Falls back to nothing (no badge) when the office name has no code.
+        function extractOfficeCode(name) {
+            if (!name) return null;
+            var match = String(name).match(/\(([^)]+)\)\s*$/);
+            return match ? match[1].trim() : null;
+        }
+
+        var officeVisitedDisplay = null; // computed per-submission below
+        var officeCode = extractOfficeCode(typeof officeName !== 'undefined' ? officeName : null);
+    %>
+    <style>
+        /* ==========================================================
+           BASE / LAYOUT
+           ========================================================== */
+        * { box-sizing: border-box; }
+        html, body {
+            overflow-x: hidden;
+        }
+        body {
+            background: #f0f3f9;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            min-height: 100vh;
+            color: #0f172a;
+        }
+
+        /* ==========================================================
+           TOPBAR
+           ========================================================== */
         .topbar {
-            background: linear-gradient(135deg, #251d3a, #2a2550);
+            background: linear-gradient(135deg, #1e1738, #2d1f57 55%, #241a44);
             color: #ffffff;
-            padding: 1rem 1.5rem;
+            padding: 0.9rem 1.5rem;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            box-shadow: 0 4px 14px -4px rgba(0,0,0,0.3);
+            gap: 1rem;
+            box-shadow: 0 4px 18px -6px rgba(0,0,0,0.35);
+            position: sticky;
+            top: 0;
+            z-index: 20;
         }
+        .topbar-left {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            min-width: 0;
+        }
+        .topbar-icon {
+            width: 42px;
+            height: 42px;
+            flex: 0 0 auto;
+            margin-top: 0.1rem;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.18);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.05rem;
+        }
+        .topbar-titles { min-width: 0; }
         .topbar h1 {
-            font-size: 1.1rem;
+            font-size: 0.72rem;
             font-weight: 700;
-            margin: 0;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            margin: 0 0 0.2rem;
+            line-height: 1.2;
+            color: #b7aee6;
         }
         .topbar .sub {
-            font-size: 0.75rem;
-            color: #cbd5e1;
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: #ffffff;
+            line-height: 1.3;
+            overflow-wrap: break-word;
+            max-width: 100%;
+        }
+        .office-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            color: #d9d4f2;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 0.18rem 0.6rem;
+            border-radius: 50px;
+            margin-top: 0.35rem;
+            white-space: nowrap;
+        }
+        .office-badge .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #a78bfa;
+            flex: 0 0 auto;
+        }
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex: 0 0 auto;
+        }
+        .portal-status {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #d9d4f2;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.16);
+            padding: 0.35rem 0.7rem;
+            border-radius: 50px;
+            white-space: nowrap;
+        }
+        .portal-status .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #34d399;
+            box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25);
         }
         .btn-logout {
             background: rgba(255,255,255,0.12);
             border: 1px solid rgba(255,255,255,0.35);
             color: #fff;
             border-radius: 50px;
-            padding: 0.4rem 1rem;
+            padding: 0.45rem 1.1rem;
             font-size: 0.82rem;
             font-weight: 600;
             text-decoration: none;
+            white-space: nowrap;
+            transition: background 0.15s ease, transform 0.15s ease;
         }
-        .btn-logout:hover { background: rgba(255,255,255,0.22); color: #fff; }
+        .btn-logout:hover { background: rgba(255,255,255,0.24); color: #fff; transform: translateY(-1px); }
+        .btn-logout:focus-visible {
+            outline: 2px solid #fff;
+            outline-offset: 2px;
+        }
 
+        /* ==========================================================
+           PAGE HEADER
+           ========================================================== */
         .content-wrap {
-            max-width: 960px;
-            margin: 2rem auto;
-            padding: 0 1rem;
+            max-width: 1140px;
+            margin: 0 auto;
+            padding: 0 1.25rem 3rem;
         }
-
-        .approval-card {
+        .page-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1.75rem 0 1.25rem;
+        }
+        .page-header h2 {
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: #1a1436;
+            margin: 0 0 0.3rem;
+        }
+        .page-header p {
+            font-size: 0.9rem;
+            color: #64748b;
+            margin: 0;
+            max-width: 46ch;
+        }
+        .pending-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
             background: #ffffff;
-            border-radius: 1rem;
-            box-shadow: 0 8px 24px -10px rgba(15, 23, 42, 0.15);
-            padding: 1.25rem 1.5rem;
-            margin-bottom: 1rem;
+            border: 1px solid #e5e7f0;
+            border-radius: 14px;
+            padding: 0.7rem 1.1rem;
+            box-shadow: 0 6px 18px -10px rgba(30, 23, 56, 0.25);
+            flex: 0 0 auto;
         }
-
-        .approval-meta-label {
-            font-size: 0.68rem;
+        .pending-badge .icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #2d1f57, #4b3a86);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+            flex: 0 0 auto;
+        }
+        .pending-badge .num {
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: #1a1436;
+            line-height: 1.1;
+        }
+        .pending-badge .label {
+            font-size: 0.7rem;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.4px;
             color: #94a3b8;
-            margin-bottom: 0.15rem;
-        }
-        .approval-meta-value {
-            font-size: 0.92rem;
-            color: #0f172a;
-            font-weight: 600;
         }
 
+        /* ==========================================================
+           APPROVAL CARDS
+           ========================================================== */
+        .approval-card {
+            background: #ffffff;
+            border: 1px solid #e9ebf3;
+            border-radius: 16px;
+            box-shadow: 0 6px 20px -12px rgba(15, 23, 42, 0.18);
+            padding: 1.35rem 1.5rem 1.25rem;
+            margin-bottom: 1.1rem;
+            transition: box-shadow 0.18s ease, transform 0.18s ease;
+            animation: cardIn 0.35s ease both;
+        }
+        .approval-card:hover {
+            box-shadow: 0 12px 30px -14px rgba(15, 23, 42, 0.28);
+            transform: translateY(-2px);
+        }
+        @keyframes cardIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .approval-card { animation: none; }
+            .approval-card:hover { transform: none; }
+        }
+
+        .card-top {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.5rem 1rem;
+            padding-bottom: 0.85rem;
+            margin-bottom: 0.95rem;
+            border-bottom: 1px solid #f0f1f7;
+        }
+        .card-top-left { min-width: 0; flex: 1 1 260px; }
+        .pending-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.63rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #92400e;
+            background: #fef3c7;
+            border: 1px solid #fde68a;
+            padding: 0.22rem 0.6rem;
+            border-radius: 50px;
+            margin-bottom: 0.45rem;
+        }
+        .pending-pill i { font-size: 0.6rem; }
+        .respondent-name {
+            font-size: 1.12rem;
+            font-weight: 700;
+            color: #14102b;
+            margin: 0;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .submitted-time {
+            font-size: 0.78rem;
+            color: #94a3b8;
+            font-weight: 600;
+            white-space: nowrap;
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.1rem 1rem;
+            margin-bottom: 1.1rem;
+        }
+        .meta-item { min-width: 0; }
+        .meta-label {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.45px;
+            color: #94a3b8;
+            margin-bottom: 0.3rem;
+        }
+        .meta-label i { font-size: 0.72rem; color: #7c6bb0; width: 14px; text-align: center; }
+        .meta-value {
+            font-size: 0.92rem;
+            color: #1a1436;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 100%;
+            cursor: default;
+        }
+        .meta-value.wrap-value {
+            white-space: normal;
+            overflow-wrap: break-word;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .time-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: #eef2ff;
+            color: #3730a3;
+            border: 1px solid #e0e7ff;
+            font-weight: 700;
+            font-size: 0.88rem;
+            padding: 0.28rem 0.7rem;
+            border-radius: 8px;
+        }
+        .time-pill i { font-size: 0.78rem; }
+
+        /* ==========================================================
+           ACTIONS
+           ========================================================== */
+        .actions-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+        }
+        .btn-approve {
+            background: #16a34a;
+            border: 1px solid #16a34a;
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.85rem;
+            padding: 0.55rem 1.3rem;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            min-height: 42px;
+            transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+        }
+        .btn-approve:hover { background: #15803d; color: #fff; box-shadow: 0 6px 16px -6px rgba(22,163,74,0.55); }
+        .btn-approve:active { transform: translateY(1px); }
+        .btn-approve:focus-visible { outline: 2px solid #16a34a; outline-offset: 2px; }
+
+        .btn-decline {
+            background: #fff;
+            border: 1.5px solid #dc2626;
+            color: #dc2626;
+            font-weight: 700;
+            font-size: 0.85rem;
+            padding: 0.55rem 1.3rem;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            min-height: 42px;
+            transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+        }
+        .btn-decline:hover { background: #fef2f2; color: #b91c1c; border-color: #b91c1c; }
+        .btn-decline:active { transform: translateY(1px); }
+        .btn-decline:focus-visible { outline: 2px solid #dc2626; outline-offset: 2px; }
+        .btn-decline[aria-expanded="true"] { background: #fef2f2; }
+
+        .decline-panel {
+            margin-top: 0.9rem;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 12px;
+            padding: 0.9rem 1rem;
+        }
+        .decline-panel-label {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #991b1b;
+            margin-bottom: 0.55rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .decline-form-row {
+            display: flex;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+        }
+        .decline-form-row .form-control {
+            flex: 1 1 220px;
+            border-radius: 8px;
+            border: 1px solid #fca5a5;
+            font-size: 0.85rem;
+        }
+        .decline-form-row .form-control:focus {
+            border-color: #dc2626;
+            box-shadow: 0 0 0 0.2rem rgba(220,38,38,0.15);
+        }
+        .btn-confirm-decline {
+            background: #dc2626;
+            border: 1px solid #dc2626;
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.85rem;
+            padding: 0.5rem 1.1rem;
+            border-radius: 8px;
+            white-space: nowrap;
+            min-height: 42px;
+            transition: background 0.15s ease;
+        }
+        .btn-confirm-decline:hover { background: #b91c1c; color: #fff; }
+        .btn-confirm-decline:focus-visible { outline: 2px solid #dc2626; outline-offset: 2px; }
+
+        /* ==========================================================
+           EMPTY STATE
+           ========================================================== */
         .empty-state {
             text-align: center;
-            padding: 4rem 1rem;
+            padding: 3.5rem 1.5rem;
             color: #64748b;
+            background: #ffffff;
+            border: 1px solid #e9ebf3;
+            border-radius: 16px;
+            margin-top: 1rem;
         }
-        .empty-state i { font-size: 2.5rem; color: #94a3b8; margin-bottom: 1rem; }
+        .empty-state .icon-wrap {
+            width: 68px;
+            height: 68px;
+            margin: 0 auto 1.1rem;
+            border-radius: 50%;
+            background: #eef2ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .empty-state .icon-wrap i { font-size: 1.8rem; color: #4338ca; }
+        .empty-state h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #1a1436;
+            margin-bottom: 0.4rem;
+        }
+        .empty-state p {
+            font-size: 0.88rem;
+            margin: 0 auto 1rem;
+            max-width: 40ch;
+        }
+        .caught-up-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #166534;
+            background: #dcfce7;
+            border: 1px solid #bbf7d0;
+            padding: 0.3rem 0.8rem;
+            border-radius: 50px;
+        }
+
+        /* ==========================================================
+           RESPONSIVE
+           ========================================================== */
+        @media (max-width: 991px) {
+            .meta-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 767px) {
+            .topbar { padding: 0.75rem 1rem; align-items: flex-start; }
+            .topbar-left { flex: 1 1 auto; min-width: 0; }
+            .topbar h1 { font-size: 0.66rem; }
+            .topbar .sub { font-size: 0.86rem; }
+            .topbar-right { flex: 0 0 auto; padding-top: 0.1rem; }
+            .portal-status { display: none; }
+            .content-wrap { padding: 0 0.85rem 2.5rem; }
+            .page-header { padding-top: 1.25rem; }
+            .page-header h2 { font-size: 1.3rem; }
+            .page-header p { font-size: 0.84rem; max-width: 100%; }
+            .pending-badge { width: 100%; }
+            .meta-grid { grid-template-columns: repeat(2, 1fr); gap: 0.9rem 0.75rem; }
+            .approval-card { padding: 1.1rem 1.1rem 1rem; }
+            .card-top { flex-direction: column; }
+            .submitted-time { order: 2; }
+            .actions-row .btn-approve,
+            .actions-row .btn-decline { flex: 1 1 auto; justify-content: center; }
+            .decline-form-row { flex-direction: column; }
+            .decline-form-row .form-control,
+            .btn-confirm-decline { width: 100%; }
+        }
+
+        @media (max-width: 420px) {
+            .meta-grid { grid-template-columns: 1fr; }
+            .topbar-icon { width: 36px; height: 36px; font-size: 0.9rem; }
+        }
     </style>
 </head>
 <body>
 
     <div class="topbar">
-        <div>
-            <h1><i class="fas fa-clipboard-check me-2"></i> Survey Approvals</h1>
-            <div class="sub"><%= officeName %></div>
+        <div class="topbar-left">
+            <div class="topbar-icon"><i class="fas fa-clipboard-check"></i></div>
+            <div class="topbar-titles">
+                <h1>Survey Approvals</h1>
+                <div class="sub" data-bs-toggle="tooltip" data-bs-placement="bottom" title="<%= officeName %>"><%= officeName %></div>
+                <% if (officeCode) { %>
+                    <span class="office-badge"><span class="dot"></span> OFFICE: <%= officeCode %></span>
+                <% } %>
+            </div>
         </div>
-        <a href="/office-logout" class="btn-logout"><i class="fas fa-sign-out-alt me-1"></i> Logout</a>
+        <div class="topbar-right">
+            <span class="portal-status"><span class="dot"></span> Approval Portal</span>
+            <a href="/office-logout" class="btn-logout" id="officeLogoutBtn"><i class="fas fa-sign-out-alt me-1"></i> Logout</a>
+        </div>
     </div>
 
     <div class="content-wrap">
+
+        <div class="page-header">
+            <div>
+                <h2>Survey Approval Requests</h2>
+                <p>Review and verify pending client survey submissions for your office.</p>
+            </div>
+            <div class="pending-badge">
+                <div class="icon"><i class="fas fa-hourglass-half"></i></div>
+                <div>
+                    <div class="num"><%= submissions ? submissions.length : 0 %></div>
+                    <div class="label">Pending Approvals</div>
+                </div>
+            </div>
+        </div>
+
         <% if (!submissions || submissions.length === 0) { %>
             <div class="empty-state">
-                <i class="fas fa-inbox"></i>
-                <p class="mb-0 fw-semibold">No pending submissions right now.</p>
-                <p class="mb-0" style="font-size: 0.85rem;">New personal-email survey submissions for your office will show up here for verification.</p>
+                <div class="icon-wrap"><i class="fas fa-inbox"></i></div>
+                <h3>No pending submissions right now.</h3>
+                <p>New personal-email survey submissions for your office will show up here for verification.</p>
+                <span class="caught-up-badge"><i class="fas fa-check-circle"></i> All caught up</span>
             </div>
         <% } else { %>
             <% submissions.forEach(function(sub) { %>
                 <div class="approval-card">
-                    <div class="row g-3 mb-3">
-                        <div class="col-6 col-md-3">
-                            <div class="approval-meta-label">Respondent</div>
-                            <div class="approval-meta-value"><%= sub.respondentName %></div>
+                    <div class="card-top">
+                        <div class="card-top-left">
+                            <span class="pending-pill"><i class="fas fa-circle"></i> Pending Review</span>
+                            <h3 class="respondent-name" data-bs-toggle="tooltip" data-bs-placement="top" title="<%= sub.respondentName %>">
+                                <%= sub.respondentName %>
+                            </h3>
                         </div>
-                        <div class="col-6 col-md-3">
-                            <div class="approval-meta-label">Service Availed</div>
-                            <div class="approval-meta-value"><%= sub.serviceAvailed || 'Not specified' %></div>
-                        </div>
-                        <div class="col-6 col-md-3">
-                            <div class="approval-meta-label">Office Visited Time</div>
-                            <div class="approval-meta-value"><%= sub.officeVisitedTime || '—' %></div>
-                        </div>
-                        <div class="col-6 col-md-3">
-                            <div class="approval-meta-label">Submitted</div>
-                            <div class="approval-meta-value"><%= new Date(sub.createdAt).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' }) %></div>
-                        </div>
-                        <div class="col-12">
-                            <div class="approval-meta-label">Google Account</div>
-                            <div class="approval-meta-value"><%= sub.googleEmail %></div>
+                        <div class="submitted-time">
+                            <i class="fas fa-calendar-alt"></i>
+                            <%= new Date(sub.createdAt).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' }) %>
                         </div>
                     </div>
 
-                    <div class="d-flex flex-wrap gap-2 align-items-center">
-                        <form action="/office-approvals/<%= sub.id %>/approve" method="POST" class="m-0">
-                            <button type="submit" class="btn btn-success btn-sm">
-                                <i class="fas fa-check me-1"></i> Approve
+                    <div class="meta-grid">
+                        <div class="meta-item">
+                            <div class="meta-label"><i class="fas fa-user"></i> Respondent</div>
+                            <div class="meta-value" data-bs-toggle="tooltip" data-bs-placement="top" title="<%= sub.respondentName %>">
+                                <%= sub.respondentName %>
+                            </div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="meta-label"><i class="fas fa-clipboard-list"></i> Service Availed</div>
+                            <div class="meta-value wrap-value" data-bs-toggle="tooltip" data-bs-placement="top" title="<%= sub.serviceAvailed || 'Not specified' %>">
+                                <%= sub.serviceAvailed || 'Not specified' %>
+                            </div>
+                        </div>
+                        <% officeVisitedDisplay = formatVisitedTime12h(sub.officeVisitedTime); %>
+                        <div class="meta-item">
+                            <div class="meta-label"><i class="fas fa-clock"></i> Office Visited Time</div>
+                            <div class="meta-value">
+                                <span class="time-pill"><i class="fas fa-clock"></i> <%= officeVisitedDisplay || sub.officeVisitedTime || '—' %></span>
+                            </div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="meta-label"><i class="fas fa-calendar-alt"></i> Submitted</div>
+                            <div class="meta-value" data-bs-toggle="tooltip" data-bs-placement="top"
+                                 title="<%= new Date(sub.createdAt).toLocaleString('en-PH', { dateStyle: 'full', timeStyle: 'medium' }) %>">
+                                <%= new Date(sub.createdAt).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' }) %>
+                            </div>
+                        </div>
+                        <div class="meta-item" style="grid-column: 1 / -1;">
+                            <div class="meta-label"><i class="fas fa-envelope"></i> Google Account</div>
+                            <div class="meta-value" data-bs-toggle="tooltip" data-bs-placement="top" title="<%= sub.googleEmail %>">
+                                <%= sub.googleEmail %>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="actions-row">
+                        <form action="/office-approvals/<%= sub.id %>/approve" method="POST" class="m-0 approve-form" data-respondent="<%= sub.respondentName %>">
+                            <button type="submit" class="btn-approve">
+                                <i class="fas fa-check"></i> Approve
                             </button>
                         </form>
-                        <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="collapse" data-bs-target="#declineForm<%= sub.id %>">
-                            <i class="fas fa-times me-1"></i> Decline
+                        <button type="button" class="btn-decline" data-bs-toggle="collapse" data-bs-target="#declineForm<%= sub.id %>" aria-expanded="false" aria-controls="declineForm<%= sub.id %>">
+                            <i class="fas fa-times"></i> Decline
                         </button>
                     </div>
 
-                    <div class="collapse mt-2" id="declineForm<%= sub.id %>">
-                        <form action="/office-approvals/<%= sub.id %>/decline" method="POST" class="d-flex gap-2">
-                            <input type="text" name="decline_reason" class="form-control form-control-sm" placeholder="Reason (optional)" maxlength="255">
-                            <button type="submit" class="btn btn-danger btn-sm text-nowrap">Confirm Decline</button>
-                        </form>
+                    <div class="collapse" id="declineForm<%= sub.id %>">
+                        <div class="decline-panel">
+                            <div class="decline-panel-label"><i class="fas fa-exclamation-circle"></i> Reason for declining (optional)</div>
+                            <form action="/office-approvals/<%= sub.id %>/decline" method="POST" class="decline-form-row decline-form" data-respondent="<%= sub.respondentName %>">
+                                <input type="text" name="decline_reason" class="form-control" placeholder="Enter a reason for declining this submission" maxlength="255" aria-label="Reason for declining">
+                                <button type="submit" class="btn-confirm-decline">Confirm Decline</button>
+                            </form>
+                        </div>
                     </div>
                 </div>
             <% }); %>
         <% } %>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <%- include('layout/footer') %>
+    <script>
+        (function () {
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.forEach(function (el) {
+                new bootstrap.Tooltip(el, { trigger: 'hover focus' });
+            });
+
+            // Toggle aria-expanded state on decline buttons in sync with the collapse.
+            document.querySelectorAll('[data-bs-target^="#declineForm"]').forEach(function (btn) {
+                var target = document.querySelector(btn.getAttribute('data-bs-target'));
+                if (!target) return;
+                target.addEventListener('shown.bs.collapse', function () { btn.setAttribute('aria-expanded', 'true'); });
+                target.addEventListener('hidden.bs.collapse', function () { btn.setAttribute('aria-expanded', 'false'); });
+            });
+
+            // Show the result of the last approve/decline redirect as a toast
+            // (?success=... / ?error=... set by server.js), then clean the URL.
+            AppAlert.autoShowFromQuery();
+
+            var logoutBtn = document.getElementById('officeLogoutBtn');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    var href = logoutBtn.getAttribute('href');
+                    AppAlert.confirm('Are you sure you want to logout?', { title: 'Logout?', confirmText: 'Yes, logout', danger: false })
+                        .then(function (confirmed) {
+                            if (confirmed) window.location.href = href;
+                        });
+                });
+            }
+
+            // Approve: confirm first, then show a loading button state and let
+            // the form submit normally (server still owns the redirect + the
+            // real approve logic — this only adds a confirmation + feedback layer).
+            document.querySelectorAll('form.approve-form').forEach(function (form) {
+                form.addEventListener('submit', function (e) {
+                    if (form.dataset.confirmed === '1') return; // already confirmed, let it through
+                    e.preventDefault();
+                    var respondent = form.dataset.respondent || 'this submission';
+                    AppAlert.confirm(
+                        'Are you sure you want to approve the survey submitted by ' + respondent + '?',
+                        { title: 'Approve Survey Submission?', confirmText: 'Yes, approve', danger: false }
+                    ).then(function (confirmed) {
+                        if (!confirmed) return;
+                        form.dataset.confirmed = '1';
+                        AppAlert.setButtonLoading(form.querySelector('button[type="submit"]'), 'Approving...');
+                        form.submit();
+                    });
+                });
+            });
+
+            // Decline: same confirm-then-submit pattern; the optional reason the
+            // office staff typed is preserved since we submit the real form as-is.
+            document.querySelectorAll('form.decline-form').forEach(function (form) {
+                form.addEventListener('submit', function (e) {
+                    if (form.dataset.confirmed === '1') return;
+                    e.preventDefault();
+                    var respondent = form.dataset.respondent || 'this submission';
+                    AppAlert.confirm(
+                        'Are you sure you want to decline the survey submitted by ' + respondent + '?',
+                        { title: 'Decline Survey Submission?', confirmText: 'Yes, decline', danger: true }
+                    ).then(function (confirmed) {
+                        if (!confirmed) return;
+                        form.dataset.confirmed = '1';
+                        AppAlert.setButtonLoading(form.querySelector('button[type="submit"]'), 'Declining...');
+                        form.submit();
+                    });
+                });
+            });
+        })();
+    </script>
 </body>
 </html>
