@@ -839,15 +839,17 @@ function analyzeComment(comment, offline = false, officeId = null) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ comment: String(comment), office: officeHint || '' }),
-            // Two-stage zero-shot topic classification alone measures ~10-11s
-            // on a comment with no keyword-lexicon hit (see heavy_model.py's
-            // classify_topic), and the GIL-bound model server processes one
-            // request at a time — a second submission queued behind another
-            // can push well past that. 15s was cutting it too close: a
-            // successful-but-slow model server call would get aborted here
-            // and land in analyzeViaPythonScript's much slower disk-reload
-            // fallback instead, doubling the wait for no benefit.
-            signal: AbortSignal.timeout(45000)
+            // heavy_model.py's fallback is now Gemini (see 2026-08-29 mDeBERTa
+            // removal), not a local model — normally a 1-3s network round
+            // trip on a lexicon miss. But Gemini's free tier caps at 15
+            // requests/minute, and gemini_model.py's client-side throttle
+            // will sleep out a full rate-limit window (up to ~60s) rather
+            // than risk a 429, on top of up to 3 retries with up to 20s
+            // backoff each if one slips through anyway. 45s was sized for
+            // mDeBERTa's very different (CPU-bound, no rate limit) profile
+            // and is too tight for Gemini's worst case, so this is sized to
+            // comfortably clear one full throttle wait plus a retry.
+            signal: AbortSignal.timeout(90000)
         })
             .then((res) => res.ok ? res.json() : Promise.reject(new Error(`Model server responded ${res.status}`)))
             .then((aiResult) => {

@@ -133,6 +133,11 @@ TOPIC_KEYWORDS = {
     "Restroom and Cleanliness": [
         "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
         "kalinisan", "cleanliness", "malinis", "marumi", "dumi", "madumi",
+        # Found missing during 2026-08-29 testing: a supplies complaint
+        # ("walang tissue/sabon") is common enough on its own (without the
+        # comment also naming "banyo"/"CR") to deserve its own anchor,
+        # rather than only being reachable when paired with a restroom word.
+        "tissue", "sabon",
     ],
     "Seating and Furniture": [
         "upuan", "silya", "mesa", "bangko", "furniture", "chairs", "seats", "muwebles",
@@ -159,6 +164,14 @@ TOPIC_KEYWORDS = {
         # madumi below) — CSPC is in the Bicol region, so this spelling shows
         # up in real feedback alongside the standard form.
         "hindi marunong", "hindi madunong", "walang alam", "not knowledgeable", "incompetent",
+        # "hindi alam ng [role]" (third-person: THAT PERSON doesn't know) is a
+        # distinct grammatical pattern from "hindi ko alam" (first-person: I
+        # don't know, self-reflective, unrelated to staff at all — already
+        # used unambiguously elsewhere, e.g. General Feedback comments) —
+        # found missing during 2026-08-29 fresh-comment testing, where "Hindi
+        # alam ng clerk yung sagot" fell through to the generic Staff
+        # Courtesy bucket (via the weighted "clerk" role-noun) instead.
+        "hindi alam ng",
         "hindi sanay", "untrained", "kulang sa training", "hindi sigurado sa sagot",
         "hindi updated", "hindi na updated", "hindi pa updated", "outdated",
         # Bare "sanay" (accustomed/skilled at a job) is a real positive
@@ -203,18 +216,40 @@ TOPIC_KEYWORDS = {
         "diploma ko", "good moral", "form 137", "form 138",
         "certificate of grades", "identification card", "id card", "school id",
         "grade change", "correction of grades", "change of grade",
+        # Found missing 2026-08-29 cross-checking cqa_db.sql's `services`
+        # table against the taxonomy — "Requesting for Clearance" (Accounting
+        # Unit) is a real, distinct CSPC service with zero coverage before
+        # this, and clearance is a very commonly complained-about process at
+        # Philippine schools (needed before enrollment/graduation/release of
+        # records).
+        "clearance",
     ],
     "Enrollment and Registration": [
         "enrollment", "enrolment", "pagpapatala", "nagpatala", "nagpapatala",
         "magpapatala", "ipatala", "registration", "rehistrasyon",
         "matriculation", "cross-enrollment", "re-admission", "shifting",
         "mag-shift", "nag-shift",
+        # Found missing 2026-08-29 alongside "clearance" above — "Applying
+        # for Graduation" (Registrar) had zero coverage. Deliberately only
+        # the unambiguous English terms — "pagtapos"/"pagtatapos" (to
+        # finish/end) is far too generic in Tagalog (finishing a line,
+        # finishing a process, etc.) to use safely as an anchor here.
+        "graduation", "commencement", "graduating",
     ],
     "Communication and Information": [
         "impormasyon", "information", "communication", "announcement", "abiso",
         "notice", "paalala", "text blast", "walang paalam", "walang reply",
         "hindi sumasagot", "no response", "not informed", "nobody informed",
         "no update", "walang update", "no updates", "walang updates", "email",
+        # Found missing during 2026-08-29 testing: comments about getting a
+        # different answer from every person asked kept getting misread as
+        # Staff Competence or Process Efficiency — this is really about
+        # information consistency, not any one staff member's skill or the
+        # number of steps involved, so it gets its own unambiguous anchor.
+        "iba-iba sagot", "iba't ibang sagot", "magkaibang sagot",
+        "kanya-kanyang sagot", "conflicting information",
+        "contradicting information", "inconsistent information",
+        "nagkontra-kontra",
     ],
     # "transaction" is the unambiguous object-noun anchor for comments whose
     # core driver is how fast the service itself moved (hal. "bilis ng
@@ -332,6 +367,9 @@ TOPIC_ITEM_KEYWORDS = {
         ]),
     ],
     "Restroom and Cleanliness": [
+        ("Restroom and Cleanliness - Supplies (Soap/Tissue)", [
+            "tissue", "sabon",
+        ]),
         ("Restroom and Cleanliness - Restroom/CR", [
             "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
         ]),
@@ -428,8 +466,12 @@ TOPIC_ITEM_KEYWORDS = {
         ("Document and Credential Processing - Certification", [
             "certification", "certificate", "cav",
         ]),
+        ("Document and Credential Processing - Clearance", ["clearance"]),
     ],
     "Enrollment and Registration": [
+        ("Enrollment and Registration - Graduation", [
+            "graduation", "commencement", "graduating",
+        ]),
         ("Enrollment and Registration - Matriculation", ["matriculation"]),
         ("Enrollment and Registration - Cross-Enrollment", ["cross-enrollment"]),
         ("Enrollment and Registration - Re-admission", ["re-admission"]),
@@ -455,6 +497,15 @@ TOPIC_ITEM_KEYWORDS = {
         ]),
     ],
     "Communication and Information": [
+        ("Communication and Information - Inconsistent/Contradicting Information", [
+            "iba-iba sagot", "iba't ibang sagot", "magkaibang sagot",
+            "kanya-kanyang sagot", "conflicting information",
+            "contradicting information", "inconsistent information",
+            "nagkontra-kontra",
+        ]),
+        ("Communication and Information - Schedule/Policy Changes", [
+            "walang paalam",
+        ]),
         ("Communication and Information - Response to Inquiries", [
             "walang reply", "hindi sumasagot", "no response",
         ]),
@@ -828,6 +879,11 @@ FAST_NEGATIVE_WORDS = [
     # unambiguous (unlike bare "mabagal"-style descriptors, they only ever
     # describe a person's demeanor).
     "suplado", "suplada", "masungit", "sungit", "mayabang",
+    # Found missing during 2026-08-29 fresh-comment testing: "nagla-lag"/
+    # "lumalag" (lagging) is a common, unambiguous system-slowness complaint
+    # with no other meaning in this context, same category as "sira"/"hindi
+    # gumagana" above.
+    "nagla-lag", "lumalag", "laggy",
 ]
 FAST_POSITIVE_WORDS = [
     "maganda", "magandang", "mabilis", "magaling", "mabait", "salamat",
@@ -895,7 +951,7 @@ GENERIC_NEGATIVE_FILLERS = {"problema", "reklamo", "issue", "concern"}
 # a negator for lookback purposes, but it neutralizes the keyword (drops it)
 # instead of flipping its polarity, since "sana [positive]" isn't a negative
 # claim either — it's a wish, distinct from both.
-ASPIRATIONAL_WORDS = {"sana"}
+ASPIRATIONAL_WORDS = {"sana", "kailangan"}
 
 
 def _is_aspirational(clause_lower, span_start):
@@ -977,6 +1033,73 @@ def lexicon_sentiment(text):
 
 def fast_sentiment(text):
     return lexicon_sentiment(text) or "Neutral"
+
+
+# ---------------------------------------------------------------------------
+# JUNK-CONTENT DETECTION (pure numbers / symbols / emoji / keyboard-mash
+# gibberish) — a deterministic pre-check so these get a clear, honest
+# "Numbers"/"Random Letters" tag INSTANTLY, without ever spending a Gemini
+# call on content that has no real linguistic meaning to classify at all.
+# Added 2026-08-29 at the admin's request specifically to keep Gemini's
+# quota from being spent on junk, since these are unambiguous enough not to
+# need an LLM's judgment.
+#
+# Deliberately conservative, scored over the WHOLE comment, not per-word —
+# admin explicitly flagged the risk of a real comment with a typo getting
+# misread as gibberish, so:
+#   - "Numbers" only fires when EVERY character is a digit or a common
+#     numeric separator (dash/space/parens/plus/dot) — a real sentence
+#     containing a phone number alongside actual words never matches this.
+#   - The gibberish check requires a long letter run (>=10) with a vowel
+#     ratio far below any real English/Tagalog/Taglish text (which almost
+#     always clears ~30%+ vowels). A whole real sentence's vowel ratio stays
+#     high even with one or two typos in it, since the ratio is computed
+#     over every letter in the comment — only content that is gibberish
+#     start-to-finish can pull the ratio this low. Short interjections
+#     ("hmp", "grr", "tsk") fall under the length-10 floor and are never
+#     touched.
+#   - Pure symbols/emoji/punctuation with literally zero letters or digits
+#     (e.g. "...", "-", "👍", "😑") also count as "Random Letters".
+# Anything with real letters that doesn't clear this bar (including a
+# comment that's mostly junk but has one real word, or short slang/typos)
+# returns None and falls through to the normal lexicon/Gemini path.
+# ---------------------------------------------------------------------------
+JUNK_TOPIC_NUMBERS = "Numbers"
+JUNK_TOPIC_RANDOM = "Random Letters"
+
+_GIBBERISH_MIN_LETTERS = 10
+_GIBBERISH_MAX_VOWEL_RATIO = 0.15
+_VOWELS = set("aeiou")
+
+
+def detect_junk_topic(text):
+    """
+    Returns "Numbers", "Random Letters", or None (not junk — classify
+    normally). Called before the keyword lexicon and before Gemini.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return None  # blank comments are handled separately upstream
+
+    letters = [c for c in stripped if c.isalpha() and c.isascii()]
+    digits = [c for c in stripped if c.isdigit()]
+
+    if digits and not letters:
+        residual = re.sub(r'[\d\s\-\(\)\+\.]', '', stripped)
+        if not residual:
+            return JUNK_TOPIC_NUMBERS
+
+    if not letters and not digits:
+        # Something is there (checked non-empty above) but it's not a
+        # letter or a digit — pure emoji/symbols/punctuation.
+        return JUNK_TOPIC_RANDOM
+
+    if len(letters) >= _GIBBERISH_MIN_LETTERS:
+        vowel_count = sum(1 for c in letters if c.lower() in _VOWELS)
+        if vowel_count / len(letters) < _GIBBERISH_MAX_VOWEL_RATIO:
+            return JUNK_TOPIC_RANDOM
+
+    return None
 
 
 def fast_topic(text):

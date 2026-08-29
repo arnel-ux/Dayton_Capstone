@@ -8,15 +8,19 @@ User=__USER__
 WorkingDirectory=__APP_DIR__
 EnvironmentFile=__APP_DIR__/.env
 # venv/bin first so Node's spawn('python', ...) resolves to the venv's
-# interpreter (with torch/transformers installed), not the bare system python3.
+# interpreter (with flask/google-genai installed), not the bare system python3.
 Environment=PATH=__VENV_DIR__/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=PORT=3000
 ExecStart=/usr/bin/node server.js
 Restart=always
 RestartSec=5
-# The Python model server loads ~1GB of transformer weights on top of Node —
-# give it real headroom.
-MemoryMax=3G
+# The Python model server used to load ~1GB of local transformer weights
+# (mDeBERTa + tabularisai) on top of Node, requiring real headroom. Removed
+# 2026-08-29 in favor of the Gemini API (see ai_scripts/heavy_model.py) —
+# the model server is now just Flask + a lightweight API client, so a much
+# smaller ceiling is plenty; this still leaves comfortable headroom for
+# Node itself plus MySQL connection buffers.
+MemoryMax=768M
 
 [Install]
 WantedBy=multi-user.target
