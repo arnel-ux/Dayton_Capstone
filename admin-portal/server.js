@@ -2030,7 +2030,10 @@ app.post('/auth-login', async (req, res) => {
                 email_address: office.email_address,
                 type: 'office'
             };
-            return res.redirect('/office-approvals');
+            // ?loggedin=1 lets office-approvals.ejs's new-tab guard mark THIS tab
+            // (via sessionStorage) as one that actually authenticated, matching the
+            // same pattern used for the admin dashboard and /client-survey.
+            return res.redirect('/office-approvals?loggedin=1');
         });
     }
     }
@@ -2061,10 +2064,13 @@ app.get('/client-login', noCache, (req, res) => {
 // checkResubmissionEligibility / finalizeVerifiedSurvey for how an approved
 // submission is replayed into survey_responses). Reuses the same hand-rolled
 // admin-session cookie/store as admin logins (see ensureOfficeAuth above).
+// Always renders the login form, even with a valid office session already on
+// the request — same as admin's /login. This page is exactly where the
+// office-approvals new-tab guard sends a freshly-pasted-URL tab that hasn't
+// authenticated in THAT tab yet; if this route bounced an already-logged-in
+// session straight back to /office-approvals, that page's guard would bounce
+// it right back here, forever (a visible infinite-reload freeze).
 app.get('/office-login', noCache, (req, res) => {
-    if (req.adminSession && req.adminSession.user && req.adminSession.user.type === 'office') {
-        return res.redirect('/office-approvals');
-    }
     res.render('office-login');
 });
 
@@ -2096,7 +2102,10 @@ app.post('/office-login', (req, res) => {
             email_address: office.email_address,
             type: 'office'
         };
-        res.redirect('/office-approvals');
+        // ?loggedin=1 lets office-approvals.ejs's new-tab guard mark THIS tab
+        // (via sessionStorage) as one that actually authenticated, matching the
+        // same pattern used for the admin dashboard and /client-survey.
+        res.redirect('/office-approvals?loggedin=1');
     });
 });
 

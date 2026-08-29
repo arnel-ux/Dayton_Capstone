@@ -1,6 +1,36 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script>
+        // New-tab auto-login guard: office sessions ride the same hand-rolled
+        // admin-session cookie as admin logins, so a brand new tab that merely
+        // inherited that cookie (typed the URL, duplicated the tab, opened a
+        // bookmark) would otherwise land here fully "logged in" without ever
+        // having submitted office credentials in THAT tab. sessionStorage is
+        // scoped per tab (never copied to a freshly opened one), so it's used
+        // here purely as a "did this tab actually authenticate" marker: /office-login's
+        // redirect tags the very next page load with ?loggedin=1, which this
+        // script converts into the marker before the URL is cleaned up. Same
+        // pattern as the admin dashboard (layout/header.ejs) and /client-survey.
+        // Note: this is a client-side UX guard, not a security boundary — the
+        // page markup briefly reaches the browser before this (first) script
+        // redirects it away, so it doesn't stop someone with devtools/view-source
+        // open on that same already-logged-in machine.
+        (function () {
+            try {
+                var params = new URLSearchParams(window.location.search);
+                if (params.has('loggedin')) {
+                    sessionStorage.setItem('cqa_office_tab_ok', '1');
+                    params.delete('loggedin');
+                    var cleanedSearch = params.toString();
+                    var cleanedUrl = window.location.pathname + (cleanedSearch ? '?' + cleanedSearch : '') + window.location.hash;
+                    window.history.replaceState({}, '', cleanedUrl);
+                } else if (sessionStorage.getItem('cqa_office_tab_ok') !== '1') {
+                    window.location.replace('/office-login?error=' + encodeURIComponent('Please log in to continue.'));
+                }
+            } catch (e) { /* sessionStorage unavailable (privacy mode, etc.) — fail open */ }
+        })();
+    </script>
     <%- include('layout/header', { forceLightMode: true }) %>
     <%
         // Display-only helpers. These never touch the underlying DB values —
