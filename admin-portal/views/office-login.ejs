@@ -3,57 +3,98 @@
 <head>
     <%- include('layout/header', { forceLightMode: true }) %>
     <style>
+        /* Reset and Base Styles */
         html, body {
             height: 100vh;
             margin: 0;
             padding: 0;
             overflow: hidden;
             font-family: 'Plus Jakarta Sans', sans-serif;
+            -webkit-font-smoothing: antialiased;
         }
 
+        /* 1. Background Image — same photo + treatment as login.ejs / index.ejs
+           (.bg-image): full-bleed, no blur, so every auth page reads as one
+           consistent backdrop. */
         .bg-blurred {
             position: fixed;
-            top: -5%; left: -5%; right: -5%; bottom: -5%;
+            top: 0; left: 0; width: 100vw; height: 100vh;
             background-image: url('https://spims.cspc.edu.ph/assets/img/background.jpg');
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
-            filter: blur(1px);
-            z-index: -1;
+            z-index: -2;
         }
 
+        /* 2. Overlay — same navy gradient as login.ejs, instead of a flat tint. */
         .bg-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(15, 23, 42, 0.6);
+            background: linear-gradient(180deg, rgba(37, 29, 58,0.92) 0%, rgba(37, 29, 58,0.85) 100%);
             z-index: -1;
         }
 
+        /* 3. Header-anchored wrapper — matches login.ejs so the header sits at
+           the same fixed offset from the top across every auth page. */
         .login-wrapper {
             position: absolute;
-            top: 0; left: 0;
+            top: 0;
+            left: 0;
             width: 100vw;
             height: 100vh;
+            max-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            z-index: 1;
+            justify-content: flex-start;
             padding: 1rem;
+            padding-top: clamp(1.5rem, 9vh, 4rem);
+            z-index: 1;
+            overflow-y: auto;
+        }
+
+        /* Keyframes para sa Fade & Slide Up Animation */
+        @keyframes fadeSlideUp {
+            0% {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .header-container {
             text-align: center;
-            margin-bottom: 1.5rem;
+            margin-bottom: 1.1rem;
             max-width: 800px;
+            flex-shrink: 0;
         }
 
         .main-title {
             color: #ffffff;
             font-weight: 800;
-            font-size: 1.6rem;
+            font-size: 1.5rem;
             text-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
-            margin-bottom: 0.4rem;
+            margin-bottom: 0.35rem;
+            letter-spacing: 0.3px;
+            line-height: 1.25;
+
+            opacity: 0;
+            animation: fadeSlideUp 0.8s ease-out forwards;
+        }
+
+        .sub-title {
+            color: #e2e8f0;
+            font-weight: 400;
+            font-style: italic;
+            font-size: 0.85rem;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+            margin-bottom: 0.6rem;
+
+            opacity: 0;
+            animation: fadeSlideUp 0.8s ease-out 0.3s forwards;
         }
 
         .portal-text {
@@ -62,16 +103,35 @@
             gap: 0.5rem;
             color: #ffffff;
             font-weight: 700;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             text-transform: uppercase;
             letter-spacing: 2.2px;
-            padding: 0.35rem 0.95rem;
-            background: rgba(37, 84, 199, 0.35);
+            padding: 0.3rem 0.9rem;
+            background: rgba(255, 204, 0, 0.35);
             border: 1px solid rgba(255, 255, 255, 0.25);
             border-radius: 50px;
             backdrop-filter: blur(6px);
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            margin-bottom: 0;
+
+            opacity: 0;
+            animation: fadeSlideUp 0.8s ease-out 0.6s forwards;
         }
 
+        @media (max-width: 600px) {
+            .main-title {
+                font-size: 1.15rem;
+            }
+            .sub-title {
+                font-size: 0.78rem;
+                margin-bottom: 0.5rem;
+            }
+            .portal-text {
+                font-size: 0.65rem;
+            }
+        }
+
+        /* 4. Card Styling — refined glassmorphism, soft layered shadow */
         .card-custom {
             background: rgba(255, 255, 255, 0.94);
             backdrop-filter: blur(18px) saturate(160%);
@@ -79,15 +139,50 @@
             border: 1px solid rgba(255, 255, 255, 0.6);
             border-radius: 1.75rem;
             box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+
             width: 400px;
-            padding: 1.75rem 2.25rem;
+            height: auto;
+            flex-shrink: 0;
+
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 1.5rem 2.25rem;
+            opacity: 0;
+            animation: fadeSlideUp 0.7s ease-out 0.15s forwards;
         }
 
         @media (max-width: 400px) {
-            .card-custom { width: 92vw; padding: 1.5rem 1.5rem; }
+            .card-custom {
+                width: 92vw;
+                height: auto;
+                padding: 1.35rem 1.5rem;
+            }
         }
 
-        .field-group { margin-bottom: 0.85rem; }
+        .card-custom .cqa-logo {
+            width: 46px;
+            height: auto;
+        }
+
+        .card-custom h4 {
+            color: #0f172a;
+            font-size: 1.05rem;
+            letter-spacing: 0.2px;
+        }
+
+        .card-custom .divider-soft {
+            width: 36px;
+            height: 3px;
+            background: #ffcc00;
+            border-radius: 50px;
+            margin: 0.4rem auto 0.55rem;
+        }
+
+        /* Form field wrapper + label */
+        .field-group {
+            margin-bottom: 0.75rem;
+        }
 
         .field-label {
             display: block;
@@ -99,23 +194,38 @@
             margin-bottom: 0.3rem;
         }
 
+        /* Modern input group styling */
         .input-modern {
+            position: relative;
             display: flex;
             align-items: center;
             background: #f8fafc;
             border: 1.5px solid #e2e8f0;
             border-radius: 0.75rem;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
         }
+
         .input-modern:focus-within {
             border-color: #251d3a;
             background: #ffffff;
             box-shadow: 0 0 0 0.2rem rgba(37, 29, 58, 0.15);
         }
+
         .input-modern .input-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
             width: 2.6rem;
-            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
             color: #94a3b8;
+            font-size: 0.9rem;
+            transition: color 0.2s ease;
         }
+
+        .input-modern:focus-within .input-icon {
+            color: #251d3a;
+        }
+
         .input-modern .form-control {
             border: none;
             background: transparent;
@@ -124,19 +234,53 @@
             box-shadow: none !important;
         }
 
+        .input-modern .form-control:focus {
+            outline: none;
+            box-shadow: none;
+        }
+
+        .field-hint {
+            font-size: 0.68rem;
+            color: #94a3b8;
+            margin-top: 0.3rem;
+            line-height: 1.35;
+        }
+
+        /* Primary login button */
         .btn-login {
             background: linear-gradient(135deg, #251d3a, #2a2550);
             border: none;
             border-radius: 0.75rem;
             padding: 0.6rem 1rem;
             font-weight: 700;
+            font-size: 0.9rem;
+            letter-spacing: 0.2px;
+            color: #ffffff;
+            box-shadow: 0 8px 18px -6px rgba(37, 29, 58, 0.55);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+        }
+
+        .btn-login:hover {
+            filter: brightness(1.06);
+            transform: translateY(-1px);
+            box-shadow: 0 12px 22px -6px rgba(37, 29, 58, 0.6);
             color: #ffffff;
         }
-        .btn-login:hover { filter: brightness(1.06); color: #ffffff; }
 
+        .btn-login:active {
+            transform: translateY(0);
+        }
+
+        /* Extra small text helper */
+        .text-xsmall {
+            font-size: 0.75rem;
+        }
+
+        /* Home button (top-left, floating over the blurred background) */
         .btn-home {
             position: fixed;
-            top: 1.25rem; left: 1.25rem;
+            top: 1.25rem;
+            left: 1.25rem;
             z-index: 10;
             background: rgba(255, 255, 255, 0.12);
             color: #ffffff;
@@ -146,9 +290,13 @@
             font-weight: 600;
             font-size: 0.85rem;
             backdrop-filter: blur(6px);
+            transition: all 0.3s ease;
             text-decoration: none;
         }
-        .btn-home:hover { background: rgba(255, 255, 255, 0.25); color: #ffffff; }
+        .btn-home:hover {
+            background: rgba(255, 255, 255, 0.25);
+            color: #ffffff;
+        }
     </style>
 </head>
 <body>
@@ -161,16 +309,20 @@
     </a>
 
     <div class="login-wrapper">
+
         <div class="header-container">
             <h1 class="main-title">Office Of Center For Quality Assurance (CQA)</h1>
+            <p class="sub-title">Digital Client Satisfaction Survey of Camarines Sur Polytechnic Colleges</p>
             <h2 class="portal-text">Office Staff Login</h2>
         </div>
 
         <div class="card-custom">
-            <div class="text-center mb-3">
-                <img src="/images/cspc-logo.png" alt="CSPC Logo" width="46" height="46" class="mb-1">
+
+            <div class="text-center mb-2">
+                <img src="/images/cspc-logo.png" alt="CSPC Logo" class="cqa-logo mb-1" width="46" height="46">
                 <h4 class="fw-bold text-dark mb-0">Office Approval Panel</h4>
-                <p class="text-muted mb-0" style="font-size: 0.8rem;">Review and verify client survey submissions for your office.</p>
+                <div class="divider-soft"></div>
+                <p class="text-muted text-xsmall mb-0">Review and verify client survey submissions for your office.</p>
             </div>
 
             <form action="/office-login" method="POST" id="officeLoginForm">
@@ -190,10 +342,11 @@
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-login w-100">
+                <button type="submit" class="btn btn-login w-100" title="Sign in to your account">
                     <i class="fas fa-sign-in-alt me-2"></i> Sign In
                 </button>
             </form>
+
         </div>
     </div>
 

@@ -576,6 +576,10 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        // Show the result of the last create/edit/archive/delete redirect as a
+        // toast (?success=... / ?error=... set by server.js), then clean the URL.
+        AppAlert.autoShowFromQuery();
+
         // Archived offices/clusters are hidden by default via the CSS in <head>
         // (no flash on load) — toggling this body class is all that's needed
         // to reveal/hide them.
@@ -588,7 +592,10 @@
                     title: 'Archive this office?',
                     confirmText: 'Yes, archive it!'
                 });
-                if (confirmed) form.submit();
+                if (confirmed) {
+                    AppAlert.setButtonLoading(form.querySelector('button[type="submit"]'), 'Archiving...');
+                    form.submit();
+                }
             });
         });
 
@@ -600,7 +607,10 @@
                     title: 'Archive this cluster?',
                     confirmText: 'Yes, archive it!'
                 });
-                if (confirmed) form.submit();
+                if (confirmed) {
+                    AppAlert.setButtonLoading(form.querySelector('button[type="submit"]'), 'Archiving...');
+                    form.submit();
+                }
             });
         });
 
@@ -612,7 +622,10 @@
                     title: 'Permanently delete this office?',
                     confirmText: 'Yes, delete permanently!'
                 });
-                if (confirmed) form.submit();
+                if (confirmed) {
+                    AppAlert.setButtonLoading(form.querySelector('button[type="submit"]'), 'Deleting...');
+                    form.submit();
+                }
             });
         });
 
@@ -624,7 +637,10 @@
                     title: 'Permanently delete this cluster?',
                     confirmText: 'Yes, delete permanently!'
                 });
-                if (confirmed) form.submit();
+                if (confirmed) {
+                    AppAlert.setButtonLoading(form.querySelector('button[type="submit"]'), 'Deleting...');
+                    form.submit();
+                }
             });
         });
 
@@ -770,7 +786,10 @@
                     title: 'Remove service?',
                     confirmText: 'Yes, remove it!'
                 });
-                if (confirmed) form.submit();
+                if (confirmed) {
+                    AppAlert.setButtonLoading(form.querySelector('button[type="submit"]'), '');
+                    form.submit();
+                }
             });
         });
 
