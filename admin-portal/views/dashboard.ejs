@@ -4,6 +4,9 @@
     <%- include('layout/header', { forceLightMode: true }) %>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
+         views/layout/report-footer.ejs) — see public/css/report.css. -->
+    <link rel="stylesheet" href="/css/report.css">
 
     <style>
         /* ============================================================
@@ -321,15 +324,9 @@
             padding-bottom: 15px; border-bottom: 1px solid #eee;
         }
 
-        /* Official Document Layout Styles for PDF/Print */
-        .header-container { display: flex; align-items: center; margin-bottom: 5px; }
-        .logo-img { width: 70px; height: auto; margin-right: 15px; }
-        .header-text { line-height: 1.2; color: #000; text-align: left; }
-        .republic { font-size: 14px; margin: 0; }
-        .college-name { font-size: 18px; font-weight: bold; margin: 0; text-transform: uppercase; }
-        .address { font-size: 13px; margin: 0; }
-        .header-line { border-bottom: 2px solid #5B9BD5; margin-top: 5px; margin-bottom: 20px; display: flex; justify-content: flex-end; }
-        .form-code { font-size: 11px; font-weight: bold; color: #000; }
+        /* Official Document Layout Styles for PDF/Print.
+           Letterhead (report-header-block/etc.) and page-footer rules live in
+           public/css/report.css, shared with every other SQD report. */
         .print-title { text-align: center; font-weight: bold; font-size: 16px; margin-bottom: 5px; color: #000; text-transform: uppercase; }
         .print-period { text-align: center; font-size: 14px; font-weight: bold; margin-bottom: 20px; color: #000; }
 
@@ -352,6 +349,7 @@
                this rule repositions it for print without forcing the other one open. */
             #reportModal, #dashboardReportModal { position: absolute; background: white; padding: 0; left: 0; top: 0; width: 100%; }
             .modal-report-container { margin: 0; box-shadow: none; max-width: 100%; padding: 0; }
+            .print-footer { break-inside: avoid; page-break-inside: avoid; }
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
     </style>
@@ -682,17 +680,7 @@
         </div>
 
         <div id="printableReportDocument">
-            <div class="header-container">
-                <img src="/images/cspc-logo.png" alt="CSPC Logo" class="logo-img">
-                <div class="header-text">
-                    <p class="republic">Republic of the Philippines</p>
-                    <p class="college-name">Camarines Sur Polytechnic Colleges</p>
-                    <p class="address">Nabua, Camarines Sur</p>
-                </div>
-            </div>
-            <div class="header-line">
-                <span class="form-code">CSPC-CQA-CSM-F01</span>
-            </div>
+            <%- include('layout/report-header', { docCode: 'CSPC-CQA-CSM-F01' }) %>
 
             <h5 class="print-title">Client Satisfaction Measurement (CSM) Institutional Report</h5>
             <p class="print-period">Period Covered: <%= typeof dashboardData !== 'undefined' ? dashboardData.periodCoveredLabel : 'All Periods' %></p>
@@ -761,17 +749,7 @@
         </div>
 
         <div id="printableDashboardReportDocument">
-            <div class="header-container">
-                <img src="/images/cspc-logo.png" alt="CSPC Logo" class="logo-img">
-                <div class="header-text">
-                    <p class="republic">Republic of the Philippines</p>
-                    <p class="college-name">Camarines Sur Polytechnic Colleges</p>
-                    <p class="address">Nabua, Camarines Sur</p>
-                </div>
-            </div>
-            <div class="header-line">
-                <span class="form-code">CSPC-CQA-CSM-F01</span>
-            </div>
+            <%- include('layout/report-header', { docCode: 'CSPC-CQA-CSM-F01' }) %>
 
             <h5 class="print-title">Dashboard Overview Report</h5>
             <p class="print-period">Period Covered: <%= typeof dashboardData !== 'undefined' ? dashboardData.periodCoveredLabel : 'All Periods' %></p>
@@ -1437,12 +1415,15 @@ function closeReportModal() {
 
 function downloadPDF() {
     const element = document.getElementById('printableReportDocument');
+    // Letter (8.5in x 11in) portrait, matching CSPC's official print spec.
+    // html2pdf's margin array is [top, left, bottom, right] (not CSS order).
     const opt = {
-        margin:       [0.5, 0.5, 0.5, 0.5],
+        margin:       [0.5, 0.5, 0.25, 0.25],
         filename:     'CSPC-CSM-Institutional-Report.pdf',
         image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false },
-        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+        html2canvas:  { scale: 2, useCORS: true, logging: false, letterRendering: true, scrollY: 0 },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
+        pagebreak:    { mode: ['css', 'legacy'], avoid: ['.report-header-block', '.page-footer', '.print-footer', 'tr'] }
     };
     html2pdf().set(opt).from(element).save();
 }
@@ -1459,12 +1440,15 @@ function closeDashboardReportModal() {
 
 function downloadDashboardReportPDF() {
     const element = document.getElementById('printableDashboardReportDocument');
+    // Letter (8.5in x 11in) portrait, matching CSPC's official print spec.
+    // html2pdf's margin array is [top, left, bottom, right] (not CSS order).
     const opt = {
-        margin:       [0.5, 0.5, 0.5, 0.5],
+        margin:       [0.5, 0.5, 0.25, 0.25],
         filename:     'CSPC-Dashboard-Report.pdf',
         image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false },
-        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+        html2canvas:  { scale: 2, useCORS: true, logging: false, letterRendering: true, scrollY: 0 },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
+        pagebreak:    { mode: ['css', 'legacy'], avoid: ['.report-header-block', '.page-footer', '.print-footer', 'tr'] }
     };
     html2pdf().set(opt).from(element).save();
 }

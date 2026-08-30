@@ -240,11 +240,14 @@ passport.use(new GoogleStrategy({
 // Resolves the signed-in client's email from either Google OAuth (passport) or the
 // unified email/password login form (req.session.clientEmail) — the two ways a
 // registered client can end up authenticated.
-// @cspc.edu.ph accounts are institutional — trusted automatically. Any other
-// (personal) email must be verified by the office the client claims to have
-// visited before it counts as a real submission — see /submit-survey.
+// @cspc.edu.ph and @my.cspc.edu.ph accounts are institutional — trusted
+// automatically. Any other (personal) email must be verified by the office
+// the client claims to have visited before it counts as a real submission —
+// see /submit-survey.
 function isCspcEmail(email) {
-    return typeof email === 'string' && email.toLowerCase().trim().endsWith('@cspc.edu.ph');
+    if (typeof email !== 'string') return false;
+    const normalized = email.toLowerCase().trim();
+    return normalized.endsWith('@cspc.edu.ph') || normalized.endsWith('@my.cspc.edu.ph');
 }
 
 // Whether enough time has passed since `lastEventAt` (the most recent APPROVED
@@ -381,7 +384,9 @@ function finalizeVerifiedSurvey(googleEmail, fields, callback) {
                     serviceAvailed: serviceAvailed || 'Not specified',
                     submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
                     surveyResponseId,
-                    sqd: sqdValues.map((v, i) => ({ label: 'SQD' + i, value: v }))
+                    cc1, cc2, cc3,
+                    sqd: sqdValues.map((v, i) => ({ label: 'SQD' + i, value: v })),
+                    comments: comments || 'N/A'
                 });
             });
         }
@@ -948,6 +953,42 @@ function sqdScoreExpr(cols) {
 }
 const ALL_SQD_COLS = [1, 2, 3, 4, 5, 6, 7, 8].map(i => `s.sqd${i}`);
 
+// Per-column rating breakdown (Strongly Agree..N/A bucket counts) for the
+// "SQD Results" detailed report — same 5/4/3/2/1/0 scale as sqdScoreExpr,
+// but returns each bucket's count instead of collapsing straight to a %.
+function sqdBucketExprs(col, alias) {
+    return [
+        `SUM(CASE WHEN ${col} = 5 THEN 1 ELSE 0 END) AS ${alias}_sa`,
+        `SUM(CASE WHEN ${col} = 4 THEN 1 ELSE 0 END) AS ${alias}_a`,
+        `SUM(CASE WHEN ${col} = 3 THEN 1 ELSE 0 END) AS ${alias}_n`,
+        `SUM(CASE WHEN ${col} = 2 THEN 1 ELSE 0 END) AS ${alias}_d`,
+        `SUM(CASE WHEN ${col} = 1 THEN 1 ELSE 0 END) AS ${alias}_sd`,
+        `SUM(CASE WHEN ${col} = 0 OR ${col} IS NULL THEN 1 ELSE 0 END) AS ${alias}_na`
+    ];
+}
+const SQD_DIMENSIONS = [
+    { col: 'sqd1', label: 'Responsiveness' },
+    { col: 'sqd2', label: 'Reliability' },
+    { col: 'sqd3', label: 'Access & Facility' },
+    { col: 'sqd4', label: 'Communication' },
+    { col: 'sqd5', label: 'Costs' },
+    { col: 'sqd6', label: 'Integrity' },
+    { col: 'sqd7', label: 'Assurance' },
+    { col: 'sqd8', label: 'Outcome' }
+];
+// Builds one rating-breakdown row from its raw bucket counts. total defaults to
+// the sum of all buckets (i.e. every respondent answered this column once).
+function buildSqdBucketRow(label, buckets) {
+    const { sa, a, n, d, sd, na } = buckets;
+    const total = sa + a + n + d + sd + na;
+    const answerable = total - na;
+    const overall = answerable > 0 ? ((sa + a) / answerable * 100) : null;
+    return {
+        label, sa, a, n, d, sd, na, total,
+        overall: overall === null ? 'N/A' : overall.toFixed(0) + '%'
+    };
+}
+
 // ==========================================
 // PERIOD COVERED HELPERS
 // ==========================================
@@ -1012,6 +1053,17 @@ function sendSurveyReceiptEmail(toEmail, receipt) {
             <td style="padding:10px 0;border-bottom:1px solid #eef1f6;font-size:13px;font-weight:700;color:#64748b;width:42%;vertical-align:top;">${label}</td>
             <td style="padding:10px 0;border-bottom:1px solid #eef1f6;font-size:14px;font-weight:600;color:#0f172a;vertical-align:top;">${value}</td>
         </tr>`;
+
+    const ccRowsHtml = ['cc1', 'cc2', 'cc3'].map((key, idx) => `
+        <tr>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};font-size:13px;font-weight:700;color:#251d3a;width:60px;">${key.toUpperCase()}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};font-size:13px;color:#334155;">${escapeHtml(receipt[key] || 'N/A')}</td>
+        </tr>`).join('');
+
+    const commentsHtml = receipt.comments && receipt.comments !== 'N/A'
+        ? `<h3 style="margin:20px 0 10px;font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:.03em;">Your Comment</h3>
+           <p style="margin:0;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;font-size:13.5px;color:#334155;line-height:1.6;">${escapeHtml(receipt.comments)}</p>`
+        : '';
 
     // Only reference the logo (both the <img> tag and the attachment below) if
     // the file actually exists — a missing/renamed logo should never break the
@@ -1092,10 +1144,17 @@ function sendSurveyReceiptEmail(toEmail, receipt) {
                                             ${detailRow('Client Type', receipt.clientType)}
                                         </table>
 
+                                        <h3 style="margin:0 0 10px;font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:.03em;">Citizen's Charter (CC)</h3>
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:24px;">
+                                            ${ccRowsHtml}
+                                        </table>
+
                                         <h3 style="margin:0 0 10px;font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:.03em;">Service Quality Dimension Ratings</h3>
                                         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">
                                             ${sqdRowsHtml}
                                         </table>
+
+                                        ${commentsHtml}
 
                                         <p style="margin:24px 0 0;font-size:11.5px;color:#94a3b8;line-height:1.6;">This is an automated message from the CSPC Center for Quality Assurance. If you did not take this survey, please disregard this email. No file is attached — this email in full is your receipt.</p>
                                     </td>
@@ -3366,6 +3425,14 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
 
     const whereClause = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
 
+    // Rating-bucket counts (Strongly Agree..N/A) for SQD 0 and SQD 1-8 — power the
+    // CQA-style "SQD Results" report table alongside the plain % columns already
+    // used by the numeric-summary table.
+    const bucketCols = [
+        ...sqdBucketExprs('s.sqd0', 'sqd0'),
+        ...SQD_DIMENSIONS.flatMap(d => sqdBucketExprs(`s.${d.col}`, d.col))
+    ].join(',\n            ');
+
     const query = `
         SELECT
             COUNT(s.id) as total_respondents,
@@ -3381,7 +3448,8 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
             ${sqdScoreExpr(['s.sqd6'])} as sqd6,
             ${sqdScoreExpr(['s.sqd7'])} as sqd7,
             ${sqdScoreExpr(['s.sqd8'])} as sqd8,
-            ${sqdScoreExpr(ALL_SQD_COLS)} as overall_score
+            ${sqdScoreExpr(ALL_SQD_COLS)} as overall_score,
+            ${bucketCols}
         FROM survey_responses s
         LEFT JOIN offices o ON s.office_id = o.id${whereClause}
     `;
@@ -3400,6 +3468,69 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
                 comments: commentsResult || []
             });
         });
+    });
+});
+
+// Per-office SQD rating breakdown for every (non-archived) office in a cluster —
+// powers the "Number of Respondents" report's ALL OFFICES view, which prints the
+// full CQA SQD 0 / SQD 1-8 template once per office rather than one combined
+// cluster-wide total. Same bucket math as /api/report-data, just grouped by
+// office instead of collapsed into a single row.
+app.post('/api/report-data-by-cluster', ensureAdminAuth, (req, res) => {
+    const { cluster, periodCovered } = req.body;
+    if (!cluster) return res.status(400).json({ error: 'cluster is required' });
+
+    const periodWhereAnd = periodCovered ? ' AND s.period_year_quarter = ?' : '';
+    const params = periodCovered ? [periodCovered, cluster] : [cluster];
+
+    const bucketCols = [
+        ...sqdBucketExprs('s.sqd0', 'sqd0'),
+        ...SQD_DIMENSIONS.flatMap(d => sqdBucketExprs(`s.${d.col}`, d.col))
+    ].join(',\n            ');
+
+    const query = `
+        SELECT o.id, o.office_name, COUNT(s.id) as total_respondents,
+            ${bucketCols}
+        FROM offices o
+        LEFT JOIN survey_responses s ON o.id = s.office_id${periodWhereAnd}
+        WHERE o.cluster_name = ? AND o.is_archived = 0
+        GROUP BY o.id, o.office_name
+        ORDER BY o.office_name
+    `;
+
+    db.query(query, params, (err, rows) => {
+        if (err) {
+            console.error('❌ [report-data-by-cluster] query failed:', err.message);
+            return res.status(500).json({ error: err.message });
+        }
+
+        const toBuckets = (row, prefix) => ({
+            sa: parseInt(row[`${prefix}_sa`]) || 0,
+            a: parseInt(row[`${prefix}_a`]) || 0,
+            n: parseInt(row[`${prefix}_n`]) || 0,
+            d: parseInt(row[`${prefix}_d`]) || 0,
+            sd: parseInt(row[`${prefix}_sd`]) || 0,
+            na: parseInt(row[`${prefix}_na`]) || 0
+        });
+
+        const offices = (rows || []).map(row => {
+            const sqd0Row = buildSqdBucketRow('SQD 0', toBuckets(row, 'sqd0'));
+            const sqdRows = SQD_DIMENSIONS.map(d => buildSqdBucketRow(d.label, toBuckets(row, d.col)));
+            const overallTotals = sqdRows.reduce((acc, r) => {
+                acc.sa += r.sa; acc.a += r.a; acc.n += r.n; acc.d += r.d; acc.sd += r.sd; acc.na += r.na;
+                return acc;
+            }, { sa: 0, a: 0, n: 0, d: 0, sd: 0, na: 0 });
+            const overallRow = buildSqdBucketRow('OVERALL', overallTotals);
+
+            return {
+                officeId: row.id,
+                officeName: row.office_name,
+                totalRespondents: row.total_respondents || 0,
+                sqd0Row, sqdRows, overallRow
+            };
+        });
+
+        res.json({ offices });
     });
 });
 
@@ -3889,6 +4020,7 @@ function getClusterPerformanceData(clusterName, periodCovered, callback) {
             let shortLabel = row.label.split(' ').map(word => word[0]).join('').substring(0, 5);
             if (!shortLabel || shortLabel.length < 2) shortLabel = row.fullName.substring(0, 4).toUpperCase();
             return {
+                id: row.id,
                 label: shortLabel,
                 fullName: row.fullName,
                 resp: row.resp,

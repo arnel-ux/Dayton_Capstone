@@ -5,6 +5,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
+         views/layout/report-footer.ejs) — see public/css/report.css. -->
+    <link rel="stylesheet" href="/css/report.css">
 
     <style>
         :root { --primary-gradient: linear-gradient(135deg, #251d3a 0%, #2a2550 100%); --glass-bg: #ffffff; --navy: #251d3a; }
@@ -63,38 +66,55 @@
         .report-container {
             background: #fff; padding: 40px; color: #000; font-family: Arial, sans-serif;
             max-width: 900px; margin: 0 auto; border: 1px solid #ccc; box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            box-sizing: border-box;
         }
-        .report-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #6c9bd2; padding-bottom: 10px; margin-bottom: 20px; }
-        .report-header-center { text-align: center; flex-grow: 1; }
-        .report-header-center p { margin: 0; font-size: 14px; }
-        .report-header-center .inst-name { font-weight: bold; font-size: 16px; }
-        .doc-code { font-size: 12px; font-weight: bold; }
-        .report-title { text-align: center; font-weight: bold; font-size: 16px; margin: 20px 0; }
-        .office-title { text-align: center; font-weight: bold; text-decoration: underline; text-transform: uppercase; font-size: 16px; margin-bottom: 0; }
-        .meta-info { font-size: 14px; margin-bottom: 10px; }
+        .report-title { text-align: center; font-weight: bold; font-size: 15px; margin: 10px 0 5px; }
+        .office-title { text-align: center; font-weight: bold; text-decoration: underline; text-transform: uppercase; font-size: 15px; margin-bottom: 0; }
+        .cqa-title { text-align: center; font-weight: bold; text-decoration: underline; font-size: 14px; margin-top: 3px; }
+        .office-name-line { text-align: center; font-style: italic; font-size: 13px; margin-bottom: 3px; }
+        /* One office's SQD 0 / SQD 1-8 section within the "Number of Respondents,
+           All Offices" packet — separated visually and kept off a print page break. */
+        .office-block { margin: 18px 0; padding-top: 10px; border-top: 1px dashed #ccc; page-break-inside: avoid; }
+        .office-block:first-child { border-top: none; padding-top: 0; margin-top: 8px; }
+        .section-title { font-weight: bold; font-size: 13px; text-transform: uppercase; margin: 16px 0 8px; padding-bottom: 3px; border-bottom: 1px solid #ccc; }
+        .meta-info { font-size: 13px; margin-bottom: 8px; }
         .meta-info span { display: inline-block; width: 200px; }
-        .report-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px; }
-        .report-table th, .report-table td { border: 1px solid #000; padding: 5px 8px; }
+        .report-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 12px; }
+        .report-table th, .report-table td { border: 1px solid #000; padding: 4px 7px; }
         .report-table th { text-align: center; font-weight: bold; }
         .header-blue { background-color: #8faadc !important; -webkit-print-color-adjust: exact; }
+        .overall-row { font-weight: bold; background-color: #bdd7ee !important; -webkit-print-color-adjust: exact; }
+        .total-row { font-weight: bold; background-color: #f2f2f2 !important; -webkit-print-color-adjust: exact; }
+        .text-end { text-align: right; }
+        /* SQD Result Report tables specifically — centered rows and roomier cells,
+           matching the CQA Excel template's layout (the office-header/comments
+           tables elsewhere on this page keep their own left-aligned styling). */
+        #sqdReportTables .report-table th, #sqdReportTables .report-table td,
+        #multiOfficeReportBody .report-table th, #multiOfficeReportBody .report-table td { padding: 8px 10px; }
+        #sqdReportTables .report-table td:first-child,
+        #multiOfficeReportBody .report-table td:first-child { text-align: center; }
         .ai-summary-box { background-color: #f8f9fa; border-left: 4px solid #6c9bd2; padding: 12px; margin-bottom: 15px; font-size: 13px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; -webkit-print-color-adjust: exact; }
         .badge-sentiment { padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; text-transform: uppercase; }
         .bg-pos { background-color: #dcfce7 !important; color: #166534 !important; -webkit-print-color-adjust: exact; }
         .bg-neg { background-color: #fee2e2 !important; color: #991b1b !important; -webkit-print-color-adjust: exact; }
         .bg-neu { background-color: #f1f5f9 !important; color: #334155 !important; -webkit-print-color-adjust: exact; }
         .topic-pill { background-color: #e8f0fe !important; color: #0056b3 !important; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; -webkit-print-color-adjust: exact; }
-        .interpretation-box { font-size: 14px; margin-left: 50%; margin-bottom: 40px; }
+        .interpretation-box { font-size: 13px; margin-left: 50%; margin-bottom: 14px; }
         .interpretation-box table { border: none; }
-        .interpretation-box td { padding: 2px 10px; border: none; }
-        .signature-section { display: flex; justify-content: space-between; margin-top: 40px; font-size: 14px; }
+        .interpretation-box td { padding: 1px 10px; border: none; }
+        .signature-section { display: flex; justify-content: space-between; margin-top: 18px; font-size: 13px; }
         .sig-block { width: 45%; }
-        .sig-name { font-weight: bold; margin-top: 30px; margin-bottom: 0; }
+        .noted-block { margin-top: 14px; font-size: 13px; }
+        .sig-name { font-weight: bold; margin-top: 14px; margin-bottom: 0; }
         .sig-title { margin: 0; }
-        .page-footer { margin-top: 50px; font-size: 12px; font-weight: bold; border-top: 2px solid #6c9bd2; padding-top: 5px; display: flex; justify-content: space-between; }
+        /* Letterhead/footer/page-setup rules live in public/css/report.css so they
+           stay identical across every SQD report. page-break-inside: avoid on
+           .report-container keeps each page (numerical summary, AI feedback) from
+           splitting across two printed sheets. */
         @media print {
             #wrapper > *:not(#content), .no-print { display: none !important; }
             #content, .container-fluid { padding: 0 !important; margin: 0 !important; }
-            .report-container { border: none; box-shadow: none; max-width: 100%; padding: 0; display: block; page-break-after: always; }
+            .report-container { border: none; box-shadow: none; max-width: 100%; padding: 0; display: block; page-break-after: always; page-break-inside: avoid; break-inside: avoid; overflow: visible; }
             .page-break { page-break-before: always; }
         }
     </style>
@@ -135,6 +155,13 @@
                                     <option value="<%= o.id %>"><%= o.office_name %></option>
                                 <% }) %>
                             <% } %>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="reportType">Report to Generate</label>
+                        <select id="reportType" name="reportType" class="form-select form-select-sm" title="Choose which report to generate">
+                            <option value="sqd" selected>SQD Result Report</option>
+                            <option value="respondents">Number of Respondents</option>
                         </select>
                     </div>
                     <button type="button" class="btn btn-primary btn-generate" onclick="renderOfficeReport()" title="Generate a report based on the selected filters">
@@ -187,71 +214,110 @@
                         <div id="officeReportContentToExport">
                         <!-- PAGE 1: NUMERICAL SUMMARY -->
                         <div class="report-container" style="margin-bottom: 30px;">
-                            <div class="report-header">
-                                <div><img src="/images/cspc-logo.png" alt="CSPC Logo" style="width: 60px; height: 60px;"></div>
-                                <div class="report-header-center">
-                                    <p>Republic of the Philippines</p>
-                                    <p class="inst-name">CAMARINES SUR POLYTECHNIC COLLEGES</p>
-                                    <p>Nabua, Camarines Sur</p>
-                                </div>
-                                <div class="doc-code">CSPC-F-CQA-06</div>
-                            </div>
+                            <%- include('layout/report-header', { docCode: 'CSPC-F-CQA-06' }) %>
 
-                            <div class="report-title">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
-                            <p class="office-title" id="officeReportTitle1"></p>
+                            <div class="report-title" id="officeReportMainTitle1">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
+                            <div class="cqa-title">CENTER FOR QUALITY ASSURANCE</div>
+                            <p class="office-name-line" id="officeReportTitle1"></p>
 
                             <div class="meta-info mt-4">
                                 <div><span>Period Covered:</span> <strong id="officeReportPeriod1"></strong></div>
                                 <div><span>Number of Respondents:</span> <strong id="officeReportTotal1">0</strong></div>
                             </div>
 
-                            <table class="report-table">
-                                <thead>
-                                    <tr class="header-blue">
-                                        <th rowspan="2" style="width: 60%;">SERVICE QUALITY DIMENSIONS<br><span style="font-weight: normal;">(Mga Dimensyon sa Kalidad na Serbisyo)</span></th>
-                                        <th colspan="2">COMPUTATION</th>
-                                    </tr>
-                                    <tr class="header-blue">
-                                        <th style="width: 20%;">PERCENTAGE</th>
-                                        <th style="width: 20%;">RATING</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr><td>1. Responsiveness (Pagtugon)/(Pagsimbag)</td><td class="text-center" id="off_sqd1_score">0.00%</td><td class="text-center" id="off_sqd1_interp">Poor</td></tr>
-                                    <tr><td>2. Reliability (Quality)/Mapagkakatiwalaan</td><td class="text-center" id="off_sqd2_score">0.00%</td><td class="text-center" id="off_sqd2_interp">Poor</td></tr>
-                                    <tr><td>3. Access & Facilities/Akses/Gamit at Pasilidad</td><td class="text-center" id="off_sqd3_score">0.00%</td><td class="text-center" id="off_sqd3_interp">Poor</td></tr>
-                                    <tr><td>4. Communication/Komunikasyon</td><td class="text-center" id="off_sqd4_score">0.00%</td><td class="text-center" id="off_sqd4_interp">Poor</td></tr>
-                                    <tr><td>5. Costs (Gastos)/ Kantidad</td><td class="text-center" id="off_sqd5_score">0.00%</td><td class="text-center" id="off_sqd5_interp">Poor</td></tr>
-                                    <tr><td>6. Integrity/(Integredad)</td><td class="text-center" id="off_sqd6_score">0.00%</td><td class="text-center" id="off_sqd6_interp">Poor</td></tr>
-                                    <tr><td>7. Assurance (Kasiguruhan)</td><td class="text-center" id="off_sqd7_score">0.00%</td><td class="text-center" id="off_sqd7_interp">Poor</td></tr>
-                                    <tr><td>8. Outcome (Resulta)</td><td class="text-center" id="off_sqd8_score">0.00%</td><td class="text-center" id="off_sqd8_interp">Poor</td></tr>
-                                    <tr class="header-blue fw-bold">
-                                        <td class="text-end" style="padding-right: 20px;">OVERALL SCORE</td>
-                                        <td class="text-center" id="off_overall_score">0.00%</td>
-                                        <td class="text-center" id="off_overall_interp">POOR</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                            <!-- SQD Result Report: the official Percentage/Rating scorecard
+                                 (live from /api/report-data's sqd1..sqd8/overall_score %s). -->
+                            <div id="percentageReportTable">
+                                <table class="report-table">
+                                    <thead>
+                                        <tr class="header-blue">
+                                            <th rowspan="2" style="width: 60%;">SERVICE QUALITY DIMENSIONS<br><span style="font-weight: normal;">(Mga Dimensyon sa Kalidad na Serbisyo)</span></th>
+                                            <th colspan="2">COMPUTATION</th>
+                                        </tr>
+                                        <tr class="header-blue">
+                                            <th style="width: 20%;">PERCENTAGE</th>
+                                            <th style="width: 20%;">RATING</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td>1. Responsiveness (Pagtugon)/(Pagsimbag)</td><td class="text-center" id="off_sqd1_score">0.00%</td><td class="text-center" id="off_sqd1_interp">Poor</td></tr>
+                                        <tr><td>2. Reliability (Quality)/Mapagkakatiwalaan</td><td class="text-center" id="off_sqd2_score">0.00%</td><td class="text-center" id="off_sqd2_interp">Poor</td></tr>
+                                        <tr><td>3. Access & Facilities/Akses/Gamit at Pasilidad</td><td class="text-center" id="off_sqd3_score">0.00%</td><td class="text-center" id="off_sqd3_interp">Poor</td></tr>
+                                        <tr><td>4. Communication/Komunikasyon</td><td class="text-center" id="off_sqd4_score">0.00%</td><td class="text-center" id="off_sqd4_interp">Poor</td></tr>
+                                        <tr><td>5. Costs (Gastos)/ Kantidad</td><td class="text-center" id="off_sqd5_score">0.00%</td><td class="text-center" id="off_sqd5_interp">Poor</td></tr>
+                                        <tr><td>6. Integrity/(Integredad)</td><td class="text-center" id="off_sqd6_score">0.00%</td><td class="text-center" id="off_sqd6_interp">Poor</td></tr>
+                                        <tr><td>7. Assurance (Kasiguruhan)</td><td class="text-center" id="off_sqd7_score">0.00%</td><td class="text-center" id="off_sqd7_interp">Poor</td></tr>
+                                        <tr><td>8. Outcome (Resulta)</td><td class="text-center" id="off_sqd8_score">0.00%</td><td class="text-center" id="off_sqd8_interp">Poor</td></tr>
+                                        <tr class="header-blue fw-bold">
+                                            <td class="text-end" style="padding-right: 20px;">OVERALL SCORE</td>
+                                            <td class="text-center" id="off_overall_score">0.00%</td>
+                                            <td class="text-center" id="off_overall_interp">POOR</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
 
-                            <div class="interpretation-box">
-                                <div class="fw-bold mb-1">INTERPRETATION OF RESULTS</div>
-                                <table>
-                                    <tr><td>95.0% to 100%</td><td>Outstanding</td></tr>
-                                    <tr><td>90.0% to 94.9%</td><td>Very Satisfactory</td></tr>
-                                    <tr><td>80.0% to 89.9%</td><td>Satisfactory</td></tr>
-                                    <tr><td>60.0% to 79.9%</td><td>Fair</td></tr>
-                                    <tr><td>Below 60.0%</td><td>Poor</td></tr>
+                                <div class="interpretation-box">
+                                    <div class="fw-bold mb-1">INTERPRETATION OF RESULTS</div>
+                                    <table>
+                                        <tr><td>95.0% to 100%</td><td>Outstanding</td></tr>
+                                        <tr><td>90.0% to 94.9%</td><td>Very Satisfactory</td></tr>
+                                        <tr><td>80.0% to 89.9%</td><td>Satisfactory</td></tr>
+                                        <tr><td>60.0% to 79.9%</td><td>Fair</td></tr>
+                                        <tr><td>Below 60.0%</td><td>Poor</td></tr>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- "Number of Respondents" + one office selected: SQD 0 / SQD 1-8
+                                 rating-bucket breakdown (live from /api/report-data). -->
+                            <div id="sqdReportTables" class="d-none">
+                                <div class="section-title">SQD 0 Results</div>
+                                <table class="report-table">
+                                    <thead>
+                                        <tr class="header-blue">
+                                            <th>Service Quality</th>
+                                            <th>Strongly Agree</th>
+                                            <th>Agree</th>
+                                            <th>Neither Agree or Disagree</th>
+                                            <th>Disagree</th>
+                                            <th>Strongly Disagree</th>
+                                            <th>N/A</th>
+                                            <th>Total Responses</th>
+                                            <th>Overall</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="sqd0Body"></tbody>
+                                </table>
+
+                                <div class="section-title">SQD 1-8 Results</div>
+                                <table class="report-table">
+                                    <thead>
+                                        <tr class="header-blue">
+                                            <th>Service Quality</th>
+                                            <th>Strongly Agree</th>
+                                            <th>Agree</th>
+                                            <th>Neither Agree or Disagree</th>
+                                            <th>Disagree</th>
+                                            <th>Strongly Disagree</th>
+                                            <th>N/A</th>
+                                            <th>Total Responses</th>
+                                            <th>Overall</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="sqd18Body"></tbody>
                                 </table>
                             </div>
+
+                            <!-- "Number of Respondents" + ALL OFFICES: one full SQD 0 / SQD 1-8
+                                 section per office in the cluster (from /api/report-data-by-cluster),
+                                 built client-side into this container by renderMultiOfficeReport(). -->
+                            <div id="multiOfficeReportBody" class="d-none"></div>
 
                             <div class="signature-section">
                                 <div class="sig-block">
                                     <div>Prepared by:</div>
                                     <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
                                     <p class="sig-title">AOV-CQA</p>
-                                    <div style="margin-top: 30px;">Noted by:</div>
-                                    <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
-                                    <p class="sig-title">SUC President III</p>
                                 </div>
                                 <div class="sig-block">
                                     <div>Reviewed by:</div>
@@ -259,24 +325,25 @@
                                     <p class="sig-title">ISO Chair</p>
                                 </div>
                             </div>
+                            <div class="noted-block">
+                                <div>Noted by:</div>
+                                <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
+                                <p class="sig-title">SUC President III</p>
+                            </div>
 
-                            <div class="page-footer">
-                                <div>Effectivity: June 2024</div>
-                                <div>Rev. 4</div>
+                            <!-- Effectivity/Rev./Page footer: only the SQD Result Report is CSPC's
+                                 official CSM survey result format that requires it — the "Number of
+                                 Respondents" report reuses this same page but must not show it, so
+                                 renderOfficeReport() toggles this wrapper's visibility by reportType
+                                 rather than hiding it globally. -->
+                            <div id="officeReportFooter1">
+                                <%- include('layout/report-footer', { pageLabel: 'Page 1 of 2', footerId: 'footerPageLabel1' }) %>
                             </div>
                         </div>
 
-                        <!-- PAGE 2: WRITTEN COMMENTS & AI ANALYTICS -->
-                        <div class="report-container page-break">
-                            <div class="report-header">
-                                <div><img src="/images/cspc-logo.png" alt="CSPC Logo" style="width: 60px; height: 60px;"></div>
-                                <div class="report-header-center">
-                                    <p>Republic of the Philippines</p>
-                                    <p class="inst-name">CAMARINES SUR POLYTECHNIC COLLEGES</p>
-                                    <p>Nabua, Camarines Sur</p>
-                                </div>
-                                <div class="doc-code">CSPC-F-CQA-06</div>
-                            </div>
+                        <!-- PAGE 2: WRITTEN COMMENTS & AI ANALYTICS (SQD Result Report only) -->
+                        <div class="report-container page-break" id="reportPage2">
+                            <%- include('layout/report-header', { docCode: 'CSPC-F-CQA-06' }) %>
 
                             <div class="report-title">AI FEEDBACK SENTIMENT & TOPIC ANALYTICS</div>
                             <p class="office-title" id="officeReportTitle2"></p>
@@ -311,9 +378,6 @@
                                     <div>Prepared by:</div>
                                     <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
                                     <p class="sig-title">AOV-CQA</p>
-                                    <div style="margin-top: 30px;">Noted by:</div>
-                                    <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
-                                    <p class="sig-title">SUC President III</p>
                                 </div>
                                 <div class="sig-block">
                                     <div>Reviewed by:</div>
@@ -321,6 +385,14 @@
                                     <p class="sig-title">ISO Chair</p>
                                 </div>
                             </div>
+                            <div class="noted-block">
+                                <div>Noted by:</div>
+                                <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
+                                <p class="sig-title">SUC President III</p>
+                            </div>
+
+                            <!-- No Effectivity/Rev./Page footer on the AI Feedback page — not part
+                                 of CSPC's official CSM survey result format. -->
                         </div>
                         </div>
                     </div>
@@ -332,10 +404,13 @@
     <%- include('layout/footer') %>
 
     <script>
+        // Tumatanggap ng real-time query mula sa server.js tuwing niloload ang page (already
+        // period-filtered server-side). Declared at script scope (not inside the
+        // DOMContentLoaded closure below) so the Number of Respondents report — built by
+        // renderOfficeReport() further down — can reuse it without a second request.
+        const currentData = <%- typeof data !== 'undefined' ? JSON.stringify(data) : '[]' %>;
+
         document.addEventListener("DOMContentLoaded", function() {
-            // Tumatanggap ng real-time query mula sa server.js tuwing niloload ang page (already period-filtered server-side)
-            const currentData = <%- typeof data !== 'undefined' ? JSON.stringify(data) : '[]' %>;
-            
             Chart.register(ChartDataLabels);
             const ctx = document.getElementById('clusterChart').getContext('2d');
             let chartInstance;
@@ -453,19 +528,59 @@
             return div.innerHTML;
         }
 
-        function getOfficeReportInterpretation(score) {
-            if (score >= 95) return "Outstanding";
-            if (score >= 90) return "Very Satisfactory";
-            if (score >= 80) return "Satisfactory";
-            if (score >= 60) return "Fair";
-            return "Poor";
+        // SQD 1-8 dimension labels, in column order — mirrors SQD_DIMENSIONS in server.js.
+        const SQD_DIMENSION_LABELS = [
+            { col: 'sqd1', label: 'Responsiveness' },
+            { col: 'sqd2', label: 'Reliability' },
+            { col: 'sqd3', label: 'Access & Facility' },
+            { col: 'sqd4', label: 'Communication' },
+            { col: 'sqd5', label: 'Costs' },
+            { col: 'sqd6', label: 'Integrity' },
+            { col: 'sqd7', label: 'Assurance' },
+            { col: 'sqd8', label: 'Outcome' }
+        ];
+
+        // Builds one rating-breakdown row from its raw bucket counts — same formula as
+        // buildSqdBucketRow() in server.js (kept in sync manually since this runs client-side).
+        function buildBucketRow(label, b) {
+            const total = b.sa + b.a + b.n + b.d + b.sd + b.na;
+            const answerable = total - b.na;
+            const overall = answerable > 0 ? Math.round((b.sa + b.a) / answerable * 100) + '%' : 'N/A';
+            return { label, ...b, total, overall };
+        }
+
+        function bucketsFromStats(stats, prefix) {
+            return {
+                sa: parseInt(stats[`${prefix}_sa`]) || 0,
+                a: parseInt(stats[`${prefix}_a`]) || 0,
+                n: parseInt(stats[`${prefix}_n`]) || 0,
+                d: parseInt(stats[`${prefix}_d`]) || 0,
+                sd: parseInt(stats[`${prefix}_sd`]) || 0,
+                na: parseInt(stats[`${prefix}_na`]) || 0
+            };
+        }
+
+        function bucketRowHtml(r, rowClass) {
+            return `<tr${rowClass ? ` class="${rowClass}"` : ''}>
+                <td>${escapeHtml(r.label)}</td>
+                <td class="text-center">${r.sa}</td>
+                <td class="text-center">${r.a}</td>
+                <td class="text-center">${r.n}</td>
+                <td class="text-center">${r.d}</td>
+                <td class="text-center">${r.sd}</td>
+                <td class="text-center">${r.na}</td>
+                <td class="text-center">${r.total}</td>
+                <td class="text-center">${r.overall}</td>
+            </tr>`;
         }
 
         function renderOfficeReport() {
             const officeSelect = document.getElementById('officeFilter');
             const periodSelect = document.getElementById('periodCovered');
+            const reportTypeSelect = document.getElementById('reportType');
             const officeId = officeSelect.value;
             const periodCovered = periodSelect.value;
+            const reportType = reportTypeSelect.value;
 
             const officeLabel = officeId
                 ? officeSelect.options[officeSelect.selectedIndex].text
@@ -474,10 +589,47 @@
                 ? periodSelect.options[periodSelect.selectedIndex].text
                 : 'All Periods';
 
+            // Per the official CQA report template: "CLIENT SATISFACTION MEASUREMENT
+            // SURVEY RESULT" for the SQD Result Report, "NUMBER OF RESPONDENTS" for
+            // the respondents-count report — both sit above the CENTER FOR QUALITY
+            // ASSURANCE / office-name lines.
+            const mainTitleEl = document.getElementById('officeReportMainTitle1');
+            mainTitleEl.classList.remove('d-none');
+            mainTitleEl.innerText = reportType === 'respondents'
+                ? 'NUMBER OF RESPONDENTS'
+                : 'CLIENT SATISFACTION MEASUREMENT SURVEY RESULT';
             document.getElementById('officeReportTitle1').innerText = officeLabel;
             document.getElementById('officeReportTitle2').innerText = officeLabel;
             document.getElementById('officeReportPeriod1').innerText = periodLabel;
             document.getElementById('officeReportPeriod2').innerText = periodLabel;
+
+            // Written Comments & AI Analytics only exists alongside the SQD Result Report —
+            // Number of Respondents is a pure SQD-numbers packet, single office or all of them.
+            const hasPage2 = reportType !== 'respondents';
+            document.getElementById('reportPage2').classList.toggle('d-none', !hasPage2);
+            // Page 1's footer label follows suit — "Page 1 of 2" when the AI Feedback page
+            // is also printing, "Page 1 of 1" when this is the only page.
+            document.getElementById('footerPageLabel1').innerText = hasPage2 ? 'Page 1 of 2' : 'Page 1 of 1';
+            // Effectivity/Rev./Page footer is CSPC's official CSM survey result footer —
+            // the SQD Result Report only. Number of Respondents reuses this same page
+            // but must not show it (page 2's AI Feedback report never shows it either,
+            // so it has no footer markup at all).
+            document.getElementById('officeReportFooter1').classList.toggle('d-none', reportType !== 'sqd');
+
+            // Three mutually exclusive report bodies:
+            //  - percentageReportTable: SQD Result Report (official Percentage/Rating scorecard)
+            //  - sqdReportTables:       Number of Respondents + one office (SQD 0/1-8 bucket breakdown)
+            //  - multiOfficeReportBody: Number of Respondents + All Offices (that same breakdown, per office)
+            const isAllOfficesPacket = reportType === 'respondents' && !officeId;
+            const isBucketSingle = reportType === 'respondents' && !!officeId;
+            document.getElementById('percentageReportTable').classList.toggle('d-none', reportType !== 'sqd');
+            document.getElementById('sqdReportTables').classList.toggle('d-none', !isBucketSingle);
+            document.getElementById('multiOfficeReportBody').classList.toggle('d-none', !isAllOfficesPacket);
+
+            if (isAllOfficesPacket) {
+                renderMultiOfficeReport(periodCovered, periodLabel);
+                return;
+            }
 
             fetch('/api/report-data', {
                 method: 'POST',
@@ -486,7 +638,11 @@
             })
                 .then(res => res.json())
                 .then(data => {
-                    updateOfficeReportStats(data.stats || {});
+                    if (reportType === 'sqd') {
+                        updatePercentageTable(data.stats || {});
+                    } else {
+                        updateOfficeReportStats(data.stats || {});
+                    }
                     updateOfficeReportComments(data.comments || []);
 
                     // Report + export buttons only become visible after a successful generate.
@@ -503,20 +659,136 @@
                 });
         }
 
+        function getOfficeReportInterpretation(score) {
+            if (score >= 95) return 'Outstanding';
+            if (score >= 90) return 'Very Satisfactory';
+            if (score >= 80) return 'Satisfactory';
+            if (score >= 60) return 'Fair';
+            return 'Poor';
+        }
+
+        // SQD Result Report's Percentage/Rating table. Uses the same sqd1..sqd8/overall_score
+        // %s that sqdScoreExpr() already computes server-side (unchanged formula) — the only
+        // addition here is reading each dimension's own bucket counts (also already in the
+        // same /api/report-data response) to tell "0% because everyone disagreed" apart from
+        // "0% because everyone answered N/A", so a fully-N/A dimension prints N/A instead of
+        // a misleading 0.00%/Poor.
+        function updatePercentageTable(stats) {
+            const totalResp = stats.total_respondents || 0;
+            document.getElementById('officeReportTotal1').innerText = totalResp;
+            document.getElementById('officeReportTotal2').innerText = totalResp;
+
+            let overallAnswerable = 0;
+            SQD_DIMENSION_LABELS.forEach((d, idx) => {
+                const i = idx + 1;
+                const b = bucketsFromStats(stats, d.col);
+                const answerable = b.sa + b.a + b.n + b.d + b.sd;
+                overallAnswerable += answerable;
+
+                const scoreEl = document.getElementById(`off_sqd${i}_score`);
+                const interpEl = document.getElementById(`off_sqd${i}_interp`);
+                // No valid answers for this dimension — either zero respondents overall, or
+                // every respondent marked it N/A. Same convention as the SQD 0/1-8 bucket
+                // tables: show N/A rather than a misleading 0.00% / Poor.
+                if (answerable === 0) {
+                    scoreEl.innerText = 'N/A';
+                    interpEl.innerText = 'N/A';
+                } else {
+                    const score = parseFloat(stats[d.col] || 0);
+                    scoreEl.innerText = score.toFixed(2) + '%';
+                    interpEl.innerText = getOfficeReportInterpretation(score);
+                }
+            });
+
+            const overall = parseFloat(stats.overall_score || 0);
+            const overallEl = document.getElementById('off_overall_score');
+            const overallInterpEl = document.getElementById('off_overall_interp');
+            if (overallAnswerable === 0) {
+                overallEl.innerText = 'N/A';
+                overallInterpEl.innerText = 'N/A';
+            } else {
+                overallEl.innerText = overall.toFixed(2) + '%';
+                overallInterpEl.innerText = getOfficeReportInterpretation(overall).toUpperCase();
+            }
+        }
+
+        // "Number of Respondents", ALL OFFICES: fetches every office's own SQD bucket
+        // breakdown from /api/report-data-by-cluster and prints the full CQA SQD 0 /
+        // SQD 1-8 template once per office, back to back — matching the official
+        // multi-office report format.
+        function renderMultiOfficeReport(periodCovered, periodLabel) {
+            const container = document.getElementById('multiOfficeReportBody');
+            container.innerHTML = '<p class="text-center text-muted py-3">Loading…</p>';
+            document.getElementById('officeReportEmptyState').classList.add('d-none');
+            document.getElementById('officeReportWrapper').classList.remove('d-none');
+            document.getElementById('officeReportWrapper').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            fetch('/api/report-data-by-cluster', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cluster: CLUSTER_NAME, periodCovered: periodCovered })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    const offices = data.offices || [];
+                    const totalAll = offices.reduce((sum, o) => sum + (o.totalRespondents || 0), 0);
+                    document.getElementById('officeReportTotal1').innerText = totalAll;
+
+                    if (offices.length === 0) {
+                        container.innerHTML = '<p class="text-center text-muted py-3">No offices found for this cluster.</p>';
+                        return;
+                    }
+
+                    container.innerHTML = offices.map(o => `
+                        <div class="office-block">
+                            <p class="office-name-line">${escapeHtml(o.officeName)}</p>
+                            <div class="meta-info">
+                                <div><span>Period Covered:</span> <strong>${escapeHtml(periodLabel)}</strong></div>
+                                <div><span>Number of Respondents:</span> <strong>${o.totalRespondents}</strong></div>
+                            </div>
+                            <div class="section-title">SQD 0 Results</div>
+                            <table class="report-table">
+                                <thead><tr class="header-blue">
+                                    <th>Service Quality</th><th>Strongly Agree</th><th>Agree</th>
+                                    <th>Neither Agree or Disagree</th><th>Disagree</th><th>Strongly Disagree</th>
+                                    <th>N/A</th><th>Total Responses</th><th>Overall</th>
+                                </tr></thead>
+                                <tbody>${bucketRowHtml(o.sqd0Row)}</tbody>
+                            </table>
+                            <div class="section-title">SQD 1-8 Results</div>
+                            <table class="report-table">
+                                <thead><tr class="header-blue">
+                                    <th>Service Quality</th><th>Strongly Agree</th><th>Agree</th>
+                                    <th>Neither Agree or Disagree</th><th>Disagree</th><th>Strongly Disagree</th>
+                                    <th>N/A</th><th>Total Responses</th><th>Overall</th>
+                                </tr></thead>
+                                <tbody>${o.sqdRows.map(r => bucketRowHtml(r)).join('')}${bucketRowHtml(o.overallRow, 'overall-row')}</tbody>
+                            </table>
+                        </div>
+                    `).join('');
+                })
+                .catch(() => {
+                    container.innerHTML = '<p class="text-center text-danger py-3">Failed to load report data.</p>';
+                });
+        }
+
         function updateOfficeReportStats(stats) {
             const totalResp = stats.total_respondents || 0;
             document.getElementById('officeReportTotal1').innerText = totalResp;
             document.getElementById('officeReportTotal2').innerText = totalResp;
 
-            for (let i = 1; i <= 8; i++) {
-                const score = parseFloat(stats[`sqd${i}`] || 0);
-                document.getElementById(`off_sqd${i}_score`).innerText = score.toFixed(2) + '%';
-                document.getElementById(`off_sqd${i}_interp`).innerText = getOfficeReportInterpretation(score);
-            }
+            const sqd0Row = buildBucketRow('SQD 0', bucketsFromStats(stats, 'sqd0'));
+            document.getElementById('sqd0Body').innerHTML = bucketRowHtml(sqd0Row);
 
-            const overall = parseFloat(stats.overall_score || 0);
-            document.getElementById('off_overall_score').innerText = overall.toFixed(2) + '%';
-            document.getElementById('off_overall_interp').innerText = getOfficeReportInterpretation(overall).toUpperCase();
+            const dimRows = SQD_DIMENSION_LABELS.map(d => buildBucketRow(d.label, bucketsFromStats(stats, d.col)));
+            const overallTotals = dimRows.reduce((acc, r) => {
+                acc.sa += r.sa; acc.a += r.a; acc.n += r.n; acc.d += r.d; acc.sd += r.sd; acc.na += r.na;
+                return acc;
+            }, { sa: 0, a: 0, n: 0, d: 0, sd: 0, na: 0 });
+            const overallRow = buildBucketRow('OVERALL', overallTotals);
+
+            document.getElementById('sqd18Body').innerHTML =
+                dimRows.map(r => bucketRowHtml(r)).join('') + bucketRowHtml(overallRow, 'overall-row');
         }
 
         function updateOfficeReportComments(comments) {
@@ -572,12 +844,15 @@
             const element = document.getElementById('officeReportContentToExport');
             const officeSelect = document.getElementById('officeFilter');
             const officeLabel = officeSelect.value ? officeSelect.options[officeSelect.selectedIndex].text : 'All_Offices';
+            // Letter (8.5in x 11in) portrait, matching CSPC's official print spec.
+            // html2pdf's margin array is [top, left, bottom, right] (not CSS order).
             const opt = {
-                margin: 0.2,
+                margin: [0.5, 0.5, 0.25, 0.25],
                 filename: `CSM_Report_${officeLabel.replace(/\s+/g, '_')}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true },
-                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+                html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollY: 0 },
+                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
+                pagebreak: { mode: ['css', 'legacy'], avoid: ['.report-header-block', '.page-footer', '.signature-section', '.office-block', 'tr'] }
             };
             html2pdf().set(opt).from(element).save();
         }

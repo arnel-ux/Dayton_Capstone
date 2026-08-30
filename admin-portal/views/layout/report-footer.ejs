@@ -1,0 +1,13 @@
+<%
+/* Shared CQA official-document footer — Effectivity date / Rev. number / page label,
+   matching the letterhead in report-header.ejs. Pass `pageLabel` (e.g. "Page 1 of 2");
+   `footerId` optionally sets an id on the page-label span for pages whose page count
+   changes at runtime (e.g. cluster-detail.ejs toggling the AI Feedback page on/off). */
+const _pageLabel = typeof pageLabel !== 'undefined' ? pageLabel : 'Page 1 of 1';
+const _footerId = typeof footerId !== 'undefined' ? footerId : '';
+%>
+<div class="page-footer">
+    <div>Effectivity: June 2024</div>
+    <div>Rev. 4</div>
+    <div<%- _footerId ? ` id="${_footerId}"` : '' %>><%= _pageLabel %></div>
+</div>

@@ -3,6 +3,9 @@
 <head>
     <%- include('layout/header', { forceLightMode: true }) %>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
+         views/layout/report-footer.ejs) — see public/css/report.css. -->
+    <link rel="stylesheet" href="/css/report.css">
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #251d3a 0%, #2a2550 100%);
@@ -82,36 +85,36 @@
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
             }
-            @page { size: A4 portrait; margin: 10mm 15mm; }
+            /* Letter-size @page rule lives in public/css/report.css, shared with
+               every other SQD report. */
         }
 
         /* Iyong Report Styles */
-        .header-container { display: flex; align-items: center; margin-bottom: 5px; }
-        .logo-img { width: 70px; height: auto; margin-right: 15px; }
-        .header-text { line-height: 1.2; }
-        .republic { font-size: 14px; margin: 0; }
-        .college-name { font-size: 18px; font-weight: bold; margin: 0; text-transform: uppercase; }
-        .address { font-size: 13px; margin: 0; }
-        .header-line { border-bottom: 2px solid #5B9BD5; margin-top: 5px; margin-bottom: 20px; display: flex; justify-content: flex-end; }
-        .form-code { font-size: 11px; font-weight: bold; padding-top: 2px; }
-        .print-title { text-align: center; font-weight: bold; font-size: 16px; margin-bottom: 5px; }
-        .print-period { text-align: center; font-size: 14px; font-weight: bold; margin-bottom: 20px; }
-        .print-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        .print-table th { background-color: #5B9BD5 !important; color: white !important; border: 1px solid black; padding: 8px; text-align: center; text-transform: uppercase; }
-        .print-table td { border: 1px solid black; padding: 4px 8px; }
+        /* Letterhead (report-header-block/etc.) and page-footer rules live in
+           public/css/report.css, shared with every other SQD report. */
+        .print-title { text-align: center; font-weight: bold; font-size: 15px; margin-bottom: 4px; }
+        .print-period { text-align: center; font-size: 13px; font-weight: bold; margin-bottom: 14px; }
+        .print-table { width: 100%; border-collapse: collapse; font-size: 11px; box-sizing: border-box; }
+        .print-table th { background-color: #5B9BD5 !important; color: white !important; border: 1px solid black; padding: 6px; text-align: center; text-transform: uppercase; }
+        .print-table td { border: 1px solid black; padding: 3px 7px; }
         .cluster-row { background-color: #D9D9D9 !important; font-weight: bold; }
         .num-col { text-align: center; width: 30px; }
         .score-col { text-align: center; width: 100px; }
         .inter-col { text-align: center; width: 120px; }
-        .print-footer { margin-top: 30px; display: flex; justify-content: space-between; }
+        .print-footer { margin-top: 18px; display: flex; justify-content: space-between; }
         .sign-block { width: 45%; }
-        .sign-name { font-weight: bold; text-decoration: underline; margin-top: 25px; margin-bottom: 0; text-transform: uppercase; }
-        .sign-title { margin-top: 0; font-size: 13px; }
-        .legend-area { font-size: 11px; margin-top: 30px; }
-        .legend-table { border-collapse: collapse; margin-top: 5px; }
+        .sign-name { font-weight: bold; text-decoration: underline; margin-top: 16px; margin-bottom: 0; text-transform: uppercase; }
+        .sign-title { margin-top: 0; font-size: 12px; }
+        .legend-area { font-size: 10px; margin-top: 16px; }
+        .legend-table { border-collapse: collapse; margin-top: 4px; }
         .legend-table td { padding: 1px 5px; border: none; }
         .range { font-weight: normal; font-style: italic; }
         .desc { font-weight: normal; padding-left: 10px; }
+
+        @media print {
+            #print-area { box-sizing: border-box; overflow: visible; }
+            .print-footer { break-inside: avoid; page-break-inside: avoid; }
+        }
     </style>
 </head>
 <body>
@@ -225,17 +228,7 @@
 </div>
 
 <div id="print-area">
-    <div class="header-container">
-        <img src="/images/cspc-logo.png" class="logo-img">
-        <div class="header-text">
-            <p class="republic">Republic of the Philippines</p>
-            <p class="college-name">CAMARINES SUR POLYTECHNIC COLLEGES</p>
-            <p class="address">Nabua, Camarines Sur</p>
-        </div>
-    </div>
-    <div class="header-line">
-        <span class="form-code">CSPC-F-CQA-06</span>
-    </div>
+    <%- include('layout/report-header', { docCode: 'CSPC-F-CQA-06' }) %>
 
     <p class="print-title">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT<br>PER CLUSTER</p>
     <p class="print-period">Period covered : <%= typeof periodLabel !== 'undefined' ? periodLabel : 'All Periods' %></p>
@@ -301,6 +294,8 @@
             </div>
         </div>
     </div>
+
+    <%- include('layout/report-footer') %>
 </div>
 
 <%- include('layout/footer') %>
