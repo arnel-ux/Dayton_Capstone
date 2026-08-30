@@ -1,0 +1,50 @@
+<%
+/* Shared "PER CLUSTER" office table — NAME OF OFFICE / OVERALL SCORE / INTERPRETATION
+   (no numbering column — the original printed report doesn't have one), grouped
+   per cluster with a bolder TOTAL row per cluster and a spacer row between
+   clusters for breathing room. Used by dashboard.ejs's report modal and print.ejs
+   so both share one table layout instead of drifting apart.
+   Expects `reportData`: an array of { clusterName, offices: [{name, score, interpretation}],
+   overallScore, interpretation } already placed in the required cluster order and
+   carrying each cluster's own weighted total — see CLUSTER_REPORT_ORDER in server.js. */
+%>
+<table class="cluster-report-table">
+    <colgroup>
+        <col style="width: 64%">
+        <col style="width: 16%">
+        <col style="width: 20%">
+    </colgroup>
+    <thead>
+        <tr>
+            <th>Name of Office</th>
+            <th class="score-col">Overall Score</th>
+            <th class="inter-col">Interpretation</th>
+        </tr>
+    </thead>
+    <% if (typeof reportData !== 'undefined' && reportData.length > 0) { %>
+        <% reportData.forEach((cluster, clusterIndex) => { %>
+            <% if (clusterIndex > 0) { %>
+                <tbody class="cluster-gap"><tr><td colspan="3"></td></tr></tbody>
+            <% } %>
+            <tbody class="cluster-section">
+                <tr class="cluster-row"><td colspan="3"><%= cluster.clusterName.toUpperCase() %></td></tr>
+                <% cluster.offices.forEach((office) => { %>
+                    <tr>
+                        <td><%= office.name %></td>
+                        <td class="score-col"><%= office.score %>%</td>
+                        <td class="inter-col"><%= office.interpretation %></td>
+                    </tr>
+                <% }) %>
+                <tr class="cluster-total-row">
+                    <td class="text-end">TOTAL</td>
+                    <td class="score-col"><%= cluster.overallScore %>%</td>
+                    <td class="inter-col"><%= cluster.interpretation %></td>
+                </tr>
+            </tbody>
+        <% }) %>
+    <% } else { %>
+        <tbody>
+            <tr><td colspan="3" class="text-center py-3 text-muted">No survey response submissions loaded yet for this period.</td></tr>
+        </tbody>
+    <% } %>
+</table>

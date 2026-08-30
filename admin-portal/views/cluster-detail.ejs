@@ -5,6 +5,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="/js/pdf-repeating-header.js"></script>
     <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
          views/layout/report-footer.ejs) — see public/css/report.css. -->
     <link rel="stylesheet" href="/css/report.css">
@@ -62,15 +63,19 @@
             overflow: hidden;
         }
 
-        /* --- Office Report (mirrors report.ejs exactly) --- */
+        /* Unconditional (not just @media print) so html2pdf's 'css' pagebreak
+           mode actually sees it — see report.ejs for the full rationale. This
+           guarantees the AI Feedback section always starts its own PDF page. */
+        .page-break { page-break-before: always; }
+        /* --- Office Report (mirrors report.ejs exactly) ---
+           No outer border/shadow — html2pdf captures this element as-is, so any
+           border/shadow here would print as a box around the official page. */
         .report-container {
-            background: #fff; padding: 40px; color: #000; font-family: Arial, sans-serif;
-            max-width: 900px; margin: 0 auto; border: 1px solid #ccc; box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            box-sizing: border-box;
+            background: #fff; padding: 18px; color: #000; font-family: Arial, sans-serif;
+            max-width: 900px; margin: 0 auto; box-sizing: border-box;
         }
         .report-title { text-align: center; font-weight: bold; font-size: 15px; margin: 10px 0 5px; }
-        .office-title { text-align: center; font-weight: bold; text-decoration: underline; text-transform: uppercase; font-size: 15px; margin-bottom: 0; }
-        .cqa-title { text-align: center; font-weight: bold; text-decoration: underline; font-size: 14px; margin-top: 3px; }
+        .office-title { text-align: center; font-weight: bold; text-decoration: underline; text-transform: uppercase; font-size: 15px; margin-bottom: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
         .office-name-line { text-align: center; font-style: italic; font-size: 13px; margin-bottom: 3px; }
         /* One office's SQD 0 / SQD 1-8 section within the "Number of Respondents,
            All Offices" packet — separated visually and kept off a print page break. */
@@ -80,7 +85,7 @@
         .meta-info { font-size: 13px; margin-bottom: 8px; }
         .meta-info span { display: inline-block; width: 200px; }
         .report-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 12px; }
-        .report-table th, .report-table td { border: 1px solid #000; padding: 4px 7px; }
+        .report-table th, .report-table td { border: 1px solid #000; padding: 4px 7px; vertical-align: middle; line-height: 1.3; }
         .report-table th { text-align: center; font-weight: bold; }
         .header-blue { background-color: #8faadc !important; -webkit-print-color-adjust: exact; }
         .overall-row { font-weight: bold; background-color: #bdd7ee !important; -webkit-print-color-adjust: exact; }
@@ -99,9 +104,6 @@
         .bg-neg { background-color: #fee2e2 !important; color: #991b1b !important; -webkit-print-color-adjust: exact; }
         .bg-neu { background-color: #f1f5f9 !important; color: #334155 !important; -webkit-print-color-adjust: exact; }
         .topic-pill { background-color: #e8f0fe !important; color: #0056b3 !important; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; -webkit-print-color-adjust: exact; }
-        .interpretation-box { font-size: 13px; margin-left: 50%; margin-bottom: 14px; }
-        .interpretation-box table { border: none; }
-        .interpretation-box td { padding: 1px 10px; border: none; }
         .signature-section { display: flex; justify-content: space-between; margin-top: 18px; font-size: 13px; }
         .sig-block { width: 45%; }
         .noted-block { margin-top: 14px; font-size: 13px; }
@@ -149,7 +151,7 @@
                     <div class="filter-group">
                         <label for="officeFilter">Select Office</label>
                         <select id="officeFilter" name="office" class="form-select form-select-sm" title="Filter by office">
-                            <option value="">All Offices</option>
+                            <option value="" selected disabled>Select Office</option>
                             <% if (typeof officesInCluster !== 'undefined') { %>
                                 <% officesInCluster.forEach(o => { %>
                                     <option value="<%= o.id %>"><%= o.office_name %></option>
@@ -208,21 +210,19 @@
                         <div class="d-flex justify-content-end gap-2 mb-3 no-print">
                             <button class="btn btn-danger btn-sm" onclick="downloadOfficeReportPDF()"><i class="fas fa-file-pdf me-2"></i> Download PDF</button>
                             <button class="btn btn-success btn-sm" onclick="downloadOfficeReportCSV()"><i class="fas fa-file-csv me-2"></i> Download CSV</button>
-                            <button class="btn btn-outline-secondary btn-sm" onclick="window.print()"><i class="fas fa-print me-2"></i> Print</button>
                         </div>
 
                         <div id="officeReportContentToExport">
                         <!-- PAGE 1: NUMERICAL SUMMARY -->
                         <div class="report-container" style="margin-bottom: 30px;">
-                            <%- include('layout/report-header', { docCode: 'CSPC-F-CQA-06' }) %>
+                            <%- include('layout/report-header', { showSQDFormCode: false, docCode: 'CSPC-F-CQA-06', bottomId: 'officeReportHeaderBottom1' }) %>
 
-                            <div class="report-title" id="officeReportMainTitle1">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
-                            <div class="cqa-title">CENTER FOR QUALITY ASSURANCE</div>
-                            <p class="office-name-line" id="officeReportTitle1"></p>
+                            <div class="sqd-report-title" id="officeReportMainTitle1">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
+                            <p class="sqd-office-name" id="officeReportTitle1"></p>
 
-                            <div class="meta-info mt-4">
-                                <div><span>Period Covered:</span> <strong id="officeReportPeriod1"></strong></div>
-                                <div><span>Number of Respondents:</span> <strong id="officeReportTotal1">0</strong></div>
+                            <div class="sqd-meta-block">
+                                <div class="sqd-meta-row"><span class="sqd-meta-label">Period Covered:</span> <span class="sqd-meta-value" id="officeReportPeriod1"></span></div>
+                                <div class="sqd-meta-row"><span class="sqd-meta-label">Number of Respondents:</span> <span class="sqd-meta-value" id="officeReportTotal1">0</span></div>
                             </div>
 
                             <!-- SQD Result Report: the official Percentage/Rating scorecard
@@ -255,17 +255,9 @@
                                         </tr>
                                     </tbody>
                                 </table>
-
-                                <div class="interpretation-box">
-                                    <div class="fw-bold mb-1">INTERPRETATION OF RESULTS</div>
-                                    <table>
-                                        <tr><td>95.0% to 100%</td><td>Outstanding</td></tr>
-                                        <tr><td>90.0% to 94.9%</td><td>Very Satisfactory</td></tr>
-                                        <tr><td>80.0% to 89.9%</td><td>Satisfactory</td></tr>
-                                        <tr><td>60.0% to 79.9%</td><td>Fair</td></tr>
-                                        <tr><td>Below 60.0%</td><td>Poor</td></tr>
-                                    </table>
-                                </div>
+                                <!-- Interpretation of Results now lives in the combined
+                                     .sqd-report-footer-layout below (SQD report only) instead
+                                     of a separate floating block here. -->
                             </div>
 
                             <!-- "Number of Respondents" + one office selected: SQD 0 / SQD 1-8
@@ -313,22 +305,31 @@
                                  built client-side into this container by renderMultiOfficeReport(). -->
                             <div id="multiOfficeReportBody" class="d-none"></div>
 
-                            <div class="signature-section">
-                                <div class="sig-block">
-                                    <div>Prepared by:</div>
-                                    <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
-                                    <p class="sig-title">AOV-CQA</p>
-                                </div>
-                                <div class="sig-block">
-                                    <div>Reviewed by:</div>
-                                    <p class="sig-name">JOCELYN O. JINTALAN, DBA</p>
-                                    <p class="sig-title">ISO Chair</p>
-                                </div>
+                            <!-- SQD Result Report only: the official lower-section layout
+                                 (Prepared/Interpretation/Noted/Reviewed grid). "Number of
+                                 Respondents" keeps the plain two-column footer below instead —
+                                 it isn't the SQD report, so it doesn't get this template. -->
+                            <div id="officeReportSqdFooter1" class="d-none">
+                                <%- include('layout/sqd-report-footer') %>
                             </div>
-                            <div class="noted-block">
-                                <div>Noted by:</div>
-                                <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
-                                <p class="sig-title">SUC President III</p>
+                            <div id="officeReportOldFooter1">
+                                <div class="signature-section">
+                                    <div class="sig-block">
+                                        <div>Prepared by:</div>
+                                        <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
+                                        <p class="sig-title">AOV-CQA</p>
+                                    </div>
+                                    <div class="sig-block">
+                                        <div>Reviewed by:</div>
+                                        <p class="sig-name">JOCELYN O. JINTALAN, DBA</p>
+                                        <p class="sig-title">ISO Chair</p>
+                                    </div>
+                                </div>
+                                <div class="noted-block">
+                                    <div>Noted by:</div>
+                                    <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
+                                    <p class="sig-title">SUC President III</p>
+                                </div>
                             </div>
 
                             <!-- Effectivity/Rev./Page footer: only the SQD Result Report is CSPC's
@@ -343,7 +344,7 @@
 
                         <!-- PAGE 2: WRITTEN COMMENTS & AI ANALYTICS (SQD Result Report only) -->
                         <div class="report-container page-break" id="reportPage2">
-                            <%- include('layout/report-header', { docCode: 'CSPC-F-CQA-06' }) %>
+                            <%- include('layout/report-header', { showSQDFormCode: false }) %>
 
                             <div class="report-title">AI FEEDBACK SENTIMENT & TOPIC ANALYTICS</div>
                             <p class="office-title" id="officeReportTitle2"></p>
@@ -582,9 +583,15 @@
             const periodCovered = periodSelect.value;
             const reportType = reportTypeSelect.value;
 
-            const officeLabel = officeId
-                ? officeSelect.options[officeSelect.selectedIndex].text
-                : `ALL OFFICES — ${CLUSTER_NAME.toUpperCase()}`;
+            // Reports are generated per individual office only — there is no
+            // "All Offices" option in the dropdown any more, so bail out instead
+            // of silently falling back to a cluster-wide packet.
+            if (!officeId) {
+                AppAlert.error("Please select a specific office before generating a report.");
+                return;
+            }
+
+            const officeLabel = officeSelect.options[officeSelect.selectedIndex].text;
             const periodLabel = periodCovered
                 ? periodSelect.options[periodSelect.selectedIndex].text
                 : 'All Periods';
@@ -615,6 +622,27 @@
             // but must not show it (page 2's AI Feedback report never shows it either,
             // so it has no footer markup at all).
             document.getElementById('officeReportFooter1').classList.toggle('d-none', reportType !== 'sqd');
+            // SQD report only gets the Prepared/Interpretation/Noted/Reviewed grid
+            // template — "Number of Respondents" keeps the plain two-column footer.
+            document.getElementById('officeReportSqdFooter1').classList.toggle('d-none', reportType !== 'sqd');
+            document.getElementById('officeReportOldFooter1').classList.toggle('d-none', reportType === 'sqd');
+
+            // Document code (CSPC-F-CQA-06) belongs on the official SQD Result Report
+            // only — Number of Respondents reuses this same page/header but must show
+            // the plain blue rule with no code, so it's added/removed here rather than
+            // rendered statically by views/layout/report-header.ejs.
+            const headerBottom1 = document.getElementById('officeReportHeaderBottom1');
+            let docCodeEl1 = headerBottom1.querySelector('.doc-code');
+            if (reportType === 'sqd') {
+                if (!docCodeEl1) {
+                    docCodeEl1 = document.createElement('div');
+                    docCodeEl1.className = 'doc-code';
+                    docCodeEl1.textContent = 'CSPC-F-CQA-06';
+                    headerBottom1.appendChild(docCodeEl1);
+                }
+            } else if (docCodeEl1) {
+                docCodeEl1.remove();
+            }
 
             // Three mutually exclusive report bodies:
             //  - percentageReportTable: SQD Result Report (official Percentage/Rating scorecard)
@@ -841,20 +869,54 @@
         }
 
         function downloadOfficeReportPDF() {
-            const element = document.getElementById('officeReportContentToExport');
             const officeSelect = document.getElementById('officeFilter');
             const officeLabel = officeSelect.value ? officeSelect.options[officeSelect.selectedIndex].text : 'All_Offices';
+            const reportType = document.getElementById('reportType').value;
+            // "Number of Respondents" hides the AI Feedback section entirely
+            // (reportPage2 gets d-none in renderOfficeReport()) — a single-section
+            // document, so every page repeats that one header.
+            const hasPage2 = reportType !== 'respondents';
+
+            const sqdHeader = {
+                title: document.getElementById('officeReportMainTitle1').textContent.trim(),
+                subtitle: document.getElementById('officeReportTitle1').textContent.trim(),
+                subtitleUnderline: true,
+                metaLines: [
+                    { label: 'Period Covered:', value: document.getElementById('officeReportPeriod1').textContent.trim() },
+                    { label: 'Number of Respondents:', value: document.getElementById('officeReportTotal1').textContent.trim() }
+                ],
+                docCode: reportType === 'sqd' ? 'CSPC-F-CQA-06' : undefined
+            };
+            const aiHeader = {
+                title: 'AI Feedback Sentiment & Topic Analytics',
+                subtitle: document.getElementById('officeReportTitle2').textContent.trim(),
+                subtitleUnderline: true,
+                period: 'Period Covered: ' + document.getElementById('officeReportPeriod2').textContent.trim(),
+                meta: 'Analyzed Feedbacks: ' + document.getElementById('officeReportTotal2').textContent.trim()
+            };
+
             // Letter (8.5in x 11in) portrait, matching CSPC's official print spec.
-            // html2pdf's margin array is [top, left, bottom, right] (not CSS order).
+            // html2pdf's margin array is [top, left, bottom, right] (not CSS order);
+            // top is overridden by exportRepeatingHeaderPdf to reserve space for
+            // the redrawn header.
             const opt = {
-                margin: [0.5, 0.5, 0.25, 0.25],
+                margin: [0, 0.5, 0.25, 0.25],
                 filename: `CSM_Report_${officeLabel.replace(/\s+/g, '_')}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollY: 0 },
+                html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollY: 0, backgroundColor: '#ffffff' },
                 jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
-                pagebreak: { mode: ['css', 'legacy'], avoid: ['.report-header-block', '.page-footer', '.signature-section', '.office-block', 'tr'] }
+                pagebreak: { mode: ['css', 'legacy'], avoid: ['.page-footer', '.signature-section', '.sqd-interpretation-standalone', '.sqd-signature-grid', '.office-block', 'tr'] }
             };
-            html2pdf().set(opt).from(element).save();
+
+            exportRepeatingHeaderPdf({
+                elementId: 'officeReportContentToExport',
+                filename: opt.filename,
+                opt,
+                headerHeightIn: 2.4,
+                headerHideSelectors: ['.report-header-block', '#officeReportMainTitle1', '.sqd-office-name', '.sqd-meta-block', '.office-title', '.meta-info'],
+                getHeaderForPage: (pageNum) => (!hasPage2 || pageNum === 1) ? sqdHeader : aiHeader,
+                avoidSplitSelector: '.sqd-signature-grid'
+            });
         }
 
         function downloadOfficeReportCSV() {

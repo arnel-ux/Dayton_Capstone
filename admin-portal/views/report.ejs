@@ -3,34 +3,43 @@
 <head>
     <%- include('layout/header', { forceLightMode: true }) %>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="/js/pdf-repeating-header.js"></script>
     <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
          views/layout/report-footer.ejs) — see public/css/report.css. -->
     <link rel="stylesheet" href="/css/report.css">
 
     <style>
         /* Custom Styles for Print-like Report */
+        /* Unconditional (not just @media print) so html2pdf's 'css' pagebreak
+           mode actually sees it — it inspects the normal/screen stylesheet, not
+           @media print, when deciding where to cut pages. This guarantees the
+           AI Feedback section always starts its own PDF page, so the repeating
+           header in downloadPDF() below can reliably assume page 1 = the SQD
+           section and every later page = AI Feedback. */
+        .page-break { page-break-before: always; }
+        /* No outer border/shadow — html2pdf captures this element as-is (it isn't
+           limited to @media print), so any border/shadow here would print as a
+           box around the official page, not just show on the on-screen preview. */
         .report-container {
             background: #fff;
-            padding: 40px;
+            padding: 18px;
             color: #000;
             font-family: Arial, sans-serif;
             max-width: 900px;
             margin: 0 auto;
-            border: 1px solid #ccc;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
             box-sizing: border-box;
         }
 
         .report-title { text-align: center; font-weight: bold; font-size: 15px; margin: 10px 0 5px; }
-        .office-title { text-align: center; font-weight: bold; text-decoration: underline; text-transform: uppercase; font-size: 15px; margin-bottom: 0; }
+        .office-title { text-align: center; font-weight: bold; text-decoration: underline; text-transform: uppercase; font-size: 15px; margin-bottom: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
         .sub-title { text-align: center; font-style: italic; font-size: 13px; margin-bottom: 16px; }
 
         .meta-info { font-size: 13px; margin-bottom: 8px; }
         .meta-info span { display: inline-block; width: 200px; }
 
         /* Table Styles */
-        .report-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 13px; }
-        .report-table th, .report-table td { border: 1px solid #000; padding: 4px 7px; }
+        .report-table { width: 100%; table-layout: fixed; border-collapse: collapse; margin-bottom: 14px; font-size: 13px; }
+        .report-table th, .report-table td { border: 1px solid #000; padding: 4px 7px; vertical-align: middle; line-height: 1.3; }
         .report-table th { text-align: center; font-weight: bold; }
         .header-blue { background-color: #8faadc !important; -webkit-print-color-adjust: exact; }
         
@@ -54,11 +63,10 @@
         .text-center { text-align: center; }
         .fw-bold { font-weight: bold; }
         
-        .interpretation-box { font-size: 13px; margin-left: 50%; margin-bottom: 14px; }
-        .interpretation-box table { border: none; }
-        .interpretation-box td { padding: 1px 10px; border: none; }
-
-        /* Signatures */
+        /* Signatures — the SQD numerical-summary page's own lower section (Prepared/
+           Interpretation/Noted/Reviewed) is styled by .sqd-report-footer-layout in
+           public/css/report.css instead; .signature-section below is only the AI
+           Feedback page's plain two-column Prepared/Reviewed row. */
         .signature-section { display: flex; justify-content: space-between; margin-top: 18px; font-size: 13px; }
         .sig-block { width: 45%; }
         .sig-name { font-weight: bold; margin-top: 14px; margin-bottom: 0; }
@@ -108,7 +116,7 @@
                         <div class="col-md-4">
                             <label class="form-label text-muted">Filter by Office</label>
                             <select class="form-select bg-light" id="selectOffice">
-                                <option value="ALL OFFICES">All Offices</option>
+                                <option value="" selected disabled>Select Office</option>
                                 <% if (typeof offices !== 'undefined' && offices.length > 0) { %>
                                     <% offices.forEach(function(office) { %>
                                         <option value="<%= office.office_name %>"><%= office.office_name %></option>
@@ -135,21 +143,20 @@
                 <div class="d-flex justify-content-end gap-2 mb-3 px-4 no-print">
                     <button class="btn btn-danger" onclick="downloadPDF()"><i class="fas fa-file-pdf me-2"></i> Download PDF</button>
                     <button class="btn btn-success" onclick="downloadCSV()"><i class="fas fa-file-csv me-2"></i> Download CSV</button>
-                    <button class="btn btn-outline-secondary" onclick="window.print()"><i class="fas fa-print me-2"></i> Print</button>
                 </div>
 
                 <div id="reportContentToExport">
                     
                     <!-- PANG-UNANG PAHINA (NUMERICAL SUMMARY) -->
                     <div class="report-container" style="display: block; margin-bottom: 30px;">
-                        <%- include('layout/report-header', { docCode: 'CSPC-F-CQA-06' }) %>
+                        <%- include('layout/report-header', { showSQDFormCode: true, docCode: 'CSPC-F-CQA-06' }) %>
 
-                        <div class="report-title">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
-                        <p class="office-title" id="displayOfficeName1"></p>
+                        <div class="sqd-report-title">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
+                        <p class="sqd-office-name" id="displayOfficeName1"></p>
 
-                        <div class="meta-info mt-4">
-                            <div><span>Period Covered:</span> <strong id="displayPeriod1"></strong></div>
-                            <div><span>Number of Respondents:</span> <strong id="totalRespondents1">0</strong></div>
+                        <div class="sqd-meta-block">
+                            <div class="sqd-meta-row"><span class="sqd-meta-label">Period Covered:</span> <span class="sqd-meta-value" id="displayPeriod1"></span></div>
+                            <div class="sqd-meta-row"><span class="sqd-meta-label">Number of Respondents:</span> <span class="sqd-meta-value" id="totalRespondents1">0</span></div>
                         </div>
 
                         <table class="report-table" id="tableData1">
@@ -212,33 +219,7 @@
                             </tbody>
                         </table>
 
-                        <div class="interpretation-box">
-                            <div class="fw-bold mb-1">INTERPRETATION OF RESULTS</div>
-                            <table>
-                                <tr><td>95.0% to 100%</td><td>Outstanding</td></tr>
-                                <tr><td>90.0 % to 94.9%</td><td>Very Satisfactory</td></tr>
-                                <tr><td>80.0% to 89.9%</td><td>Satisfactory</td></tr>
-                                <tr><td>60.0% to 79.9%</td><td>Fair</td></tr>
-                                <tr><td>Below 60.0%</td><td>Poor</td></tr>
-                            </table>
-                        </div>
-
-                        <div class="signature-section">
-                            <div class="sig-block">
-                                <div>Prepared by:</div>
-                                <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
-                                <p class="sig-title">AOV-CQA</p>
-                                
-                                <div style="margin-top: 30px;">Noted by:</div>
-                                <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
-                                <p class="sig-title">SUC President III</p>
-                            </div>
-                            <div class="sig-block">
-                                <div>Reviewed by:</div>
-                                <p class="sig-name">JOCELYN O. JINTALAN, DBA</p>
-                                <p class="sig-title">ISO Chair</p>
-                            </div>
-                        </div>
+                        <%- include('layout/sqd-report-footer') %>
 
                         <!-- No Effectivity/Rev./Page-label footer here on purpose: CSPC-F-CQA-06's
                              official Client Satisfaction Measurement Survey Result format (unlike
@@ -248,7 +229,7 @@
 
                     <!-- PANGALAWANG PAHINA (WRITTEN COMMENTS & AI ANALYTICS) -->
                     <div class="report-container page-break" style="display: block;">
-                        <%- include('layout/report-header', { docCode: 'CSPC-F-CQA-06' }) %>
+                        <%- include('layout/report-header', { showSQDFormCode: false }) %>
 
                         <div class="report-title">AI FEEDBACK SENTIMENT & TOPIC ANALYTICS</div>
                         <p class="office-title" id="displayOfficeName2"></p>
@@ -308,6 +289,10 @@
 <script>
     async function generateReport() {
         const selectedOffice = document.getElementById('selectOffice').value;
+        if (!selectedOffice) {
+            AppAlert.error("Please select a specific office before generating a report.");
+            return;
+        }
         const selectedQuarter = document.getElementById('selectQuarter').value;
         const selectedPeriodSelect = document.getElementById('selectPeriod');
         const selectedPeriod = selectedPeriodSelect.value;
@@ -417,18 +402,52 @@
     }
 
     function downloadPDF() {
-        const element = document.getElementById('reportContentToExport');
+        // Two report identities share this one PDF: the SQD numerical summary
+        // (always exactly one page — the table is a fixed 8 rows) and AI Feedback
+        // Sentiment & Topic Analytics (can span several pages if there are many
+        // comments). Page 1 always belongs to the SQD section; every later page
+        // belongs to AI Feedback — see public/js/pdf-repeating-header.js and the
+        // unconditional .page-break rule above that guarantees this split.
+        const sqdHeader = {
+            title: 'Client Satisfaction Measurement Survey Result',
+            subtitle: document.getElementById('displayOfficeName1').textContent.trim(),
+            subtitleUnderline: true,
+            metaLines: [
+                { label: 'Period Covered:', value: document.getElementById('displayPeriod1').textContent.trim() },
+                { label: 'Number of Respondents:', value: document.getElementById('totalRespondents1').textContent.trim() }
+            ],
+            docCode: 'CSPC-F-CQA-06'
+        };
+        const aiHeader = {
+            title: 'AI Feedback Sentiment & Topic Analytics',
+            subtitle: document.getElementById('displayOfficeName2').textContent.trim(),
+            subtitleUnderline: true,
+            period: 'Period Covered: ' + document.getElementById('displayPeriod2').textContent.trim(),
+            meta: 'Analyzed Feedbacks: ' + document.getElementById('totalRespondents2').textContent.trim()
+        };
+
         // Letter (8.5in x 11in) portrait, matching CSPC's official print spec.
-        // html2pdf's margin array is [top, left, bottom, right] (not CSS order).
+        // html2pdf's margin array is [top, left, bottom, right] (not CSS order);
+        // top is overridden by exportRepeatingHeaderPdf to reserve space for the
+        // redrawn header.
         const opt = {
-            margin:       [0.5, 0.5, 0.25, 0.25],
+            margin:       [0, 0.5, 0.25, 0.25],
             filename:     'CSM_Report.pdf',
             image:        { type: 'jpeg', quality: 0.98 },
-            html2canvas:  { scale: 2, useCORS: true, letterRendering: true, scrollY: 0 },
+            html2canvas:  { scale: 2, useCORS: true, letterRendering: true, scrollY: 0, backgroundColor: '#ffffff' },
             jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
-            pagebreak:    { mode: ['css', 'legacy'], avoid: ['.report-header-block', '.signature-section', 'tr'] }
+            pagebreak:    { mode: ['css', 'legacy'], avoid: ['.signature-section', '.sqd-interpretation-standalone', '.sqd-signature-grid', 'tr'] }
         };
-        html2pdf().set(opt).from(element).save();
+
+        exportRepeatingHeaderPdf({
+            elementId: 'reportContentToExport',
+            filename: opt.filename,
+            opt,
+            headerHeightIn: 2.4,
+            headerHideSelectors: ['.report-header-block', '.sqd-report-title', '.sqd-office-name', '.sqd-meta-block', '.report-title', '.office-title', '.meta-info'],
+            getHeaderForPage: (pageNum) => (pageNum === 1 ? sqdHeader : aiHeader),
+            avoidSplitSelector: '.sqd-signature-grid'
+        });
     }
 
     function downloadCSV() {

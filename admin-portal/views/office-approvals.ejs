@@ -51,6 +51,17 @@
             return hours12 + ':' + minutes + ' ' + suffix;
         }
 
+        // Office visits happen the same day the client submits, so the visit
+        // date is just the submission's created_at date paired with the
+        // separately-recorded visit time.
+        function formatVisitedDateTime12h(timeValue, createdAt) {
+            var time12h = formatVisitedTime12h(timeValue);
+            if (!time12h) return null;
+            if (!createdAt) return time12h;
+            var datePart = new Date(createdAt).toLocaleDateString('en-PH', { dateStyle: 'medium' });
+            return datePart + ', ' + time12h;
+        }
+
         // Office names are sometimes stored as "Full Name (CODE)". Pull the
         // parenthesized short code, when present, for a small office badge.
         // Falls back to nothing (no badge) when the office name has no code.
@@ -633,9 +644,9 @@
                                 <%= sub.serviceAvailed || 'Not specified' %>
                             </div>
                         </div>
-                        <% officeVisitedDisplay = formatVisitedTime12h(sub.officeVisitedTime); %>
+                        <% officeVisitedDisplay = formatVisitedDateTime12h(sub.officeVisitedTime, sub.createdAt); %>
                         <div class="meta-item">
-                            <div class="meta-label"><i class="fas fa-clock"></i> Office Visited Time</div>
+                            <div class="meta-label"><i class="fas fa-clock"></i> Office Visited Date &amp; Time</div>
                             <div class="meta-value">
                                 <span class="time-pill"><i class="fas fa-clock"></i> <%= officeVisitedDisplay || sub.officeVisitedTime || '—' %></span>
                             </div>

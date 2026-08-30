@@ -1,0 +1,40 @@
+<%
+/* Official SQD report's lower section, matching the client's original printed
+   template exactly:
+     - INTERPRETATION OF RESULTS sits alone on the right side, right after the
+       table (not paired with "Prepared by" — it finishes before the
+       signature row even starts).
+     - Prepared by (left) and Reviewed by (right) share one row, each with its
+       own signature space + name/title underneath.
+     - Noted by sits alone below that, left-aligned only — there is no
+       right-side counterpart for it.
+   This is intentionally asymmetric (2 rows x 2 columns, but the bottom-right
+   cell is empty) — do not force it into a symmetric 2x2 grid.
+   SQD-ONLY: do not reuse this for the PER CLUSTER report or AI Feedback
+   Sentiment & Topic Analytics — those keep their own existing footer layouts.
+   Used by report.ejs, cluster-detail.ejs, and survey-records.ejs's SQD
+   numerical-summary page only. */
+%>
+<div class="sqd-interpretation-standalone">
+    <%- include('interpretation-legend') %>
+</div>
+<div class="sqd-signature-grid">
+    <div class="sqd-sig-block">
+        <p class="sqd-sig-label">Prepared by:</p>
+        <div class="sqd-sig-space"></div>
+        <p class="sqd-sig-name">JUVY M. BUSTAMANTE, JD</p>
+        <p class="sqd-sig-title">AOV-CQA</p>
+    </div>
+    <div class="sqd-sig-block">
+        <p class="sqd-sig-label">Reviewed by:</p>
+        <div class="sqd-sig-space"></div>
+        <p class="sqd-sig-name">JOCELYN O. JINTALAN, DBA</p>
+        <p class="sqd-sig-title">ISO Chair</p>
+    </div>
+    <div class="sqd-sig-block">
+        <p class="sqd-sig-label">Noted by:</p>
+        <div class="sqd-sig-space"></div>
+        <p class="sqd-sig-name">AMADO A. OLIVA JR., PhD</p>
+        <p class="sqd-sig-title">SUC President III</p>
+    </div>
+</div>

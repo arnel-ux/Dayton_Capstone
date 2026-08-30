@@ -1,11 +1,22 @@
 <%
 /* Shared CQA official-document letterhead — logo + institution block left-aligned,
-   then a row with a shortened blue rule and the form/document code aligned to its
-   right on the same line. Used by every SQD-related printable report (report.ejs,
-   cluster-detail.ejs) so they all share one letterhead instead of each keeping its
+   then a row with a shortened blue rule and, on SQD reports only, the form/document
+   code aligned to its right on the same line. Used by every printable report
+   (report.ejs, cluster-detail.ejs, survey-records.ejs, print.ejs, dashboard.ejs,
+   dashboard-report.ejs) so they all share one letterhead instead of each keeping its
    own copy that can drift out of sync.
-   Pass `docCode` (e.g. "CSPC-F-CQA-06"); defaults to the CSM survey result form. */
+   Pass `showSQDFormCode: true` only from pages whose main content is the SQD
+   (Service Quality Dimensions) results — everything else must leave it off so the
+   blue rule spans the full width with no document code. Defaults to false/off so a
+   newly added report never shows the code by accident.
+   Pass `docCode` (e.g. "CSPC-F-CQA-06") to override which code is shown when
+   showSQDFormCode is true; defaults to the CSM survey result form.
+   Pass `bottomId` to id the blue-line/doc-code row when a page needs to toggle the
+   document code client-side at runtime (e.g. cluster-detail.ejs, whose report type
+   switches between SQD Result and Number of Respondents after the initial render). */
+const _showSQDFormCode = typeof showSQDFormCode !== 'undefined' && showSQDFormCode === true;
 const _docCode = typeof docCode !== 'undefined' ? docCode : 'CSPC-F-CQA-06';
+const _bottomId = typeof bottomId !== 'undefined' ? bottomId : null;
 %>
 <div class="report-header-block">
     <div class="report-header-top">
@@ -16,8 +27,10 @@ const _docCode = typeof docCode !== 'undefined' ? docCode : 'CSPC-F-CQA-06';
             <p>Nabua, Camarines Sur</p>
         </div>
     </div>
-    <div class="report-header-bottom">
+    <div class="report-header-bottom"<% if (_bottomId) { %> id="<%= _bottomId %>"<% } %>>
         <div class="report-header-rule"></div>
-        <div class="doc-code"><%= _docCode %></div>
+        <% if (_showSQDFormCode) { %>
+            <div class="doc-code"><%= _docCode %></div>
+        <% } %>
     </div>
 </div>
