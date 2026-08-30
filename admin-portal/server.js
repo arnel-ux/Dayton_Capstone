@@ -337,7 +337,7 @@ function finalizeVerifiedSurvey(googleEmail, fields, callback) {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     const values = [
-        officeId, respondentName, topic || 'General', sentiment || 'Neutral', region,
+        officeId, respondentName, topic || 'General Feedback', sentiment || 'Neutral', region,
         cc1, cc2, cc3,
         sqdValues[0], sqdValues[1], sqdValues[2], sqdValues[3], sqdValues[4], sqdValues[5], sqdValues[6], sqdValues[7], sqdValues[8],
         comments || 'N/A', period, googleEmail, serviceAvailed
@@ -2693,7 +2693,12 @@ app.get('/api/client-history/:id', ensureClientAuth, noCache, (req, res) => {
 });
 
 app.post('/submit-survey', ensureClientAuth, (req, res) => {
-    console.log("📥 [Survey Payload Dumating]:", req.body);
+    // Raw incoming request body — on a repeat visit, disabled HTML fields
+    // (age/gender/region, locked after first submission) don't get sent by
+    // the browser at all, so this will legitimately show them missing/
+    // 'Not Specified' even though the actual saved value is correct. See the
+    // "📤 [Survey Final Fields]" log below for what's really used/stored.
+    console.log("📥 [Survey Payload Dumating] (raw, pre-profile-merge):", req.body);
 
     const googleEmail = req.clientEmail;
 
@@ -2748,6 +2753,7 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
                 clientType: finalClientType, age: finalAge, gender: finalGender,
                 officeVisitedTime: finalOfficeVisitedTime, period: getPeriodCovered()
             };
+            console.log("📤 [Survey Final Fields] (after profile merge, what actually gets stored):", fields);
 
             // @cspc.edu.ph accounts are trusted automatically and land straight in
             // survey_responses, exactly as before. Any other email must first be
@@ -2919,14 +2925,14 @@ async function syncOneSurvey(googleEmail, body) {
         return { success: false, message: "Database insertion error: " + err.message };
     }
 
-    console.log(`✅ [Sync Success] ID: ${surveyResponseId} | Sentiment: ${sentiment || 'Neutral'} | Topic: ${topic || 'General'}`);
+    console.log(`✅ [Sync Success] ID: ${surveyResponseId} | Sentiment: ${sentiment || 'Neutral'} | Topic: ${topic || 'General Feedback'}`);
 
     return {
         success: true,
         message: "Survey synced and analyzed successfully!",
         surveyResponseId,
         sentiment: sentiment || 'Neutral',
-        topic: topic || 'General'
+        topic: topic || 'General Feedback'
     };
 }
 
@@ -3450,7 +3456,7 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                     if (sentimentLower.includes('positive')) sentimentClass = 'bg-sentiment-positive';
                     else if (sentimentLower.includes('negative')) sentimentClass = 'bg-sentiment-negative';
 
-                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', officeName: row.office_name || 'N/A', topic: row.topic || 'General', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: row.comments || 'No comments provided.', date: row.formatted_date, officeVisitedTime: row.office_visited_time_formatted || 'N/A' });
+                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', officeName: row.office_name || 'N/A', topic: row.topic || 'General Feedback', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: row.comments || 'No comments provided.', date: row.formatted_date, officeVisitedTime: row.office_visited_time_formatted || 'N/A' });
                 });
             }
             res.render('survey-records', { recordsByCluster, clusterRatings });
