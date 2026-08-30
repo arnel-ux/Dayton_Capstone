@@ -1325,7 +1325,7 @@
 
                         <div class="col-md-6">
                             <label class="form-label fw-semibold text-dark fs-6" for="officeVisitedTime" data-i18n="lbl_office_visited_time"></label>
-                            <input type="time" id="officeVisitedTime" name="office_visited_time" class="form-control" required>
+                            <input type="datetime-local" id="officeVisitedTime" name="office_visited_time" class="form-control" required>
                             <div class="form-text" data-i18n="hint_office_visited_time"></div>
                         </div>
 
@@ -1787,12 +1787,19 @@ window.addEventListener('pageshow', function (event) {
 });
 
 document.getElementById('surveyDate').valueAsDate = new Date();
-(function initDefaultOfficeVisitedTime() {
-    const timeInput = document.getElementById('officeVisitedTime');
-    if (timeInput && !timeInput.value) {
-        timeInput.value = new Date().toTimeString().slice(0, 5);
-    }
-})();
+
+// Caps the office-visit picker at "now" (no future visits) and defaults it
+// to now when empty; the visit's own date can still be moved back to an
+// earlier day than today, independent of the survey submission date.
+function initDefaultOfficeVisitedTime() {
+    const dtInput = document.getElementById('officeVisitedTime');
+    if (!dtInput) return;
+    const now = new Date();
+    const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    dtInput.max = localNow;
+    if (!dtInput.value) dtInput.value = localNow;
+}
+initDefaultOfficeVisitedTime();
 let currentLang = 'en';
 
 // The "Home" view is active by default on load (no switchView() call fires
@@ -2628,9 +2635,9 @@ const i18n = {
         opt_sel_age: "Select Age...",
         opt_18_below: "18 and below",
         opt_60_above: "60 and above",
-        lbl_date: "Date:",
-        lbl_office_visited_time: "Time of Office Visit:",
-        hint_office_visited_time: "Recorded together with the Date above as the office visit's date and time.",
+        lbl_date: "Survey Date:",
+        lbl_office_visited_time: "Date & Time of Office Visit:",
+        hint_office_visited_time: "When you actually visited the office — this can be a different day than today if you're answering this survey later.",
         lbl_region: "Region of residence:",
         lbl_office: "Office Visited:",
         lbl_service: "Service Availed:",
@@ -2772,9 +2779,9 @@ const i18n = {
         opt_sel_age: "Pumili ng Edad...",
         opt_18_below: "18 pababa",
         opt_60_above: "60 pataas",
-        lbl_date: "Petsa:",
-        lbl_office_visited_time: "Oras ng Pagpunta sa Opisina:",
-        hint_office_visited_time: "Isinasama sa Petsa sa itaas bilang petsa at oras ng pagpunta sa opisina.",
+        lbl_date: "Petsa ng Survey:",
+        lbl_office_visited_time: "Petsa at Oras ng Pagpunta sa Opisina:",
+        hint_office_visited_time: "Kailan ka talaga pumunta sa opisina — maaaring iba sa araw na ito kung sinasagot mo ang survey mamaya o kinabukasan.",
         lbl_region: "Rehiyon ng Paninirahan:",
         lbl_office: "Pinuntahang Tanggapan:",
         lbl_service: "Serbisyong Ginamit:",
@@ -2975,10 +2982,13 @@ function formatDateForDisplay(rawDate) {
     return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
-// The office visit happens the same day the survey is filled out, so the
-// visit date is just the (auto-filled, readonly) survey date paired with
-// the separately-recorded visit time.
-function formatDateTimeForDisplay(rawDate, rawTime) {
+// Converts an <input type="datetime-local"> value ("YYYY-MM-DDTHH:MM") into
+// "Mon DD, YYYY, h:mm AM/PM". The office visit can happen on a different day
+// than the survey is actually filled out, so this reads the visit's own
+// date+time picker rather than assuming it matches today.
+function formatDateTimeForDisplay(rawDateTime) {
+    if (!rawDateTime) return '—';
+    const [rawDate, rawTime] = rawDateTime.split('T');
     const timePart = formatTimeForDisplay(rawTime);
     if (!rawDate) return timePart;
     return `${formatDateForDisplay(rawDate)}, ${timePart}`;
@@ -3009,7 +3019,7 @@ function renderReviewSummary() {
     document.getElementById('rv-gender').textContent = checkedLabelText('gender');
     document.getElementById('rv-age').textContent = selectedText('select[name="age"]');
     document.getElementById('rv-date').textContent = val('input[name="survey_date"]') || '—';
-    document.getElementById('rv-office-visited-time').textContent = formatDateTimeForDisplay(val('input[name="survey_date"]'), val('input[name="office_visited_time"]'));
+    document.getElementById('rv-office-visited-time').textContent = formatDateTimeForDisplay(val('input[name="office_visited_time"]'));
     document.getElementById('rv-region').textContent = selectedText('select[name="region"]');
     document.getElementById('rv-office').textContent = selectedText('select[name="office_id"]');
     document.getElementById('rv-service').textContent = selectedText('select[name="service_availed"]');
@@ -3160,7 +3170,8 @@ function startNewSurvey() {
     // form.reset() clears values but not the `disabled` attribute on
     // already-locked profile fields, and doesn't restore today's date.
     document.getElementById('surveyDate').valueAsDate = new Date();
-    document.getElementById('officeVisitedTime').value = new Date().toTimeString().slice(0, 5);
+    document.getElementById('officeVisitedTime').value = '';
+    initDefaultOfficeVisitedTime();
     applyLockedProfile();
     populateServiceSelect('');
 

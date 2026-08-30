@@ -1049,19 +1049,24 @@ function getPeriodCovered(date = new Date()) {
     return month <= 5 ? `Jan to June ${year}` : `July to Dec ${year}`;
 }
 
-// Validates/normalizes the client-submitted "Time of Office Visit" (from
-// <input type="time">, e.g. "09:35" or "09:35:00") into a MySQL TIME literal.
-// Anything that doesn't match is dropped to NULL rather than rejected outright,
-// since client_profiles.office_visited_time is nullable for legacy records.
+// Validates/normalizes the client-submitted "Date & Time of Office Visit"
+// (from <input type="datetime-local">, e.g. "2026-08-28T15:00") into a MySQL
+// DATETIME literal. The visit can be an earlier day than the survey is
+// actually submitted on (client answers it later), so this is stored as its
+// own date+time rather than assumed to match the submission's created_at.
+// Anything that doesn't match is dropped to NULL rather than rejected
+// outright, since client_profiles.office_visited_time is nullable for
+// legacy records.
 function cleanTime(val) {
     if (val === undefined || val === null) return null;
     const str = String(val).trim();
-    const match = /^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(str);
+    const match = /^(\d{4}-\d{2}-\d{2})[T ]([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(str);
     if (!match) return null;
-    const hh = match[1].padStart(2, '0');
-    const mm = match[2];
-    const ss = match[3] || '00';
-    return `${hh}:${mm}:${ss}`;
+    const date = match[1];
+    const hh = match[2].padStart(2, '0');
+    const mm = match[3];
+    const ss = match[4] || '00';
+    return `${date} ${hh}:${mm}:${ss}`;
 }
 
 // Legacy/manually-seeded rows have used a handful of equivalent spellings for
@@ -1549,7 +1554,7 @@ CREATE TABLE IF NOT EXISTS client_profiles (
     gender VARCHAR(50) NULL,
     region VARCHAR(100) NULL,
     email VARCHAR(255) NULL,
-    office_visited_time TIME NULL,
+    office_visited_time DATETIME NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (survey_response_id) REFERENCES survey_responses(id) ON DELETE CASCADE
 );`;
@@ -1758,7 +1763,14 @@ db.query(createClustersTableQuery, (err) => {
                             else console.log('✅ client_profiles table verified/created successfully!');
                             // Older deployments created this table before office_visited_time
                             // existed — add it now, nullable, so existing rows keep working.
-                            db.query("ALTER TABLE client_profiles ADD COLUMN office_visited_time TIME NULL", () => {});
+                            db.query("ALTER TABLE client_profiles ADD COLUMN office_visited_time DATETIME NULL", () => {
+                                // Older deployments still on the original TIME-only column: widen it to
+                                // DATETIME so the visit's own date (which can precede the survey's
+                                // submission date) is stored instead of assumed from created_at. A
+                                // no-op once the column is already DATETIME; MySQL backfills existing
+                                // TIME values onto today's date, matching the old same-day assumption.
+                                db.query("ALTER TABLE client_profiles MODIFY COLUMN office_visited_time DATETIME NULL", () => {});
+                            });
                         });
 
                         // Client accounts (locked demographics + unified login lookup)
@@ -2783,7 +2795,7 @@ app.get('/api/client-history/:id', ensureClientAuth, noCache, (req, res) => {
                DATE_FORMAT(s.created_at, '%M %d, %Y %h:%i %p') AS formatted_date,
                o.office_name, o.cluster_name,
                p.client_type, p.age, p.gender,
-               DATE_FORMAT(CONCAT(DATE(s.created_at), ' ', p.office_visited_time), '%M %d, %Y %h:%i %p') AS office_visited_time_formatted
+               DATE_FORMAT(p.office_visited_time, '%M %d, %Y %h:%i %p') AS office_visited_time_formatted
         FROM survey_responses s
         JOIN offices o ON s.office_id = o.id
         LEFT JOIN client_profiles p ON p.survey_response_id = s.id
@@ -3616,7 +3628,7 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
         
         const recordsQuery = `
             SELECT s.id, s.respondent_name, s.topic, s.sentiment, s.comments, DATE_FORMAT(s.created_at, '%M %d, %Y') as formatted_date, o.cluster_name, o.office_name,
-                   DATE_FORMAT(CONCAT(DATE(s.created_at), ' ', p.office_visited_time), '%M %d, %Y %h:%i %p') as office_visited_time_formatted
+                   DATE_FORMAT(p.office_visited_time, '%M %d, %Y %h:%i %p') as office_visited_time_formatted
             FROM survey_responses s
             JOIN offices o ON s.office_id = o.id
             LEFT JOIN client_profiles p ON p.survey_response_id = s.id
@@ -3670,7 +3682,7 @@ app.get('/api/admin/survey-response/:id', ensureAdminAuth, noCache, (req, res) =
                DATE_FORMAT(s.created_at, '%M %d, %Y %h:%i %p') AS formatted_date,
                o.office_name, o.cluster_name,
                p.client_type, p.age, p.gender,
-               DATE_FORMAT(CONCAT(DATE(s.created_at), ' ', p.office_visited_time), '%M %d, %Y %h:%i %p') AS office_visited_time_formatted
+               DATE_FORMAT(p.office_visited_time, '%M %d, %Y %h:%i %p') AS office_visited_time_formatted
         FROM survey_responses s
         JOIN offices o ON s.office_id = o.id
         LEFT JOIN client_profiles p ON p.survey_response_id = s.id

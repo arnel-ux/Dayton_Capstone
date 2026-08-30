@@ -36,30 +36,22 @@
         // Display-only helpers. These never touch the underlying DB values —
         // they only format sub.officeVisitedTime / officeName for presentation.
 
-        // MySQL TIME columns arrive as "HH:mm:ss" (sometimes "HH:mm"). Convert
-        // to a 12-hour "h:mm AM/PM" string for the UI; raw value is untouched.
-        function formatVisitedTime12h(value) {
+        // client_profiles.office_visited_time is a MySQL DATETIME, arriving here
+        // as "YYYY-MM-DD HH:mm:ss" — the client's own visit date+time, which can
+        // be an earlier day than when they actually submitted the survey. Format
+        // it directly rather than assuming it matches the submission's created_at.
+        function formatVisitedDateTime12h(value) {
             if (!value) return null;
-            var match = String(value).trim().match(/^(\d{1,2}):(\d{2})/);
+            var match = String(value).trim().match(/^(\d{4}-\d{2}-\d{2})[T ](\d{1,2}):(\d{2})/);
             if (!match) return null;
-            var hours = parseInt(match[1], 10);
-            var minutes = match[2];
+            var datePart = new Date(match[1] + 'T00:00:00').toLocaleDateString('en-PH', { dateStyle: 'medium' });
+            var hours = parseInt(match[2], 10);
+            var minutes = match[3];
             if (isNaN(hours)) return null;
             var suffix = hours >= 12 ? 'PM' : 'AM';
             var hours12 = hours % 12;
             if (hours12 === 0) hours12 = 12;
-            return hours12 + ':' + minutes + ' ' + suffix;
-        }
-
-        // Office visits happen the same day the client submits, so the visit
-        // date is just the submission's created_at date paired with the
-        // separately-recorded visit time.
-        function formatVisitedDateTime12h(timeValue, createdAt) {
-            var time12h = formatVisitedTime12h(timeValue);
-            if (!time12h) return null;
-            if (!createdAt) return time12h;
-            var datePart = new Date(createdAt).toLocaleDateString('en-PH', { dateStyle: 'medium' });
-            return datePart + ', ' + time12h;
+            return datePart + ', ' + hours12 + ':' + minutes + ' ' + suffix;
         }
 
         // Office names are sometimes stored as "Full Name (CODE)". Pull the
@@ -644,7 +636,7 @@
                                 <%= sub.serviceAvailed || 'Not specified' %>
                             </div>
                         </div>
-                        <% officeVisitedDisplay = formatVisitedDateTime12h(sub.officeVisitedTime, sub.createdAt); %>
+                        <% officeVisitedDisplay = formatVisitedDateTime12h(sub.officeVisitedTime); %>
                         <div class="meta-item">
                             <div class="meta-label"><i class="fas fa-clock"></i> Office Visited Date &amp; Time</div>
                             <div class="meta-value">
