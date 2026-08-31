@@ -125,7 +125,7 @@ def _build_topic_guide():
 
 _TOPIC_GUIDE = _build_topic_guide()
 
-PROMPT_TEMPLATE = """You are classifying a student/client feedback comment submitted to a Philippine state college (CSPC). The comment may be in English, Tagalog, or Taglish (mixed).
+PROMPT_TEMPLATE = """You are classifying a student/client feedback comment submitted to a Philippine state college (CSPC) located in Camarines Sur, Bicol region. The comment may be in English, Tagalog, or Taglish (mixed) — it may also include Bikol (the regional language of that area), regional slang, informal shorthand/textspeak, or dialectal spelling variants (e.g. "madunong"/"madumi" instead of "marunong"/"marumi"). If a word or phrase is unfamiliar, infer its meaning from context and sentence structure rather than skipping or misreading it.
 
 Classify the comment on two axes:
 

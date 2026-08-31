@@ -7,6 +7,49 @@ heuristic path and the full model path can never silently drift apart.
 import re
 
 # ---------------------------------------------------------------------------
+# HYPHEN-TOLERANT KEYWORD MATCHING
+# Real feedback typed by Filipino users on a phone keyboard very often drops
+# hyphens ("naghang" / "nag hang" instead of "nag-hang", "wifi" instead of
+# "wi-fi") — added 2026-08-30 after finding "nag-hang"/"nag-crash" wouldn't
+# match the far more common unhyphenated typing. Rather than hand-listing 2-3
+# spelling variants of every hyphenated keyword in every list below (easy to
+# forget on the next addition), every keyword's hyphen is compiled as an
+# OPTIONAL separator that also matches a space or nothing at all — so a
+# single entry like "nag-hang" already covers "nag-hang", "nag hang", and
+# "naghang" everywhere keywords are matched (TOPIC_KEYWORDS,
+# TOPIC_ITEM_KEYWORDS, the sentiment lexicon, neutral phrases, and collision
+# phrases all go through this one helper).
+# ---------------------------------------------------------------------------
+def _kw_pattern(kw):
+    escaped = re.escape(kw).replace('\\-', '[- ]?')
+    return r'\b' + escaped + r'\b'
+
+
+def _matched_spans(lowered, keywords):
+    """
+    Non-overlapping (start, end, weight) match spans for a keyword list
+    (plain strings, weight 1, or (keyword, weight) tuples). When two
+    keywords in the SAME list match overlapping text — e.g. "wifi" and
+    "wi-fi" both matching the same word now that _kw_pattern treats the
+    hyphen as optional, or a pre-existing intentional duplicate like
+    "one-stop"/"one stop" — only the first-listed keyword's match is kept,
+    so one real mention is never double-counted as two hits. Added
+    2026-08-30 alongside _kw_pattern: hyphen-tolerant matching would
+    otherwise silently inflate counts for every keyword list that already
+    carries both a hyphenated and unhyphenated spelling of the same term.
+    """
+    spans = []
+    for entry in keywords:
+        kw, weight = entry if isinstance(entry, tuple) else (entry, 1)
+        for m in re.finditer(_kw_pattern(kw), lowered):
+            s, e = m.start(), m.end()
+            if any(s < e2 and e > s2 for s2, e2, _ in spans):
+                continue
+            spans.append((s, e, weight))
+    return spans
+
+
+# ---------------------------------------------------------------------------
 # TOPIC TAXONOMY
 # Split into topics specific enough that an admin reading a feedback report
 # can tell what a comment is about from its topic tag alone, without opening
@@ -125,6 +168,12 @@ TOPIC_KEYWORDS = {
         # both, e.g. "nalilito ako sa online form", is really about the form
         # being confusing, not the portal itself) — see Ease of Use below.
         ("online form", 0.75),
+        # 2026-08-30: unambiguous digital-system-failure vocabulary, distinct
+        # from the physical-facility "sira"/broken anchors elsewhere — these
+        # only ever describe software/system behavior, never a physical
+        # object, so safe as standalone anchors here.
+        "glitch", "glitchy", "buggy", "crashed", "crashing", "nag-crash",
+        "nag-hang", "hanging", "nag-error", "system error",
     ],
     "Aircon and Cooling": [
         "aircon", "air-con", "air condition", "aircondition", "air conditioning",
@@ -209,6 +258,12 @@ TOPIC_KEYWORDS = {
         "bayad", "babayaran", "nagbayad", "nagbabayad", "magbayad", "binayaran",
         "fee", "fees", "singil", "kabayaran", "resibo",
         "official receipt", "sobrang mahal ang bayad", "tuition", "tuition fee",
+        # 2026-08-30 cross-check against cqa_db.sql's `services` table —
+        # "Requesting for Reimbursement/Liquidation of Petty Cash Expenses"
+        # (Cash Unit) and "Requesting Statement of Student Accounts
+        # Balances" (Accounting Unit) were real services with zero coverage.
+        "petty cash", "reimbursement", "liquidation", "statement of account",
+        "account balance",
     ],
     "Document and Credential Processing": [
         "transcript", "tor", "diploma", "certification", "certificate",
@@ -223,6 +278,12 @@ TOPIC_KEYWORDS = {
         # Philippine schools (needed before enrollment/graduation/release of
         # records).
         "clearance",
+        # 2026-08-30 second cross-check against cqa_db.sql's `services` table —
+        # HR-office document requests (Leave of Absence, Certificate of
+        # Employment, Service Record) had zero coverage; these are real,
+        # distinct document/credential requests even though the requester is
+        # an employee rather than a student.
+        "leave of absence", "certificate of employment", "service record",
     ],
     "Enrollment and Registration": [
         "enrollment", "enrolment", "pagpapatala", "nagpatala", "nagpapatala",
@@ -235,6 +296,15 @@ TOPIC_KEYWORDS = {
         # finish/end) is far too generic in Tagalog (finishing a line,
         # finishing a process, etc.) to use safely as an anchor here.
         "graduation", "commencement", "graduating",
+        # 2026-08-30 cross-check: "Applying for College/Graduate Entrance
+        # Examination" (Student Testing and Admission) and "Adding/Dropping
+        # of Subjects" (Registrar) were both real services with zero
+        # coverage. "exam"/"pagsusulit" alone are too generic (could mean any
+        # academic exam unrelated to admission), so anchored as the specific
+        # compound phrases actually used for this service.
+        "entrance exam", "entrance examination", "college entrance exam",
+        "add/drop", "adding of subjects", "dropping of subjects",
+        "drop subject", "dropping subject",
     ],
     "Communication and Information": [
         "impormasyon", "information", "communication", "announcement", "abiso",
@@ -411,6 +481,10 @@ TOPIC_ITEM_KEYWORDS = {
             "log-in", "login", "log in", "online account",
         ]),
         ("Online System and Portal - Website", ["website", "web site"]),
+        ("Online System and Portal - System Errors/Bugs", [
+            "glitch", "glitchy", "buggy", "crashed", "crashing", "nag-crash",
+            "nag-hang", "hanging", "nag-error", "system error",
+        ]),
         ("Online System and Portal - Online System", [
             "portal", "sias", "online form", "online system", "e-services", "e-portal",
         ]),
@@ -463,6 +537,12 @@ TOPIC_ITEM_KEYWORDS = {
         ("Document and Credential Processing - Grade Change/Correction", [
             "grade change", "correction of grades", "change of grade",
         ]),
+        # Listed before the generic "Certification" catch-all below, same
+        # tie-break reasoning as "Good Moral Certificate" above — "certificate
+        # of employment" also contains the bare word "certificate".
+        ("Document and Credential Processing - HR Employee Records", [
+            "leave of absence", "certificate of employment", "service record",
+        ]),
         ("Document and Credential Processing - Certification", [
             "certification", "certificate", "cav",
         ]),
@@ -476,6 +556,13 @@ TOPIC_ITEM_KEYWORDS = {
         ("Enrollment and Registration - Cross-Enrollment", ["cross-enrollment"]),
         ("Enrollment and Registration - Re-admission", ["re-admission"]),
         ("Enrollment and Registration - Shifting", ["shifting"]),
+        ("Enrollment and Registration - Entrance Examination", [
+            "entrance exam", "entrance examination", "college entrance exam",
+        ]),
+        ("Enrollment and Registration - Adding/Dropping of Subjects", [
+            "add/drop", "adding of subjects", "dropping of subjects",
+            "drop subject", "dropping subject",
+        ]),
         ("Enrollment and Registration - Enrollment/Registration Process", [
             "enrollment", "enrolment", "pagpapatala", "nagpatala", "nagpapatala",
             "magpapatala", "ipatala", "registration", "rehistrasyon",
@@ -484,6 +571,12 @@ TOPIC_ITEM_KEYWORDS = {
     "Payment and Fees": [
         ("Payment and Fees - Official Receipt", ["resibo", "official receipt"]),
         ("Payment and Fees - Tuition Fee", ["tuition", "tuition fee"]),
+        ("Payment and Fees - Petty Cash Reimbursement/Liquidation", [
+            "petty cash", "reimbursement", "liquidation",
+        ]),
+        ("Payment and Fees - Statement of Account", [
+            "statement of account", "account balance",
+        ]),
         ("Payment and Fees - Fees", [
             "bayad", "babayaran", "nagbayad", "nagbabayad", "magbayad", "binayaran",
             "fee", "fees", "singil", "kabayaran", "sobrang mahal ang bayad",
@@ -558,7 +651,7 @@ def item_label_override(topic, text):
     lowered = text.lower()
     hits = {}
     for item_label, keywords in groups:
-        count = sum(1 for kw in keywords if re.search(r'\b' + re.escape(kw) + r'\b', lowered))
+        count = len(_matched_spans(lowered, keywords))
         if count:
             hits[item_label] = count
     if not hits:
@@ -781,11 +874,7 @@ def keyword_topic_override(text):
     lowered = text.lower()
     hits = {}
     for topic, keywords in TOPIC_KEYWORDS.items():
-        count = 0
-        for entry in keywords:
-            kw, weight = entry if isinstance(entry, tuple) else (entry, 1)
-            if re.search(r'\b' + re.escape(kw) + r'\b', lowered):
-                count += weight
+        count = sum(weight for _, _, weight in _matched_spans(lowered, keywords))
         if count:
             hits[topic] = count
     if not hits:
@@ -884,6 +973,19 @@ FAST_NEGATIVE_WORDS = [
     # with no other meaning in this context, same category as "sira"/"hindi
     # gumagana" above.
     "nagla-lag", "lumalag", "laggy",
+    # 2026-08-30 vocabulary pass — additional common Tagalog/English/Taglish
+    # words found NOT covered by either lexicon, distinct from words already
+    # present above. Only added words that are unambiguous negative signals
+    # on their own (same bar as everything else in this list).
+    "nakakabwisit", "nakakagalit", "nakakadismaya", "nakakapagod",
+    "walang silbi", "walang kwenta na", "walang malasakit", "pabaya",
+    "abusado", "walang modo", "walang disiplina", "naantala", "na-delay",
+    "nadelay", "sablay", "epic fail",
+    "unprofessional", "unacceptable", "horrible", "pathetic", "useless",
+    "waste of time", "inconvenient", "inconvenience", "unresponsive",
+    "unreliable", "chaotic", "disorganized", "incomplete", "faulty",
+    "malfunctioning", "glitch", "glitchy", "buggy", "crashed", "crashing",
+    "nag-crash", "nag-hang", "hanging",
 ]
 FAST_POSITIVE_WORDS = [
     "maganda", "magandang", "mabilis", "magaling", "mabait", "salamat",
@@ -908,6 +1010,13 @@ FAST_POSITIVE_WORDS = [
     # unambiguous, since (unlike bare "mabagal"-style words) it only ever
     # describes demeanor.
     "magalang", "matulungin", "maasikaso",
+    # 2026-08-30 vocabulary pass — same rationale as the FAST_NEGATIVE_WORDS
+    # addition above: real words a client would plausibly write that weren't
+    # covered yet, unambiguous enough to stand alone as a positive anchor.
+    "maagap", "matiyaga", "masipag", "accommodating", "approachable",
+    "considerate", "welcoming", "sulit", "astig", "solid", "top-notch",
+    "seamless", "responsive", "on-time", "prompt",
+    "organized", "spot on", "kaaya-aya", "mapagkalinga",
 ]
 
 # Filler phrases that read as flat/neutral on their own — matched only when
@@ -960,11 +1069,11 @@ def _is_aspirational(clause_lower, span_start):
 
 
 def _keyword_spans(clause_lower, keywords):
-    spans = []
-    for kw in keywords:
-        for m in re.finditer(r'\b' + re.escape(kw) + r'\b', clause_lower):
-            spans.append((m.start(), m.end()))
-    return spans
+    # Delegates to _matched_spans so two keywords in the same list that match
+    # the same text (e.g. "walang kwenta"/"walang kwenta na", or a hyphenated
+    # spelling now matching its own unhyphenated variant via _kw_pattern)
+    # count as one hit, not two — see _matched_spans docstring.
+    return [(s, e) for s, e, _ in _matched_spans(clause_lower, keywords)]
 
 
 def _is_negated(clause_lower, span_start):
@@ -981,7 +1090,7 @@ def lexicon_sentiment(text):
     """
     lowered = text.lower()
     for phrase in SENTIMENT_COLLISION_PHRASES:
-        lowered = re.sub(r'\b' + re.escape(phrase) + r'\b', ' ', lowered)
+        lowered = re.sub(_kw_pattern(phrase), ' ', lowered)
 
     clauses = re.split(r'[.,;:!?]+', lowered)
     pos_count = 0
@@ -991,7 +1100,7 @@ def lexicon_sentiment(text):
         clause = clause.strip()
         if not clause:
             continue
-        if any(re.search(r'\b' + re.escape(p) + r'\b', clause) for p in FAST_NEUTRAL_PHRASES):
+        if any(re.search(_kw_pattern(p), clause) for p in FAST_NEUTRAL_PHRASES):
             neutral_hit = True
         pos_spans = _keyword_spans(clause, FAST_POSITIVE_WORDS)
         covered = set()

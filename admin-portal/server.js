@@ -65,7 +65,16 @@ app.use(session({
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 1000 * 60 * 60 * 8 } // 8 hours
+    cookie: {
+        maxAge: 1000 * 60 * 60 * 8, // 8 hours
+        // secure:true means the browser will never send this cookie over
+        // plain HTTP — only turn it on once the app is actually served over
+        // HTTPS (NODE_ENV=production is this project's existing convention
+        // for that), otherwise local http://localhost dev would silently
+        // never receive the session cookie at all.
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax'
+    }
 }));
 
 const ADMIN_COOKIE_NAME = 'admin.sid';
@@ -88,7 +97,11 @@ function writeAdminSessionCookie(res, id) {
     res.cookie(ADMIN_COOKIE_NAME, 's:' + cookieSignature.sign(id, process.env.SESSION_SECRET), {
         httpOnly: true,
         maxAge: ADMIN_SESSION_MAX_AGE_MS,
-        path: '/'
+        path: '/',
+        // Same reasoning as the client session cookie above: only require
+        // HTTPS-only transport once actually deployed behind HTTPS.
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax'
     });
 }
 
@@ -933,6 +946,33 @@ function escapeHtml(str) {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// client-survey.ejs's age/gender/region fields are all fixed <select>/radio
+// option sets (never free text) — but that only constrains the normal
+// browser form UI, not a direct POST to /submit-survey or /sync-surveys.
+// Without a matching server-side allowlist, an attacker could POST an
+// arbitrary string for one of these, which gets saved to client_accounts and
+// later rendered back into client-survey.ejs's `savedClientProfile` via an
+// unescaped `JSON.stringify()` inside an inline <script> tag — since
+// JSON.stringify doesn't escape "/", a value containing "</script><script>…"
+// breaks out of the script element and executes. Validating against the
+// same fixed option sets the form actually offers closes that off entirely
+// (invalid values fall through to the safe 'Not Specified' default) instead
+// of trying to escape "/" as a workaround.
+const VALID_AGE_BRACKETS = new Set(['18 and below', '19-24', '25-39', '40-59', '60 and above']);
+const VALID_GENDERS = new Set(['Male', 'Female']);
+const VALID_REGIONS = new Set([
+    'NCR - National Capital Region', 'CAR - Cordillera Administrative Region',
+    'Region I - Ilocos Region', 'Region II - Cagayan Valley', 'Region III - Central Luzon',
+    'Region IV-A - CALABARZON', 'MIMAROPA Region', 'Region V - Bicol Region',
+    'Region VI - Western Visayas', 'Region VII - Central Visayas', 'Region VIII - Eastern Visayas',
+    'Region IX - Zamboanga Peninsula', 'Region X - Northern Mindanao', 'Region XI - Davao Region',
+    'Region XII - SOCCSKSARGEN', 'Region XIII - Caraga', 'BARMM - Bangsamoro'
+]);
+function allowlisted(value, allowedSet) {
+    const v = value == null ? null : String(value).trim();
+    return (v && allowedSet.has(v)) ? v : null;
+}
+
 const sqdStatementFor = (label) => {
     const idx = parseInt(String(label).replace(/[^0-9]/g, ''), 10);
     return Number.isInteger(idx) && SQD_STATEMENTS[idx] ? `${label}. ${SQD_STATEMENTS[idx]}` : label;
@@ -1132,16 +1172,16 @@ function sendSurveyReceiptEmail(toEmail, receipt) {
                             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                                 <tr>
                                     <td class="receipt-body" style="padding:28px;color:#1e293b;">
-                                        <p style="margin:0 0 8px;font-size:15px;">Hi <strong>${receipt.name}</strong>,</p>
+                                        <p style="margin:0 0 8px;font-size:15px;">Hi <strong>${escapeHtml(receipt.name)}</strong>,</p>
                                         <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6;">Thank you for completing the CSM survey. This email is your official, system-generated proof of submission — no further action or signature is required.</p>
 
                                         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-                                            ${detailRow('Name', receipt.name)}
+                                            ${detailRow('Name', escapeHtml(receipt.name))}
                                             ${detailRow('Office Visited', receipt.officeName)}
-                                            ${detailRow('Service Availed', receipt.serviceAvailed)}
+                                            ${detailRow('Service Availed', escapeHtml(receipt.serviceAvailed))}
                                             ${detailRow('Date Submitted', receipt.submittedAt)}
                                             ${detailRow('Cluster', receipt.clusterName || 'N/A')}
-                                            ${detailRow('Client Type', receipt.clientType)}
+                                            ${detailRow('Client Type', escapeHtml(receipt.clientType))}
                                         </table>
 
                                         <h3 style="margin:0 0 10px;font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:.03em;">Citizen's Charter (CC)</h3>
@@ -1291,15 +1331,15 @@ function sendSurveyApprovedEmail(toEmail, details) {
                                 <tr>
                                     <td class="receipt-body" style="padding:28px;color:#1e293b;">
                                         <p style="margin:0 0 8px;font-size:15px;">Hi <strong>${escapeHtml(details.name)}</strong>,</p>
-                                        <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6;"><strong>${details.officeName}</strong> has reviewed and approved the CSM survey you submitted${details.serviceAvailed ? ` for <strong>${details.serviceAvailed}</strong>` : ''}. Below is the full result of what you answered — no need to sign in anywhere to see it.</p>
+                                        <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6;"><strong>${details.officeName}</strong> has reviewed and approved the CSM survey you submitted${details.serviceAvailed ? ` for <strong>${escapeHtml(details.serviceAvailed)}</strong>` : ''}. Below is the full result of what you answered — no need to sign in anywhere to see it.</p>
 
                                         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
                                             ${detailRow('Name', escapeHtml(details.name))}
                                             ${detailRow('Office Visited', details.officeName)}
-                                            ${detailRow('Service Availed', details.serviceAvailed)}
+                                            ${detailRow('Service Availed', escapeHtml(details.serviceAvailed))}
                                             ${detailRow('Date Submitted', details.submittedAt)}
                                             ${detailRow('Cluster', details.clusterName || 'N/A')}
-                                            ${detailRow('Client Type', details.clientType)}
+                                            ${detailRow('Client Type', escapeHtml(details.clientType))}
                                         </table>
 
                                         <h3 style="margin:0 0 10px;font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:.03em;">Citizen's Charter (CC)</h3>
@@ -1555,12 +1595,36 @@ db.query(createAdminsTableQuery, (err) => {
 
     // Seed the two original accounts once, so a fresh database still boots with
     // working admin logins (existing databases keep whatever's already in there).
+    // Stored as bcrypt hashes (not plaintext) so a leaked DB dump/backup alone
+    // doesn't hand over working credentials — verifyAdminPassword already
+    // supports bcrypt rows via isBcryptHash(), same as any password changed
+    // through Manage Admins. The default password VALUES are still fixed and
+    // documented here for first-login purposes only — deployers MUST change
+    // both immediately after first login (see the console warning below).
     db.query('SELECT COUNT(*) AS count FROM admins', (err, result) => {
         if (!err && result[0].count === 0) {
-            const seedAdmins = `INSERT INTO admins (username, password, fullname, gender, role) VALUES
-                ('admin1', 'francis123', 'Francis James Obis', 'Male', 'Super Admin'),
-                ('admin2', 'arnel123', 'Arnel Marquina', 'Male', 'Admin');`;
-            db.query(seedAdmins, () => console.log('✅ Default admin accounts seeded.'));
+            (async () => {
+                try {
+                    const hash1 = await bcrypt.hash('francis123', 10);
+                    const hash2 = await bcrypt.hash('arnel123', 10);
+                    db.query(
+                        `INSERT INTO admins (username, password, fullname, gender, role) VALUES
+                         (?, ?, 'Francis James Obis', 'Male', 'Super Admin'),
+                         (?, ?, 'Arnel Marquina', 'Male', 'Admin')`,
+                        ['admin1', hash1, 'admin2', hash2],
+                        (seedErr) => {
+                            if (seedErr) {
+                                console.error('❌ Error seeding default admin accounts:', seedErr);
+                                return;
+                            }
+                            console.log('✅ Default admin accounts seeded.');
+                            console.warn('⚠️  SECURITY: default admin1/admin2 passwords are the ones documented in server.js — change both via Manage Admins before/immediately after going live.');
+                        }
+                    );
+                } catch (hashErr) {
+                    console.error('❌ Error hashing default admin passwords:', hashErr);
+                }
+            })();
         }
     });
 
@@ -1878,7 +1942,18 @@ app.get('/login', noCache, (req, res) => {
 // the client (e.g. a direct POST to /auth-login).
 function verifyRecaptcha(token, remoteIp) {
     return new Promise((resolve) => {
-        if (!process.env.RECAPTCHA_SECRET_KEY || !token) {
+        // Gate on RECAPTCHA_SITE_KEY, not RECAPTCHA_SECRET_KEY: login.ejs's
+        // client-side fallback decides whether to render the widget at all
+        // based on RECAPTCHA_SITE_KEY (see the /login route above), so the
+        // server-side bypass has to key off that same variable or the two
+        // can desync — e.g. secret key set but site key missing/typo'd would
+        // otherwise skip the widget client-side while still requiring a
+        // token server-side, permanently locking out every login with no
+        // visible widget to ever complete.
+        if (!process.env.RECAPTCHA_SITE_KEY) {
+            return resolve(true);
+        }
+        if (!token) {
             return resolve(false);
         }
 
@@ -1929,6 +2004,45 @@ function isBcryptHash(value) {
     return typeof value === 'string' && /^\$2[aby]?\$/.test(value);
 }
 
+// Simple in-memory login-attempt throttle — neither /auth-login nor
+// /office-login had any brute-force/credential-stuffing protection before
+// this (reCAPTCHA only covers /auth-login, and only blocks scripted
+// automation, not slow/manual guessing). Not a substitute for a proper
+// distributed rate limiter behind a load balancer, but this admin portal
+// runs as a single Node process, so a per-IP in-memory counter is a real,
+// meaningful mitigation for this deployment shape without adding a new
+// dependency. Counts ALL attempts (not just failures) — simpler, and a
+// legitimate admin typing their own password wrong a handful of times in
+// 10 minutes is not meaningfully burdened by this ceiling.
+const loginAttempts = new Map(); // ip -> { count, windowStart }
+const LOGIN_RATE_LIMIT_MAX = 10;
+const LOGIN_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+
+function loginRateLimiter(redirectPath) {
+    return (req, res, next) => {
+        const ip = req.ip;
+        const now = Date.now();
+        let entry = loginAttempts.get(ip);
+        if (!entry || now - entry.windowStart > LOGIN_RATE_LIMIT_WINDOW_MS) {
+            entry = { count: 0, windowStart: now };
+            loginAttempts.set(ip, entry);
+        }
+        entry.count++;
+        if (entry.count > LOGIN_RATE_LIMIT_MAX) {
+            return res.redirect(redirectPath + '?error=' + encodeURIComponent('Too many login attempts. Please try again in a few minutes.'));
+        }
+        next();
+    };
+}
+
+// Periodic sweep so stale IP entries don't accumulate in the Map forever.
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, entry] of loginAttempts) {
+        if (now - entry.windowStart > LOGIN_RATE_LIMIT_WINDOW_MS) loginAttempts.delete(ip);
+    }
+}, LOGIN_RATE_LIMIT_WINDOW_MS).unref();
+
 async function verifyAdminPassword(admin, passwordInput) {
     if (isBcryptHash(admin.password)) {
         return bcrypt.compare(passwordInput, admin.password);
@@ -1936,7 +2050,7 @@ async function verifyAdminPassword(admin, passwordInput) {
     return admin.password === passwordInput;
 }
 
-app.post('/auth-login', async (req, res) => {
+app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
     const { username, password } = req.body;
     const usernameInput = String(username || '').trim();
 
@@ -2061,11 +2175,22 @@ app.post('/auth-login', async (req, res) => {
             return res.redirect('/login?error=' + encodeURIComponent('Invalid email or password.'));
         }
 
-        req.session.clientEmail = account.email;
-        // ?loggedin=1 lets client-survey.ejs's new-tab guard mark THIS tab (via
-        // sessionStorage) as one that actually authenticated, as opposed to a
-        // different tab merely inheriting the shared 'client.sid' cookie.
-        return res.redirect('/client-survey?loggedin=1');
+        // Regenerate before assigning identity to prevent session fixation
+        // (an attacker who planted a known session id on the victim's
+        // browser — e.g. via a shared/kiosk machine — must not have that id
+        // become authenticated once the victim logs in). Mirrors
+        // regenerateAdminSession's use on the admin/office login paths.
+        req.session.regenerate((err) => {
+            if (err) {
+                return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
+            }
+            req.session.clientEmail = account.email;
+            // ?loggedin=1 lets client-survey.ejs's new-tab guard mark THIS tab
+            // (via sessionStorage) as one that actually authenticated, as
+            // opposed to a different tab merely inheriting the shared
+            // 'client.sid' cookie.
+            return res.redirect('/client-survey?loggedin=1');
+        });
     });
 
     function handleOfficeLogin() {
@@ -2135,7 +2260,7 @@ app.get('/office-login', noCache, (req, res) => {
     res.render('office-login');
 });
 
-app.post('/office-login', (req, res) => {
+app.post('/office-login', loginRateLimiter('/office-login'), (req, res) => {
     const emailInput = String(req.body.email || '').trim().toLowerCase();
     const password = req.body.password;
     if (!emailInput || !password) {
@@ -2203,52 +2328,77 @@ app.get('/office-approvals', ensureOfficeAuth, noCache, (req, res) => {
 
 app.post('/office-approvals/:id/approve', ensureOfficeAuth, (req, res) => {
     const officeId = req.adminSession.user.id;
+    // Atomically claim the row FIRST (flip to an interim 'processing' status
+    // conditioned on it still being 'pending') before doing any of the actual
+    // finalize work. A plain SELECT check here (the previous approach) lets
+    // two concurrent requests for the same submission — a double-click, two
+    // open tabs, or a race with /decline — both pass the pending check before
+    // either write lands, both call finalizeVerifiedSurvey, and double-insert
+    // the same respondent into survey_responses. Conditioning this UPDATE on
+    // status='pending' (same pattern /decline already uses) means only one
+    // concurrent request can ever win the claim; the loser's affectedRows
+    // comes back 0 and it bails out before finalizing anything.
     db.query(
-        "SELECT * FROM pending_survey_submissions WHERE id = ? AND office_id = ? AND status = 'pending' LIMIT 1",
+        "UPDATE pending_survey_submissions SET status = 'processing' WHERE id = ? AND office_id = ? AND status = 'pending'",
         [req.params.id, officeId],
-        (err, rows) => {
-            if (err || !rows || rows.length === 0) {
-                return res.redirect('/office-approvals?error=' + encodeURIComponent('Unable to process the submission. Please try again.'));
+        (claimErr, claimResult) => {
+            if (claimErr || !claimResult || claimResult.affectedRows === 0) {
+                return res.redirect('/office-approvals?error=' + encodeURIComponent('This submission was already processed or is unavailable.'));
             }
-            const row = rows[0];
-            let payload;
-            try { payload = JSON.parse(row.payload); } catch (e) {
-                console.error("❌ [Office Approval] Corrupt payload for pending submission", row.id, e);
-                return res.redirect('/office-approvals?error=' + encodeURIComponent('Unable to process the submission. Please try again.'));
-            }
+            db.query(
+                "SELECT * FROM pending_survey_submissions WHERE id = ? LIMIT 1",
+                [req.params.id],
+                (err, rows) => {
+                    if (err || !rows || rows.length === 0) {
+                        return res.redirect('/office-approvals?error=' + encodeURIComponent('Unable to process the submission. Please try again.'));
+                    }
+                    const row = rows[0];
+                    let payload;
+                    try { payload = JSON.parse(row.payload); } catch (e) {
+                        console.error("❌ [Office Approval] Corrupt payload for pending submission", row.id, e);
+                        // Revert the claim so this doesn't get stuck as 'processing'
+                        // forever with no way to retry or decline it.
+                        db.query("UPDATE pending_survey_submissions SET status = 'pending' WHERE id = ?", [row.id], () => {});
+                        return res.redirect('/office-approvals?error=' + encodeURIComponent('Unable to process the submission. Please try again.'));
+                    }
 
-            // This survey was already submitted by the client — the generic "thanks
-            // for submitting" receipt doesn't fit here. Send the dedicated approval
-            // notification (with the result embedded right in the email) below instead.
-            payload.skipReceiptEmail = true;
+                    // This survey was already submitted by the client — the generic "thanks
+                    // for submitting" receipt doesn't fit here. Send the dedicated approval
+                    // notification (with the result embedded right in the email) below instead.
+                    payload.skipReceiptEmail = true;
 
-            finalizeVerifiedSurvey(row.google_email, payload, (finalizeErr, surveyResponseId) => {
-                if (finalizeErr) {
-                    console.error("❌ [Office Approval] Error finalizing approved survey:", finalizeErr);
-                    return res.redirect('/office-approvals?error=' + encodeURIComponent('Unable to process the submission. Please try again.'));
-                }
-                db.query(
-                    "UPDATE pending_survey_submissions SET status = 'approved', reviewed_at = NOW() WHERE id = ?",
-                    [row.id],
-                    () => res.redirect('/office-approvals?success=' + encodeURIComponent('Survey submission approved successfully.'))
-                );
+                    finalizeVerifiedSurvey(row.google_email, payload, (finalizeErr, surveyResponseId) => {
+                        if (finalizeErr) {
+                            console.error("❌ [Office Approval] Error finalizing approved survey:", finalizeErr);
+                            // Revert the claim so the office can retry instead of the
+                            // submission being stuck unfinalized in 'processing' forever.
+                            db.query("UPDATE pending_survey_submissions SET status = 'pending' WHERE id = ?", [row.id], () => {});
+                            return res.redirect('/office-approvals?error=' + encodeURIComponent('Unable to process the submission. Please try again.'));
+                        }
+                        db.query(
+                            "UPDATE pending_survey_submissions SET status = 'approved', reviewed_at = NOW() WHERE id = ?",
+                            [row.id],
+                            () => res.redirect('/office-approvals?success=' + encodeURIComponent('Survey submission approved successfully.'))
+                        );
 
-                db.query('SELECT office_name, cluster_name FROM offices WHERE id = ? LIMIT 1', [payload.officeId], (officeErr, officeRows) => {
-                    const office = (!officeErr && officeRows && officeRows[0]) ? officeRows[0] : null;
-                    sendSurveyApprovedEmail(row.google_email, {
-                        name: payload.respondentName,
-                        officeName: office ? office.office_name : 'Selected Office',
-                        clusterName: office ? office.cluster_name : '',
-                        clientType: payload.clientType,
-                        serviceAvailed: payload.serviceAvailed || 'Not specified',
-                        submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
-                        surveyResponseId,
-                        cc1: payload.cc1, cc2: payload.cc2, cc3: payload.cc3,
-                        sqd: (payload.sqdValues || []).map((v, i) => ({ label: 'SQD' + i, value: v })),
-                        comments: payload.comments || 'N/A'
+                        db.query('SELECT office_name, cluster_name FROM offices WHERE id = ? LIMIT 1', [payload.officeId], (officeErr, officeRows) => {
+                            const office = (!officeErr && officeRows && officeRows[0]) ? officeRows[0] : null;
+                            sendSurveyApprovedEmail(row.google_email, {
+                                name: payload.respondentName,
+                                officeName: office ? office.office_name : 'Selected Office',
+                                clusterName: office ? office.cluster_name : '',
+                                clientType: payload.clientType,
+                                serviceAvailed: payload.serviceAvailed || 'Not specified',
+                                submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
+                                surveyResponseId,
+                                cc1: payload.cc1, cc2: payload.cc2, cc3: payload.cc3,
+                                sqd: (payload.sqdValues || []).map((v, i) => ({ label: 'SQD' + i, value: v })),
+                                comments: payload.comments || 'N/A'
+                            });
+                        });
                     });
-                });
-            });
+                }
+            );
         }
     );
 });
@@ -2335,13 +2485,20 @@ app.get('/auth/google/callback',
                 }
 
                 if (existingAccount && existingAccount.password) {
-                    req.session.clientEmail = existingAccount.email;
-                    // Refresh the stored photo on every Google sign-in (Google account photos can
-                    // change) — fire-and-forget, doesn't block the redirect.
-                    if (photo) {
-                        db.query('UPDATE client_accounts SET google_photo_url = ? WHERE email = ?', [photo, existingAccount.email], () => {});
-                    }
-                    return res.redirect('/client-survey?loggedin=1');
+                    // Regenerate before assigning identity to prevent session
+                    // fixation — same reasoning as the /auth-login client path.
+                    return req.session.regenerate((regenErr) => {
+                        if (regenErr) {
+                            return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
+                        }
+                        req.session.clientEmail = existingAccount.email;
+                        // Refresh the stored photo on every Google sign-in (Google account photos can
+                        // change) — fire-and-forget, doesn't block the redirect.
+                        if (photo) {
+                            db.query('UPDATE client_accounts SET google_photo_url = ? WHERE email = ?', [photo, existingAccount.email], () => {});
+                        }
+                        return res.redirect('/client-survey?loggedin=1');
+                    });
                 }
 
                 req.session.pendingGoogleUser = { email, name, photo };
@@ -2385,9 +2542,16 @@ app.post('/complete-google-registration', async (req, res) => {
                 if (err) {
                     return res.redirect('/complete-google-registration?error=' + encodeURIComponent('Could not save your account. Please try again.'));
                 }
-                req.session.clientEmail = pending.email;
-                delete req.session.pendingGoogleUser;
-                return res.redirect('/client-survey?loggedin=1');
+                // Regenerate before assigning identity to prevent session
+                // fixation — same reasoning as the /auth-login client path.
+                const registeredEmail = pending.email;
+                req.session.regenerate((regenErr) => {
+                    if (regenErr) {
+                        return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
+                    }
+                    req.session.clientEmail = registeredEmail;
+                    return res.redirect('/client-survey?loggedin=1');
+                });
             }
         );
     } catch (e) {
@@ -2409,6 +2573,16 @@ app.post('/complete-google-registration', async (req, res) => {
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
 function hashResetToken(token) {
     return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+// Constant-time comparison for reset-token hashes — a plain `===` short-
+// circuits on the first mismatched character, leaking (via response timing)
+// how many leading hex characters of a guess are correct. Both hashes are
+// fixed-length hex SHA-256 digests here, so the length check itself leaks
+// nothing an attacker doesn't already know.
+function timingSafeHexEqual(a, b) {
+    if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
 }
 
 app.get('/forgot-password', noCache, (req, res) => {
@@ -2458,7 +2632,7 @@ app.get('/reset-password', noCache, (req, res) => {
             [String(email).trim().toLowerCase()],
             (err, rows) => {
                 const row = (!err && rows && rows.length > 0) ? rows[0] : null;
-                const valid = row && row.reset_token_hash === tokenHash && row.reset_token_expires && new Date(row.reset_token_expires) > new Date();
+                const valid = row && row.reset_token_hash && timingSafeHexEqual(row.reset_token_hash, tokenHash) && row.reset_token_expires && new Date(row.reset_token_expires) > new Date();
                 if (!valid) {
                     return res.render('reset-password', { mode: 'invalid', email: null, token: null, error: 'This reset link is invalid or has expired. Please request a new one.' });
                 }
@@ -2492,9 +2666,13 @@ app.post('/reset-password', async (req, res) => {
 
             db.query('UPDATE client_accounts SET password = ? WHERE email = ?', [hashedPassword, verifiedEmail], (err) => {
                 if (err) return fail('Could not update your password. Please try again.');
-                delete req.session.googleVerifiedResetEmail;
-                req.session.clientEmail = verifiedEmail;
-                return res.redirect('/client-survey?loggedin=1');
+                // Regenerate before assigning identity to prevent session
+                // fixation — same reasoning as the /auth-login client path.
+                req.session.regenerate((regenErr) => {
+                    if (regenErr) return fail('Server error. Please try again.');
+                    req.session.clientEmail = verifiedEmail;
+                    return res.redirect('/client-survey?loggedin=1');
+                });
             });
             return;
         }
@@ -2506,7 +2684,7 @@ app.post('/reset-password', async (req, res) => {
 
         db.query('SELECT reset_token_hash, reset_token_expires FROM client_accounts WHERE email = ? LIMIT 1', [email], (err, rows) => {
             const row = (!err && rows && rows.length > 0) ? rows[0] : null;
-            const valid = row && row.reset_token_hash === tokenHash && row.reset_token_expires && new Date(row.reset_token_expires) > new Date();
+            const valid = row && row.reset_token_hash && timingSafeHexEqual(row.reset_token_hash, tokenHash) && row.reset_token_expires && new Date(row.reset_token_expires) > new Date();
             if (!valid) {
                 return res.render('reset-password', { mode: 'invalid', email: null, token: null, error: 'This reset link is invalid or has expired. Please request a new one.' });
             }
@@ -2516,8 +2694,13 @@ app.post('/reset-password', async (req, res) => {
                 [hashedPassword, email],
                 (updateErr) => {
                     if (updateErr) return fail('Could not update your password. Please try again.');
-                    req.session.clientEmail = email;
-                    return res.redirect('/client-survey?loggedin=1');
+                    // Regenerate before assigning identity to prevent session
+                    // fixation — same reasoning as the /auth-login client path.
+                    req.session.regenerate((regenErr) => {
+                        if (regenErr) return fail('Server error. Please try again.');
+                        req.session.clientEmail = email;
+                        return res.redirect('/client-survey?loggedin=1');
+                    });
                 }
             );
         });
@@ -2792,9 +2975,9 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
 
         const finalName = cleanStr(respondent_name) || 'Anonymous';
         const finalClientType = cleanStr(client_type) || 'Citizen';
-        const finalAge = cleanStr(age) || 'Not Specified';
-        const finalGender = cleanStr(gender) || 'Not Specified';
-        const finalRegion = cleanStr(region) || 'Not Specified';
+        const finalAge = allowlisted(age, VALID_AGE_BRACKETS) || 'Not Specified';
+        const finalGender = allowlisted(gender, VALID_GENDERS) || 'Not Specified';
+        const finalRegion = allowlisted(region, VALID_REGIONS) || 'Not Specified';
         const finalOfficeId = cleanInt(office_id);
         const finalOfficeVisitedTime = cleanTime(office_visited_time);
         const finalServiceAvailed = cleanStr(service_availed);
@@ -2912,9 +3095,9 @@ async function syncOneSurvey(googleEmail, body) {
 
     const finalName = cleanStr(respondent_name) || 'Anonymous';
     const finalClientType = cleanStr(client_type) || 'Citizen';
-    const finalAge = cleanStr(age) || 'Not Specified';
-    const finalGender = cleanStr(gender) || 'Not Specified';
-    const finalRegion = cleanStr(region) || 'Not Specified';
+    const finalAge = allowlisted(age, VALID_AGE_BRACKETS) || 'Not Specified';
+    const finalGender = allowlisted(gender, VALID_GENDERS) || 'Not Specified';
+    const finalRegion = allowlisted(region, VALID_REGIONS) || 'Not Specified';
     const finalOfficeVisitedTime = cleanTime(office_visited_time);
     const finalServiceAvailed = cleanStr(service_availed);
 
@@ -3418,8 +3601,13 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
             queryParams.push(office);
         }
         if (periodCovered) {
-            conditions.push('s.period_year_quarter = ?');
-            queryParams.push(periodCovered);
+            // Normalized comparison, not exact `=` — see periodNormExpr's
+            // docstring. Using exact match here (while /dashboard and
+            // /report use the normalized form) made this endpoint's totals
+            // silently diverge from the dashboard's for the same period
+            // whenever a row's period string used a legacy/variant spelling.
+            conditions.push(`${periodNormExpr('s.period_year_quarter')} = ?`);
+            queryParams.push(normalizePeriodStr(periodCovered));
         }
     }
 
@@ -3480,8 +3668,12 @@ app.post('/api/report-data-by-cluster', ensureAdminAuth, (req, res) => {
     const { cluster, periodCovered } = req.body;
     if (!cluster) return res.status(400).json({ error: 'cluster is required' });
 
-    const periodWhereAnd = periodCovered ? ' AND s.period_year_quarter = ?' : '';
-    const params = periodCovered ? [periodCovered, cluster] : [cluster];
+    // Normalized comparison, not exact `=` — see periodNormExpr's docstring.
+    // Kept consistent with /dashboard, /report, and /api/report-data so the
+    // same period selection never yields different respondent counts
+    // depending on which report page is open.
+    const periodWhereAnd = periodCovered ? ` AND ${periodNormExpr('s.period_year_quarter')} = ?` : '';
+    const params = periodCovered ? [normalizePeriodStr(periodCovered), cluster] : [cluster];
 
     const bucketCols = [
         ...sqdBucketExprs('s.sqd0', 'sqd0'),
@@ -3995,7 +4187,11 @@ app.post('/settings/restore', ensureAdminAuth, (req, res) => {
 // 5. Helper Function para sa Cluster Queries
 // ==========================================
 function getClusterPerformanceData(clusterName, periodCovered, callback) {
-    const periodJoinFilter = periodCovered ? ' AND s.period_year_quarter = ?' : '';
+    // Normalized comparison, not exact `=` — see periodNormExpr's docstring.
+    // Kept consistent with /dashboard, /report, and /api/report-data so
+    // /cluster/:id never reports different respondent counts/ratings than
+    // the dashboard for the same selected period.
+    const periodJoinFilter = periodCovered ? ` AND ${periodNormExpr('s.period_year_quarter')} = ?` : '';
     const clusterQuery = `
         SELECT
             o.id,
@@ -4011,7 +4207,7 @@ function getClusterPerformanceData(clusterName, periodCovered, callback) {
         WHERE o.cluster_name = ?
         GROUP BY o.id, o.office_name
     `;
-    const queryParams = periodCovered ? [periodCovered, clusterName] : [clusterName];
+    const queryParams = periodCovered ? [normalizePeriodStr(periodCovered), clusterName] : [clusterName];
 
     db.query(clusterQuery, queryParams, (err, results) => {
         if (err) return callback(err, null);
@@ -4077,25 +4273,28 @@ app.get('/api/public-dashboard', (req, res) => {
     // Cluster/office lists come from the offices table (all non-archived offices),
     // not just ones with survey rows — so a cluster filter shows every office it
     // contains, blank (0%) if it has no responses yet, instead of hiding it.
-    db.query('SELECT cluster_name, office_name FROM offices WHERE is_archived = 0 ORDER BY cluster_name, office_name', (err, officeRows) => {
+    // office_name has no UNIQUE constraint in the schema — two offices can
+    // legitimately share a name under different clusters. Keying the chart
+    // buckets by office id (not name) below keeps them distinct instead of
+    // silently merging their respondent counts/satisfaction % together.
+    db.query('SELECT id, cluster_name, office_name FROM offices WHERE is_archived = 0 ORDER BY office_name, id', (err, officeRows) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
 
         const clustersSet = new Set();
-        const officesSet = new Set();
-        const officeToClusterMap = {};
-        officeRows.forEach(o => {
-            if (o.cluster_name) clustersSet.add(o.cluster_name);
-            if (o.office_name) officesSet.add(o.office_name);
-            if (o.office_name && o.cluster_name && !officeToClusterMap[o.office_name]) {
-                officeToClusterMap[o.office_name] = o.cluster_name;
-            }
-        });
+        officeRows.forEach(o => { if (o.cluster_name) clustersSet.add(o.cluster_name); });
         const clusterList = Array.from(clustersSet).sort();
-        const officeList = Array.from(officesSet).sort();
-        const officeCluster = officeList.map(o => officeToClusterMap[o] || null);
+
+        // officeList/officeCluster stay parallel arrays of DISPLAY labels (for
+        // the chart legend), but officeIndexById is what actually resolves a
+        // survey_responses row to its bucket index, so two offices with the
+        // same name never collide into one bucket.
+        const officeList = officeRows.map(o => o.office_name);
+        const officeCluster = officeRows.map(o => o.cluster_name || null);
+        const officeIndexById = new Map(officeRows.map((o, i) => [o.id, i]));
 
         const query = `
             SELECT
+                o.id AS office_id,
                 o.cluster_name,
                 o.office_name,
                 s.sqd1, s.sqd2, s.sqd3, s.sqd4, s.sqd5, s.sqd6, s.sqd7, s.sqd8,
@@ -4154,7 +4353,7 @@ app.get('/api/public-dashboard', (req, res) => {
             }
 
             const cIdx = clusterList.indexOf(row.cluster_name);
-            const oIdx = officeList.indexOf(row.office_name);
+            const oIdx = officeIndexById.has(row.office_id) ? officeIndexById.get(row.office_id) : -1;
 
             const sqdAvg = ((row.sqd1||0) + (row.sqd2||0) + (row.sqd3||0) + (row.sqd4||0) + (row.sqd5||0) + (row.sqd6||0) + (row.sqd7||0) + (row.sqd8||0)) / 8;
             const isSatisfied = sqdAvg >= 3.5;
@@ -4249,7 +4448,7 @@ app.get('/api/public-dashboard', (req, res) => {
 // ==========================================
 const listenPort = process.env.PORT || port;
 app.listen(listenPort, '0.0.0.0', () => {
-    console.log(`🚀 Server is running on port ${listenPort}`);
-    console.log(`🔗 Open: http://localhost:${listenPort}`);
+    console.log(`Server is running on port ${listenPort}`);
+    console.log(`Open: http://localhost:${listenPort}`);
     startModelServer();
 });
