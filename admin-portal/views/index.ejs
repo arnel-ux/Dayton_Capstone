@@ -614,20 +614,24 @@
             .footer-main { grid-template-columns: 1fr 1fr; gap: var(--sp-5) var(--sp-4); }
         }
         @media (max-width: 36rem) {
-            .footer-main { grid-template-columns: 1fr; padding: var(--sp-6) var(--sp-3) var(--sp-4); gap: var(--sp-4); text-align: center; }
+            .footer-main { grid-template-columns: 1fr; padding: var(--sp-4) var(--sp-3) var(--sp-3); gap: var(--sp-3); text-align: center; }
+            .footer-heading { margin-bottom: var(--sp-2); }
             .footer-heading::after { left: 50%; transform: translateX(-50%); }
-            .footer-brand-logo { justify-content: center; }
+            .footer-brand-logo { justify-content: center; margin-bottom: var(--sp-1); }
             .footer-links { align-items: center; }
             .footer-socials { justify-content: center; }
+            .footer-contact { gap: var(--sp-1); }
             .footer-contact li { justify-content: center; text-align: left; }
+            .footer-bottom { padding: var(--sp-2) var(--sp-3); }
         }
 
         @media (max-width: 62rem) {
             .chart-card { min-width: 90vw; height: 55vh; }
-            .sticky-top-section { flex-direction: column; align-items: flex-start; padding: var(--sp-1) var(--sp-2); }
+            .sticky-top-section { flex-direction: column; align-items: flex-start; padding: 0.5rem var(--sp-2); }
             .nav-inner { gap: var(--sp-1); }
             .nav-right { width: 100%; justify-content: space-between; }
-            .nav-left img { width: 38px; height: 38px; }
+            .nav-left img { width: 32px; height: 32px; }
+            .nav-left { gap: 0.5rem; }
             .hover-only-text { display: none; }
             .tap-only-text { display: inline; }
 
@@ -640,7 +644,11 @@
             .site-nav.nav-open a::after { display: none; }
         }
         @media (max-width: 36rem) {
-            .header-text-container { display: none; }
+            /* Previously hidden outright on mobile — brought back at a
+               compact size (instead of removed) so the college's name isn't
+               missing from the header, without pushing the header taller. */
+            .header-title { font-size: 0.7rem; letter-spacing: 0.2px; }
+            .header-subtitle { font-size: 0.58rem; letter-spacing: 0.3px; }
             .chart-card { min-width: 94vw; height: 50vh; }
             .about-section, .org-section { padding-left: var(--sp-2); padding-right: var(--sp-2); }
             /* .about-section, .org-section, .services-section all carry a
