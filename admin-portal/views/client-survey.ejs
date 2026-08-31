@@ -1096,7 +1096,16 @@
         #sqd-table-wrap {
             border: 1px solid var(--line) !important;
             border-radius: 16px !important;
-            overflow: hidden;
+            /* overflow: hidden here (an ID selector) was silently overriding
+               Bootstrap's .table-responsive overflow-x: auto — the table
+               could never actually scroll horizontally, so the last column
+               (N/A) was permanently clipped off-screen on any viewport too
+               narrow for all 7 columns, not just small phones. Only clip
+               vertically now (still rounds the table's square corners to
+               match this wrapper's border-radius), let horizontal scroll
+               through. */
+            overflow-x: auto;
+            overflow-y: hidden;
         }
 
         #sqd-table-wrap table { margin-bottom: 0; }

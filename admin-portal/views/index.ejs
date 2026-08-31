@@ -487,7 +487,23 @@
         .kpi-value { font-size: 1.25rem; font-weight: 800; color: #fff; line-height: 1.15; letter-spacing: -0.02em; }
         .kpi-label { font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: rgba(255,255,255,0.6); margin-top: 2px; }
         @media (max-width: 62rem) { .kpi-strip { grid-template-columns: repeat(2, 1fr); } }
-        @media (max-width: 36rem) { .kpi-strip { grid-template-columns: 1fr; } }
+        @media (max-width: 36rem) {
+            /* Stayed 2-column here too instead of collapsing to a single
+               stacked column — 2x2 fits comfortably even on narrow phones
+               once the tile itself is sized down a bit. */
+            .kpi-strip { grid-template-columns: repeat(2, 1fr); gap: 0.6rem; padding: 0 var(--sp-2); }
+            .kpi-tile { padding: 0.6rem 0.6rem; gap: 0.5rem; }
+            .kpi-icon { width: 30px; height: 30px; font-size: 0.85rem; }
+            .kpi-value { font-size: 1.05rem; }
+            .kpi-label { font-size: 0.62rem; }
+            .dashboard-live-badge { display: none; }
+
+            /* Cluster pills: each has a flex-basis of 11rem (176px), so on a
+               375-414px phone only one fit per row before wrapping — forced
+               into a real 2-column grid instead, sized down to fit. */
+            .cluster-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+            .cluster-tab-btn { flex: none; padding: 0.6rem 0.5rem; font-size: 0.72rem; border-radius: var(--sp-2); gap: 0.4rem; }
+        }
 
         /* No boxed "tray" anymore — just a plain flex viewport so the marquee
            still has something to clip against (overflow:hidden) for the
@@ -648,7 +664,12 @@
                redundant and was what pushed the header tall in the first
                place. */
             .sticky-top-section { padding: 0.5rem var(--sp-2); }
-            .nav-inner { gap: var(--sp-1); }
+            /* Hamburger far left, brand centered in the remaining space,
+               Login far right — .nav-left gets flex:1 so it centers its own
+               logo+text within whatever room is left between the other two,
+               rather than sitting flush against the hamburger. */
+            .nav-inner { gap: var(--sp-1); justify-content: space-between; }
+            .nav-left { flex: 1; justify-content: center; }
             .nav-left img { width: 32px; height: 32px; }
             .nav-left { gap: 0.5rem; }
             /* Fixed short "CQA Portal" / "Login" labels instead of the full
@@ -674,7 +695,7 @@
             .site-nav.nav-open a::after { display: none; }
         }
         @media (max-width: 36rem) {
-            .chart-card { min-width: 94vw; height: 50vh; }
+            .chart-card { min-width: 90vw; height: 38vh; }
             .about-section, .org-section { padding-left: var(--sp-2); padding-right: var(--sp-2); }
             /* .about-section, .org-section, .services-section all carry a
                desktop-scale 80px top/bottom padding (--sp-10) with no mobile
@@ -725,6 +746,15 @@
 
     <div class="sticky-top-section" id="siteHeader">
         <div class="nav-inner">
+            <!-- Sits outside nav-left/nav-right on purpose: on mobile it's
+                 CSS-ordered to the far left with nav-left centered between
+                 it and nav-right (Login) — on desktop it's just plain
+                 hidden (.nav-hamburger { display:none }), so its DOM
+                 position here has zero effect on desktop layout. -->
+            <button type="button" class="nav-hamburger" id="navHamburgerBtn" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="siteNavList">
+                <i class="fas fa-bars"></i>
+            </button>
+
             <div class="nav-left">
                 <img src="<%= landingContent.branding.logoUrl %>" alt="Camarines Sur Polytechnic Colleges Logo">
                 <div class="header-text-container">
@@ -741,9 +771,6 @@
             </nav>
 
             <div class="nav-right">
-                <button type="button" class="nav-hamburger" id="navHamburgerBtn" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="siteNavList">
-                    <i class="fas fa-bars"></i>
-                </button>
                 <div class="auth-buttons">
                     <a href="/login" class="btn btn-admin magnetic"><i class="fas fa-sign-in-alt d-none d-sm-inline"></i><span class="desktop-only-text"><%= landingContent.branding.loginLabel %></span><span class="mobile-only-text">Login</span></a>
                 </div>
