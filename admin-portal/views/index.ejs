@@ -614,29 +614,42 @@
             .footer-main { grid-template-columns: 1fr 1fr; gap: var(--sp-5) var(--sp-4); }
         }
         @media (max-width: 36rem) {
-            .footer-main { grid-template-columns: 1fr; padding: var(--sp-4) var(--sp-3) var(--sp-3); gap: var(--sp-3); text-align: center; }
-            .footer-heading { margin-bottom: var(--sp-2); }
+            .footer-main { grid-template-columns: 1fr; padding: var(--sp-3) var(--sp-3) var(--sp-2); gap: var(--sp-2); text-align: center; }
+            .footer-heading { margin-bottom: 0.6rem; font-size: 0.78rem; }
             .footer-heading::after { left: 50%; transform: translateX(-50%); }
-            .footer-brand-logo { justify-content: center; margin-bottom: var(--sp-1); }
-            .footer-links { align-items: center; }
-            .footer-socials { justify-content: center; }
-            .footer-contact { gap: var(--sp-1); }
-            .footer-contact li { justify-content: center; text-align: left; }
-            .footer-bottom { padding: var(--sp-2) var(--sp-3); }
+            .footer-brand-logo { justify-content: center; margin-bottom: 0.4rem; }
+            .footer-brand-logo img { width: 34px; height: 34px; }
+            .footer-desc { line-height: 1.45; font-size: 0.78rem; }
+            .footer-links { align-items: center; gap: 0.35rem; }
+            .footer-links a { padding: 0.25rem 0; }
+            .footer-socials { justify-content: center; margin-top: 0.4rem; }
+            .footer-contact { gap: 0.4rem; }
+            .footer-contact li { justify-content: center; text-align: left; font-size: 0.78rem; }
+            .footer-bottom { padding: var(--sp-2) var(--sp-3); font-size: 0.72rem; }
         }
 
         @media (max-width: 62rem) {
             .chart-card { min-width: 90vw; height: 55vh; }
-            .sticky-top-section { flex-direction: column; align-items: flex-start; padding: 0.5rem var(--sp-2); }
+            /* Single-row compact header: logo left, hamburger + login right.
+               The 2-row stacked version (logo+title on row 1, hamburger+login
+               on row 2) read as cluttered/misaligned — this is the standard
+               mobile header pattern instead. The full org name/tagline is
+               dropped here since the hero heading right below already
+               introduces it prominently; showing it twice in a row was
+               redundant and was what pushed the header tall in the first
+               place. */
+            .sticky-top-section { padding: 0.5rem var(--sp-2); }
             .nav-inner { gap: var(--sp-1); }
-            .nav-right { width: 100%; justify-content: space-between; }
             .nav-left img { width: 32px; height: 32px; }
             .nav-left { gap: 0.5rem; }
+            .header-text-container { display: none; }
+            .nav-right { flex-shrink: 0; gap: var(--sp-1); }
             .hover-only-text { display: none; }
             .tap-only-text { display: inline; }
 
             /* Nav links no longer just vanish on mobile — .nav-hamburger toggles
-               .site-nav between hidden (default) and an open vertical list. */
+               .site-nav between hidden (default) and an open vertical list
+               that drops down below the single header row (not inline with it). */
             .nav-hamburger { display: inline-flex; }
             .site-nav { display: none; width: 100%; order: 3; }
             .site-nav.nav-open { display: flex; flex-direction: column; align-items: stretch; margin: var(--sp-2) 0 0; gap: 0; border-top: 1px solid rgba(255,255,255,0.15); }
@@ -681,13 +694,10 @@
             .btn-back-custom { padding: 0.6rem var(--sp-2); min-height: 40px; }
             .kpi-label { font-size: 0.8rem; }
             .footer-socials a { width: 44px; height: 44px; }
-
-            /* Footer link rows were ~20px-tall text with only a 16px gap
-               between them — pad each row into a real tap target instead of
-               relying on the gap alone to keep thumbs from mis-tapping the
-               link above/below. */
-            .footer-links a { padding: 0.4rem 0; }
-            .footer-links { gap: 0.25rem; }
+            /* Footer link padding/gap consolidated into the earlier footer
+               block above (search "line-height: 1.45" nearby) — keeping tap
+               targets comfortable while fitting the whole footer into a much
+               shorter mobile height overall. */
         }
 
         /* Respect reduced-motion preference: kill parallax/float, keep instant states */
