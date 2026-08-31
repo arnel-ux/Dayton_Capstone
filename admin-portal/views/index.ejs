@@ -102,6 +102,7 @@
            with no hover — .tap-only-text is desktop-hidden by default, swapped
            for .hover-only-text inside the existing mobile media query below. */
         .tap-only-text { display: none; }
+        .mobile-only-text { display: none; }
 
         /* --- SITE NAV LINKS --- */
         .site-nav { display: flex; align-items: center; justify-content: center; gap: var(--sp-2); margin: 0 var(--sp-3); }
@@ -625,9 +626,14 @@
             .footer-links { display: grid; grid-template-columns: 1fr 1fr; align-items: start; justify-items: center; gap: 0.35rem 0.5rem; }
             .footer-links a { padding: 0.25rem 0; }
             .footer-socials { justify-content: center; margin-top: 0.4rem; }
-            .footer-contact { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-            .footer-contact li:first-child { grid-column: 1 / -1; }
-            .footer-contact li { justify-content: center; text-align: left; font-size: 0.78rem; }
+            .footer-contact { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem 0.5rem; }
+            .footer-contact li:first-child { grid-column: 1 / -1; flex-direction: row; justify-content: center; text-align: left; }
+            /* Email/phone/hours: icon stacked above centered, wrapped text
+               instead of a horizontal row — a short cell (email) and a long
+               one (phone number) sitting side-by-side in a row layout wrapped
+               unevenly and looked lopsided; stacked-and-centered reads as
+               deliberate regardless of each item's text length. */
+            .footer-contact li { flex-direction: column; align-items: center; text-align: center; gap: 0.3rem; font-size: 0.78rem; }
             .footer-bottom { padding: var(--sp-2) var(--sp-3); font-size: 0.72rem; }
         }
 
@@ -645,15 +651,15 @@
             .nav-inner { gap: var(--sp-1); }
             .nav-left img { width: 32px; height: 32px; }
             .nav-left { gap: 0.5rem; }
-            /* Back, but compact: single truncated line next to the logo
-               (whatever the real title text is, gracefully clipped with an
-               ellipsis instead of hardcoding an abbreviation) — the
-               subtitle line is dropped since one short line is what keeps
-               this fitting on the same row as the hamburger/login button
-               instead of forcing a second row again. */
-            .header-text-container { display: flex; max-width: 42vw; }
-            .header-title { display: block; font-size: 0.68rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
-            .header-subtitle { display: none; }
+            /* Fixed short "CQA Portal" / "Login" labels instead of the full
+               dynamic title/subtitle/login-label text (which was either too
+               wide for one row, or truncated into an ugly "...") — swapped
+               via a simple desktop/mobile text-toggle pair, same idea as the
+               "Hover to see"/"Tap to drilldown" hint text above. */
+            .desktop-only-text { display: none; }
+            .mobile-only-text { display: inline; }
+            .header-text-container { display: flex; }
+            .header-title .mobile-only-text { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.3px; }
             .nav-right { flex-shrink: 0; gap: var(--sp-1); }
             .hover-only-text { display: none; }
             .tap-only-text { display: inline; }
@@ -668,11 +674,6 @@
             .site-nav.nav-open a::after { display: none; }
         }
         @media (max-width: 36rem) {
-            /* Previously hidden outright on mobile — brought back at a
-               compact size (instead of removed) so the college's name isn't
-               missing from the header, without pushing the header taller. */
-            .header-title { font-size: 0.7rem; letter-spacing: 0.2px; }
-            .header-subtitle { font-size: 0.58rem; letter-spacing: 0.3px; }
             .chart-card { min-width: 94vw; height: 50vh; }
             .about-section, .org-section { padding-left: var(--sp-2); padding-right: var(--sp-2); }
             /* .about-section, .org-section, .services-section all carry a
@@ -727,8 +728,8 @@
             <div class="nav-left">
                 <img src="<%= landingContent.branding.logoUrl %>" alt="Camarines Sur Polytechnic Colleges Logo">
                 <div class="header-text-container">
-                    <h1 class="header-title"><%= landingContent.branding.title %></h1>
-                    <p class="header-subtitle"><%= landingContent.branding.subtitle %></p>
+                    <h1 class="header-title"><span class="desktop-only-text"><%= landingContent.branding.title %></span><span class="mobile-only-text">CQA Portal</span></h1>
+                    <p class="header-subtitle desktop-only-text"><%= landingContent.branding.subtitle %></p>
                 </div>
             </div>
 
@@ -744,7 +745,7 @@
                     <i class="fas fa-bars"></i>
                 </button>
                 <div class="auth-buttons">
-                    <a href="/login" class="btn btn-admin magnetic"><i class="fas fa-sign-in-alt d-none d-sm-inline"></i><%= landingContent.branding.loginLabel %></a>
+                    <a href="/login" class="btn btn-admin magnetic"><i class="fas fa-sign-in-alt d-none d-sm-inline"></i><span class="desktop-only-text"><%= landingContent.branding.loginLabel %></span><span class="mobile-only-text">Login</span></a>
                 </div>
             </div>
         </div>
@@ -978,7 +979,7 @@
                     <h4 class="footer-heading">Connect With Us</h4>
                     <div class="footer-socials">
                         <a href="<%= landingContent.footer.facebook %>" target="_blank" rel="noopener" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
-                        <a href="<%= landingContent.footer.twitter %>" target="_blank" rel="noopener" aria-label="Twitter / X"><i class="fab fa-x-twitter"></i></a>
+                        <a href="<%= landingContent.footer.twitter %>" target="_blank" rel="noopener" aria-label="Twitter / X"><i class="fab fa-twitter"></i></a>
                         <a href="<%= landingContent.footer.linkedin %>" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
                         <a href="<%= landingContent.footer.spims %>" target="_blank" rel="noopener" aria-label="SPIMS Portal"><i class="fas fa-globe"></i></a>
                     </div>
