@@ -89,6 +89,11 @@
            of the same image lining up imperfectly at each section boundary. */
         .page-content { position: relative; z-index: 1; }
 
+        /* "Hover to see details" reads as broken instruction on a touch device
+           with no hover — .tap-only-text is desktop-hidden by default, swapped
+           for .hover-only-text inside the existing mobile media query below. */
+        .tap-only-text { display: none; }
+
         /* --- SITE NAV LINKS --- */
         .site-nav { display: flex; align-items: center; justify-content: center; gap: var(--sp-2); margin: 0 var(--sp-3); }
         .site-nav a { color: rgba(255,255,255,0.85); text-decoration: none; font-weight: 600; font-size: var(--fs-sm); letter-spacing: 0.4px; text-transform: uppercase; position: relative; padding-bottom: 4px; transition: color 0.25s ease; }
@@ -125,6 +130,14 @@
         .header-subtitle { font-size: var(--fs-sm); color: var(--gold-400); font-weight: 600; margin: 0; letter-spacing: 1px; line-height: 1.4; }
 
         .nav-right { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); margin-left: auto; }
+
+        /* Hamburger toggle for .site-nav — hidden on desktop (the nav is already
+           visible inline there), only shown/wired up inside the mobile media
+           query below, where .site-nav switches from "hidden entirely" to a
+           tap-to-open vertical menu instead of just disappearing with no
+           replacement. */
+        .nav-hamburger { display: none; background: transparent; border: 1px solid rgba(255,255,255,0.4); color: #fff; width: 44px; height: 44px; min-width: 44px; border-radius: 10px; font-size: 1.15rem; align-items: center; justify-content: center; cursor: pointer; }
+        .nav-hamburger:hover { border-color: var(--gold-400); background: rgba(255,255,255,0.1); }
         .period-select {
             padding: var(--sp-1) var(--sp-2); border-radius: 50px; border: 1px solid rgba(255,255,255,0.4);
             background: rgba(255, 255, 255, 0.1); color: white; font-weight: 600; font-size: var(--fs-sm);
@@ -604,7 +617,16 @@
             .chart-card { min-width: 90vw; height: 55vh; }
             .sticky-top-section { flex-direction: column; align-items: flex-start; }
             .nav-right { width: 100%; justify-content: space-between; }
-            .site-nav { display: none; }
+            .hover-only-text { display: none; }
+            .tap-only-text { display: inline; }
+
+            /* Nav links no longer just vanish on mobile — .nav-hamburger toggles
+               .site-nav between hidden (default) and an open vertical list. */
+            .nav-hamburger { display: inline-flex; }
+            .site-nav { display: none; width: 100%; order: 3; }
+            .site-nav.nav-open { display: flex; flex-direction: column; align-items: stretch; margin: var(--sp-2) 0 0; gap: 0; border-top: 1px solid rgba(255,255,255,0.15); }
+            .site-nav.nav-open a { padding: 0.9rem var(--sp-1); border-bottom: 1px solid rgba(255,255,255,0.12); text-align: left; }
+            .site-nav.nav-open a::after { display: none; }
         }
         @media (max-width: 36rem) {
             .header-text-container { display: none; }
@@ -664,7 +686,7 @@
                 </div>
             </div>
 
-            <nav class="site-nav">
+            <nav class="site-nav" id="siteNavList">
                 <a href="#dashboard" data-nav-link>Dashboard</a>
                 <a href="#services" data-nav-link>Services</a>
                 <a href="#about" data-nav-link>About</a>
@@ -672,6 +694,9 @@
             </nav>
 
             <div class="nav-right">
+                <button type="button" class="nav-hamburger" id="navHamburgerBtn" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="siteNavList">
+                    <i class="fas fa-bars"></i>
+                </button>
                 <div class="auth-buttons">
                     <a href="/login" class="btn btn-admin magnetic"><i class="fas fa-sign-in-alt d-none d-sm-inline"></i><%= landingContent.branding.loginLabel %></a>
                 </div>
@@ -691,7 +716,7 @@
                 <div class="dashboard-header-block" data-reveal="fade-up">
                     <span class="section-eyebrow">Data &amp; Transparency</span>
                     <h2 class="section-title">Transparency Dashboard</h2>
-                    <p>Live satisfaction survey results across clusters and offices. Hover to see details, click to drill down.</p>
+                    <p>Live satisfaction survey results across clusters and offices. <span class="hover-only-text">Hover to see details, click to drill down.</span><span class="tap-only-text">Tap a chart to drill down.</span></p>
                     <div class="dashboard-live-badge"><span class="dashboard-live-dot"></span> Live &middot; refreshes automatically</div>
                 </div>
 
@@ -746,7 +771,7 @@
                                     <div class="chart-icon-badge"><i class="fas fa-chart-pie"></i></div>
                                     <div>
                                         <h3 id="c1-title" class="chart-title" data-main="Overall Ratings" data-drill="Total Overall Rating">Overall Ratings</h3>
-                                        <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
+                                        <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i><span class="hover-only-text">Hover to see details • Click to drilldown</span><span class="tap-only-text">Tap to drilldown</span></div>
                                     </div>
                                 </div>
                                 <button id="c1-back" onclick="goBack('c1')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
@@ -760,7 +785,7 @@
                                     <div class="chart-icon-badge"><i class="fas fa-sitemap"></i></div>
                                     <div>
                                         <h3 id="c2-title" class="chart-title" data-main="Satisfaction by Cluster" data-drill="Cluster Rating">Satisfaction by Cluster</h3>
-                                        <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
+                                        <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i><span class="hover-only-text">Hover to see details • Click to drilldown</span><span class="tap-only-text">Tap to drilldown</span></div>
                                     </div>
                                 </div>
                                 <button id="c2-back" onclick="goBack('c2')" class="btn btn-sm btn-primary btn-back-custom d-none"><i class="fas fa-arrow-left me-1"></i> BACK</button>
@@ -774,7 +799,7 @@
                                     <div class="chart-icon-badge"><i class="fas fa-building-columns"></i></div>
                                     <div>
                                         <h3 id="c3-title" class="chart-title" data-main="Satisfaction By Office" data-drill="Office Rating">Satisfaction By Office</h3>
-                                        <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i>Hover to see details • Click to drilldown</div>
+                                        <div class="hint-text"><i class="fas fa-hand-pointer me-1"></i><span class="hover-only-text">Hover to see details • Click to drilldown</span><span class="tap-only-text">Tap to drilldown</span></div>
                                     </div>
                                 </div>
                                 <div class="chart-header-actions">
@@ -1848,6 +1873,20 @@
         gsap.ticker.lagSmoothing(0);
 
         function initScrollReveals() {
+            // Mobile browsers change viewport height as the address bar shows/hides
+            // while scrolling, which throws off ScrollTrigger's trigger-position math
+            // — the practical result is [data-reveal] elements that never fire and
+            // stay stuck at their `opacity: 0` starting state (or a half-tweened
+            // in-between), which is exactly what read as "ghosted text" and "huge
+            // blank gaps" on phones. Desktop's animation is untouched — mobile just
+            // skips the scroll-triggered tween and shows content immediately.
+            if (window.matchMedia('(max-width: 62rem)').matches) {
+                document.querySelectorAll('[data-reveal]').forEach(el => {
+                    gsap.set(el, { opacity: 1, x: 0, y: 0, scale: 1 });
+                });
+                return;
+            }
+
             document.querySelectorAll('[data-reveal]').forEach(el => {
                 const type = el.dataset.reveal;
                 const delay = parseFloat(el.dataset.revealDelay || 0) / 1000;
@@ -2079,6 +2118,39 @@
             }, 200);
         }
 
+        // Mobile hamburger: toggles .site-nav open/closed, syncs the icon and
+        // aria-expanded, closes again on a link tap (single-page anchor nav) or
+        // a tap anywhere outside the menu.
+        function initMobileNav() {
+            const btn = document.getElementById('navHamburgerBtn');
+            const nav = document.getElementById('siteNavList');
+            if (!btn || !nav) return;
+
+            function closeNav() {
+                nav.classList.remove('nav-open');
+                btn.setAttribute('aria-expanded', 'false');
+                btn.innerHTML = '<i class="fas fa-bars"></i>';
+                spacer && syncHeaderSpacer();
+            }
+            function openNav() {
+                nav.classList.add('nav-open');
+                btn.setAttribute('aria-expanded', 'true');
+                btn.innerHTML = '<i class="fas fa-times"></i>';
+                syncHeaderSpacer();
+            }
+            const spacer = document.getElementById('header-spacer');
+
+            btn.addEventListener('click', () => {
+                nav.classList.contains('nav-open') ? closeNav() : openNav();
+            });
+            nav.querySelectorAll('a').forEach(link => link.addEventListener('click', closeNav));
+            document.addEventListener('click', (e) => {
+                if (nav.classList.contains('nav-open') && !nav.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+                    closeNav();
+                }
+            });
+        }
+
         document.addEventListener("DOMContentLoaded", () => {
             syncHeaderSpacer();
 
@@ -2087,6 +2159,7 @@
             initMagneticButtons();
             initGlowCards();
             initScrollSpy();
+            initMobileNav();
 
             renderClusterTabs();
             renderServicesAccordion();
