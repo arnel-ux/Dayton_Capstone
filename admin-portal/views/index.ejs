@@ -620,10 +620,13 @@
             .footer-brand-logo { justify-content: center; margin-bottom: 0.4rem; }
             .footer-brand-logo img { width: 34px; height: 34px; }
             .footer-desc { line-height: 1.45; font-size: 0.78rem; }
-            .footer-links { align-items: center; gap: 0.35rem; }
+            /* Quick Links and Contact Us as a 2-column grid instead of one
+               long vertical stack — same info, roughly half the height. */
+            .footer-links { display: grid; grid-template-columns: 1fr 1fr; align-items: start; justify-items: center; gap: 0.35rem 0.5rem; }
             .footer-links a { padding: 0.25rem 0; }
             .footer-socials { justify-content: center; margin-top: 0.4rem; }
-            .footer-contact { gap: 0.4rem; }
+            .footer-contact { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+            .footer-contact li:first-child { grid-column: 1 / -1; }
             .footer-contact li { justify-content: center; text-align: left; font-size: 0.78rem; }
             .footer-bottom { padding: var(--sp-2) var(--sp-3); font-size: 0.72rem; }
         }
@@ -642,7 +645,15 @@
             .nav-inner { gap: var(--sp-1); }
             .nav-left img { width: 32px; height: 32px; }
             .nav-left { gap: 0.5rem; }
-            .header-text-container { display: none; }
+            /* Back, but compact: single truncated line next to the logo
+               (whatever the real title text is, gracefully clipped with an
+               ellipsis instead of hardcoding an abbreviation) — the
+               subtitle line is dropped since one short line is what keeps
+               this fitting on the same row as the hamburger/login button
+               instead of forcing a second row again. */
+            .header-text-container { display: flex; max-width: 42vw; }
+            .header-title { display: block; font-size: 0.68rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+            .header-subtitle { display: none; }
             .nav-right { flex-shrink: 0; gap: var(--sp-1); }
             .hover-only-text { display: none; }
             .tap-only-text { display: inline; }
