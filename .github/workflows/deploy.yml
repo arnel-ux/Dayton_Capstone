@@ -16,5 +16,9 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             cd ~/Dayton_Capstone
-            git pull
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd -e admin-portal/.env -e admin-portal/venv -e 'admin-portal/ai_scripts/__pycache__'
+            admin-portal/venv/bin/pip install -q -r admin-portal/ai_scripts/requirements.txt
+            cd admin-portal && npm install --omit=dev --silent && cd ..
             sudo systemctl restart cqa-admin-portal
