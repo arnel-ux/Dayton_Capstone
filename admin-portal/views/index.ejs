@@ -610,6 +610,37 @@
             .header-text-container { display: none; }
             .chart-card { min-width: 94vw; height: 50vh; }
             .about-section, .org-section { padding-left: var(--sp-2); padding-right: var(--sp-2); }
+            /* Chart card header (title + back button, or title + cluster-select +
+               back button on the "By Office" card) was overflowing its fixed-width
+               card on narrow phones since it never wrapped — let it wrap onto a
+               second line instead of clipping/overlapping. */
+            .card-header-custom { flex-wrap: wrap; row-gap: var(--sp-1); }
+            .chart-header-actions { flex-wrap: wrap; row-gap: var(--sp-1); }
+            .office-cluster-select { max-width: 100%; }
+            .chart-title { font-size: var(--fs-sm); }
+            .profile-contact a, .profile-contact span { word-break: break-word; }
+
+            /* ---- Touch targets + readability pass ----
+               Several controls were comfortably sized on desktop but landed
+               under the ~44px tap-height guideline once scaled to phone
+               widths: the Admin Login pill (~36px), the dashboard period
+               dropdown (~40px), the per-chart cluster filter (~24px) and
+               BACK button (~36px), and the footer's social icons (38px).
+               Bumped padding/size on each — desktop's unprefixed rules are
+               untouched. */
+            .btn-admin { padding: 0.75rem var(--sp-3); }
+            .period-dropbar { padding: 12px 40px 12px 16px; }
+            .office-cluster-select { padding: 8px 10px; font-size: 0.8rem; }
+            .btn-back-custom { padding: 0.6rem var(--sp-2); min-height: 40px; }
+            .kpi-label { font-size: 0.8rem; }
+            .footer-socials a { width: 44px; height: 44px; }
+
+            /* Footer link rows were ~20px-tall text with only a 16px gap
+               between them — pad each row into a real tap target instead of
+               relying on the gap alone to keep thumbs from mis-tapping the
+               link above/below. */
+            .footer-links a { padding: 0.4rem 0; }
+            .footer-links { gap: 0.25rem; }
         }
 
         /* Respect reduced-motion preference: kill parallax/float, keep instant states */

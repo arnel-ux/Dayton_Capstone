@@ -359,6 +359,50 @@
             .home-feature-chip { font-size: 0.68rem; padding: 0.35rem 0.65rem; }
         }
 
+        /* ---- Touch targets + spacing across the survey flow (client info
+           step, terms checkbox, profile, history) ----
+           Reuses this file's existing 767.98px tablet/phone breakpoint. */
+        @media (max-width: 767.98px) {
+            /* "Read the full Terms..." was a small btn-sm (~30px tall). */
+            #terms-box .btn-sm { padding: 0.6rem 1.1rem; min-height: 44px; font-size: 0.85rem; }
+            /* Native checkbox/switch controls render very small (~16-20px);
+               the label text next to each is already clickable via its
+               for="" attribute, so growing the row's vertical padding (not
+               the tiny control itself) is what actually enlarges the tap
+               area without changing how the control looks. */
+            #terms-box .form-check { padding: 0.4rem 0; gap: 0.6rem !important; }
+            .section-title .form-check.form-switch { padding: 0.35rem 0; }
+            /* Male/Female radio rows: each option is a whole clickable
+               <label>, but its hit height was just the text line (~24px)
+               with only 1.5rem between the two — pad each row taller and
+               let them wrap with a visible gap instead of sitting close
+               enough to mis-tap the wrong one. */
+            #gender-field-group { gap: 1.25rem !important; row-gap: 0.75rem !important; }
+            #gender-field-group label { padding: 0.4rem 0; min-height: 44px; }
+
+            /* Profile "Edit" button and history badges/meta text were on the
+               small side for a phone (~34px tap height, ~12.5px meta text). */
+            .btn-edit-profile { padding: 0.65rem 1.2rem; min-height: 44px; }
+            .history-item { padding: 1rem 1.1rem; }
+            .history-meta { font-size: 0.82rem; }
+            .history-badge { font-size: 0.76rem; padding: 0.35rem 0.85rem; }
+
+            /* Back / Next / Submit at the bottom of every survey step use
+               plain, unsized .btn — Bootstrap's default padding leaves them
+               only ~36px tall. Every one of these rows is
+               ".page .d-flex.justify-content-between", so this catches all
+               of them (stage1's full-width Start button already has its own
+               py-3 and isn't affected). */
+            #stage2 .d-flex.justify-content-between.border-top > .btn,
+            #stage3 .d-flex.justify-content-between.border-top > .btn,
+            #stage4 .d-flex.justify-content-between.border-top > .btn,
+            #stage5 .d-flex.justify-content-between.border-top > .btn {
+                padding-top: 0.85rem;
+                padding-bottom: 0.85rem;
+                min-height: 44px;
+            }
+        }
+
         .view-header { text-align: center; padding-bottom: 1.5rem; margin-bottom: 2rem; border-bottom: 1px solid var(--line-soft); }
         .view-header .view-icon {
             width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 1rem;
@@ -598,6 +642,13 @@
             .review-grid { grid-template-columns: 1fr; }
             .review-item { flex-direction: column; align-items: flex-start; gap: 0.2rem; }
             .review-item .value { text-align: left; width: 100%; }
+
+            /* Per-section "Edit" pill was ~28px tall — the only way back into
+               that step's fields from the review screen, so it's worth a
+               real tap target. Label/statement text bumped a touch too. */
+            .btn-edit-section { padding: 0.55rem 1.1rem; font-size: 0.8rem; min-height: 44px; }
+            .review-item .label { font-size: 0.76rem; }
+            .review-sqd-statement { font-size: 0.88rem; }
         }
 
         @media (max-width: 991.98px) {
@@ -608,6 +659,22 @@
             .main-content { margin-left: 0; }
             .topbar-hamburger { display: inline-flex; }
             .btn-sidebar-toggle { display: none; }
+
+            /* ---- Touch targets on the mobile drawer + topbar ----
+               The hamburger/fullscreen icon buttons were 40x40 (just under
+               the ~44px comfortable minimum) and the drawer's nav links/
+               logout button had ~35-40px tap heights with tight spacing
+               between stacked items — easy to mis-tap with a thumb. Nothing
+               here touches the persistent desktop sidebar's look, since this
+               whole block only ever applies once the sidebar has already
+               become the slide-over drawer. */
+            .topbar-hamburger, .btn-fullscreen { width: 44px; height: 44px; font-size: 1.15rem; }
+            .topbar { gap: 0.85rem; padding: 0 1.1rem; }
+            .topbar-actions { gap: 0.5rem; }
+            .sidebar-nav { gap: 0.4rem; padding: 1.25rem 0.85rem; }
+            .sidebar-nav .nav-item-link { padding: 0.85rem 0.95rem; min-height: 44px; }
+            .sidebar-footer .btn-logout-side { padding: 0.75rem; min-height: 44px; }
+            .lang-toggle-group .btn { padding: 0.5rem 1rem; min-height: 40px; }
         }
 
         #sqd-body td {
@@ -1106,6 +1173,22 @@
 
         summary { list-style: none; outline: none; }
         summary::-webkit-details-marker { display: none; }
+
+        /* ---- SQD rating table on small phones ----
+           7 columns (statement + 5 ratings + N/A) is inherently wide; the table
+           already scrolls horizontally via .table-responsive, but tightening
+           padding/font-size here lets more columns fit before scrolling kicks
+           in, and keeps the emoji/number header legible instead of ballooning
+           the row height. Smooth momentum scroll on iOS for the part that does
+           still need to scroll. */
+        @media (max-width: 576px) {
+            #sqd-table-wrap { -webkit-overflow-scrolling: touch; }
+            #sqd-table-wrap thead th { padding: 0.6rem 0.4rem; font-size: 0.74rem; }
+            #sqd-table-wrap thead th small { font-size: 0.62rem; }
+            #sqd-body td.text-start { font-size: 0.84rem; padding-left: 0.9rem; padding-right: 0.6rem; }
+            #sqd-body .sqd-rating-option { padding: 0.75rem 0.35rem; min-height: 44px; }
+            #sqd-body .radio-custom { width: 18px; height: 18px; }
+        }
     </style>
 </head>
 
