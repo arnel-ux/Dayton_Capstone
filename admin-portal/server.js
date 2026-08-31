@@ -2101,6 +2101,75 @@ setInterval(() => {
     }
 }, LOGIN_RATE_LIMIT_WINDOW_MS).unref();
 
+// Per-ACCOUNT login lockout — separate from the per-IP limiter above. That one
+// caps request volume from a single IP; this one protects one specific
+// account (admin username, or client/office email) from being guessed at
+// all, even if the attempts are spread across many different IPs. Keyed by
+// the identifier typed into the login form, lowercased so 'Admin' and
+// 'admin' share one counter.
+const failedLoginsByAccount = new Map(); // identifier -> { count, firstAttempt, lockedUntil }
+const ACCOUNT_LOCKOUT_THRESHOLD = 2;
+const ACCOUNT_LOCKOUT_WINDOW_MS = 5 * 60 * 1000; // failed attempts older than this no longer count
+const ACCOUNT_LOCKOUT_DURATION_MS = 5 * 60 * 1000; // how long the account stays locked once tripped
+
+// Returns the active lockout entry for this identifier, or null if it isn't
+// currently locked (also clears it out of the Map once expired).
+function getAccountLockout(identifier) {
+    // TEMPORARILY DISABLED — was blocking real logins during testing (see
+    // conversation with the admin). Tracking below still runs so re-enabling
+    // is just deleting this line.
+    return null;
+    // eslint-disable-next-line no-unreachable
+    const key = String(identifier || '').trim().toLowerCase();
+    if (!key) return null;
+    const entry = failedLoginsByAccount.get(key);
+    if (!entry) return null;
+    if (entry.lockedUntil) {
+        if (entry.lockedUntil > Date.now()) return entry;
+        failedLoginsByAccount.delete(key);
+        return null;
+    }
+    if (Date.now() - entry.firstAttempt > ACCOUNT_LOCKOUT_WINDOW_MS) {
+        failedLoginsByAccount.delete(key);
+        return null;
+    }
+    return null;
+}
+
+function recordFailedLogin(identifier) {
+    const key = String(identifier || '').trim().toLowerCase();
+    if (!key) return;
+    const now = Date.now();
+    let entry = failedLoginsByAccount.get(key);
+    if (!entry || now - entry.firstAttempt > ACCOUNT_LOCKOUT_WINDOW_MS) {
+        entry = { count: 0, firstAttempt: now, lockedUntil: null };
+    }
+    entry.count++;
+    if (entry.count >= ACCOUNT_LOCKOUT_THRESHOLD) {
+        entry.lockedUntil = now + ACCOUNT_LOCKOUT_DURATION_MS;
+    }
+    failedLoginsByAccount.set(key, entry);
+}
+
+function clearFailedLogins(identifier) {
+    const key = String(identifier || '').trim().toLowerCase();
+    if (key) failedLoginsByAccount.delete(key);
+}
+
+function accountLockoutMessage(entry) {
+    const minutesLeft = Math.max(1, Math.ceil((entry.lockedUntil - Date.now()) / 60000));
+    return `Too many failed login attempts for this account. Please wait ${minutesLeft} minute${minutesLeft === 1 ? '' : 's'} and try again.`;
+}
+
+// Periodic sweep, mirroring the IP-limiter one above.
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of failedLoginsByAccount) {
+        const expired = entry.lockedUntil ? entry.lockedUntil <= now : (now - entry.firstAttempt > ACCOUNT_LOCKOUT_WINDOW_MS);
+        if (expired) failedLoginsByAccount.delete(key);
+    }
+}, ACCOUNT_LOCKOUT_WINDOW_MS).unref();
+
 async function verifyAdminPassword(admin, passwordInput) {
     if (isBcryptHash(admin.password)) {
         return bcrypt.compare(passwordInput, admin.password);
@@ -2111,6 +2180,11 @@ async function verifyAdminPassword(admin, passwordInput) {
 app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
     const { username, password } = req.body;
     const usernameInput = String(username || '').trim();
+
+    const existingLockout = getAccountLockout(usernameInput);
+    if (existingLockout) {
+        return res.redirect('/login?error=' + encodeURIComponent(accountLockoutMessage(existingLockout)));
+    }
 
     const captchaOk = await verifyRecaptcha(req.body['g-recaptcha-response'], req.ip);
     if (!captchaOk) {
@@ -2137,8 +2211,10 @@ app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
             const admin = rows[0];
             const passwordMatches = await verifyAdminPassword(admin, password);
             if (!passwordMatches) {
+                recordFailedLogin(usernameInput);
                 return res.redirect('/login?error=' + encodeURIComponent('Invalid admin credentials!'));
             }
+            clearFailedLogins(usernameInput);
 
             const loginToken = crypto.randomUUID();
 
@@ -2230,8 +2306,10 @@ app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
 
         const passwordMatches = await bcrypt.compare(password, account.password);
         if (!passwordMatches) {
+            recordFailedLogin(emailInput);
             return res.redirect('/login?error=' + encodeURIComponent('Invalid email or password.'));
         }
+        clearFailedLogins(emailInput);
 
         // Regenerate before assigning identity to prevent session fixation
         // (an attacker who planted a known session id on the victim's
@@ -2263,8 +2341,10 @@ app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
 
             const passwordMatches = await bcrypt.compare(password, office.password);
             if (!passwordMatches) {
+                recordFailedLogin(emailInput);
                 return res.redirect('/login?error=' + encodeURIComponent('Invalid email or password.'));
             }
+            clearFailedLogins(emailInput);
 
             regenerateAdminSession(req, res);
             req.adminSession.user = {
@@ -2325,6 +2405,11 @@ app.post('/office-login', loginRateLimiter('/office-login'), (req, res) => {
         return res.redirect('/office-login?error=' + encodeURIComponent('Please enter both the office email and password.'));
     }
 
+    const existingLockout = getAccountLockout(emailInput);
+    if (existingLockout) {
+        return res.redirect('/office-login?error=' + encodeURIComponent(accountLockoutMessage(existingLockout)));
+    }
+
     db.query('SELECT id, office_name, cluster_name, email_address, password FROM offices WHERE email_address = ? LIMIT 1', [emailInput], async (err, rows) => {
         if (err) return res.redirect('/office-login?error=' + encodeURIComponent('Server error. Please try again.'));
 
@@ -2335,8 +2420,10 @@ app.post('/office-login', loginRateLimiter('/office-login'), (req, res) => {
 
         const passwordMatches = await bcrypt.compare(password, office.password);
         if (!passwordMatches) {
+            recordFailedLogin(emailInput);
             return res.redirect('/office-login?error=' + encodeURIComponent('Invalid office email or password.'));
         }
+        clearFailedLogins(emailInput);
 
         regenerateAdminSession(req, res);
         req.adminSession.user = {
@@ -3402,17 +3489,18 @@ function loadDashboardData(req, callback) {
                                 }));
 
                                 const recentQuery = `
-                                    SELECT s.id, o.office_name, s.sentiment, s.topic, s.created_at
+                                    SELECT s.id, o.office_name, o.cluster_name, s.sentiment, s.topic, s.created_at
                                     FROM survey_responses s
                                     JOIN offices o ON o.id = s.office_id
                                     ${dateWhere}
                                     ORDER BY s.created_at DESC
-                                    LIMIT 6
+                                    LIMIT 60
                                 `;
                                 db.query(recentQuery, dateParams, (err, recentRows) => {
                                     logErr('recent submissions')(err);
                                     const recentSubmissions = (recentRows || []).map(r => ({
                                         officeName: r.office_name,
+                                        cluster: r.cluster_name || 'Unassigned Cluster',
                                         sentiment: r.sentiment || 'Neutral',
                                         topic: r.topic || 'General Feedback',
                                         date: r.created_at
@@ -3426,7 +3514,8 @@ function loadDashboardData(req, callback) {
                                         hasQueryParam: hasQueryParam,
                                         sentimentBreakdown: sentimentBreakdown, sentimentTotal: sentimentTotal,
                                         topTopics: topTopics, recentSubmissions: recentSubmissions,
-                                        topOffices: topOffices, bottomOffices: bottomOffices
+                                        topOffices: topOffices, bottomOffices: bottomOffices,
+                                        clusterOptions: CLUSTER_REPORT_ORDER
                                     });
                                 });
                             });

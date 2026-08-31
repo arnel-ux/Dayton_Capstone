@@ -544,6 +544,21 @@
                 });
             }
         })();
+
+        // Pressing Enter while in the username field moves focus to the
+        // password field instead of submitting the form right away.
+        (function () {
+            const usernameInput = document.getElementById('usernameInput');
+            const passwordInput = document.getElementById('passwordInput');
+            if (usernameInput && passwordInput) {
+                usernameInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        passwordInput.focus();
+                    }
+                });
+            }
+        })();
     </script>
 </body>
 </html>
