@@ -2214,12 +2214,21 @@
             }
             const spacer = document.getElementById('header-spacer');
 
-            btn.addEventListener('click', () => {
+            // stopPropagation here means this click can never reach the
+            // document-level "close on outside click" listener below at
+            // all — on some mobile browsers a tap's synthetic click event
+            // and the resulting DOM changes (innerHTML swap below) land in
+            // a way where that listener's own exclusion check
+            // (e.target !== btn) intermittently missed, immediately
+            // re-closing the menu the instant it opened — which is exactly
+            // what read as "needs multiple taps to actually open."
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
                 nav.classList.contains('nav-open') ? closeNav() : openNav();
             });
             nav.querySelectorAll('a').forEach(link => link.addEventListener('click', closeNav));
             document.addEventListener('click', (e) => {
-                if (nav.classList.contains('nav-open') && !nav.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+                if (nav.classList.contains('nav-open') && !nav.contains(e.target)) {
                     closeNav();
                 }
             });
