@@ -65,6 +65,15 @@
         body, html {
             margin: 0; padding: 0; font-family: 'Inter', sans-serif; color: #1e293b;
             font-size: var(--fs-base); line-height: 1.6;
+            /* Any single element overflowing horizontally by even a few px (a
+               fixed-width card, an un-shrunk image, a stray negative margin)
+               silently widens the whole page's layout viewport on mobile —
+               the browser then "zooms out" to fit it all, which is what read
+               as "can still zoom out" and the wide blank margins showing past
+               the real content in every mobile screenshot so far. Clipping it
+               here is the standard fix and has zero effect on desktop, where
+               nothing was overflowing to begin with. */
+            overflow-x: hidden;
         }
         h1, h2, h3, h4, h5, h6 { line-height: 1.2; }
 
@@ -226,7 +235,7 @@
         .hero-scroll-cue-icon { display: inline-block; animation: heroCueBounce 2s ease-in-out infinite; }
 
         @media (max-width: 36rem) {
-            .hero-section { padding: var(--sp-6) var(--sp-2) var(--sp-4); }
+            .hero-section { padding: var(--sp-4) var(--sp-2) var(--sp-4); }
             .hero-scroll-cue { margin: var(--sp-3) 0 0; }
         }
         @media (prefers-reduced-motion: reduce) {
@@ -615,8 +624,10 @@
 
         @media (max-width: 62rem) {
             .chart-card { min-width: 90vw; height: 55vh; }
-            .sticky-top-section { flex-direction: column; align-items: flex-start; }
+            .sticky-top-section { flex-direction: column; align-items: flex-start; padding: var(--sp-1) var(--sp-2); }
+            .nav-inner { gap: var(--sp-1); }
             .nav-right { width: 100%; justify-content: space-between; }
+            .nav-left img { width: 38px; height: 38px; }
             .hover-only-text { display: none; }
             .tap-only-text { display: inline; }
 
@@ -632,6 +643,12 @@
             .header-text-container { display: none; }
             .chart-card { min-width: 94vw; height: 50vh; }
             .about-section, .org-section { padding-left: var(--sp-2); padding-right: var(--sp-2); }
+            /* .about-section, .org-section, .services-section all carry a
+               desktop-scale 80px top/bottom padding (--sp-10) with no mobile
+               override — tightened to --sp-4 (32px) here, the same amount of
+               breathing room the header/hero already use on mobile. */
+            .org-section { padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
+            .about-section, .services-section { padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
             /* Chart card header (title + back button, or title + cluster-select +
                back button on the "By Office" card) was overflowing its fixed-width
                card on narrow phones since it never wrapped — let it wrap onto a
