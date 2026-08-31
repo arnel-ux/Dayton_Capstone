@@ -1864,9 +1864,11 @@ document.getElementById('officeSelect').addEventListener('change', function () {
 
 // Demographics saved from this account's FIRST-EVER survey submission (Region, Age, Sex).
 // Once set, these are pre-filled and locked so the client can never change them again.
-// JSON.stringify doesn't escape "/", so a stored field containing
-// "</script>" would otherwise close this tag early and let injected markup
-// after it execute — .replace guards that even though server-side (see
+// JSON.stringify doesn't escape "/", so a stored field containing the
+// literal sequence "<" + "/script>" would otherwise close this tag early
+// (browsers scan raw bytes for that sequence inside <script>, even inside a
+// comment or string) and let injected markup after it execute — .replace
+// guards that even though server-side (see
 // server.js's VALID_AGE_BRACKETS/VALID_GENDERS/VALID_REGIONS allowlists)
 // should already keep these fields to known-safe values.
 const savedClientProfile = <%- JSON.stringify(typeof clientProfile !== 'undefined' && clientProfile ? clientProfile : null).replace(/\//g, '\\u002f') %>;
