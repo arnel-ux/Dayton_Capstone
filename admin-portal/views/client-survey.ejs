@@ -2399,8 +2399,12 @@ function switchView(view) {
     if (langToggle) langToggle.classList.toggle('d-none', view !== 'survey');
 
     // Auto-hide the sidebar while taking the survey (topbar stays visible);
-    // auto-restore it on Profile/History.
-    setSidebarCollapsed(view === 'survey');
+    // auto-restore it on Profile/History. Desktop-only persistent-collapse
+    // behavior (see setSidebarCollapsed's own comment) — applying it on
+    // mobile leaves .sidebar-collapsed stuck on .app-shell, which permanently
+    // out-specificities the mobile show/hide toggle (see navigate()'s comment
+    // on the same issue).
+    if (window.innerWidth >= 992) setSidebarCollapsed(view === 'survey');
 
     closeSidebarOnMobile();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2866,7 +2870,13 @@ function navigate(stage) {
     // (Terms) keeps the centered hero-card presentation.
     const shell = document.querySelector('.app-shell');
     if (shell) shell.classList.toggle('survey-inprogress', stage >= 2);
-    if (stage >= 2) setSidebarCollapsed(true);
+    // setSidebarCollapsed is the desktop-only persistent collapse (see its own
+    // comment) — applying it below 992px stacks .sidebar-collapsed on top of
+    // the mobile show/hide overlay mechanism, and .app-shell.sidebar-collapsed
+    // .sidebar's higher specificity permanently wins over .sidebar.show, so
+    // the hamburger toggle looked like it stopped working (backdrop appears,
+    // panel never slides in) for the rest of the survey. Desktop only.
+    if (stage >= 2 && window.innerWidth >= 992) setSidebarCollapsed(true);
 
     // Entering the Review stage — rebuild the summary from whatever is
     // currently in the form so "Edit" + coming back always reflects the latest answers.
