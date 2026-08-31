@@ -1,0 +1,32 @@
+<%
+/* Shared bottom section for the PER CLUSTER-style official report (dashboard.ejs's
+   report modal, print.ejs): Prepared by / Reviewed by / Noted by signature blocks
+   plus the Interpretation of Results legend, laid out as a 2x2 grid so it matches
+   the original printed report (Prepared left, Reviewed right, Noted below Prepared,
+   legend below Reviewed) instead of one flat row of signatories.
+   These are CSPC's existing official CQA report signatories, already used
+   identically on report.ejs / cluster-detail.ejs / survey-records.ejs. */
+%>
+<div class="cluster-report-signatures">
+    <div class="sig-cell">
+        <p class="sig-label">Prepared by:</p>
+        <div class="sig-space"></div>
+        <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
+        <p class="sig-title">AOV-CQA</p>
+    </div>
+    <div class="sig-cell">
+        <p class="sig-label">Reviewed by:</p>
+        <div class="sig-space"></div>
+        <p class="sig-name">JOCELYN O. JINTALAN, DBA</p>
+        <p class="sig-title">ISO Chair</p>
+    </div>
+    <div class="sig-cell">
+        <p class="sig-label">Noted by:</p>
+        <div class="sig-space"></div>
+        <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
+        <p class="sig-title">SUC President III</p>
+    </div>
+    <div class="sig-cell">
+        <%- include('interpretation-legend') %>
+    </div>
+</div>

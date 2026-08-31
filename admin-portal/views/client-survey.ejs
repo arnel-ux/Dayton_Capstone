@@ -615,6 +615,37 @@
             padding-bottom: 1.1rem;
         }
 
+        /* Rating cells: the whole cell is the click/tap target, not just the radio
+           circle — the label fills the cell so any click inside it toggles the
+           radio via native <label>-for-<input> behavior. */
+        #sqd-body td.sqd-rating-cell {
+            padding: 0;
+            cursor: pointer;
+        }
+        #sqd-body .sqd-rating-option {
+            display: flex;
+            width: 100%;
+            min-height: 52px;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            padding: 1rem 0.5rem;
+        }
+        /* Hover tint, skipped when the cell is already checked (so it doesn't wash
+           out the green/yellow/red selected-state color below) or its radio is
+           disabled/locked (a <label> never toggles a disabled radio on click, so
+           it shouldn't look clickable either). */
+        #sqd-body .sqd-rating-cell:not(:has(.radio-custom:checked)):not(:has(.radio-custom:disabled)):hover .sqd-rating-option {
+            background: rgba(37, 84, 199, 0.08);
+        }
+        [data-bs-theme="dark"] #sqd-body .sqd-rating-cell:not(:has(.radio-custom:checked)):not(:has(.radio-custom:disabled)):hover .sqd-rating-option {
+            background: rgba(96, 141, 255, 0.1);
+        }
+        #sqd-body .sqd-rating-option:has(input:disabled),
+        #sqd-body td.sqd-rating-cell:has(input:disabled) {
+            cursor: not-allowed;
+        }
+
         .page { display: none; }
         .active { display: block; animation: fadeIn .4s ease; }
         .active.dir-fwd { animation: slideInFwd .45s cubic-bezier(.22,.61,.36,1); }
@@ -1294,7 +1325,8 @@
 
                         <div class="col-md-6">
                             <label class="form-label fw-semibold text-dark fs-6" for="officeVisitedTime" data-i18n="lbl_office_visited_time"></label>
-                            <input type="time" id="officeVisitedTime" name="office_visited_time" class="form-control" required>
+                            <input type="datetime-local" id="officeVisitedTime" name="office_visited_time" class="form-control" required>
+                            <div class="form-text" data-i18n="hint_office_visited_time"></div>
                         </div>
 
                         <div class="col-12">
@@ -1508,7 +1540,7 @@
                                         <div class="review-item"><div class="label" data-i18n="rv_lbl_gender">Sex</div><div class="value" id="rv-gender">—</div></div>
                                         <div class="review-item"><div class="label" data-i18n="rv_lbl_age">Age</div><div class="value" id="rv-age">—</div></div>
                                         <div class="review-item"><div class="label" data-i18n="rv_lbl_date">Date</div><div class="value" id="rv-date">—</div></div>
-                                        <div class="review-item"><div class="label" data-i18n="rv_lbl_office_visited_time">Time of Office Visit</div><div class="value" id="rv-office-visited-time">—</div></div>
+                                        <div class="review-item"><div class="label" data-i18n="rv_lbl_office_visited_time">Date &amp; Time of Office Visit</div><div class="value" id="rv-office-visited-time">—</div></div>
                                         <div class="review-item"><div class="label" data-i18n="rv_lbl_region">Region</div><div class="value" id="rv-region">—</div></div>
                                         <div class="review-item"><div class="label" data-i18n="rv_lbl_office">Office Visited</div><div class="value" id="rv-office">—</div></div>
                                         <div class="review-item full"><div class="label" data-i18n="rv_lbl_service">Service Availed</div><div class="value" id="rv-service">—</div></div>
@@ -1755,12 +1787,19 @@ window.addEventListener('pageshow', function (event) {
 });
 
 document.getElementById('surveyDate').valueAsDate = new Date();
-(function initDefaultOfficeVisitedTime() {
-    const timeInput = document.getElementById('officeVisitedTime');
-    if (timeInput && !timeInput.value) {
-        timeInput.value = new Date().toTimeString().slice(0, 5);
-    }
-})();
+
+// Caps the office-visit picker at "now" (no future visits) and defaults it
+// to now when empty; the visit's own date can still be moved back to an
+// earlier day than today, independent of the survey submission date.
+function initDefaultOfficeVisitedTime() {
+    const dtInput = document.getElementById('officeVisitedTime');
+    if (!dtInput) return;
+    const now = new Date();
+    const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    dtInput.max = localNow;
+    if (!dtInput.value) dtInput.value = localNow;
+}
+initDefaultOfficeVisitedTime();
 let currentLang = 'en';
 
 // The "Home" view is active by default on load (no switchView() call fires
@@ -2601,8 +2640,9 @@ const i18n = {
         opt_sel_age: "Select Age...",
         opt_18_below: "18 and below",
         opt_60_above: "60 and above",
-        lbl_date: "Date:",
-        lbl_office_visited_time: "Time of Office Visit:",
+        lbl_date: "Survey Date:",
+        lbl_office_visited_time: "Date & Time of Office Visit:",
+        hint_office_visited_time: "When you actually visited the office — this can be a different day than today if you're answering this survey later.",
         lbl_region: "Region of residence:",
         lbl_office: "Office Visited:",
         lbl_service: "Service Availed:",
@@ -2666,7 +2706,7 @@ const i18n = {
         rv_lbl_gender: "Sex",
         rv_lbl_age: "Age",
         rv_lbl_date: "Date",
-        rv_lbl_office_visited_time: "Time of Office Visit",
+        rv_lbl_office_visited_time: "Date &amp; Time of Office Visit",
         rv_lbl_region: "Region",
         rv_lbl_office: "Office Visited",
         rv_lbl_service: "Service Availed",
@@ -2744,8 +2784,9 @@ const i18n = {
         opt_sel_age: "Pumili ng Edad...",
         opt_18_below: "18 pababa",
         opt_60_above: "60 pataas",
-        lbl_date: "Petsa:",
-        lbl_office_visited_time: "Oras ng Pagpunta sa Opisina:",
+        lbl_date: "Petsa ng Survey:",
+        lbl_office_visited_time: "Petsa at Oras ng Pagpunta sa Opisina:",
+        hint_office_visited_time: "Kailan ka talaga pumunta sa opisina — maaaring iba sa araw na ito kung sinasagot mo ang survey mamaya o kinabukasan.",
         lbl_region: "Rehiyon ng Paninirahan:",
         lbl_office: "Pinuntahang Tanggapan:",
         lbl_service: "Serbisyong Ginamit:",
@@ -2809,7 +2850,7 @@ const i18n = {
         rv_lbl_gender: "Kasarian",
         rv_lbl_age: "Edad",
         rv_lbl_date: "Petsa",
-        rv_lbl_office_visited_time: "Oras ng Pagpunta sa Opisina",
+        rv_lbl_office_visited_time: "Petsa at Oras ng Pagpunta sa Opisina",
         rv_lbl_region: "Rehiyon",
         rv_lbl_office: "Pinuntahang Tanggapan",
         rv_lbl_service: "Serbisyong Ginamit",
@@ -2852,16 +2893,28 @@ function renderSQD() {
     const tbody = document.getElementById('sqd-body');
     tbody.innerHTML = '';
     
+    // Each rating cell wraps its radio in a full-cell <label> so clicking anywhere
+    // in the cell (not just the tiny circle) selects it — native <label>-for-<input>
+    // behavior, so it needs no JS click handler and survives renderSQD() re-running
+    // on every language switch without ever attaching duplicate listeners.
+    const ratingCell = (index, value) => `
+        <td class="text-center sqd-rating-cell">
+            <label class="sqd-rating-option">
+                <input type="radio" name="sqd${index}" value="${value}" class="radio-custom">
+            </label>
+        </td>
+    `;
+
     i18n[currentLang].sqd_items.forEach((item, index) => {
         tbody.innerHTML += `
             <tr>
                 <td class="text-start">${item}</td>
-                <td class="text-center"><input type="radio" name="sqd${index}" value="5" class="radio-custom"></td>
-                <td class="text-center"><input type="radio" name="sqd${index}" value="4" class="radio-custom"></td>
-                <td class="text-center"><input type="radio" name="sqd${index}" value="3" class="radio-custom"></td>
-                <td class="text-center"><input type="radio" name="sqd${index}" value="2" class="radio-custom"></td>
-                <td class="text-center"><input type="radio" name="sqd${index}" value="1" class="radio-custom"></td>
-                <td class="text-center"><input type="radio" name="sqd${index}" value="0" class="radio-custom"></td>
+                ${ratingCell(index, 5)}
+                ${ratingCell(index, 4)}
+                ${ratingCell(index, 3)}
+                ${ratingCell(index, 2)}
+                ${ratingCell(index, 1)}
+                ${ratingCell(index, 0)}
             </tr>
         `;
     });
@@ -2924,6 +2977,28 @@ function formatTimeForDisplay(rawTime) {
     return `${hours}:${minutes} ${period}`;
 }
 
+// Converts an <input type="date"> value ("YYYY-MM-DD") into "Mon DD, YYYY".
+function formatDateForDisplay(rawDate) {
+    if (!rawDate) return '—';
+    const parts = rawDate.split('-');
+    if (parts.length !== 3) return rawDate;
+    const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    if (isNaN(d.getTime())) return rawDate;
+    return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+// Converts an <input type="datetime-local"> value ("YYYY-MM-DDTHH:MM") into
+// "Mon DD, YYYY, h:mm AM/PM". The office visit can happen on a different day
+// than the survey is actually filled out, so this reads the visit's own
+// date+time picker rather than assuming it matches today.
+function formatDateTimeForDisplay(rawDateTime) {
+    if (!rawDateTime) return '—';
+    const [rawDate, rawTime] = rawDateTime.split('T');
+    const timePart = formatTimeForDisplay(rawTime);
+    if (!rawDate) return timePart;
+    return `${formatDateForDisplay(rawDate)}, ${timePart}`;
+}
+
 // =====================================
 // STAGE 5 — REVIEW & CONFIRMATION SUMMARY
 // =====================================
@@ -2949,7 +3024,7 @@ function renderReviewSummary() {
     document.getElementById('rv-gender').textContent = checkedLabelText('gender');
     document.getElementById('rv-age').textContent = selectedText('select[name="age"]');
     document.getElementById('rv-date').textContent = val('input[name="survey_date"]') || '—';
-    document.getElementById('rv-office-visited-time').textContent = formatTimeForDisplay(val('input[name="office_visited_time"]'));
+    document.getElementById('rv-office-visited-time').textContent = formatDateTimeForDisplay(val('input[name="office_visited_time"]'));
     document.getElementById('rv-region').textContent = selectedText('select[name="region"]');
     document.getElementById('rv-office').textContent = selectedText('select[name="office_id"]');
     document.getElementById('rv-service').textContent = selectedText('select[name="service_availed"]');
@@ -3100,7 +3175,8 @@ function startNewSurvey() {
     // form.reset() clears values but not the `disabled` attribute on
     // already-locked profile fields, and doesn't restore today's date.
     document.getElementById('surveyDate').valueAsDate = new Date();
-    document.getElementById('officeVisitedTime').value = new Date().toTimeString().slice(0, 5);
+    document.getElementById('officeVisitedTime').value = '';
+    initDefaultOfficeVisitedTime();
     applyLockedProfile();
     populateServiceSelect('');
 

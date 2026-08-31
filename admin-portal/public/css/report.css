@@ -27,8 +27,118 @@
 .report-header-rule { flex: 1; border-bottom: 3px solid #1e88e5; }
 .doc-code { flex-shrink: 0; white-space: nowrap; text-align: right; font-size: 11px; font-weight: bold; line-height: 1; }
 
+/* ---- PER CLUSTER report table (views/layout/report-cluster-table.ejs) ----
+   Used by dashboard.ejs's report modal and print.ejs. Fully namespaced under
+   .cluster-report-table so it can't collide with each page's own pre-existing
+   .score-col/.inter-col rules for its other tables.
+   No numbering column — the original printed report doesn't have one, so
+   Name of Office gets the freed-up width. Header blue matches the SQD report's
+   own .header-blue (#8faadc) rather than an unrelated blue, so both official
+   report tables read as the same template. */
+.cluster-report-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 9pt; color: #000; }
+.cluster-report-table th { background-color: #8faadc; color: #fff; border: 1px solid #000; padding: 4px 6px; line-height: 1.2; text-align: center; vertical-align: middle; text-transform: uppercase; font-size: 9pt; }
+.cluster-report-table td { border: 1px solid #000; padding: 2px 6px; line-height: 1.2; vertical-align: middle; overflow-wrap: break-word; word-break: normal; white-space: normal; font-weight: normal; }
+/* Column widths come from the <colgroup> in report-cluster-table.ejs (64/16/20,
+   same grid used by the header row, every cluster's body rows, and the TOTAL
+   row) — width is not repeated here so header and body can never drift apart.
+   The header label ("Name of Office") stays centered via the .cluster-report-table
+   th rule above; only the office-name body cells are left-aligned, matching the
+   original printed report. */
+.cluster-report-table td:first-child { text-align: left; }
+.cluster-report-table th.score-col,
+.cluster-report-table td.score-col {
+    text-align: center !important;
+    vertical-align: middle !important;
+    font-weight: bold;
+}
+.cluster-report-table th.inter-col,
+.cluster-report-table td.inter-col {
+    text-align: center !important;
+    vertical-align: middle !important;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+.cluster-report-table .text-end { text-align: right; }
+/* Cluster label row: plain bold italic text like the original, not a shaded
+   "modern section header" bar. */
+.cluster-report-table .cluster-row { font-weight: bold; font-style: italic; font-size: 9pt; text-transform: none; }
+.cluster-report-table .cluster-row td { padding: 4px 6px; text-align: left; }
+/* TOTAL row: a plain, understated light-gray bar — the original report does
+   not use a bright/gold accent color here. */
+.cluster-report-table .cluster-total-row { background-color: #e6e6e6; font-weight: 800; }
+.cluster-report-table .cluster-total-row td { padding: 5px 6px; font-weight: 800; }
+/* Spacer row between clusters (not before the first) — a plain, borderless
+   row rather than table margin (tbody doesn't support CSS margin). */
+.cluster-report-table .cluster-gap td { border: none; padding: 0; height: 8px; }
+
+/* ---- PER CLUSTER signature/legend block (views/layout/report-signatories.ejs) ----
+   2x2 grid: Prepared (top-left), Reviewed (top-right), Noted (bottom-left),
+   Interpretation legend (bottom-right) — matches the original printed layout. */
+.cluster-report-signatures { display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; row-gap: 12px; margin-top: 10px; font-size: 9.5pt; color: #000; }
+.cluster-report-signatures .sig-label { margin: 0; font-size: 9.5pt; }
+.cluster-report-signatures .sig-space { height: 20px; }
+.cluster-report-signatures .sig-name { margin: 0 0 2px; font-weight: bold; text-decoration: underline; text-transform: uppercase; font-size: 9.5pt; }
+.cluster-report-signatures .sig-title { margin: 0; font-size: 9pt; color: #333; }
+.cluster-report-signatures .interpretation-legend { font-size: 9pt; }
+.cluster-report-signatures .legend-title { font-weight: bold; margin-bottom: 4px; }
+.cluster-report-signatures .legend-table { border-collapse: collapse; }
+.cluster-report-signatures .legend-table td { border: none; padding: 1px 6px 1px 0; }
+.cluster-report-signatures .legend-range { font-style: italic; }
+.cluster-report-signatures .legend-desc { padding-left: 10px !important; }
+
+/* ---- SQD report title/office/period section ----
+   SQD-report-only (report.ejs, cluster-detail.ejs, survey-records.ejs's SQD
+   numerical-summary page) — matches the client's original printed template:
+   title, then centered underlined office name, then an italic service-availed
+   line (only rendered when there is one), then a left-aligned two-column
+   Period Covered / Number of Respondents block, with real vertical breathing
+   room between each — not stacked tight like a web form. */
+.sqd-report-title { text-align: center; font-weight: bold; font-size: 13pt; margin: 10px 0 16px; text-transform: uppercase; }
+.sqd-office-name { text-align: center; font-weight: bold; text-decoration: underline; text-transform: uppercase; font-size: 12pt; margin: 0 0 4px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.sqd-service-line { text-align: center; font-style: italic; font-size: 10.5pt; margin: 0 0 20px; }
+.sqd-meta-block { font-size: 10.5pt; margin: 0 0 18px; }
+.sqd-meta-block .sqd-meta-row { display: flex; margin-bottom: 4px; }
+.sqd-meta-block .sqd-meta-label { width: 190px; flex-shrink: 0; }
+.sqd-meta-block .sqd-meta-value { font-weight: bold; }
+
+/* ---- SQD report lower section (views/layout/sqd-report-footer.ejs) ----
+   SQD-report-only — do NOT reuse .sqd-* classes for the PER CLUSTER report or
+   AI Feedback Sentiment & Topic Analytics. Matches the original template:
+   Interpretation of Results sits alone on the right, finishing above the
+   signature row entirely (not paired with Prepared); Prepared (left) and
+   Reviewed (right) share one row; Noted sits alone below, left only — this is
+   intentionally asymmetric, not a symmetric 2x2 grid. */
+.sqd-interpretation-standalone { width: 56%; margin: 26px 0 22px auto; font-size: 11px; color: #000; }
+.sqd-interpretation-standalone .interpretation-legend { font-size: 11px; }
+.sqd-interpretation-standalone .legend-title { font-weight: bold; font-style: italic; margin-bottom: 5px; }
+.sqd-interpretation-standalone .legend-table { border-collapse: collapse; width: 100%; }
+.sqd-interpretation-standalone .legend-table td { border: none; padding: 1.5px 0; font-style: italic; }
+.sqd-interpretation-standalone .legend-range { width: 42%; }
+.sqd-interpretation-standalone .legend-desc { padding-left: 12px !important; }
+
+.sqd-signature-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; row-gap: 20px; font-size: 12px; color: #000; }
+.sqd-signature-grid .sqd-sig-label { margin: 0; font-size: 12px; }
+.sqd-signature-grid .sqd-sig-space { height: 34px; }
+.sqd-signature-grid .sqd-sig-name { margin: 0 0 2px; font-weight: bold; text-decoration: underline; text-transform: uppercase; font-size: 12px; }
+.sqd-signature-grid .sqd-sig-title { margin: 0; font-size: 11px; color: #333; }
+
 /* ---- Footer (views/layout/report-footer.ejs) ---- */
 .page-footer { margin-top: 22px; font-size: 11px; font-weight: bold; border-top: 2px solid #6c9bd2; padding-top: 4px; display: flex; justify-content: space-between; }
+
+/* ---- PER CLUSTER report pagination (unconditional, NOT inside @media print) ----
+   html2pdf's `pagebreak: { mode: ['css', ...] }` inspects the element's normal/
+   screen computed style while it builds the PDF — it does not evaluate
+   @media print rules at all (see the .page-break comment in report.ejs for the
+   same lesson learned elsewhere). Keeping these break-avoidance rules inside
+   @media print silently no-ops them for the dashboard/print "Download PDF"
+   button, which is what let table rows and the signature/legend block get cut
+   across page boundaries instead of moving whole. Duplicated (harmlessly) under
+   @media print below for native browser printing. */
+.cluster-report-table thead { display: table-header-group; }
+.cluster-report-table .cluster-row { break-after: avoid; page-break-after: avoid; }
+.cluster-report-table tr { break-inside: avoid; page-break-inside: avoid; }
+.cluster-report-table .cluster-total-row { break-inside: avoid; page-break-inside: avoid; }
+.cluster-report-signatures { break-inside: avoid; page-break-inside: avoid; }
 
 /* ---- Letter-size print / PDF page setup ----
    Applies to both native browser print (window.print()) and html2pdf's CSS
@@ -50,6 +160,23 @@
 
     .page-footer { break-inside: avoid; page-break-inside: avoid; }
     .signature-section { break-inside: avoid; page-break-inside: avoid; }
+    .sqd-interpretation-standalone { break-inside: avoid; page-break-inside: avoid; }
+    .sqd-signature-grid { break-inside: avoid; page-break-inside: avoid; }
+
+    /* PER CLUSTER report: repeat the column header if a cluster spans a page,
+       keep the cluster heading glued to its first data row (never stranded
+       alone at a page bottom), and never split one row, the TOTAL row, or the
+       bottom signature/legend block.
+       Deliberately NOT page-break-inside:avoid on the whole cluster body — a
+       cluster too tall for one page (e.g. Academic Cluster's 19 offices) must
+       keep flowing onto the next page rather than being forced whole onto a
+       fresh page, which would leave a large blank gap at the bottom of the one
+       before it. */
+    .cluster-report-table thead { display: table-header-group; }
+    .cluster-report-table .cluster-row { break-after: avoid; page-break-after: avoid; }
+    .cluster-report-table tr { break-inside: avoid; page-break-inside: avoid; }
+    .cluster-report-table .cluster-total-row { break-inside: avoid; page-break-inside: avoid; }
+    .cluster-report-signatures { break-inside: avoid; page-break-inside: avoid; }
 
     .report-table, .print-table {
         width: 100%;

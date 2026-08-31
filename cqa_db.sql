@@ -69,7 +69,7 @@ CREATE TABLE `client_profiles` (
   `gender` varchar(50) DEFAULT NULL,
   `region` varchar(100) DEFAULT NULL,
   `email` varchar(255) DEFAULT NULL,
-  `office_visited_time` time DEFAULT NULL,
+  `office_visited_time` datetime DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 

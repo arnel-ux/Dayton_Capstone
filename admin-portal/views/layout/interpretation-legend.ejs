@@ -1,0 +1,16 @@
+<%
+/* Shared "INTERPRETATION OF RESULTS" legend (95/90/80/60 scale) — used inside
+   views/layout/report-signatories.ejs so every PER CLUSTER-style report
+   (dashboard.ejs's report modal, print.ejs) shows the identical legend instead
+   of each page keeping its own copy. */
+%>
+<div class="interpretation-legend">
+    <div class="legend-title">INTERPRETATION OF RESULTS</div>
+    <table class="legend-table">
+        <tr><td class="legend-range">95.0% to 100%</td><td class="legend-desc">Outstanding</td></tr>
+        <tr><td class="legend-range">90.0% to 94.9%</td><td class="legend-desc">Very Satisfactory</td></tr>
+        <tr><td class="legend-range">80.0% to 89.9%</td><td class="legend-desc">Satisfactory</td></tr>
+        <tr><td class="legend-range">60.0% to 79.9%</td><td class="legend-desc">Fair</td></tr>
+        <tr><td class="legend-range">Below 60.0%</td><td class="legend-desc">Poor</td></tr>
+    </table>
+</div>

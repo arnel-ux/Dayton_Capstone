@@ -601,9 +601,18 @@ const MODEL_SERVER_URL = `http://127.0.0.1:${MODEL_SERVER_PORT}`;
 let modelServerProcess = null;
 let modelServerReady = false;
 
+// The AI scripts need google-genai, which requires Python 3.9+. If a venv
+// was set up under ai_scripts/venv (see ai_scripts/requirements.txt), prefer
+// its python.exe over whatever "python" resolves to on PATH, since that may
+// be an older system Python missing the dependency.
+function getPythonExecutable() {
+    const venvPython = path.join(__dirname, 'ai_scripts', 'venv', 'Scripts', 'python.exe');
+    return fs.existsSync(venvPython) ? venvPython : 'python';
+}
+
 function startModelServer() {
     const scriptPath = path.join(__dirname, 'ai_scripts', 'model_server.py');
-    modelServerProcess = spawn('python', [scriptPath], {
+    modelServerProcess = spawn(getPythonExecutable(), [scriptPath], {
         env: { ...process.env, AI_MODEL_SERVER_PORT: String(MODEL_SERVER_PORT) }
     });
 
@@ -782,7 +791,7 @@ function analyzeViaPythonScript(comment, offline, officeHint) {
     return new Promise((resolve) => {
         try {
             const pythonScriptPath = path.join(__dirname, 'ai_scripts', 'analyze.py');
-            const pythonProcess = spawn('python', [pythonScriptPath]);
+            const pythonProcess = spawn(getPythonExecutable(), [pythonScriptPath]);
 
             pythonProcess.on('error', (err) => {
                 console.error("❌ [AI] Could not start Python. Is it installed?", err);
@@ -993,6 +1002,43 @@ function sqdScoreExpr(cols) {
 }
 const ALL_SQD_COLS = [1, 2, 3, 4, 5, 6, 7, 8].map(i => `s.sqd${i}`);
 
+// Fixed cluster presentation order for the "PER CLUSTER" institutional report
+// (dashboard's report modal and /print) — NOT alphabetical/ID order, per the
+// official printed report's required sequence.
+const CLUSTER_REPORT_ORDER = [
+    'Office of the President Cluster',
+    'Administrative and Finance Cluster',
+    'Research, Innovation and Collaboration Cluster',
+    'Academic Cluster'
+];
+
+// Reorders a { clusterName, offices: [...] }[] array (built in cluster_name
+// alphabetical order by the SQL GROUP BY) into CLUSTER_REPORT_ORDER, and
+// attaches each cluster's own weighted overall score/interpretation from
+// clusterRatingMap (cluster_name -> { rating }) so the report can print a
+// TOTAL row per cluster instead of only one institution-wide total.
+function buildOrderedClusterReport(clustersMap, clusterRatingMap, interpretFn) {
+    const byName = new Map();
+    Object.keys(clustersMap).forEach(name => byName.set(name, clustersMap[name]));
+
+    const ordered = [];
+    CLUSTER_REPORT_ORDER.forEach(name => {
+        if (byName.has(name)) { ordered.push(byName.get(name)); byName.delete(name); }
+    });
+    // Any cluster not in the fixed list (e.g. newly added) still prints, just
+    // appended after the required sequence rather than silently dropped.
+    byName.forEach(cluster => ordered.push(cluster));
+
+    ordered.forEach(cluster => {
+        const rating = clusterRatingMap[cluster.clusterName];
+        const score = rating ? parseFloat(rating.rating || 0) : 0;
+        cluster.overallScore = score.toFixed(2);
+        cluster.interpretation = interpretFn(score);
+    });
+
+    return ordered;
+}
+
 // Per-column rating breakdown (Strongly Agree..N/A bucket counts) for the
 // "SQD Results" detailed report — same 5/4/3/2/1/0 scale as sqdScoreExpr,
 // but returns each bucket's count instead of collapsing straight to a %.
@@ -1043,19 +1089,24 @@ function getPeriodCovered(date = new Date()) {
     return month <= 5 ? `Jan to June ${year}` : `July to Dec ${year}`;
 }
 
-// Validates/normalizes the client-submitted "Time of Office Visit" (from
-// <input type="time">, e.g. "09:35" or "09:35:00") into a MySQL TIME literal.
-// Anything that doesn't match is dropped to NULL rather than rejected outright,
-// since client_profiles.office_visited_time is nullable for legacy records.
+// Validates/normalizes the client-submitted "Date & Time of Office Visit"
+// (from <input type="datetime-local">, e.g. "2026-08-28T15:00") into a MySQL
+// DATETIME literal. The visit can be an earlier day than the survey is
+// actually submitted on (client answers it later), so this is stored as its
+// own date+time rather than assumed to match the submission's created_at.
+// Anything that doesn't match is dropped to NULL rather than rejected
+// outright, since client_profiles.office_visited_time is nullable for
+// legacy records.
 function cleanTime(val) {
     if (val === undefined || val === null) return null;
     const str = String(val).trim();
-    const match = /^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(str);
+    const match = /^(\d{4}-\d{2}-\d{2})[T ]([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(str);
     if (!match) return null;
-    const hh = match[1].padStart(2, '0');
-    const mm = match[2];
-    const ss = match[3] || '00';
-    return `${hh}:${mm}:${ss}`;
+    const date = match[1];
+    const hh = match[2].padStart(2, '0');
+    const mm = match[3];
+    const ss = match[4] || '00';
+    return `${date} ${hh}:${mm}:${ss}`;
 }
 
 // Legacy/manually-seeded rows have used a handful of equivalent spellings for
@@ -1543,7 +1594,7 @@ CREATE TABLE IF NOT EXISTS client_profiles (
     gender VARCHAR(50) NULL,
     region VARCHAR(100) NULL,
     email VARCHAR(255) NULL,
-    office_visited_time TIME NULL,
+    office_visited_time DATETIME NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (survey_response_id) REFERENCES survey_responses(id) ON DELETE CASCADE
 );`;
@@ -1776,7 +1827,14 @@ db.query(createClustersTableQuery, (err) => {
                             else console.log('✅ client_profiles table verified/created successfully!');
                             // Older deployments created this table before office_visited_time
                             // existed — add it now, nullable, so existing rows keep working.
-                            db.query("ALTER TABLE client_profiles ADD COLUMN office_visited_time TIME NULL", () => {});
+                            db.query("ALTER TABLE client_profiles ADD COLUMN office_visited_time DATETIME NULL", () => {
+                                // Older deployments still on the original TIME-only column: widen it to
+                                // DATETIME so the visit's own date (which can precede the survey's
+                                // submission date) is stored instead of assumed from created_at. A
+                                // no-op once the column is already DATETIME; MySQL backfills existing
+                                // TIME values onto today's date, matching the old same-day assumption.
+                                db.query("ALTER TABLE client_profiles MODIFY COLUMN office_visited_time DATETIME NULL", () => {});
+                            });
                         });
 
                         // Client accounts (locked demographics + unified login lookup)
@@ -2920,7 +2978,7 @@ app.get('/api/client-history/:id', ensureClientAuth, noCache, (req, res) => {
                DATE_FORMAT(s.created_at, '%M %d, %Y %h:%i %p') AS formatted_date,
                o.office_name, o.cluster_name,
                p.client_type, p.age, p.gender,
-               TIME_FORMAT(p.office_visited_time, '%h:%i %p') AS office_visited_time_formatted
+               DATE_FORMAT(p.office_visited_time, '%M %d, %Y %h:%i %p') AS office_visited_time_formatted
         FROM survey_responses s
         JOIN offices o ON s.office_id = o.id
         LEFT JOIN client_profiles p ON p.survey_response_id = s.id
@@ -3239,6 +3297,12 @@ function loadDashboardData(req, callback) {
                     const clusterCards = [];
                     const colors = ['#251d3a', '#2a2550', '#ffcc00', '#ffcc00'];
 
+                    // cluster_name -> weighted overall rating, reused below to print a
+                    // per-cluster TOTAL row on the PER CLUSTER report (same weighted-
+                    // average math as the chart/cards, just keyed by full cluster name
+                    // instead of the shortened chart label).
+                    const clusterRatingMap = {};
+
                     if (clusterData) {
                         clusterData.forEach((row, idx) => {
                             let shortName = row.cluster_name;
@@ -3255,6 +3319,8 @@ function loadDashboardData(req, callback) {
                                 respondents: row.cluster_volume,
                                 color: colors[idx % colors.length]
                             });
+
+                            clusterRatingMap[row.cluster_name] = { rating: safeRating };
                         });
                     }
 
@@ -3273,32 +3339,36 @@ function loadDashboardData(req, callback) {
 
                     db.query(reportQuery, dateParams, (err, reportRows) => {
                         logErr('office report')(err);
-                        const reportData = [];
                         const clustersMap = {};
                         const rankedOffices = [];
+                        const interpretForDashboard = (score) => {
+                            if (score >= 95) return "OUTSTANDING";
+                            if (score >= 90) return "VERY SATISFACTORY";
+                            if (score >= 80) return "SATISFACTORY";
+                            if (score >= 60) return "FAIR";
+                            return "POOR";
+                        };
 
                         if (reportRows) {
                             reportRows.forEach(row => {
                                 const cName = row.cluster_name || 'Unassigned Cluster';
                                 if (!clustersMap[cName]) {
                                     clustersMap[cName] = { clusterName: cName, offices: [] };
-                                    reportData.push(clustersMap[cName]);
                                 }
 
                                 let score = parseFloat(row.office_score || 0);
-                                let interp = "POOR";
-                                if(score >= 95) interp = "OUTSTANDING";
-                                else if(score >= 90) interp = "VERY SATISFACTORY";
-                                else if(score >= 80) interp = "SATISFACTORY";
-                                else if(score >= 60) interp = "FAIR";
-
-                                clustersMap[cName].offices.push({ name: row.office_name, score: score.toFixed(2), interpretation: interp });
+                                clustersMap[cName].offices.push({ name: row.office_name, score: score.toFixed(2), interpretation: interpretForDashboard(score) });
 
                                 if (row.office_volume > 0) {
                                     rankedOffices.push({ name: row.office_name, cluster: cName, score, respondents: row.office_volume });
                                 }
                             });
                         }
+
+                        // PER CLUSTER report order (Office of the President, Administrative
+                        // and Finance, Research/Innovation/Collaboration, Academic) with each
+                        // cluster's own TOTAL row attached — see CLUSTER_REPORT_ORDER.
+                        const reportData = buildOrderedClusterReport(clustersMap, clusterRatingMap, interpretForDashboard);
 
                         rankedOffices.sort((a, b) => b.score - a.score);
                         const topOffices = rankedOffices.slice(0, 5);
@@ -3515,6 +3585,7 @@ app.get('/print', ensureAdminAuth, noCache, (req, res) => {
                     const colors = ['#251d3a', '#2a2550', '#ffcc00', '#ffcc00'];
                     const chartData = { labels: [], respondents: [], ratings: [] };
                     const clusterCards = [];
+                    const clusterRatingMap = {};
                     (clusterRows || []).forEach((row, idx) => {
                         const name = row.cluster_name || 'Other Offices';
                         const rating = parseFloat(row.cluster_rating || 0);
@@ -3522,6 +3593,7 @@ app.get('/print', ensureAdminAuth, noCache, (req, res) => {
                         chartData.respondents.push(row.cluster_volume);
                         chartData.ratings.push(rating);
                         clusterCards.push({ name, rating: rating.toFixed(2), respondents: row.cluster_volume, color: colors[idx % colors.length] });
+                        clusterRatingMap[row.cluster_name] = { rating };
                     });
 
                     const officeQuery = `
@@ -3534,17 +3606,19 @@ app.get('/print', ensureAdminAuth, noCache, (req, res) => {
                     `;
                     db.query(officeQuery, dateParams, (err, officeRows) => {
                         logErr('office report')(err);
-                        const reportData = [];
                         const clustersMap = {};
                         (officeRows || []).forEach(row => {
                             const cName = row.cluster_name || 'Other Offices';
                             if (!clustersMap[cName]) {
                                 clustersMap[cName] = { clusterName: cName, offices: [] };
-                                reportData.push(clustersMap[cName]);
                             }
                             const score = parseFloat(row.office_score || 0);
                             clustersMap[cName].offices.push({ name: row.office_name, score: score.toFixed(2), interpretation: interpretFor(score) });
                         });
+
+                        // PER CLUSTER report order with each cluster's own TOTAL row —
+                        // see CLUSTER_REPORT_ORDER.
+                        const reportData = buildOrderedClusterReport(clustersMap, clusterRatingMap, interpretFor);
 
                         res.render('print', {
                             overallRating: overallAvgScore.toFixed(2),
@@ -3626,6 +3700,7 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
             COUNT(s.id) as total_respondents,
             MAX(s.respondent_name) as respondent_name,
             MAX(o.office_name) as office_name,
+            MAX(s.service_availed) as service_availed,
             MAX(s.period_year_quarter) as period_year_quarter,
             MAX(DATE_FORMAT(s.created_at, '%M %d, %Y')) as response_date,
             ${sqdScoreExpr(['s.sqd1'])} as sqd1,
@@ -3745,7 +3820,7 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
         
         const recordsQuery = `
             SELECT s.id, s.respondent_name, s.topic, s.sentiment, s.comments, DATE_FORMAT(s.created_at, '%M %d, %Y') as formatted_date, o.cluster_name, o.office_name,
-                   TIME_FORMAT(p.office_visited_time, '%h:%i %p') as office_visited_time_formatted
+                   DATE_FORMAT(p.office_visited_time, '%M %d, %Y %h:%i %p') as office_visited_time_formatted
             FROM survey_responses s
             JOIN offices o ON s.office_id = o.id
             LEFT JOIN client_profiles p ON p.survey_response_id = s.id
@@ -3799,7 +3874,7 @@ app.get('/api/admin/survey-response/:id', ensureAdminAuth, noCache, (req, res) =
                DATE_FORMAT(s.created_at, '%M %d, %Y %h:%i %p') AS formatted_date,
                o.office_name, o.cluster_name,
                p.client_type, p.age, p.gender,
-               TIME_FORMAT(p.office_visited_time, '%h:%i %p') AS office_visited_time_formatted
+               DATE_FORMAT(p.office_visited_time, '%M %d, %Y %h:%i %p') AS office_visited_time_formatted
         FROM survey_responses s
         JOIN offices o ON s.office_id = o.id
         LEFT JOIN client_profiles p ON p.survey_response_id = s.id

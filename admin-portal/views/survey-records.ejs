@@ -3,6 +3,7 @@
 <head>
     <%- include('layout/header', { forceLightMode: true }) %>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="/js/pdf-repeating-header.js"></script>
     <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
          views/layout/report-footer.ejs) — see public/css/report.css. -->
     <link rel="stylesheet" href="/css/report.css">
@@ -383,19 +384,23 @@
             padding: 32px 24px;
         }
         html[data-bs-theme="dark"] .client-report-body { background: #0d1420; }
+        /* Unconditional (not just @media print) so html2pdf's 'css' pagebreak
+           mode actually sees it — see report.ejs for the full rationale. This
+           guarantees the AI Feedback section always starts its own PDF page. */
+        .page-break { page-break-before: always; }
+        /* No outer border/shadow — html2pdf captures this element as-is, so any
+           border/shadow here would print as a box around the official page. */
         .report-container {
             background: #fff;
-            padding: 40px;
+            padding: 18px;
             color: #000;
             font-family: Arial, sans-serif;
             max-width: 900px;
             margin: 0 auto 30px;
-            border: 1px solid #ccc;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
             box-sizing: border-box;
         }
         .report-title { text-align: center; font-weight: bold; font-size: 15px; margin: 10px 0 5px; }
-        .office-title { text-align: center; font-weight: bold; text-decoration: underline; text-transform: uppercase; font-size: 15px; margin-bottom: 0; }
+        .office-title { text-align: center; font-weight: bold; text-decoration: underline; text-transform: uppercase; font-size: 15px; margin-bottom: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
         .meta-info { font-size: 13px; margin-bottom: 8px; }
         .meta-info span { display: inline-block; width: 200px; }
         .report-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 13px; }
@@ -419,9 +424,10 @@
         .topic-pill { background-color: #e8f0fe !important; color: #0056b3 !important; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; -webkit-print-color-adjust: exact; }
         .text-center { text-align: center; }
         .fw-bold { font-weight: bold; }
-        .interpretation-box { font-size: 13px; margin-left: 50%; margin-bottom: 14px; }
-        .interpretation-box table { border: none; }
-        .interpretation-box td { padding: 1px 10px; border: none; }
+        /* The SQD page's own lower section (Prepared/Interpretation/Noted/Reviewed)
+           is styled by .sqd-report-footer-layout in public/css/report.css instead;
+           .signature-section below is only the AI Feedback page's plain
+           two-column Prepared/Reviewed row. */
         .signature-section { display: flex; justify-content: space-between; margin-top: 18px; font-size: 13px; }
         .sig-block { width: 45%; }
         .sig-name { font-weight: bold; margin-top: 14px; margin-bottom: 0; }
@@ -493,10 +499,10 @@
                                 <div class="table-scroll-x">
                                 <table class="table">
                                     <colgroup>
-                                        <col style="width: 12%;">
-                                        <col style="width: 14%;">
                                         <col style="width: 10%;">
-                                        <col style="width: 21%;">
+                                        <col style="width: 12%;">
+                                        <col style="width: 17%;">
+                                        <col style="width: 18%;">
                                         <col style="width: 15%;">
                                         <col style="width: 11%;">
                                         <col style="width: 17%;">
@@ -505,7 +511,7 @@
                                         <tr>
                                             <th>Office</th>
                                             <th>Name</th>
-                                            <th class="text-center">Time of Office Visit</th>
+                                            <th class="text-center">Date &amp; Time of Office Visit</th>
                                             <th>Comments</th>
                                             <th class="text-center">Topic</th>
                                             <th class="text-center">Sentiment</th>
@@ -579,7 +585,6 @@
                 <div class="d-flex align-items-center gap-2">
                     <button class="btn btn-sm btn-outline-danger" onclick="downloadClientReportPDF()"><i class="fas fa-file-pdf me-1"></i> PDF</button>
                     <button class="btn btn-sm btn-outline-success" onclick="downloadClientReportCSV()"><i class="fas fa-file-csv me-1"></i> CSV</button>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="window.print()"><i class="fas fa-print me-1"></i> Print</button>
                     <div class="vr mx-2"></div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -593,14 +598,15 @@
 
                     <!-- PAGE 1: NUMERICAL SUMMARY -->
                     <div class="report-container">
-                        <%- include('layout/report-header', { docCode: 'CSPC-F-CQA-06' }) %>
+                        <%- include('layout/report-header', { showSQDFormCode: true, docCode: 'CSPC-F-CQA-06' }) %>
 
-                        <div class="report-title">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
-                        <p class="office-title" id="cr_officeName1"></p>
+                        <div class="sqd-report-title">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
+                        <p class="sqd-office-name" id="cr_officeName1"></p>
+                        <p class="sqd-service-line d-none" id="cr_serviceLine1"></p>
 
-                        <div class="meta-info mt-4">
-                            <div><span>Period Covered:</span> <strong id="cr_period1"></strong></div>
-                            <div><span>Number of Respondents:</span> <strong id="cr_totalRespondents1">0</strong></div>
+                        <div class="sqd-meta-block">
+                            <div class="sqd-meta-row"><span class="sqd-meta-label">Period Covered:</span> <span class="sqd-meta-value" id="cr_period1"></span></div>
+                            <div class="sqd-meta-row"><span class="sqd-meta-label">Number of Respondents:</span> <span class="sqd-meta-value" id="cr_totalRespondents1">0</span></div>
                         </div>
 
                         <table class="report-table">
@@ -631,39 +637,14 @@
                             </tbody>
                         </table>
 
-                        <div class="interpretation-box">
-                            <div class="fw-bold mb-1">INTERPRETATION OF RESULTS</div>
-                            <table>
-                                <tr><td>95.0% to 100%</td><td>Outstanding</td></tr>
-                                <tr><td>90.0 % to 94.9%</td><td>Very Satisfactory</td></tr>
-                                <tr><td>80.0% to 89.9%</td><td>Satisfactory</td></tr>
-                                <tr><td>60.0% to 79.9%</td><td>Fair</td></tr>
-                                <tr><td>Below 60.0%</td><td>Poor</td></tr>
-                            </table>
-                        </div>
-
-                        <div class="signature-section">
-                            <div class="sig-block">
-                                <div>Prepared by:</div>
-                                <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
-                                <p class="sig-title">AOV-CQA</p>
-                                <div style="margin-top: 30px;">Noted by:</div>
-                                <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
-                                <p class="sig-title">SUC President III</p>
-                            </div>
-                            <div class="sig-block">
-                                <div>Reviewed by:</div>
-                                <p class="sig-name">JOCELYN O. JINTALAN, DBA</p>
-                                <p class="sig-title">ISO Chair</p>
-                            </div>
-                        </div>
+                        <%- include('layout/sqd-report-footer') %>
 
                         <%- include('layout/report-footer', { pageLabel: 'Page 1 of 2' }) %>
                     </div>
 
                     <!-- PAGE 2: WRITTEN COMMENTS & AI ANALYTICS -->
                     <div class="report-container page-break">
-                        <%- include('layout/report-header', { docCode: 'CSPC-F-CQA-06' }) %>
+                        <%- include('layout/report-header', { showSQDFormCode: false }) %>
 
                         <div class="report-title">AI FEEDBACK SENTIMENT & TOPIC ANALYTICS</div>
                         <p class="office-title" id="cr_officeName2"></p>
@@ -801,7 +782,7 @@
                     <div class="result-section">
                         <div class="result-section-header"><i class="fas fa-clock"></i> Visit Details</div>
                         <div class="result-grid">
-                            ${ccItem('Time of Office Visit', s.office_visited_time_formatted)}
+                            ${ccItem('Date &amp; Time of Office Visit', s.office_visited_time_formatted)}
                             ${ccItem('Google Account', s.google_email)}
                         </div>
                     </div>
@@ -936,6 +917,18 @@
                 document.getElementById('cr_officeName2').innerText = `${clientName} — ${officeName}`;
                 document.getElementById('cr_period2').innerText = periodText;
 
+                // Service availed (italic subtitle under the office name) — only
+                // this single-respondent report has one real service to show;
+                // hidden entirely when this respondent didn't record one.
+                const serviceLineEl = document.getElementById('cr_serviceLine1');
+                if (stats.service_availed) {
+                    serviceLineEl.textContent = stats.service_availed;
+                    serviceLineEl.classList.remove('d-none');
+                } else {
+                    serviceLineEl.textContent = '';
+                    serviceLineEl.classList.add('d-none');
+                }
+
                 updateClientReportTable(stats);
                 updateClientCommentsTable(data.comments);
 
@@ -1021,18 +1014,52 @@
     }
 
     function downloadClientReportPDF() {
-        const element = document.getElementById('clientReportContentToExport');
+        // Two report identities share this one PDF: the SQD numerical summary
+        // (always exactly one page) and AI Feedback Sentiment & Topic Analytics
+        // (can span several pages) — page 1 always belongs to the SQD section,
+        // every later page to AI Feedback. See public/js/pdf-repeating-header.js.
+        const serviceLineEl = document.getElementById('cr_serviceLine1');
+        const sqdHeader = {
+            title: 'Client Satisfaction Measurement Survey Result',
+            subtitle: document.getElementById('cr_officeName1').textContent.trim(),
+            subtitleUnderline: true,
+            serviceLine: (!serviceLineEl.classList.contains('d-none') ? serviceLineEl.textContent.trim() : ''),
+            metaLines: [
+                { label: 'Period Covered:', value: document.getElementById('cr_period1').textContent.trim() },
+                { label: 'Number of Respondents:', value: document.getElementById('cr_totalRespondents1').textContent.trim() }
+            ],
+            docCode: 'CSPC-F-CQA-06'
+        };
+        const aiHeader = {
+            title: 'AI Feedback Sentiment & Topic Analytics',
+            subtitle: document.getElementById('cr_officeName2').textContent.trim(),
+            subtitleUnderline: true,
+            period: 'Period Covered: ' + document.getElementById('cr_period2').textContent.trim(),
+            meta: 'Analyzed Feedbacks: ' + document.getElementById('cr_totalRespondents2').textContent.trim()
+        };
+
         // Letter (8.5in x 11in) portrait, matching CSPC's official print spec.
-        // html2pdf's margin array is [top, left, bottom, right] (not CSS order).
+        // html2pdf's margin array is [top, left, bottom, right] (not CSS order);
+        // top is overridden by exportRepeatingHeaderPdf to reserve space for the
+        // redrawn header.
         const opt = {
-            margin: [0.5, 0.5, 0.25, 0.25],
+            margin: [0, 0.5, 0.25, 0.25],
             filename: 'CSM_Client_Report.pdf',
             image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollY: 0 },
+            html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollY: 0, backgroundColor: '#ffffff' },
             jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
-            pagebreak: { mode: ['css', 'legacy'], avoid: ['.report-header-block', '.page-footer', '.signature-section', 'tr'] }
+            pagebreak: { mode: ['css', 'legacy'], avoid: ['.page-footer', '.signature-section', '.sqd-interpretation-standalone', '.sqd-signature-grid', 'tr'] }
         };
-        html2pdf().set(opt).from(element).save();
+
+        exportRepeatingHeaderPdf({
+            elementId: 'clientReportContentToExport',
+            filename: opt.filename,
+            opt,
+            headerHeightIn: 2.7,
+            headerHideSelectors: ['.report-header-block', '.sqd-report-title', '.sqd-office-name', '.sqd-service-line', '.sqd-meta-block', '.report-title', '.office-title', '.meta-info'],
+            getHeaderForPage: (pageNum) => (pageNum === 1 ? sqdHeader : aiHeader),
+            avoidSplitSelector: '.sqd-signature-grid'
+        });
     }
 
     function downloadClientReportCSV() {

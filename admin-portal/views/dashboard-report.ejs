@@ -8,15 +8,15 @@
     <link rel="stylesheet" href="/css/report.css">
 
     <style>
+        /* No outer border/shadow — html2pdf captures this element as-is, so any
+           border/shadow here would print as a box around the official page. */
         .report-container {
             background: #fff;
-            padding: 40px;
+            padding: 18px;
             color: #000;
             font-family: Arial, sans-serif;
             max-width: 950px;
             margin: 0 auto;
-            border: 1px solid #ccc;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
 
         .report-title { text-align: center; font-weight: bold; font-size: 16px; margin: 20px 0 5px; }
@@ -95,12 +95,11 @@
 
             <div class="d-flex justify-content-end gap-2 mb-3 px-4 no-print">
                 <button class="btn btn-danger" onclick="downloadPDF()"><i class="fas fa-file-pdf me-2"></i> Download PDF</button>
-                <button class="btn btn-outline-secondary" onclick="window.print()"><i class="fas fa-print me-2"></i> Print</button>
             </div>
 
             <div id="reportContentToExport">
                 <div class="report-container" style="display: block; margin-bottom: 30px;">
-                    <%- include('layout/report-header', { docCode: 'CSPC-CQA-CSM-F01' }) %>
+                    <%- include('layout/report-header', { showSQDFormCode: false }) %>
 
                     <div class="report-title">DASHBOARD OVERVIEW REPORT</div>
                     <div class="sub-title">Institution-wide client satisfaction summary</div>

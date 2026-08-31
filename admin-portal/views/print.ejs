@@ -91,29 +91,15 @@
 
         /* Iyong Report Styles */
         /* Letterhead (report-header-block/etc.) and page-footer rules live in
-           public/css/report.css, shared with every other SQD report. */
-        .print-title { text-align: center; font-weight: bold; font-size: 15px; margin-bottom: 4px; }
-        .print-period { text-align: center; font-size: 13px; font-weight: bold; margin-bottom: 14px; }
-        .print-table { width: 100%; border-collapse: collapse; font-size: 11px; box-sizing: border-box; }
-        .print-table th { background-color: #5B9BD5 !important; color: white !important; border: 1px solid black; padding: 6px; text-align: center; text-transform: uppercase; }
-        .print-table td { border: 1px solid black; padding: 3px 7px; }
-        .cluster-row { background-color: #D9D9D9 !important; font-weight: bold; }
-        .num-col { text-align: center; width: 30px; }
-        .score-col { text-align: center; width: 100px; }
-        .inter-col { text-align: center; width: 120px; }
-        .print-footer { margin-top: 18px; display: flex; justify-content: space-between; }
-        .sign-block { width: 45%; }
-        .sign-name { font-weight: bold; text-decoration: underline; margin-top: 16px; margin-bottom: 0; text-transform: uppercase; }
-        .sign-title { margin-top: 0; font-size: 12px; }
-        .legend-area { font-size: 10px; margin-top: 16px; }
-        .legend-table { border-collapse: collapse; margin-top: 4px; }
-        .legend-table td { padding: 1px 5px; border: none; }
-        .range { font-weight: normal; font-style: italic; }
-        .desc { font-weight: normal; padding-left: 10px; }
+           public/css/report.css, shared with every other SQD report — as does the
+           cluster table (.cluster-report-table) and signature/legend block
+           (.cluster-report-signatures) rendered by layout/report-cluster-table.ejs
+           and layout/report-signatories.ejs below. */
+        .print-title { text-align: center; font-weight: bold; font-size: 13pt; line-height: 1.3; margin: 10px 0 6px; }
+        .print-period { text-align: center; font-size: 10.5pt; font-weight: bold; margin: 0 0 16px; }
 
         @media print {
             #print-area { box-sizing: border-box; overflow: visible; }
-            .print-footer { break-inside: avoid; page-break-inside: avoid; }
         }
     </style>
 </head>
@@ -129,9 +115,6 @@
             
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h4 class="fw-bold mb-0">Analytics Dashboard</h4>
-                <button onclick="window.print()" class="btn btn-primary px-4 rounded-pill shadow-sm">
-                    <i class="fas fa-print me-2"></i> Print Report
-                </button>
             </div>
 
             <div class="row g-4 mb-4">
@@ -228,72 +211,14 @@
 </div>
 
 <div id="print-area">
-    <%- include('layout/report-header', { docCode: 'CSPC-F-CQA-06' }) %>
+    <%- include('layout/report-header', { showSQDFormCode: false }) %>
 
-    <p class="print-title">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT<br>PER CLUSTER</p>
+    <p class="print-title">Client Satisfaction Measurement Survey Result<br>Per Cluster</p>
     <p class="print-period">Period covered : <%= typeof periodLabel !== 'undefined' ? periodLabel : 'All Periods' %></p>
 
-    <table class="print-table">
-        <thead>
-            <tr>
-                <th colspan="2">NAME OF OFFICE</th>
-                <th>OVERALL SCORE</th>
-                <th>INTERPRETATION</th>
-            </tr>
-        </thead>
-        <tbody>
-            <% if (typeof reportData !== 'undefined' && reportData.length > 0) { %>
-                <% reportData.forEach(cluster => { %>
-                    <tr class="cluster-row"><td colspan="4"><%= cluster.clusterName %></td></tr>
-                    <% cluster.offices.forEach((office, index) => { %>
-                        <tr>
-                            <td class="num-col"><%= index + 1 %></td>
-                            <td><%= office.name %></td>
-                            <td class="score-col"><%= office.score %>%</td>
-                            <td class="inter-col"><%= office.interpretation %></td>
-                        </tr>
-                    <% }) %>
-                <% }) %>
-            <% } else { %>
-                <tr><td colspan="4" class="text-center py-3 text-muted">No survey response submissions loaded yet for this period.</td></tr>
-            <% } %>
+    <%- include('layout/report-cluster-table', { reportData: typeof reportData !== 'undefined' ? reportData : [] }) %>
 
-            <tr style="background-color: #eee !important;">
-                <td colspan="2" style="text-align: right; font-weight: bold;">OVERALL RATING</td>
-                <td class="score-col" style="font-weight: bold;"><%= typeof overallRating !== 'undefined' ? overallRating : '0.00' %>%</td>
-                <td class="inter-col" style="font-weight: bold; text-transform: uppercase;"><%= typeof overallInterpretation !== 'undefined' ? overallInterpretation : 'Poor' %></td>
-            </tr>
-        </tbody>
-    </table>
-
-    <div class="print-footer">
-        <div class="sign-block">
-            <p>Prepared by:</p>
-            <p class="sign-name">JUVY M. BUSTAMANTE, JD</p>
-            <p class="sign-title">AOV-CQA</p>
-            <br><br>
-            <p>Noted by:</p>
-            <p class="sign-name">AMADO A. OLIVA JR., PhD</p>
-            <p class="sign-title">SUC President III</p>
-        </div>
-        
-        <div class="sign-block">
-            <p>Reviewed by:</p>
-            <p class="sign-name">JOCELYN O. JINTALAN, DBA</p>
-            <p class="sign-title">ISO Chair</p>
-            
-            <div class="legend-area">
-                <strong>INTERPRETATION OF RESULTS</strong>
-                <table class="legend-table">
-                    <tr><td class="range">95.0% to 100%</td><td class="desc">Outstanding</td></tr>
-                    <tr><td class="range">90.0% to 94.9%</td><td class="desc">Very Satisfactory</td></tr>
-                    <tr><td class="range">80.0% to 89.9%</td><td class="desc">Satisfactory</td></tr>
-                    <tr><td class="range">60.0% to 79.9%</td><td class="desc">Fair</td></tr>
-                    <tr><td class="range">Below 60.0%</td><td class="desc">Poor</td></tr>
-                </table>
-            </div>
-        </div>
-    </div>
+    <%- include('layout/report-signatories') %>
 
     <%- include('layout/report-footer') %>
 </div>
