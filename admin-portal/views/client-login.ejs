@@ -153,13 +153,33 @@
             transition: box-shadow 0.3s ease;
         }
 
-        /* Responsive para sa mobile card */
-        @media (max-width: 400px) {
+        /* Responsive para sa mobile card
+           NOTE: the fixed 390px card (plus the wrapper's 1rem/16px side
+           padding) needs >= 422px of viewport to avoid overflowing. The old
+           400px cutoff missed the 401-421px range, which includes very common
+           phones like the Pixel 6/7 (412px) and iPhone 6/7/8 Plus / XR / 11
+           (414px) — on those the card was clipped by html/body's
+           overflow:hidden. Raised to 480px so every common phone is covered. */
+        @media (max-width: 480px) {
             .card-custom {
                 width: 92vw;
                 height: 92vw; /* Keep it square on mobile */
                 padding: 1.5rem 1.75rem;
             }
+
+            /* Readability: the "Sign in to your CQA Dashboard" caption and the
+               Gmail-account explainer paragraph were both under the ~14px
+               minimum comfortable body-text size on a phone (0.75rem / 12px
+               and inline 0.85rem / 13.6px). The explainer uses an inline
+               style="font-size:0.85rem" attribute, so it needs !important
+               here to actually win over it. */
+            .card-custom .text-xsmall { font-size: 0.82rem; }
+            .card-custom .text-center.mb-4 p { font-size: 0.9rem !important; }
+
+            /* The single "Sign in with Google" button is already a large
+               (~54px) tap target — just give it a bit more breathing room
+               above so it doesn't sit right under the paragraph. */
+            .card-custom > a { margin-top: 0.25rem; display: block; }
         }
 
         .card-custom .cqa-logo {

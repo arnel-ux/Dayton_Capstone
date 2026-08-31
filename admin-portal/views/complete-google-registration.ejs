@@ -102,11 +102,37 @@
             padding: 2rem 2.25rem;
         }
 
-        @media (max-width: 460px) {
+        /* NOTE: the fixed 440px card (plus the wrapper's 1rem/16px side
+           padding) needs >= 472px of viewport to avoid overflowing. Raised
+           from 460px to 480px so it lines up with the other auth pages
+           (login/forgot-password/reset-password) and leaves no gap where the
+           card could still clip. */
+        @media (max-width: 480px) {
             .card-custom {
                 width: 90vw;
                 padding: 1.75rem;
             }
+
+            /* ---- Touch targets + readability ----
+               This form has FOUR stacked fields (Name, Email, Create Password,
+               Confirm Password) — the most of any auth page here, so cramped
+               spacing/small text compounds fast on a phone. 16px input text
+               avoids iOS Safari's auto-zoom-on-focus; taller field/button
+               padding brings tap heights up to ~44px; extra margin between
+               the four stacked field groups keeps adjacent inputs from being
+               easy to mis-tap. */
+            .card-custom .form-control {
+                font-size: 16px;
+                padding-top: 0.75rem;
+                padding-bottom: 0.75rem;
+            }
+            .card-custom .input-group-text { font-size: 1rem; padding-left: 0.9rem; padding-right: 0.9rem; }
+            .card-custom label { font-size: 0.8rem; margin-bottom: 0.35rem !important; }
+            .card-custom form > div.mb-2 { margin-bottom: 1rem !important; }
+            .card-custom form > div.mb-3 { margin-bottom: 1.15rem !important; }
+            .card-custom .btn { padding-top: 0.85rem; padding-bottom: 0.85rem; font-size: 1rem; }
+            .text-xsmall { font-size: 0.85rem; }
+            .btn-home { padding: 0.65rem 1.15rem; font-size: 0.85rem; }
         }
 
         .card-custom h4 {

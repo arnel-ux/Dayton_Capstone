@@ -169,13 +169,78 @@
             animation: fadeSlideUp 0.7s ease-out 0.15s forwards;
         }
 
-        /* Responsive para sa mobile card */
-        @media (max-width: 400px) {
+        /* Responsive para sa mobile card
+           NOTE: the fixed 400px card width above (plus the wrapper's 1rem/16px
+           side padding) needs >= 432px of viewport to avoid overflowing —
+           but common phones (375/390/393/412/414/428/430px) are ALL narrower
+           than that, and html/body has overflow:hidden, so on every real phone
+           the card was getting clipped off-screen on the sides instead of
+           shrinking. Raised the breakpoint from 400px to 480px so it now
+           covers every phone width, including the larger Pro Max/Android
+           sizes the old 400px cutoff missed. */
+        @media (max-width: 480px) {
             .card-custom {
                 width: 92vw;
                 height: auto;
                 padding: 1.35rem 1.5rem;
             }
+            /* Google's reCAPTCHA checkbox widget is a fixed 304x78px iframe —
+               wider than the card's content area on every phone (92vw card
+               minus its own side padding leaves ~280-300px). Scaling it down
+               and shrinking its layout box by the same factor keeps it fully
+               inside the card instead of poking out past the edge. */
+            .g-recaptcha {
+                transform: scale(0.85);
+                transform-origin: 0 0;
+                width: 258px;
+                height: 66px;
+            }
+
+            /* ---- Touch targets + readability ----
+               The text inputs were ~34px tall with a 14.08px font — under the
+               ~44px comfortable tap-height guideline, and critically, any
+               input with a font-size below 16px makes iOS Safari auto-zoom
+               the whole page on focus (jarring layout jump, easy to trigger
+               here since these are the very first fields a phone user taps).
+               16px input text avoids that zoom outright. */
+            .input-modern .form-control {
+                font-size: 16px;
+                padding: 0.8rem 0.85rem 0.8rem 0;
+            }
+            .input-modern .input-icon { width: 2.8rem; font-size: 1rem; }
+            .field-group { margin-bottom: 1rem; }
+            .field-label { font-size: 0.74rem; margin-bottom: 0.4rem; }
+            .field-hint { font-size: 0.74rem; margin-top: 0.4rem; }
+
+            /* Buttons: taller padding brings both to a comfortable >=44px tap
+               height; unchanged font stayed readable but the old padding made
+               them feel like a thin bar to tap on a phone. */
+            .btn-login, .btn-google {
+                padding: 0.9rem 1rem;
+                font-size: 0.95rem;
+            }
+
+            /* "Forgot Password?" sits inline next to the Password label —
+               it's a short link with almost no hit area beyond its own text
+               height. Padding it (and giving the row more gap) turns it into
+               a real tap target and keeps a thumb from clipping the label
+               next to it. */
+            .forgot-link {
+                padding: 0.35rem 0;
+                margin: -0.35rem 0;
+                font-size: 0.8rem;
+            }
+            .field-group .d-flex.justify-content-between { gap: 0.75rem; }
+
+            .divider-or { margin: 1.1rem 0; }
+
+            /* Subtitle/eyebrow text was down at 12.48px/10.4px — bump both
+               into comfortably-readable territory on a phone screen. */
+            .sub-title { font-size: 0.85rem; }
+            .portal-text { font-size: 0.7rem; padding: 0.35rem 1rem; }
+
+            /* Fixed top-left "Home" pill was a ~30px-tall tap target. */
+            .btn-home { padding: 0.65rem 1.15rem; font-size: 0.85rem; }
         }
 
         .card-custom .cqa-logo {
