@@ -508,11 +508,11 @@
             <input type="hidden" name="office_id" id="servicesOfficeId">
             <input type="text" name="service_name" class="form-control" placeholder="E.g., Requesting for Clearance" required>
             <select name="availability" class="form-select" style="max-width: 160px;" title="How often a client may re-survey this service">
-                <option value="">One-time only</option>
-                <option value="daily">Daily</option>
+                <option value="daily" selected>Daily</option>
                 <option value="weekly">Weekly</option>
                 <option value="monthly">Monthly</option>
                 <option value="yearly">Yearly</option>
+                <option value="">One-time only</option>
             </select>
             <button type="submit" class="btn btn-primary text-nowrap"><i class="fas fa-plus me-1"></i> Add</button>
         </form>
@@ -757,11 +757,11 @@
                     <input type="hidden" name="id" value="${svc.id}">
                     <input type="hidden" name="service_name" value="${nameSpan.textContent.replace(/"/g, '&quot;')}">
                     <select name="availability" class="form-select form-select-sm" title="How often a client may re-survey this service" onchange="this.form.submit()">
-                        <option value="" ${!svc.availability ? 'selected' : ''}>One-time only</option>
                         <option value="daily" ${svc.availability === 'daily' ? 'selected' : ''}>Daily</option>
                         <option value="weekly" ${svc.availability === 'weekly' ? 'selected' : ''}>Weekly</option>
                         <option value="monthly" ${svc.availability === 'monthly' ? 'selected' : ''}>Monthly</option>
                         <option value="yearly" ${svc.availability === 'yearly' ? 'selected' : ''}>Yearly</option>
+                        <option value="" ${!svc.availability ? 'selected' : ''}>One-time only</option>
                     </select>
                 `;
                 actions.appendChild(editForm);

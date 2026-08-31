@@ -58,12 +58,13 @@ def _matched_spans(lowered, keywords):
 #                          Process Efficiency
 #   - Systems:             Ease of Use, Online System and Portal,
 #                          Internet Connection
-#   - Physical facility:   Aircon and Cooling, Restroom and Cleanliness,
+#   - Physical facility:   Aircon and Cooling, Restroom, Cleanliness,
 #                          Seating and Furniture, Power and Lighting,
 #                          Facilities and Equipment (narrow fallback)
-#   - People:              Staff Courtesy and Attitude,
+#   - People:              Courtesy and Attitude,
 #                          Staff Competence and Knowledge,
-#                          Fairness and Equal Treatment
+#                          Fairness and Equal Treatment,
+#                          Bystanders and Loitering
 #   - Transaction-specific: Payment and Fees, Document and Credential
 #                          Processing, Enrollment and Registration,
 #                          Scholarship and Financial Assistance
@@ -77,9 +78,28 @@ def _matched_spans(lowered, keywords):
 # dormitory, and transportation complaints via item-level refinement (see
 # TOPIC_ITEM_KEYWORDS) since those are physical/logistics services without
 # enough distinct comment volume to justify their own top-level topic.
-# Likewise "Staff Courtesy and Attitude" doubles as the default bucket for
-# staff-related comments that don't clearly single out competence or
-# fairness specifically.
+# Likewise "Courtesy and Attitude" doubles as the default bucket for
+# demeanor-related comments that don't clearly single out competence or
+# fairness specifically — item-level refinement (see TOPIC_ITEM_KEYWORDS)
+# further breaks it down by WHO the attitude complaint is about (staff,
+# student, faculty, guard, etc.) instead of assuming it's always staff.
+#
+# "Restroom" and "Cleanliness" were split from the single combined
+# "Restroom and Cleanliness" topic on 2026-08-31 — a comment about general
+# office/area messiness (e.g. "makalat ang office nila") was landing on a
+# label that literally says "Restroom" even though no restroom was involved
+# at all, which read as a misclassification to admins reviewing the tag.
+# Restroom-specific words (banyo/CR/toilet, and the supplies used there)
+# stay in "Restroom"; general tidiness/dirtiness words with no restroom word
+# present go to "Cleanliness".
+#
+# "Bystanders and Loitering" was added 2026-08-31 — comments about idle
+# people/outsiders hanging around ("nakatambay", "mga standby") were
+# previously falling through to either "General Feedback" or, worse, getting
+# misread by the AI fallback as a "Facilities and Equipment - Building/
+# Structure" comment purely because a physical-location word like "building"
+# appeared nearby, even though the complaint is about people, not the
+# structure.
 #
 # Health and Medical Services, Guidance and Counseling Services, and
 # Scholarship and Financial Assistance were added 2026-08-24 after
@@ -102,13 +122,15 @@ candidate_topics = [
     "Online System and Portal",
     "Internet Connection",
     "Aircon and Cooling",
-    "Restroom and Cleanliness",
+    "Restroom",
+    "Cleanliness",
     "Seating and Furniture",
     "Power and Lighting",
     "Facilities and Equipment",
-    "Staff Courtesy and Attitude",
+    "Courtesy and Attitude",
     "Staff Competence and Knowledge",
     "Fairness and Equal Treatment",
+    "Bystanders and Loitering",
     "Payment and Fees",
     "Document and Credential Processing",
     "Enrollment and Registration",
@@ -179,14 +201,25 @@ TOPIC_KEYWORDS = {
         "aircon", "air-con", "air condition", "aircondition", "air conditioning",
         "electric fan", "bentilador", "pabentilador",
     ],
-    "Restroom and Cleanliness": [
+    # Restroom-specific words only — split from the old combined "Restroom
+    # and Cleanliness" topic on 2026-08-31 (see candidate_topics comment
+    # above) so a general "malinis"/"marumi" comment with no restroom word
+    # doesn't get tagged with a label that says "Restroom".
+    "Restroom": [
         "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
-        "kalinisan", "cleanliness", "malinis", "marumi", "dumi", "madumi",
         # Found missing during 2026-08-29 testing: a supplies complaint
         # ("walang tissue/sabon") is common enough on its own (without the
         # comment also naming "banyo"/"CR") to deserve its own anchor,
         # rather than only being reachable when paired with a restroom word.
         "tissue", "sabon",
+    ],
+    # General tidiness/dirtiness — no restroom word required. "makalat"
+    # (messy/cluttered) and "magulo" (disorganized/messy) added 2026-08-31
+    # after a real comment ("makalat ang office nila") had no anchor at all
+    # in either the old combined topic or this one.
+    "Cleanliness": [
+        "kalinisan", "cleanliness", "malinis", "marumi", "dumi", "madumi",
+        "makalat", "magulo",
     ],
     "Seating and Furniture": [
         "upuan", "silya", "mesa", "bangko", "furniture", "chairs", "seats", "muwebles",
@@ -231,26 +264,64 @@ TOPIC_KEYWORDS = {
         # topic, only wins when nothing else does.
         ("sanay", 0.5),
     ],
-    # Generic staff-behavior bucket: role nouns with no more specific
+    # Generic demeanor/attitude bucket: role nouns with no more specific
     # competence/fairness phrase present. Listed after those two so a
     # comment naming both (e.g. "yung guard, walang palakasan") resolves to
     # the more specific bucket instead.
     #
-    # Role nouns (staff/kawani/empleyado/...) are near-synonyms for "this is
-    # about a staff member" rather than independent signals, so they're
-    # weighted 0.5 each — otherwise a comment naming two synonyms for the
-    # same person (e.g. "yung staff... parang bagong empleyado") could
-    # outscore a single specific phrase in another bucket (e.g. Staff
+    # Renamed from "Staff Courtesy and Attitude" on 2026-08-31 — a comment
+    # about STUDENTS being rude ("masungit ang mga estudyante") was landing
+    # on a topic label that literally says "Staff", which read as wrong to
+    # admins even though the plain attitude words below (masungit, bastos,
+    # ...) are unambiguous regardless of who the subject is. WHO the comment
+    # is about is captured at the item level instead (see
+    # TOPIC_ITEM_KEYWORDS["Courtesy and Attitude"]) so the top-level topic
+    # itself no longer assumes "staff".
+    #
+    # Deliberately does NOT include "estudyante"/"student" as a role noun
+    # here (unlike "staff"/"kawani"/... below) — student/mag-aaral is FAR
+    # more likely than the staff-role nouns to appear in a comment that has
+    # nothing to do with anyone's demeanor at all (e.g. "dami ng estudyante"
+    # about crowding, or an enrollment-count remark), so it would wrongly
+    # win this topic on its own. It's only used for item-level refinement
+    # once an unambiguous attitude word below has already resolved the
+    # topic, not as a topic-resolving signal by itself.
+    #
+    # Role nouns (staff/kawani/empleyado/...) are near-synonyms for "this
+    # names a specific person/group" rather than independent signals, so
+    # they're weighted 0.5 each — otherwise a comment naming two synonyms
+    # for the same person (e.g. "yung staff... parang bagong empleyado")
+    # could outscore a single specific phrase in another bucket (e.g. Staff
     # Competence's "hindi sigurado sa sagot") purely by synonym-stacking.
     # "bastos" is a real, unambiguous courtesy signal on its own, so it
     # keeps the default weight of 1.
-    "Staff Courtesy and Attitude": [
+    "Courtesy and Attitude": [
         ("staff", 0.5), ("kawani", 0.5), ("empleyado", 0.5), ("tauhan", 0.5),
         ("employee", 0.5), ("receptionist", 0.5), ("guard", 0.5),
         ("security", 0.5), ("clerk", 0.5), ("faculty", 0.5),
         ("professor", 0.5), ("guro", 0.5), ("adviser", 0.5),
         ("ma'am", 0.5), ("sir", 0.5),
         "bastos", "hindi magalang", "suplado", "suplada", "masungit",
+    ],
+    # Idle outsiders/non-clients hanging around the area — a people/noise
+    # complaint, not a facility or staff complaint. Added 2026-08-31 after a
+    # real comment ("sobrang ingay ng mga standby dun") had no anchor
+    # anywhere and fell through to "General Feedback", and a related comment
+    # ("madaming nakatambay sa building nila") was misread by the AI
+    # fallback as a "Facilities and Equipment - Building/Structure" issue
+    # purely because "building" appeared nearby. "standby" here is the local
+    # slang sense (== "tambay"/loiterer), not the English "on standby"
+    # sense — safe in this survey-comment context.
+    "Bystanders and Loitering": [
+        "tambay", "nakatambay", "istambay", "mga tambay", "standby",
+        "mga standby", "loitering", "loiterers",
+        # "-um-" infix conjugations of "tambay" (to loiter) — same affixed-root
+        # gap as "hintay"/"naghintay" above: the word boundary sits at the
+        # infix, not the root, so bare \btambay\b never matches these on its
+        # own. Covers present ("tumatambay"), the casual/contracted form some
+        # users type for it ("tumambay"), future ("tatambay"), and the mag-
+        # affix variant some users use instead ("nagtatambay"/"nagtambay").
+        "tumatambay", "tumambay", "tatambay", "nagtatambay", "nagtambay",
     ],
     "Payment and Fees": [
         # Same affixed-root gap as "hintay" above — "nagbayad"/"magbabayad"
@@ -436,15 +507,12 @@ TOPIC_ITEM_KEYWORDS = {
             "aircon", "air-con", "air condition", "aircondition", "air conditioning",
         ]),
     ],
-    "Restroom and Cleanliness": [
-        ("Restroom and Cleanliness - Supplies (Soap/Tissue)", [
+    "Restroom": [
+        ("Restroom - Supplies (Soap/Tissue)", [
             "tissue", "sabon",
         ]),
-        ("Restroom and Cleanliness - Restroom/CR", [
+        ("Restroom - Restroom/CR", [
             "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
-        ]),
-        ("Restroom and Cleanliness - General Cleanliness", [
-            "kalinisan", "cleanliness", "malinis", "marumi", "dumi", "madumi",
         ]),
     ],
     "Seating and Furniture": [
@@ -582,11 +650,21 @@ TOPIC_ITEM_KEYWORDS = {
             "fee", "fees", "singil", "kabayaran", "sobrang mahal ang bayad",
         ]),
     ],
-    "Staff Courtesy and Attitude": [
-        ("Staff Courtesy and Attitude - Security Guard", ["guard", "security"]),
-        ("Staff Courtesy and Attitude - Front Desk/Clerk", ["receptionist", "clerk"]),
-        ("Staff Courtesy and Attitude - Faculty/Adviser", [
+    # Ordered most-specific-role first, then the general "who" split
+    # (Student vs. Staff/Employee), same tie-break convention as elsewhere
+    # in this file — a comment naming e.g. both "guard" and "staff" resolves
+    # to the more specific Security Guard item.
+    "Courtesy and Attitude": [
+        ("Courtesy and Attitude - Security Guard", ["guard", "security"]),
+        ("Courtesy and Attitude - Front Desk/Clerk", ["receptionist", "clerk"]),
+        ("Courtesy and Attitude - Faculty/Adviser", [
             "faculty", "professor", "guro", "adviser",
+        ]),
+        ("Courtesy and Attitude - Student", [
+            "estudyante", "mag-aaral", "student", "students",
+        ]),
+        ("Courtesy and Attitude - Staff/Employee", [
+            "staff", "kawani", "empleyado", "tauhan", "employee",
         ]),
     ],
     "Communication and Information": [
@@ -755,12 +833,13 @@ BROAD_LABELS = {
 # grouped buckets (facility / staff) map down to their generic sub-label.
 BROAD_TO_SPECIFIC_FALLBACK = {
     "Facilities and Equipment": "Facilities and Equipment",
-    "Staff and Service Quality": "Staff Courtesy and Attitude",
+    "Staff and Service Quality": "Courtesy and Attitude",
 }
 
 FACILITY_SUBTOPICS = [
     "Aircon and Cooling",
-    "Restroom and Cleanliness",
+    "Restroom",
+    "Cleanliness",
     "Seating and Furniture",
     "Power and Lighting",
     "Facilities and Equipment",
@@ -768,20 +847,21 @@ FACILITY_SUBTOPICS = [
 
 FACILITY_LABELS = {
     "Aircon and Cooling": "the aircon, electric fan, or room temperature",
-    "Restroom and Cleanliness": "the restroom or the overall cleanliness of the place",
+    "Restroom": "the restroom or comfort room specifically",
+    "Cleanliness": "the overall cleanliness or tidiness of the place, not specifically the restroom",
     "Seating and Furniture": "chairs, benches, tables, or other furniture",
     "Power and Lighting": "electricity, brownouts, or lighting",
     "Facilities and Equipment": "some other physical facility, building, or equipment issue",
 }
 
 STAFF_SUBTOPICS = [
-    "Staff Courtesy and Attitude",
+    "Courtesy and Attitude",
     "Staff Competence and Knowledge",
     "Fairness and Equal Treatment",
 ]
 
 STAFF_LABELS = {
-    "Staff Courtesy and Attitude": "staff being polite, rude, or courteous",
+    "Courtesy and Attitude": "someone (staff, faculty, or a student) being polite, rude, or courteous",
     "Staff Competence and Knowledge": "staff being knowledgeable or skilled at their job",
     "Fairness and Equal Treatment": "staff treating everyone fairly and without favoritism",
 }

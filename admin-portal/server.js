@@ -279,13 +279,22 @@ function isEligibleForResubmission(lastEventAt, availability) {
     }
 }
 
+// Epoch ms this account becomes eligible again for a cadence-based service,
+// or null for a one-time-only (or unset) service, which is never eligible
+// again. Shared math behind nextEligibleDateText (server-rendered message)
+// and the client-side live countdown (see /client-survey's blockedUntil).
+function nextEligibleTimestamp(lastEventAt, availability) {
+    const stepDays = { daily: 1, weekly: 7, monthly: 30, yearly: 365 }[availability];
+    if (!stepDays || !lastEventAt) return null;
+    return new Date(lastEventAt).getTime() + stepDays * 86400000;
+}
+
 // Human-readable date the client becomes eligible again, or null for a
 // one-time-only (or unset) service, which is never eligible again.
 function nextEligibleDateText(lastEventAt, availability) {
-    const stepDays = { daily: 1, weekly: 7, monthly: 30, yearly: 365 }[availability];
-    if (!stepDays) return null;
-    const next = new Date(new Date(lastEventAt).getTime() + stepDays * 86400000);
-    return next.toLocaleDateString('en-PH', { dateStyle: 'long' });
+    const ts = nextEligibleTimestamp(lastEventAt, availability);
+    if (!ts) return null;
+    return new Date(ts).toLocaleDateString('en-PH', { dateStyle: 'long' });
 }
 
 // Server-side gate for /submit-survey and syncOneSurvey: decides whether
@@ -2910,7 +2919,7 @@ app.get('/client-survey', ensureClientAuth, noCache, (req, res) => {
     const clientEmail = req.clientEmail;
 
     db.query('SELECT * FROM offices WHERE is_archived = 0 ORDER BY office_name ASC', (err, offices) => {
-        if (err) return res.render('client-survey', { offices: [], clientEmail, blockedCombos: {}, clientProfile: null, officeServices: {} });
+        if (err) return res.render('client-survey', { offices: [], clientEmail, blockedCombos: {}, blockedUntil: {}, serviceAvailability: {}, clientProfile: null, officeServices: {} });
 
         // All active services, grouped by office_id — powers the dependent
         // "Service Availed" dropdown (#serviceSelect) on the client side. Also
@@ -2938,6 +2947,13 @@ app.get('/client-survey', ensureClientAuth, noCache, (req, res) => {
                         [clientEmail],
                         (err4, pendingRows) => {
                             const blockedCombos = {};
+                            // "officeId::serviceName" -> epoch ms this account becomes eligible
+                            // again, for cadence-based services only (daily/weekly/monthly/yearly).
+                            // Powers the live countdown next to a blocked service on the client —
+                            // a combo can be in blockedCombos without a blockedUntil entry (still
+                            // pending review, or permanently one-time-only), in which case the
+                            // client shows the static message instead of a countdown.
+                            const blockedUntil = {};
 
                             (pendingRows || []).forEach(row => {
                                 blockedCombos[row.office_id + '::' + row.service_availed] = "Awaiting the office's review.";
@@ -2952,13 +2968,19 @@ app.get('/client-survey', ensureClientAuth, noCache, (req, res) => {
                                     blockedCombos[key] = nextDate
                                         ? `You can retake this survey starting ${nextDate}.`
                                         : 'You have already evaluated this service.';
+                                    const nextTs = nextEligibleTimestamp(row.last_at, availability);
+                                    if (nextTs) blockedUntil[key] = nextTs;
                                 }
                             });
 
-                            // Saved/locked demographics from this account's first-ever submission (if any)
-                            db.query('SELECT region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [clientEmail], (err3, profileRows) => {
+                            // Saved/locked demographics from this account's first-ever submission
+                            // (if any), plus the account's registered name — respondent_name is
+                            // set at registration (Google name) and kept up to date on every
+                            // survey submission, so it's always available here regardless of
+                            // whether this is the account's first or a later visit.
+                            db.query('SELECT respondent_name, region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [clientEmail], (err3, profileRows) => {
                                 const clientProfile = (!err3 && profileRows && profileRows.length > 0) ? profileRows[0] : null;
-                                res.render('client-survey', { offices, clientEmail, blockedCombos, clientProfile, officeServices });
+                                res.render('client-survey', { offices, clientEmail, blockedCombos, blockedUntil, serviceAvailability, clientProfile, officeServices });
                             });
                         }
                     );

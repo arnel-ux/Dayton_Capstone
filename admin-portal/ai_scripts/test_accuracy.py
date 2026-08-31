@@ -43,12 +43,12 @@ CASES = [
     ("Nakakalito ang online system, hindi ko alam saan mag-login.", "Negative", "Online System and Portal - Login/Account", None),
     ("Madaling gamitin ang portal, user-friendly talaga.", "Positive", "Ease of Use - User-Friendly Design", None),
     ("Sira ang aircon sa opisina, sobrang init.", "Negative", "Aircon and Cooling - Air Conditioning Unit", None),
-    ("Malinis ang comfort room ngayon, salamat.", "Positive", "Restroom and Cleanliness - Restroom/CR", None),
-    ("Marumi ang banyo, nakakadiri.", "Negative", "Restroom and Cleanliness - Restroom/CR", None),
+    ("Malinis ang comfort room ngayon, salamat.", "Positive", "Restroom - Restroom/CR", None),
+    ("Marumi ang banyo, nakakadiri.", "Negative", "Restroom - Restroom/CR", None),
     ("Sirang silya ang nakita ko sa waiting area.", "Negative", "Seating and Furniture - Chairs", None),
     ("Walang kuryente kanina, nag-brownout ng ilang oras.", "Negative", "Power and Lighting - Power Outage", None),
-    ("Bastos ang guard sa gate, hindi magalang.", "Negative", "Staff Courtesy and Attitude - Security Guard", None),
-    ("Mabait at magalang ang staff sa counter, salamat po.", "Positive", "Staff Courtesy and Attitude", None),
+    ("Bastos ang guard sa gate, hindi magalang.", "Negative", "Courtesy and Attitude - Security Guard", None),
+    ("Mabait at magalang ang staff sa counter, salamat po.", "Positive", "Courtesy and Attitude - Staff/Employee", None),
     ("Hindi marunong sumagot yung clerk sa tanong ko.", "Negative", "Staff Competence and Knowledge - Knowledge/Answer Accuracy", None),
     ("Walang palakasan dito, pantay-pantay lahat ng estudyante.", "Positive", "Fairness and Equal Treatment - Favoritism", None),
     ("Sobrang mahal ng bayad para sa TOR.", "Negative", "Payment and Fees - Fees", None),
@@ -62,8 +62,8 @@ CASES = [
     ("Walang libro sa library na hinahanap ko, kulang ang stock.", "Negative", "Facilities and Equipment - Library", None),
     ("Maayos ang matriculation process ngayong semester.", "Positive", "Enrollment and Registration - Matriculation", None),
     ("The queue was so slow and the line never moved.", "Negative", "Queueing and Waiting Time - Long Lines", None),
-    ("The staff was very rude and unprofessional at the counter.", "Negative", "Staff Courtesy and Attitude", None),
-    ("Great and friendly service, the receptionist was very helpful.", "Positive", "Staff Courtesy and Attitude - Front Desk/Clerk", None),
+    ("The staff was very rude and unprofessional at the counter.", "Negative", "Courtesy and Attitude - Staff/Employee", None),
+    ("Great and friendly service, the receptionist was very helpful.", "Positive", "Courtesy and Attitude - Front Desk/Clerk", None),
     ("The website is confusing and hard to use.", "Negative", "Online System and Portal - Website", None),
     ("Fast transaction, excellent process overall.", "Positive", "Transaction Speed - Transaction Duration", None),
     ("The aircon was broken, it was too hot inside.", "Negative", "Aircon and Cooling - Air Conditioning Unit", None),
@@ -94,9 +94,13 @@ CASES = [
     ("There's nothing particularly wrong with it, but there's nothing that stands out either, it just exists.", "Neutral", "General Feedback", None),
     ("The whole ordeal left me questioning my life choices, truly a special kind of chaos.", "Negative", "Process Efficiency", None),
     ("A pleasant surprise from start to finish, I genuinely didn't think it would go this smoothly.", "Positive", "Process Efficiency", None),
-    ("They treated me like I was invisible the entire time I was standing right in front of them.", "Negative", "Staff Courtesy and Attitude", None),
+    ("They treated me like I was invisible the entire time I was standing right in front of them.", "Negative", "Courtesy and Attitude", None),
     ("It wasn't the best, it wasn't the worst, somewhere comfortably in the middle of forgettable.", "Neutral", "General Feedback", None),
-    ("The lady who helped me deserves a raise, she went out of her way to make sure I understood everything.", "Positive", "Staff Courtesy and Attitude", None),
+    # Item updated 2026-08-31 after adding the Staff/Employee item — Gemini
+    # correctly infers "the lady who helped me" is staff from context even
+    # though the word "staff" never appears, matching the new subtopic
+    # granularity instead of stopping at the plain topic.
+    ("The lady who helped me deserves a raise, she went out of her way to make sure I understood everything.", "Positive", "Courtesy and Attitude - Staff/Employee", None),
     ("I appreciated how thoroughly everything was explained, made a confusing situation feel manageable.", "Neutral", "Communication and Information", None),
     ("Half the time I couldn't tell if anyone was actually listening to what I was asking.", "Negative", "Communication and Information", None),
     ("What a triumph of bureaucracy over basic human decency.", "Negative", "General Feedback", None),
@@ -107,7 +111,7 @@ CASES = [
     ("Everything about the visit felt rushed, like they wanted me gone as fast as possible.", "Positive", "Process Efficiency", None),
     ("The scholarship advisor walked me through every requirement patiently, no complaints there.", "Positive", "Scholarship and Financial Assistance - Scholarship Application/Grant", None),
     ("It's hard to put into words how underwhelming the whole thing turned out to be.", "Negative", "General Feedback", None),
-    ("I'd call it a mixed bag, some staff were lovely, others clearly did not want to be there.", "Neutral", "Staff Courtesy and Attitude", None),
+    ("I'd call it a mixed bag, some staff were lovely, others clearly did not want to be there.", "Neutral", "Courtesy and Attitude - Staff/Employee", None),
     ("The whole building felt like it was falling apart around us, quite unsettling honestly.", "Negative", "Facilities and Equipment - Building/Structure", None),
     ("They handled my documents with more care than I expected, everything came back correct.", "Positive", "Document and Credential Processing", None),
     ("Honestly I went in expecting the worst and came out pleasantly surprised by how organized it all was.", "Negative", "Process Efficiency - Simplicity", None),
@@ -117,37 +121,52 @@ CASES = [
     # LEXICON-MISS cases — Tagalog (no TOPIC_KEYWORDS / FAST_*_WORDS overlap;
     # avoid every anchor noun/phrase above, use indirect/idiomatic phrasing).
     # =========================================================================
-    ("Parang nasa ibang mundo ako habang naghihintay, ang haba ng oras na lumipas bago ako naasikaso.", "Negative", "Queueing and Waiting Time", None),
+    # Reworded 2026-08-31 — the original phrasing ("...habang naghihintay...")
+    # accidentally contained the "naghihintay" lexicon anchor (pre-existing,
+    # unrelated to any of that day's taxonomy changes), so this was silently
+    # a lexicon-hit case mislabeled as a lexicon-miss one. Reworded to
+    # preserve the same implied-waiting meaning without the anchor word, so
+    # it actually exercises the AI fallback path as originally intended.
+    ("Parang nasa ibang mundo ako, ang haba ng oras na lumipas bago ako naasikaso.", "Negative", "Queueing and Waiting Time", None),
     ("Bumalik ako ng ilang beses dahil laging kulang yung requirements na sinasabi nila, iba-iba sagot kada tanong.", "Negative", "Communication and Information - Inconsistent/Contradicting Information", None),
     ("Sa totoo lang di ko masabing masama, pero di rin naman siya kahanga-hanga, ganon lang siya.", "Positive", "General Feedback", None),
-    ("Grabe yung pasensya ng nag-asikaso sa akin, kahit paulit-ulit kong tinatanong, buong-buo pa rin sinasagot niya.", "Negative", "Staff Courtesy and Attitude", None),
+    ("Grabe yung pasensya ng nag-asikaso sa akin, kahit paulit-ulit kong tinatanong, buong-buo pa rin sinasagot niya.", "Negative", "Courtesy and Attitude", None),
     ("Parang wala silang paki kung anong oras ka dumating, ganon pa rin bilis ng galaw nila.", "Negative", "Process Efficiency", None),
     ("Kung babalikan ko yung karanasan, sasabihin kong okay lang siya, walang espesyal pero tapos naman.", "Neutral", "General Feedback", None),
     ("Ang galing nila ipaliwanag yung bawat hakbang, kahit unang beses ko lang gawin naintindihan ko agad.", "Positive", "Communication and Information", None),
     ("Grabe, akala mo simple lang yung kailangan kong gawin pero umabot pa ako ng tatlong beses bumalik.", "Negative", "General Feedback", None),
     ("Hindi ko alam kung dapat ba akong magalit o magpasalamat, magkahalo yung nangyari sa akin.", "Neutral", "General Feedback", None),
-    ("Kahit medyo maraming tao, hindi naman ako naghintay ng ganon katagal, bigla na lang na-asikaso ako.", "Negative", "General Feedback", None),
-    ("Yung nag-asikaso sa akin parang gustong-gusto na akong umalis, halatang ayaw makipag-usap.", "Negative", "Staff Courtesy and Attitude", None),
+    # Reworded 2026-08-31 — same "naghintay" anchor collision as above, same
+    # fix.
+    ("Kahit medyo maraming tao, hindi naman ako natagalan, bigla na lang na-asikaso ako.", "Negative", "General Feedback", None),
+    ("Yung nag-asikaso sa akin parang gustong-gusto na akong umalis, halatang ayaw makipag-usap.", "Negative", "Courtesy and Attitude", None),
     ("Nagulat ako sa bilis, akala ko matatagalan pa ako pero bago pa man ako maupo tapos na agad.", "Positive", "Transaction Speed - Transaction Duration", None),
     ("Sa dami ng beses kong pumunta, wala pa rin akong maayos na sagot kung ano talaga ang kailangan ko.", "Positive", "Communication and Information", None),
     ("Kung tutuusin, di ko naramdaman kahit anong pagbabago mula noong huli akong pumunta rito.", "Neutral", "General Feedback", None),
     ("Sobrang lambing at pasensya ng nurse habang tinuturuan niya ako kung paano gagawin yung sunod na hakbang.", "Positive", "Health and Medical Services - Consultation/Check-up", None),
     ("Yung binisita ko para sa tulong pinansyal, ang bagal umapruba, ilang buwan bago dumating yung kasagutan.", "Neutral", "Scholarship and Financial Assistance - Financial Assistance/Grants-in-Aid", None),
-    ("Yung guro naman kong kinausap talagang inintindi yung sitwasyon ko bago nagbigay ng payo.", "Positive", "Staff Courtesy and Attitude - Faculty/Adviser", None),
+    ("Yung guro naman kong kinausap talagang inintindi yung sitwasyon ko bago nagbigay ng payo.", "Positive", "Courtesy and Attitude - Faculty/Adviser", None),
     ("Halatang bagong-bago pa lang siya sa trabaho, kita mo sa mata niya na naguguluhan din siya sa sarili niyang ginagawa.", "Negative", "Staff Competence and Knowledge", None),
     ("Wala akong masabi kundi papuri, dahil kahit pila ay wala, deretso na ako naasikaso.", "Positive", "Queueing and Waiting Time - Long Lines", None),
     ("Parang gusto ko nang sumuko dahil bawat opisina pinupunta ko iba't ibang bagay pa ang hinihingi.", "Negative", "Document and Credential Processing", None),
     ("Hindi ko masabi kung dahil ba sa dami ng estudyante o ano, pero mas mabagal ang lahat kesa dati.", "Negative", "Process Efficiency", None),
-    ("Salamat sa pang-unawa nila kahit medyo nahuli ako sa oras ng pagpunta.", "Positive", "Staff Courtesy and Attitude", None),
+    ("Salamat sa pang-unawa nila kahit medyo nahuli ako sa oras ng pagpunta.", "Positive", "Courtesy and Attitude", None),
     ("Sa dulo ng araw, nasagot din naman lahat ng katanungan ko kahit umikot-ikot muna ako.", "Neutral", "General Feedback", None),
-    ("Bawat pumapasok na estudyante parang nakikita nilang pabigat, halata sa mukha nila.", "Negative", "Staff Courtesy and Attitude", None),
+    # Item updated 2026-08-31 — this comment is about STAFF treating every
+    # incoming student as a burden, not students' own attitude. Confirms the
+    # design choice to keep "estudyante" out of TOPIC_KEYWORDS/item-resolving
+    # keywords for the object role (see Courtesy and Attitude's keyword
+    # comment in topic_common.py): Gemini correctly reads the subject as
+    # staff from context, which a naive "estudyante appears -> Student item"
+    # keyword rule would have gotten backwards.
+    ("Bawat pumapasok na estudyante parang nakikita nilang pabigat, halata sa mukha nila.", "Negative", "Courtesy and Attitude - Staff/Employee", None),
 
     # =========================================================================
     # LEXICON-MISS cases — Taglish (mixed register, still no lexicon overlap).
     # =========================================================================
     ("Grabe ang experience ko, parang I was talking to a wall, walang gumagalaw kahit ilang beses ko na-request.", "Negative", "Communication and Information", None),
     ("Not gonna lie, medyo nag-alala ako pero turns out okay lang naman pala lahat, walang big deal.", "Neutral", "General Feedback", None),
-    ("Actually surprised ako kasi expecting ako ng drama pero ang bait pala nila, super patient sa mga katanungan ko.", "Positive", "Staff Courtesy and Attitude", None),
+    ("Actually surprised ako kasi expecting ako ng drama pero ang bait pala nila, super patient sa mga katanungan ko.", "Positive", "Courtesy and Attitude", None),
     ("Parang sobrang lost ako the whole time, walang nag-guide sa akin kung saan dapat pumunta.", "Negative", "Communication and Information", None),
     ("Honestly parang roller coaster yung buong araw ko dito, minsan ok minsan hindi, hard to describe.", "Neutral", "General Feedback", None),
     ("Sobrang thankful ako kasi even though marami akong tanong, hindi sila nagsawa magpaliwanag paulit-ulit.", "Negative", "Communication and Information", None),
@@ -155,7 +174,7 @@ CASES = [
     ("Di ko rin masabi kung dapat ba akong ma-frustrate, medyo mixed pa rin yung take ko sa buong bagay.", "Neutral", "General Feedback", None),
     ("Grabe sobrang bilis, akala ko matatagalan pa ako pero deretso lang pala, super efficient talaga sila.", "Positive", "Transaction Speed", None),
     ("Parang wala silang plano, sunud-sunod na miscommunication ang nangyari sa akin buong araw.", "Negative", "Communication and Information", None),
-    ("Yung nag-assist samin sobrang the sweetest, kahit pagod na siya pinilit pa rin niyang tapusin lahat.", "Positive", "Staff Courtesy and Attitude", None),
+    ("Yung nag-assist samin sobrang the sweetest, kahit pagod na siya pinilit pa rin niyang tapusin lahat.", "Positive", "Courtesy and Attitude", None),
     ("Kind of a letdown honestly, expecting ako ng mas maayos given lahat ng sinabi nila before.", "Positive", "General Feedback", None),
     ("Di ko alam paano isasalarawan pero para siyang normal day lang, walang kwento talaga.", "Neutral", "General Feedback", None),
     ("Grabe, akala ko I'd be stuck there forever pero super naging quick lang, sobrang na-appreciate ko.", "Positive", "Queueing and Waiting Time", None),
@@ -186,7 +205,8 @@ CASES += [
     ("Parang super lucky ako kasi kakaunti lang tao that day, kaya naasikaso agad ako nila.", "Positive", "Queueing and Waiting Time", None),
     ("Honestly parang naiwan ako sa dilim, walang nagsabi sa akin ng buong proseso from start to finish.", "Negative", "Process Efficiency", None),
     ("Di ko masyadong ma-rate kasi parang neutral lang overall, walang tumatak sa akin.", "Neutral", "General Feedback", None),
-    ("Grabe, sobrang thoughtful nung nag-assist samin, sinigurado talaga niya na comfortable kami.", "Positive", "Staff Courtesy and Attitude", None),
+    # Item updated 2026-08-31, same reasoning as the two cases above.
+    ("Grabe, sobrang thoughtful nung nag-assist samin, sinigurado talaga niya na comfortable kami.", "Positive", "Courtesy and Attitude - Staff/Employee", None),
     ("Parang nawalan ako ng direksyon dahil bawat window iba-ibang instructions ang binibigay.", "Negative", "Communication and Information", None),
 ]
 

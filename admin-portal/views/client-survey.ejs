@@ -664,6 +664,46 @@
             to { opacity: 1; transform: translateX(0); }
         }
 
+        /* Short "available again in ..." countdown, beside the Service Availed
+           field (see the HTML comment above it for why it sits above the select
+           instead of under it). Amber/accent-toned so it reads as an
+           informational wait-state, not an error. Kept deliberately terse —
+           the timer itself is the point, not a full sentence. */
+        .availability-notice {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin: 0.35rem 0;
+            padding: 0.4rem 0.75rem;
+            background: rgba(212, 175, 55, 0.12);
+            border: 1px solid rgba(212, 175, 55, 0.35);
+            border-radius: 0.5rem;
+            color: var(--ink-800);
+            font-size: 0.84rem;
+            font-weight: 600;
+            line-height: 1.3;
+        }
+        .availability-notice i {
+            color: var(--accent);
+            font-size: 0.95rem;
+            flex-shrink: 0;
+        }
+
+        /* "1/3 answered" pill beside the Service Availed label — only shown for
+           an office with more than one service, once at least one has been
+           answered, so the client sees at a glance how much of that office
+           they've already given feedback on. */
+        .service-progress-badge {
+            font-size: 0.74rem;
+            font-weight: 700;
+            color: var(--ink-600);
+            background: #eef1f6;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 0.15rem 0.65rem;
+            white-space: nowrap;
+        }
+
         /* Subtle padlock icon shown next to labels of previously-answered, locked fields */
         .lock-icon {
             font-size: 0.85rem;
@@ -1368,7 +1408,21 @@
                         </div>
 
                         <div class="col-12">
-                            <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_service"></label>
+                            <!--
+                                The badge/notice row sits ABOVE the select, beside its label, on
+                                purpose: a native <select>'s open option list overlays whatever
+                                sits directly below it, so anything placed under the dropdown
+                                would be invisible for as long as it's open — exactly when
+                                someone is looking at it to see why a service is disabled.
+                            -->
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <label class="form-label fw-semibold text-dark fs-6 mb-0" data-i18n="lbl_service"></label>
+                                <span id="serviceProgressBadge" class="service-progress-badge d-none"></span>
+                            </div>
+                            <div id="availabilityNotice" class="availability-notice d-none">
+                                <i class="bi bi-clock-history"></i>
+                                <span id="availabilityNoticeText"></span>
+                            </div>
                             <select name="service_availed" id="serviceSelect" class="form-select fs-6" disabled>
                                 <option value="" selected disabled>Select Service...</option>
                             </select>
@@ -1816,6 +1870,21 @@ const officeServices = <%- JSON.stringify(typeof officeServices !== 'undefined' 
 // re-survey — built server-side from each service's resubmission cadence
 // (see isEligibleForResubmission in server.js). Not blocked = not in this map.
 const blockedCombos = <%- JSON.stringify(typeof blockedCombos !== 'undefined' ? blockedCombos : {}) %>;
+// "officeId::serviceName" -> epoch ms this account becomes eligible again,
+// for cadence-based services only (see nextEligibleTimestamp in server.js).
+// A combo can be in blockedCombos without a matching entry here — still
+// pending office review, or a one-time-only service — in which case the
+// countdown UI falls back to the static blockedCombos message instead of
+// ticking down. Drives the live countdown next to the Office/Service
+// fields (see updateAvailabilityNotice below).
+const blockedUntil = <%- JSON.stringify(typeof blockedUntil !== 'undefined' ? blockedUntil : {}) %>;
+// "officeId::serviceName" -> the admin-configured cadence string (daily/
+// weekly/monthly/yearly) or null/absent for a one-time-only service — from
+// the `services` table (see /client-survey in server.js). Lets a just-
+// submitted service show its REAL countdown immediately (see
+// markServiceAsTaken below) instead of a placeholder message, without
+// waiting for a page reload to re-derive blockedUntil from the server.
+const serviceAvailability = <%- JSON.stringify(typeof serviceAvailability !== 'undefined' ? serviceAvailability : {}) %>;
 
 function populateServiceSelect(officeId) {
     const serviceSelect = document.getElementById('serviceSelect');
@@ -1848,9 +1917,130 @@ function populateServiceSelect(officeId) {
     serviceSelect.disabled = services.length === 0;
 }
 
+// =====================================
+// LIVE "AVAILABLE AGAIN IN..." COUNTDOWN
+// =====================================
+// Ticks down to blockedUntil[officeId::service] once a second so the client
+// sees exactly when they can retake a survey for this office/service without
+// reloading the page. Falls back to the static blockedCombos message (still
+// pending office review, or a permanently one-time-only service) when
+// there's no timestamp to count down to — those never reach zero on their
+// own. Per-account and per-office/service by construction: blockedUntil and
+// blockedCombos were both built server-side from THIS signed-in client's own
+// submission history (see /client-survey in server.js), so a different
+// account — or the same account after answering a different service —
+// always gets its own independent countdown.
+let availabilityCountdownTimer = null;
+
+function formatCountdown(msRemaining) {
+    const totalSeconds = Math.max(0, Math.floor(msRemaining / 1000));
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
+}
+
+// Collapses the longer, precise blockedCombos strings (used elsewhere as a
+// tooltip/title, where the extra detail is worth keeping) down to a short
+// phrase for the notice line itself — the countdown next to it is the part
+// that actually matters, this is just a label for it.
+function shortAvailabilityText(message) {
+    if (/Awaiting the office/.test(message)) return 'Pending office review';
+    if (/already evaluated/i.test(message)) return 'Already evaluated';
+    return message;
+}
+
+// "1/3 answered" pill beside the Service Availed label — office-wide (not
+// tied to whichever service happens to be selected), so it stays visible
+// the moment an office with more than one service is picked.
+function updateServiceProgressBadge(officeId) {
+    const badge = document.getElementById('serviceProgressBadge');
+    if (!badge) return;
+
+    const services = officeServices[officeId] || [];
+    if (services.length <= 1) {
+        badge.classList.add('d-none');
+        return;
+    }
+
+    const answered = services.filter(s => blockedCombos[officeId + '::' + s]).length;
+    if (answered === 0) {
+        badge.classList.add('d-none');
+        return;
+    }
+
+    badge.textContent = `${answered}/${services.length} answered`;
+    badge.classList.remove('d-none');
+}
+
+function updateAvailabilityNotice() {
+    if (availabilityCountdownTimer) {
+        clearInterval(availabilityCountdownTimer);
+        availabilityCountdownTimer = null;
+    }
+
+    const notice = document.getElementById('availabilityNotice');
+    const noticeText = document.getElementById('availabilityNoticeText');
+    const officeSelect = document.getElementById('officeSelect');
+    const serviceSelect = document.getElementById('serviceSelect');
+    if (!notice || !noticeText || !officeSelect || !serviceSelect) return;
+
+    const officeId = officeSelect.value;
+    updateServiceProgressBadge(officeId);
+
+    const services = officeServices[officeId] || [];
+
+    // A single-service office has nothing else to pick, so its availability
+    // is surfaced as soon as the office itself is chosen. An office with
+    // multiple services only surfaces it once the client has actually
+    // picked the (blocked) service they want to see.
+    const service = services.length === 1 ? services[0] : serviceSelect.value;
+    if (!officeId || !service) {
+        notice.classList.add('d-none');
+        return;
+    }
+
+    const key = officeId + '::' + service;
+    const untilTs = blockedUntil[key];
+    const message = blockedCombos[key];
+
+    if (untilTs) {
+        const tick = () => {
+            const remaining = untilTs - Date.now();
+            if (remaining <= 0) {
+                clearInterval(availabilityCountdownTimer);
+                availabilityCountdownTimer = null;
+                // Countdown just hit zero — unblock live instead of making
+                // the client reload to see it.
+                delete blockedUntil[key];
+                delete blockedCombos[key];
+                populateServiceSelect(officeId);
+                updateAvailabilityNotice();
+                return;
+            }
+            noticeText.textContent = `Available again in ${formatCountdown(remaining)}`;
+        };
+        tick();
+        availabilityCountdownTimer = setInterval(tick, 1000);
+        notice.classList.remove('d-none');
+    } else if (message) {
+        noticeText.textContent = shortAvailabilityText(message);
+        notice.classList.remove('d-none');
+    } else {
+        notice.classList.add('d-none');
+    }
+}
+
 document.getElementById('officeSelect').addEventListener('change', function () {
     populateServiceSelect(this.value);
+    updateAvailabilityNotice();
 });
+
+document.getElementById('serviceSelect').addEventListener('change', updateAvailabilityNotice);
 
 // Handle the case where the browser restores a previously-selected office_id
 // (e.g. back/forward navigation, or a locked/pre-filled value) without a
@@ -1859,6 +2049,7 @@ document.getElementById('officeSelect').addEventListener('change', function () {
     const officeSelect = document.getElementById('officeSelect');
     if (officeSelect && officeSelect.value) {
         populateServiceSelect(officeSelect.value);
+        updateAvailabilityNotice();
     }
 })();
 
@@ -1941,6 +2132,17 @@ function applyAutofillFromLocalStorage() {
 
 function applyLockedProfile() {
     if (!savedClientProfile) return;
+
+    // Prefill (but never lock) the Name field from this account's registered
+    // name — unlike region/age/gender below, the client can still edit it per
+    // survey. Only fills an empty field so it never clobbers something the
+    // client already typed or a name restored from autofillSnapshot.
+    if (savedClientProfile.respondent_name) {
+        const nameInput = document.querySelector('input[name="respondent_name"]');
+        if (nameInput && !nameInput.disabled && !nameInput.value) {
+            nameInput.value = savedClientProfile.respondent_name;
+        }
+    }
 
     if (savedClientProfile.region) {
         const regionSelect = document.querySelector('select[name="region"]');
@@ -2321,7 +2523,7 @@ function openHistoryDetail(id) {
             }).join('');
 
             const ccItem = (label, value) => `
-                <div class="review-item">
+                <div class="review-item full">
                     <div class="label">${label}</div>
                     <div class="value">${escapeHtml(value || '—')}</div>
                 </div>
@@ -3155,14 +3357,53 @@ function showThankYou() {
     exitFullscreen();
 }
 
+// Mirrors isCspcEmail in server.js exactly — a @cspc.edu.ph/@my.cspc.edu.ph
+// account's submission is finalized immediately server-side (no review
+// step at all, see the /submit-survey handler), so its resubmission cooldown
+// starts counting from right now. Any other account's submission instead
+// goes to pending_survey_submissions and only starts counting once/if the
+// office approves it — a time this page can't know in advance.
+function isCspcAccountEmail(email) {
+    if (typeof email !== 'string') return false;
+    const normalized = email.toLowerCase().trim();
+    return normalized.endsWith('@cspc.edu.ph') || normalized.endsWith('@my.cspc.edu.ph');
+}
+
 function markServiceAsTaken(officeId, serviceName) {
     if (!officeId || !serviceName) return;
-    blockedCombos[officeId + '::' + serviceName] = "Awaiting the office's review, or already evaluated.";
+    const key = officeId + '::' + serviceName;
+    const stepDays = { daily: 1, weekly: 7, monthly: 30, yearly: 365 }[serviceAvailability[key]];
+
+    if (isCspcAccountEmail(currentClientEmail) && stepDays) {
+        // Finalized right now, on a known cadence — the exact same math as
+        // nextEligibleTimestamp in server.js, just anchored to "now" instead
+        // of a stored created_at, since that's exactly what finalizing
+        // immediately means. Shows the real countdown right away instead of
+        // a vague placeholder. blockedCombos still gets a (now-unused-for-
+        // display, since blockedUntil takes priority in updateAvailabilityNotice)
+        // fallback string — populateServiceSelect's disabled/checkmark/title
+        // logic keys off blockedCombos alone, so this also has to be set for
+        // the option to actually lock in the dropdown.
+        blockedUntil[key] = Date.now() + stepDays * 86400000;
+        blockedCombos[key] = 'You can answer this again soon.';
+    } else {
+        // Either a one-time-only service (no cadence to count down to) or
+        // an account whose submission still needs office review (no known
+        // start time for the cooldown yet) — fall back to a static message
+        // until the next page load re-derives the real state from the
+        // server.
+        blockedCombos[key] = isCspcAccountEmail(currentClientEmail)
+            ? 'You have already evaluated this service.'
+            : "Awaiting the office's review, or already evaluated.";
+        delete blockedUntil[key];
+    }
+
     // Re-render the service dropdown if it's currently showing this office's
     // services, so the just-submitted one shows disabled immediately.
     const officeSelect = document.getElementById('officeSelect');
     if (officeSelect && String(officeSelect.value) === String(officeId)) {
         populateServiceSelect(officeId);
+        updateAvailabilityNotice();
     }
 }
 
@@ -3181,6 +3422,7 @@ function startNewSurvey() {
     initDefaultOfficeVisitedTime();
     applyLockedProfile();
     populateServiceSelect('');
+    updateAvailabilityNotice();
 
     editReturnTarget = null;
 
