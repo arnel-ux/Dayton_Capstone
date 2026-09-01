@@ -726,16 +726,30 @@
                enough to force it onto its own flex line — which then lands
                it flush left instead of near the title, looking like a
                layout bug that only shows up in one language. Stacking both
-               languages the same way removes that inconsistency. */
-            #clientProfileHeader { flex-direction: column; align-items: flex-start; }
-            #clientProfileHeader .form-switch { margin-top: 0.25rem; }
+               languages the same way removes that inconsistency. The
+               !important is needed because the markup also carries
+               Bootstrap's d-flex/align-items-center utilities, which ship
+               !important themselves and would otherwise win over a plain
+               override regardless of source order. Smaller heading + tighter
+               gap so the stacked header reads as compact/intentional rather
+               than an oversized title with an orphaned switch under it. */
+            #clientProfileHeader {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 0.4rem !important;
+            }
+            #clientProfileHeader h4 { font-size: 1rem; }
+            #clientProfileHeader .form-switch { margin-top: 0; }
 
-            /* Terms checkbox: stack the box above its label and center both
-               instead of a left-aligned row whose wrapped 2nd line no longer
-               lines up under the checkbox. */
+            /* Terms checkbox: show the label text first, checkbox centered
+               below it — instead of a left-aligned row whose wrapped 2nd
+               line no longer lines up under the checkbox. The markup's own
+               "align-items-start" utility ships !important, so a plain
+               align-items: center here would lose to it and the checkbox
+               would stay pinned to the left edge regardless of this rule. */
             #termsAgreeRow {
-                flex-direction: column-reverse;
-                align-items: center;
+                flex-direction: column-reverse !important;
+                align-items: center !important;
                 text-align: center;
                 padding-left: 0;
                 gap: 0.6rem !important;
