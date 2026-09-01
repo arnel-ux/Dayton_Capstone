@@ -693,7 +693,7 @@ const DEFAULT_LANDING_CONTENT = {
         cta1Link: '#dashboard',
         cta2Text: 'View Our Services',
         cta2Link: '#services',
-        imageUrl: 'https://spims.cspc.edu.ph/assets/img/background.jpg'
+        imageUrl: '/images/campus-monument.jpg'
     },
     about: {
         eyebrow: 'Who We Are',

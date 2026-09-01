@@ -4,8 +4,8 @@
 
 importScripts('/js/offline-db.js');
 
-const STATIC_CACHE = 'cspc-static-v5';
-const RUNTIME_CACHE = 'cspc-runtime-v5';
+const STATIC_CACHE = 'cspc-static-v6';
+const RUNTIME_CACHE = 'cspc-runtime-v6';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
@@ -18,17 +18,18 @@ const PRECACHE_URLS = [
     '/js/pwa-client.js',
     '/icons/icon.svg',
     '/images/cspc-logo.png',
+    // Shared login/survey/landing-page backdrop — now hosted locally
+    // (used to point at spims.cspc.edu.ph, a separate domain outside this
+    // app's control whose content changed out from under us) so it's a
+    // same-origin asset the browser precaches and keeps fresh itself,
+    // same as cspc-logo.png above, with no separate CDN entry needed.
+    '/images/campus-monument.jpg',
     '/client-login',
     '/login'
 ];
 
 // Third-party libraries the survey/login pages load from a CDN. Cached
 // individually (not via cache.addAll) so one failure doesn't abort install.
-// Includes the login/survey pages' shared background photo — it's hosted on
-// CSPC's own separate spims.cspc.edu.ph domain, not this app's origin, so
-// without an explicit precache entry it would otherwise depend entirely on
-// runtime caching (cacheFirst, see RUNTIME_CACHE_HOSTS below) succeeding on
-// some earlier online visit before it's ever available offline.
 const CDN_PRECACHE_URLS = [
     'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
     'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
@@ -36,8 +37,7 @@ const CDN_PRECACHE_URLS = [
     'https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css',
     'https://cdn.jsdelivr.net/npm/sweetalert2@11',
     'https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js',
-    'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap',
-    'https://spims.cspc.edu.ph/assets/img/background.jpg'
+    'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap'
 ];
 
 const RUNTIME_CACHE_HOSTS = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com', 'cdnjs.cloudflare.com', 'spims.cspc.edu.ph'];
