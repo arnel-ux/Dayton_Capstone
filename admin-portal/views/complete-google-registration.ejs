@@ -17,7 +17,11 @@
             top: -5%; left: -5%; right: -5%; bottom: -5%;
             background-image: url('https://spims.cspc.edu.ph/assets/img/background.jpg');
             background-size: cover;
-            background-position: center;
+            /* The CSPC monument sits in the upper half of this photo — on a
+               tall mobile viewport, centering it vertically cropped the
+               monument almost entirely out of frame. Anchoring to the top
+               keeps it in view. */
+            background-position: top center;
             background-repeat: no-repeat;
             filter: blur(1px);
             z-index: -1;

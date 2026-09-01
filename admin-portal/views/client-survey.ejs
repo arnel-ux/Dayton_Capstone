@@ -96,7 +96,11 @@
            landing page) sitting behind the whole app shell ---- */
         .survey-bg-image {
             position: fixed; inset: 0; z-index: -2;
-            background: url('https://spims.cspc.edu.ph/assets/img/background.jpg') center/cover no-repeat;
+            /* The CSPC monument sits in the upper half of this photo — on a
+               tall mobile viewport, centering it vertically cropped the
+               monument almost entirely out of frame. Anchoring to the top
+               keeps it in view. */
+            background: url('https://spims.cspc.edu.ph/assets/img/background.jpg') top center/cover no-repeat;
         }
         .survey-bg-overlay {
             position: fixed; inset: 0; z-index: -1;

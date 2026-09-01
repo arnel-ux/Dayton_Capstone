@@ -21,7 +21,12 @@
             top: 0; left: 0; width: 100vw; height: 100vh;
             background-image: url('https://spims.cspc.edu.ph/assets/img/background.jpg');
             background-size: cover;
-            background-position: center;
+            /* The CSPC monument (seal/torch/globe) sits in the upper half
+               of this photo. On a tall mobile viewport, "cover" scales the
+               image up enough that centering it vertically cropped the
+               monument almost entirely out of frame, leaving mostly sky and
+               pavement — anchoring to the top keeps it in view. */
+            background-position: top center;
             background-repeat: no-repeat;
             z-index: -2;
         }
