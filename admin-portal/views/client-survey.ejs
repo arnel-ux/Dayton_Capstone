@@ -723,8 +723,23 @@
             /* Terms checkbox: stack the box above its label and center both
                instead of a left-aligned row whose wrapped 2nd line no longer
                lines up under the checkbox. */
-            #termsAgreeRow { flex-direction: column; align-items: center; text-align: center; }
-            #termsAgreeRow .form-check-input { margin-top: 0 !important; }
+            #termsAgreeRow {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+                padding-left: 0;
+            }
+            /* Bootstrap's .form-check pairs padding-left:1.5em on the row with
+               margin-left:-1.5em on the input (the classic float-based
+               indent hack) so the box sits under the label's first line —
+               that negative margin survives the switch to flex and drags
+               the checkbox back to the far left even with align-items:
+               center. Zero both out once the box is on its own centered row. */
+            #termsAgreeRow .form-check-input {
+                margin-top: 0 !important;
+                margin-left: 0 !important;
+                float: none !important;
+            }
         }
 
         #sqd-body td {
@@ -762,6 +777,12 @@
         #sqd-body td.sqd-rating-cell:has(input:disabled) {
             cursor: not-allowed;
         }
+
+        /* Text label next to each radio — only meaningful once the table
+           below is flattened into cards on small phones, where there's no
+           column header left to read the rating name from. Hidden on the
+           desktop/tablet table, where the header row already says it. */
+        .sqd-rating-text { display: none; }
 
         .page { display: none; }
         .active { display: block; animation: fadeIn .4s ease; }
@@ -1234,19 +1255,60 @@
         summary::-webkit-details-marker { display: none; }
 
         /* ---- SQD rating table on small phones ----
-           7 columns (statement + 5 ratings + N/A) is inherently wide; the table
-           already scrolls horizontally via .table-responsive, but tightening
-           padding/font-size here lets more columns fit before scrolling kicks
-           in, and keeps the emoji/number header legible instead of ballooning
-           the row height. Smooth momentum scroll on iOS for the part that does
-           still need to scroll. */
-        @media (max-width: 576px) {
-            #sqd-table-wrap { -webkit-overflow-scrolling: touch; }
-            #sqd-table-wrap thead th { padding: 0.6rem 0.4rem; font-size: 0.74rem; }
-            #sqd-table-wrap thead th small { font-size: 0.62rem; }
-            #sqd-body td.text-start { font-size: 0.84rem; padding-left: 0.9rem; padding-right: 0.6rem; }
-            #sqd-body .sqd-rating-option { padding: 0.75rem 0.35rem; min-height: 44px; }
-            #sqd-body .radio-custom { width: 18px; height: 18px; }
+           7 columns (statement + 5 ratings + N/A) crammed into a phone
+           screen meant the last column(s) were only ever readable by
+           scrolling the table sideways — awkward on a form, and easy to
+           submit without ever having seen "Strongly Disagree" or "N/A" at
+           all. Below 700px the table stops being a table visually: each
+           row becomes its own card (statement as a heading, then every
+           rating option stacked as a full-width tappable row with its own
+           emoji + label), so nothing is ever off-screen. The radios/values/
+           name attributes are untouched — same form, same JS, same
+           renderSQD() — this is purely a CSS reflow. */
+        @media (max-width: 700px) {
+            #sqd-table-wrap { overflow-x: visible; border-radius: 0 !important; border: none !important; background: transparent !important; }
+            #sqd-table-wrap table,
+            #sqd-table-wrap thead,
+            #sqd-table-wrap tbody,
+            #sqd-table-wrap tr,
+            #sqd-table-wrap td { display: block; width: 100%; }
+            #sqd-table-wrap thead { display: none; }
+
+            #sqd-body tr {
+                background: var(--surface);
+                border: 1px solid var(--line);
+                border-radius: 14px;
+                margin-bottom: 1rem;
+                overflow: hidden;
+            }
+            #sqd-body tr:last-child { margin-bottom: 0; }
+            #sqd-body tr:nth-child(even) { background: var(--surface); }
+
+            #sqd-body td.text-start {
+                font-weight: 600;
+                font-size: 0.92rem;
+                padding: 0.95rem 1rem;
+                border-bottom: 1px solid var(--line-soft);
+                background: var(--page-bg);
+            }
+
+            #sqd-body td.sqd-rating-cell { border-top: none; border-radius: 0 !important; }
+            #sqd-body td.sqd-rating-cell + td.sqd-rating-cell { border-top: 1px solid var(--line-soft); }
+
+            #sqd-body .sqd-rating-option {
+                justify-content: flex-start;
+                gap: 0.75rem;
+                padding: 0.85rem 1rem;
+                min-height: 48px;
+            }
+            .sqd-rating-text {
+                display: inline-block;
+                font-size: 0.88rem;
+                font-weight: 600;
+                color: var(--ink-800);
+                text-align: left;
+            }
+            #sqd-body .radio-custom { width: 20px; height: 20px; flex-shrink: 0; }
         }
     </style>
 </head>
@@ -3338,10 +3400,20 @@ function renderSQD() {
     // in the cell (not just the tiny circle) selects it — native <label>-for-<input>
     // behavior, so it needs no JS click handler and survives renderSQD() re-running
     // on every language switch without ever attaching duplicate listeners.
+    // sqd-rating-text is invisible on the desktop table (the column header
+    // already names the rating) but is what the mobile card layout below
+    // shows next to the radio, since a stacked card has no header row to
+    // read the label from.
+    const ratingLabels = {
+        5: `🤩 ${i18n[currentLang].th_sa}`, 4: `😊 ${i18n[currentLang].th_a}`,
+        3: `😐 ${i18n[currentLang].th_n}`, 2: `☹️ ${i18n[currentLang].th_d}`,
+        1: `😡 ${i18n[currentLang].th_sd}`, 0: 'N/A'
+    };
     const ratingCell = (index, value) => `
         <td class="text-center sqd-rating-cell">
             <label class="sqd-rating-option">
                 <input type="radio" name="sqd${index}" value="${value}" class="radio-custom">
+                <span class="sqd-rating-text">${ratingLabels[value]}</span>
             </label>
         </td>
     `;
