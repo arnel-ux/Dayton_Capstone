@@ -384,13 +384,15 @@
                     <div class="filter-icon"><i class="fas fa-sliders-h"></i></div>
                     <div>
                         <label for="periodCovered" class="filter-label mb-0">Period Covered</label>
-                        <select id="periodCovered" name="periodCovered" class="form-select form-select-sm" title="Filter records by period covered" onchange="this.form.submit()">
+                        <select id="periodCovered" name="periodCovered" class="form-select form-select-sm" title="Filter records by period covered" onchange="handlePeriodSelectChange(this)">
                             <option value="">All Periods</option>
                             <% if (typeof periodOptions !== 'undefined') { %>
                                 <% periodOptions.forEach(opt => { %>
                                     <option value="<%= opt.value %>" <%= selectedPeriod === opt.value ? 'selected' : '' %>><%= opt.label %></option>
                                 <% }) %>
                             <% } %>
+                            <option disabled>──────────</option>
+                            <option value="__add_new_period__">+ Add New Period</option>
                         </select>
                     </div>
                     <% if (typeof hasQueryParam !== 'undefined' && hasQueryParam) { %>
@@ -691,6 +693,30 @@
     </div>
 </div>
 
+<div class="modal fade" id="addPeriodModal" tabindex="-1" aria-labelledby="addPeriodModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form action="/period-covered/add" method="POST">
+          <div class="modal-header">
+            <h5 class="modal-title fw-bold" id="addPeriodModalLabel">Add Period Covered</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-0">
+                <label class="form-label fw-bold">Period Covered</label>
+                <input type="text" name="periodCovered" class="form-control" placeholder="E.g., Jan to June 2028" required>
+                <div class="form-text">This only adds a new choice to the filter dropdown above — it does not change which period new survey submissions get tagged with.</div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Period</button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <div id="reportModal">
     <div class="modal-report-container shadow-lg">
         <div class="modal-controls">
@@ -892,7 +918,29 @@
 <%- include('layout/footer') %>
 
 <script>
+// "+ Add New Period" is a sentinel option inside the Period Covered dropdown
+// itself (not a separate button) so the filter row stays visually clean —
+// picking it opens the add-period modal instead of filtering, and the select
+// is reset back to whatever was actually selected before.
+function handlePeriodSelectChange(selectEl) {
+    if (selectEl.value === '__add_new_period__') {
+        selectEl.value = '<%= typeof selectedPeriod !== "undefined" ? selectedPeriod : "" %>';
+        const modalEl = document.getElementById('addPeriodModal');
+        if (modalEl && window.bootstrap) {
+            new bootstrap.Modal(modalEl).show();
+        }
+        return;
+    }
+    selectEl.form.submit();
+}
+
 document.addEventListener("DOMContentLoaded", function() {
+
+    // Show the result of the last "Add Period" submission as a toast
+    // (?success=... / ?error=... set by POST /period-covered/add), then clean the URL.
+    if (typeof AppAlert !== 'undefined' && AppAlert.autoShowFromQuery) {
+        AppAlert.autoShowFromQuery();
+    }
 
     const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 

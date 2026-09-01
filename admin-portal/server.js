@@ -1136,6 +1136,34 @@ const PERIOD_COVERED_OPTIONS = [
     { value: 'July to Dec 2027', label: 'July to Dec 2027' }
 ];
 
+// Admin-added periods on top of the fixed list above, stored in the existing
+// generic survey_settings lookup table (category = 'period_covered') rather
+// than a new table. Lets an admin extend the dropdown (e.g. seed a future
+// year ahead of time) without a code change/redeploy. Merged and de-duped
+// against normalizePeriodStr() so a custom entry that collides with a static
+// one (different spelling of the same range) never shows up twice.
+function getMergedPeriodOptions(callback) {
+    db.query(
+        "SELECT content FROM survey_settings WHERE category = 'period_covered' AND is_archived = 0 ORDER BY id ASC",
+        (err, rows) => {
+            if (err) { console.error('❌ Error loading custom period covered options:', err); return callback(PERIOD_COVERED_OPTIONS); }
+            const seen = new Set(PERIOD_COVERED_OPTIONS.map(o => normalizePeriodStr(o.value)));
+            const custom = (rows || []).reduce((acc, r) => {
+                const value = String(r.content || '').trim();
+                const norm = normalizePeriodStr(value);
+                if (!value || seen.has(norm)) return acc;
+                seen.add(norm);
+                acc.push({ value, label: value });
+                return acc;
+            }, []);
+            callback(PERIOD_COVERED_OPTIONS.concat(custom));
+        }
+    );
+}
+
+function periodCoveredOk(msg) { return '/dashboard?success=' + encodeURIComponent(msg); }
+function periodCoveredErr(msg) { return '/dashboard?error=' + encodeURIComponent(msg); }
+
 // Sends the client a proof-of-completion receipt of exactly what they just
 // submitted. Fire-and-forget: called AFTER the client already got its
 // success response, so a slow or failed send can never hold up the survey.
@@ -2458,6 +2486,26 @@ app.get('/office-logout', noCache, (req, res) => {
     res.redirect('/office-login');
 });
 
+// Approval/decline history count only — used to show a badge on the sidebar's
+// "History" link from the Pending page without pulling the full history rows.
+function getOfficeHistoryCount(officeId, callback) {
+    db.query(
+        "SELECT COUNT(*) AS c FROM pending_survey_submissions WHERE office_id = ? AND status IN ('approved', 'declined')",
+        [officeId],
+        (err, rows) => callback((!err && rows && rows[0]) ? rows[0].c : 0)
+    );
+}
+
+// Pending count only — used to show a badge on the sidebar's "Pending" link
+// from the History page without pulling the full pending rows.
+function getOfficePendingCount(officeId, callback) {
+    db.query(
+        "SELECT COUNT(*) AS c FROM pending_survey_submissions WHERE office_id = ? AND status = 'pending'",
+        [officeId],
+        (err, rows) => callback((!err && rows && rows[0]) ? rows[0].c : 0)
+    );
+}
+
 app.get('/office-approvals', ensureOfficeAuth, noCache, (req, res) => {
     const officeId = req.adminSession.user.id;
     db.query(
@@ -2476,9 +2524,51 @@ app.get('/office-approvals', ensureOfficeAuth, noCache, (req, res) => {
                     createdAt: r.created_at
                 };
             }) : [];
-            res.render('office-approvals', {
-                officeName: req.adminSession.user.office_name,
-                submissions
+
+            getOfficeHistoryCount(officeId, (historyCount) => {
+                res.render('office-approvals', {
+                    officeName: req.adminSession.user.office_name,
+                    submissions,
+                    historyCount
+                });
+            });
+        }
+    );
+});
+
+// Approval/decline history — its own page (separate from the Pending list) so
+// a busy office's growing pending queue doesn't have to share space with its
+// history; navigated between via the sidebar on both pages.
+app.get('/office-approvals/history', ensureOfficeAuth, noCache, (req, res) => {
+    const officeId = req.adminSession.user.id;
+    // Most recently reviewed first, capped so the page doesn't grow unbounded
+    // for offices that process a lot of surveys.
+    db.query(
+        "SELECT id, google_email, service_availed, payload, status, decline_reason, reviewed_at, created_at FROM pending_survey_submissions WHERE office_id = ? AND status IN ('approved', 'declined') ORDER BY reviewed_at DESC LIMIT 50",
+        [officeId],
+        (err, rows) => {
+            const history = (!err && rows) ? rows.map(r => {
+                let payload = {};
+                try { payload = JSON.parse(r.payload); } catch (e) { /* leave payload empty on corrupt JSON */ }
+                return {
+                    id: r.id,
+                    googleEmail: r.google_email,
+                    serviceAvailed: r.service_availed,
+                    respondentName: payload.respondentName || 'Anonymous',
+                    officeVisitedTime: payload.officeVisitedTime || null,
+                    createdAt: r.created_at,
+                    reviewedAt: r.reviewed_at,
+                    status: r.status,
+                    declineReason: r.decline_reason
+                };
+            }) : [];
+
+            getOfficePendingCount(officeId, (pendingCount) => {
+                res.render('office-history', {
+                    officeName: req.adminSession.user.office_name,
+                    history,
+                    pendingCount
+                });
             });
         }
     );
@@ -3532,16 +3622,18 @@ function loadDashboardData(req, callback) {
                                         date: r.created_at
                                     }));
 
-                                    callback({
-                                        dashboardData: { overallRating: overallAvgScore, overallLevel: interpretation, periodCoveredLabel: selectedPeriod || 'All Periods' },
-                                        chartData: chartData, clusterCards: clusterCards, satisfactionRate: overallAvgScore,
-                                        totalRespondents: totalRespondents, totalOffices: totalOffices, reportData: reportData,
-                                        periodOptions: PERIOD_COVERED_OPTIONS, selectedPeriod: selectedPeriod || '',
-                                        hasQueryParam: hasQueryParam,
-                                        sentimentBreakdown: sentimentBreakdown, sentimentTotal: sentimentTotal,
-                                        topTopics: topTopics, recentSubmissions: recentSubmissions,
-                                        topOffices: topOffices, bottomOffices: bottomOffices,
-                                        clusterOptions: CLUSTER_REPORT_ORDER
+                                    getMergedPeriodOptions((periodOptions) => {
+                                        callback({
+                                            dashboardData: { overallRating: overallAvgScore, overallLevel: interpretation, periodCoveredLabel: selectedPeriod || 'All Periods' },
+                                            chartData: chartData, clusterCards: clusterCards, satisfactionRate: overallAvgScore,
+                                            totalRespondents: totalRespondents, totalOffices: totalOffices, reportData: reportData,
+                                            periodOptions: periodOptions, selectedPeriod: selectedPeriod || '',
+                                            hasQueryParam: hasQueryParam,
+                                            sentimentBreakdown: sentimentBreakdown, sentimentTotal: sentimentTotal,
+                                            topTopics: topTopics, recentSubmissions: recentSubmissions,
+                                            topOffices: topOffices, bottomOffices: bottomOffices,
+                                            clusterOptions: CLUSTER_REPORT_ORDER
+                                        });
                                     });
                                 });
                             });
@@ -3757,7 +3849,9 @@ app.get('/print', ensureAdminAuth, noCache, (req, res) => {
 // ==========================================
 app.get('/report', ensureAdminAuth, noCache, (req, res) => {
     db.query('SELECT office_name FROM offices ORDER BY office_name ASC', (err, offices) => {
-        res.render('report', { offices: offices || [], periodOptions: PERIOD_COVERED_OPTIONS });
+        getMergedPeriodOptions((periodOptions) => {
+            res.render('report', { offices: offices || [], periodOptions: periodOptions });
+        });
     });
 });
 
@@ -4373,6 +4467,29 @@ app.post('/settings/restore', ensureAdminAuth, (req, res) => {
     });
 });
 
+// Manually add a new "Period Covered" option to the dashboard filter dropdown.
+// Stored as its own row in the same survey_settings lookup table used for
+// SQD/CC content (category = 'period_covered') rather than a new table — see
+// getMergedPeriodOptions(). This only extends the filter's choices; it does
+// NOT change how new survey submissions get tagged (that stays tied to the
+// server date via getPeriodCovered()).
+app.post('/period-covered/add', ensureAdminAuth, (req, res) => {
+    const periodCovered = String(req.body.periodCovered || '').trim();
+    if (!periodCovered) {
+        return res.redirect(periodCoveredErr('Please enter a period covered value.'));
+    }
+    getMergedPeriodOptions((existingOptions) => {
+        const alreadyExists = existingOptions.some(o => normalizePeriodStr(o.value) === normalizePeriodStr(periodCovered));
+        if (alreadyExists) {
+            return res.redirect(periodCoveredErr('That period covered already exists.'));
+        }
+        db.query('INSERT INTO survey_settings (category, content) VALUES (?, ?)', ['period_covered', periodCovered], (err) => {
+            if (err) { console.error('❌ Error adding period covered:', err); return res.redirect(periodCoveredErr(GENERIC_SAVE_ERROR)); }
+            res.redirect(periodCoveredOk('Period covered added successfully.'));
+        });
+    });
+});
+
 // ==========================================
 // 5. Helper Function para sa Cluster Queries
 // ==========================================
@@ -4443,13 +4560,15 @@ app.get('/cluster/:id', ensureAdminAuth, noCache, (req, res) => {
 
         getClusterPerformanceData(cluster.cluster_name, selectedPeriod, (err, data) => {
             getOfficesForCluster(cluster.cluster_name, (officesInCluster) => {
-                res.render('cluster-detail', {
-                    data: data || [],
-                    periodOptions: PERIOD_COVERED_OPTIONS,
-                    selectedPeriod: selectedPeriod || '',
-                    officesInCluster: officesInCluster,
-                    clusterName: cluster.cluster_name,
-                    clusterId: cluster.id
+                getMergedPeriodOptions((periodOptions) => {
+                    res.render('cluster-detail', {
+                        data: data || [],
+                        periodOptions: periodOptions,
+                        selectedPeriod: selectedPeriod || '',
+                        officesInCluster: officesInCluster,
+                        clusterName: cluster.cluster_name,
+                        clusterId: cluster.id
+                    });
                 });
             });
         });
@@ -4497,12 +4616,14 @@ app.get('/api/public-dashboard', (req, res) => {
         db.query(query, (err, results) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
 
-        // Keyed by the exact canonical period strings (PERIOD_COVERED_OPTIONS) —
-        // real-time and exact, instead of the old fuzzy 2-bucket p1/p2 substring
-        // match, so switching periods reflects only what's actually in the DB for
-        // that period (and shows empty once its records are gone).
+        // Keyed by the exact canonical period strings (PERIOD_COVERED_OPTIONS plus
+        // any admin-added ones — see getMergedPeriodOptions) — real-time and
+        // exact, instead of the old fuzzy 2-bucket p1/p2 substring match, so
+        // switching periods reflects only what's actually in the DB for that
+        // period (and shows empty once its records are gone).
+        getMergedPeriodOptions((periodOptions) => {
         const chartData = {};
-        const periods = PERIOD_COVERED_OPTIONS.map(o => o.value);
+        const periods = periodOptions.map(o => o.value);
 
         periods.forEach(p => {
             chartData[p] = {
@@ -4626,8 +4747,9 @@ app.get('/api/public-dashboard', (req, res) => {
             clusterList: clusterList.length > 0 ? clusterList : undefined,
             officeList: officeList.length > 0 ? officeList : undefined,
             officeCluster: officeList.length > 0 ? officeCluster : undefined,
-            periodOptions: PERIOD_COVERED_OPTIONS,
+            periodOptions: periodOptions,
             currentPeriod: getPeriodCovered()
+        });
         });
         });
     });
