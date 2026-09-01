@@ -236,12 +236,43 @@
         .text-xsmall {
             font-size: 0.75rem;
         }
+
+        /* Same "viewing offline" pill as client-survey.ejs — shown here too
+           since a signed-out (or not-yet-redirected) visitor can still land
+           on this page while offline. */
+        .offline-pill {
+            display: none;
+            align-items: center;
+            gap: 0.4rem;
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 20;
+            padding: 0.35rem 0.85rem;
+            border-radius: 50px;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+            font-size: 0.78rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .offline-pill.is-visible { display: inline-flex; }
+        .offline-pill .dot {
+            width: 7px; height: 7px; border-radius: 50%; background: #d97706; flex: none;
+            animation: offlinePulse 1.6s ease-in-out infinite;
+        }
+        @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
     </style>
 </head>
 <body>
 
     <div class="bg-blurred"></div>
     <div class="bg-overlay"></div>
+
+    <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection.">
+        <span class="dot"></span> Viewing Offline
+    </span>
 
     <div class="login-wrapper">
         
@@ -277,6 +308,14 @@
     </div>
 
     <script>
+        function updateOfflineIndicator() {
+            const el = document.getElementById('offlineIndicator');
+            if (el) el.classList.toggle('is-visible', !navigator.onLine);
+        }
+        window.addEventListener('online', updateOfflineIndicator);
+        window.addEventListener('offline', updateOfflineIndicator);
+        updateOfflineIndicator();
+
         // Offline session bypass: if a survey was already opened once while
         // signed in, its session is cached in localStorage (see
         // client-survey.ejs). Reopening the app with no connection skips the

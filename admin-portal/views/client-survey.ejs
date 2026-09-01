@@ -230,6 +230,31 @@
         .btn-fullscreen:hover { border-color: var(--brand); color: var(--brand); transform: translateY(-1px); background: var(--ring); }
         .btn-fullscreen:active { transform: translateY(0) scale(0.94); }
 
+        /* Persistent "you're viewing offline" pill — shown in the topbar
+           whenever navigator.onLine is false (see updateOfflineIndicator()
+           below). Amber, not red: being offline here is a supported,
+           expected mode (autosave + auto-sync), not an error state. */
+        .offline-pill {
+            display: none;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.85rem;
+            border-radius: 50px;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+            font-size: 0.78rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        [data-bs-theme="dark"] .offline-pill { background: rgba(245,158,11,0.16); color: #fbbf24; border-color: rgba(245,158,11,0.35); }
+        .offline-pill.is-visible { display: inline-flex; }
+        .offline-pill .dot {
+            width: 7px; height: 7px; border-radius: 50%; background: #d97706; flex: none;
+            animation: offlinePulse 1.6s ease-in-out infinite;
+        }
+        @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
         .content-body { padding: 2rem 1.75rem 3.5rem; flex-grow: 1; }
 
         /* =========================================================
@@ -671,6 +696,10 @@
             .topbar-hamburger, .btn-fullscreen { width: 44px; height: 44px; font-size: 1.15rem; }
             .topbar { gap: 0.85rem; padding: 0 1.1rem; }
             .topbar-actions { gap: 0.5rem; }
+            /* Tight topbar real estate on mobile — keep just the pulsing dot,
+               drop the label text so it doesn't crowd the fullscreen button. */
+            .offline-pill.is-visible { padding: 0.4rem; }
+            .offline-pill .label { display: none; }
             .sidebar-nav { gap: 0.4rem; padding: 1.25rem 0.85rem; }
             .sidebar-nav .nav-item-link { padding: 0.85rem 0.95rem; min-height: 44px; }
             .sidebar-footer .btn-logout-side { padding: 0.75rem; min-height: 44px; }
@@ -1250,6 +1279,9 @@
                 <small data-i18n="gov_rep">Republic of the Philippines</small>
             </div>
             <div class="topbar-actions">
+                <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — your answers are saved on this device and will sync automatically once you're back online.">
+                    <span class="dot"></span><span class="label">Viewing Offline</span>
+                </span>
                 <button id="btn-fullscreen" type="button" onclick="toggleFullscreen()" class="btn-fullscreen" title="Toggle full screen" aria-label="Toggle full screen">
                     <i class="bi bi-arrows-fullscreen"></i>
                 </button>
@@ -2168,6 +2200,18 @@ if (currentClientEmail) {
     } catch (e) { /* localStorage unavailable — offline session bypass just won't apply */ }
 }
 
+// Persistent "Viewing Offline" pill — reflects navigator.onLine live, not
+// just at page load, so it flips the instant the connection drops/returns
+// (same signal the autosave/auto-sync logic below already relies on).
+function updateOfflineIndicator() {
+    const el = document.getElementById('offlineIndicator');
+    if (el) el.classList.toggle('is-visible', !navigator.onLine);
+}
+window.addEventListener('online', updateOfflineIndicator);
+window.addEventListener('offline', updateOfflineIndicator);
+document.addEventListener('DOMContentLoaded', updateOfflineIndicator);
+updateOfflineIndicator();
+
 // Local, client-side fallback autofill. Independent of the server's
 // client_accounts lookup (which only has data for users whose account row
 // exists) — this simply remembers what THIS ACCOUNT last typed/selected for
@@ -2527,22 +2571,24 @@ function saveProfile(event) {
     return false;
 }
 
-function loadHistoryView() {
-    fetch('/api/client-history')
-        .then(res => res.json())
-        .then(data => {
-            if (!data.success) throw new Error(data.message || 'Failed to load history.');
-            historyLoaded = true;
-            document.getElementById('historyLoading').classList.add('d-none');
+// Cache key is per-account, same convention as CLIENT_AUTOFILL_KEY, so a
+// different person signing in on this browser never sees someone else's
+// cached history.
+const CLIENT_HISTORY_CACHE_KEY = currentClientEmail
+    ? 'cspc_client_history_cache_' + currentClientEmail.toLowerCase()
+    : null;
 
-            const history = data.history || [];
-            if (history.length === 0) {
-                document.getElementById('historyEmpty').classList.remove('d-none');
-                return;
-            }
+function renderHistoryList(history, fromCache) {
+    document.getElementById('historyLoading').classList.add('d-none');
 
-            const listEl = document.getElementById('historyList');
-            listEl.innerHTML = history.map(row => {
+    if (history.length === 0) {
+        document.getElementById('historyEmpty').classList.remove('d-none');
+        return;
+    }
+
+    const listEl = document.getElementById('historyList');
+    listEl.innerHTML = (fromCache ? '<div class="history-meta mb-2"><i class="bi bi-wifi-off me-1"></i>Viewing offline — showing your last-loaded history.</div>' : '')
+        + history.map(row => {
                 const isApproved = row.status === 'approved';
                 const isDeclined = row.status === 'declined';
                 const badge = isApproved
@@ -2566,10 +2612,40 @@ function loadHistoryView() {
                 </div>
             `;
             }).join('');
-            listEl.classList.remove('d-none');
+    listEl.classList.remove('d-none');
+}
+
+function loadHistoryView() {
+    fetch('/api/client-history')
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed to load history.');
+            historyLoaded = true;
+            const history = data.history || [];
+
+            // Cache a fresh copy for the next time this view loads offline —
+            // see the fetch failure branch below.
+            if (CLIENT_HISTORY_CACHE_KEY) {
+                try { localStorage.setItem(CLIENT_HISTORY_CACHE_KEY, JSON.stringify(history)); } catch (e) { /* localStorage unavailable — offline fallback just won't apply */ }
+            }
+
+            renderHistoryList(history, false);
         })
         .catch(err => {
-            console.error('Error loading history:', err);
+            console.error('Error loading history, falling back to cache:', err);
+
+            let cached = null;
+            if (CLIENT_HISTORY_CACHE_KEY) {
+                try { cached = JSON.parse(localStorage.getItem(CLIENT_HISTORY_CACHE_KEY) || 'null'); } catch (e) { /* corrupt/unavailable cache */ }
+            }
+
+            if (cached) {
+                // Deliberately leave historyLoaded false so reopening this
+                // view retries the network once connectivity returns.
+                renderHistoryList(cached, true);
+                return;
+            }
+
             document.getElementById('historyLoading').innerHTML =
                 '<p class="text-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i> Could not load your survey history. Please try again.</p>';
         });
