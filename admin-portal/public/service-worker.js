@@ -4,8 +4,8 @@
 
 importScripts('/js/offline-db.js');
 
-const STATIC_CACHE = 'cspc-static-v4';
-const RUNTIME_CACHE = 'cspc-runtime-v4';
+const STATIC_CACHE = 'cspc-static-v5';
+const RUNTIME_CACHE = 'cspc-runtime-v5';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
@@ -132,6 +132,22 @@ async function handleNavigation(request) {
         cache.put(request, response.clone());
         return response;
     } catch (err) {
+        // Check RUNTIME_CACHE before STATIC_CACHE. Pages like '/', '/login',
+        // '/client-login' are baked into STATIC_CACHE once at install time
+        // and never touched again after that — only a successful network
+        // fetch above ever rewrites a page, and that always lands in
+        // RUNTIME_CACHE. Plain caches.match() with no cache name checks
+        // every cache and can return whichever one it opened first, which
+        // in practice kept surfacing that frozen install-time snapshot
+        // (an old footer layout, say) even after this exact page had
+        // already been fetched fresh and cached in RUNTIME_CACHE during a
+        // later online visit. Checking RUNTIME_CACHE explicitly first means
+        // any page that's ever been fetched fresh always wins over the
+        // stale precached copy.
+        const runtimeCache = await caches.open(RUNTIME_CACHE);
+        const freshCached = await runtimeCache.match(request);
+        if (freshCached) return freshCached;
+
         const cached = await caches.match(request);
         if (cached) return cached;
         const fallback = await caches.match('/offline.html');

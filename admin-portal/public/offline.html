@@ -3,41 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Offline - CSM Survey</title>
+    <title>Offline - CSPC CSM Survey</title>
     <style>
-        body {
+        * { box-sizing: border-box; }
+        html, body {
             margin: 0;
             min-height: 100vh;
+        }
+        body {
             display: flex;
             align-items: center;
             justify-content: center;
-            background: #eef1f6;
-            color: #0f172a;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            text-align: center;
             padding: 1.5rem;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            text-align: center;
+            /* Same navy gradient used behind every login/survey screen in
+               the app, so landing here (no cached page to fall back to)
+               still reads as this system instead of a generic browser
+               error page. */
+            background: linear-gradient(180deg, #1e1738 0%, #2d1f57 55%, #241a44 100%);
+            color: #ffffff;
         }
         .box {
+            width: 100%;
             max-width: 420px;
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(18px) saturate(160%);
+            -webkit-backdrop-filter: blur(18px) saturate(160%);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: 1.75rem;
+            box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.45);
+            padding: 2.25rem 1.75rem;
+            color: #0f172a;
         }
-        .icon { font-size: 3rem; margin-bottom: 1rem; }
-        h1 { font-size: 1.4rem; margin-bottom: .5rem; }
-        p { color: #475569; margin-bottom: 1.5rem; }
+        .logo { width: 52px; height: 52px; object-fit: contain; margin-bottom: 1rem; }
+        .icon {
+            width: 56px;
+            height: 56px;
+            margin: 0 auto 1.1rem;
+            border-radius: 50%;
+            background: #eef2ff;
+            color: #251d3a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+        }
+        .divider {
+            width: 36px;
+            height: 3px;
+            background: #ffcc00;
+            border-radius: 50px;
+            margin: 0.6rem auto 1rem;
+        }
+        h1 { font-size: 1.25rem; font-weight: 800; margin: 0 0 0.5rem; color: #0f172a; }
+        p { font-size: 0.9rem; line-height: 1.55; color: #64748b; margin: 0 0 1.5rem; }
         button {
-            background: #2554c7;
-            color: #fff;
+            background: linear-gradient(135deg, #251d3a, #2a2550);
+            color: #ffffff;
             border: none;
-            border-radius: 8px;
-            padding: .7rem 1.5rem;
-            font-weight: 600;
+            border-radius: 0.75rem;
+            padding: 0.7rem 1.5rem;
+            font-weight: 700;
+            font-size: 0.9rem;
+            font-family: inherit;
             cursor: pointer;
+            box-shadow: 0 8px 18px -6px rgba(37, 29, 58, 0.55);
+            transition: filter 0.2s ease, transform 0.2s ease;
         }
+        button:hover { filter: brightness(1.06); transform: translateY(-1px); }
+        button:active { transform: translateY(0); }
     </style>
 </head>
 <body>
     <div class="box">
+        <img src="/images/cspc-logo.png" alt="CSPC Logo" class="logo">
         <div class="icon">📡</div>
-        <h1>You're offline</h1>
+        <h1>You're Offline</h1>
+        <div class="divider"></div>
         <p>This page hasn't been loaded before, so it isn't available offline yet. Please sign in at least once while connected, then this app will work without internet.</p>
         <button onclick="location.reload()">Try Again</button>
     </div>
