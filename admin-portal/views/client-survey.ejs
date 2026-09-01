@@ -720,14 +720,25 @@
             .lang-toggle-group { padding: 0.15rem; gap: 0.2rem; }
             .lang-toggle-group .btn { padding: 0.3rem 0.55rem; font-size: 0.7rem; min-height: 30px; }
 
+            /* Client Profile header + Autofill switch: in English "Client
+               Profile" is short enough to share a row with the switch, but
+               the Tagalog heading ("Pagkakakilanlan ng Kliyente") is long
+               enough to force it onto its own flex line — which then lands
+               it flush left instead of near the title, looking like a
+               layout bug that only shows up in one language. Stacking both
+               languages the same way removes that inconsistency. */
+            #clientProfileHeader { flex-direction: column; align-items: flex-start; }
+            #clientProfileHeader .form-switch { margin-top: 0.25rem; }
+
             /* Terms checkbox: stack the box above its label and center both
                instead of a left-aligned row whose wrapped 2nd line no longer
                lines up under the checkbox. */
             #termsAgreeRow {
-                flex-direction: column;
+                flex-direction: column-reverse;
                 align-items: center;
                 text-align: center;
                 padding-left: 0;
+                gap: 0.6rem !important;
             }
             /* Bootstrap's .form-check pairs padding-left:1.5em on the row with
                margin-left:-1.5em on the input (the classic float-based
@@ -1500,7 +1511,7 @@
                 </div>
 
                 <div id="stage2" class="page">
-                    <div class="section-title mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div id="clientProfileHeader" class="section-title mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
                         <h4 class="fw-semibold text-heading text-uppercase mb-0" data-i18n="client_prof">Client Profile</h4>
                         <div class="form-check form-switch mb-0" title="Fill in Name, Sex, Age, and Region from your account's previous answers">
                             <input class="form-check-input" type="checkbox" role="switch" id="switchAutofillProfile" onchange="toggleAutofillClientProfile(this.checked)">
@@ -1527,6 +1538,7 @@
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_client_type"></label>
                             <!-- IDINAGDAG ANG name="client_type" AT value="" -->
                             <select name="client_type" class="form-select">
+                                <option value="" disabled selected data-i18n="opt_select_client_type"></option>
                                 <option value="Citizen" data-i18n="opt_citizen"></option>
                                 <option value="Business" data-i18n="opt_business"></option>
                                 <option value="Government" data-i18n="opt_gov"></option>
@@ -3132,6 +3144,7 @@ const i18n = {
         lbl_name: "Name (Optional)",
         ph_name: "e.g. Juan Dela Cruz",
         lbl_client_type: "Client Type:",
+        opt_select_client_type: "Select Client Type...",
         opt_citizen: "Citizen",
         opt_business: "Business",
         opt_gov: "Government (Employee or another agency)",
@@ -3276,6 +3289,7 @@ const i18n = {
         lbl_name: "Pangalan (Opsyonal)",
         ph_name: "hal. Juan Dela Cruz",
         lbl_client_type: "Uri ng Kliyente:",
+        opt_select_client_type: "Pumili ng Uri ng Kliyente...",
         opt_citizen: "Mamamayan",
         opt_business: "Negosyo",
         opt_gov: "Gobyerno",
