@@ -21,12 +21,45 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="/js/offline-db.js"></script>
 
     <!-- Animation stack: GSAP + ScrollTrigger for scroll-driven reveals/parallax (native scroll, no smooth-scroll library) -->
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
 
     <style>
+        /* Persistent "you're viewing offline" pill — matches client-login.ejs /
+           client-survey.ejs. Fixed top-right, above everything, shown/hidden by
+           navigator.onLine (see the script near the closing </body> tag). */
+        .offline-pill {
+            display: none;
+            align-items: center;
+            gap: 0.4rem;
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 2000;
+            padding: 0.35rem 0.85rem;
+            border-radius: 50px;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+            font-size: 0.78rem;
+            font-weight: 700;
+            white-space: nowrap;
+            box-shadow: 0 6px 16px -4px rgba(0,0,0,0.25);
+        }
+        .offline-pill.is-visible { display: inline-flex; }
+        .offline-pill .dot {
+            width: 7px; height: 7px; border-radius: 50%; background: #d97706; flex: none;
+            animation: offlinePulse 1.6s ease-in-out infinite;
+        }
+        @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+        @media (max-width: 480px) {
+            .offline-pill.is-visible { padding: 0.4rem; }
+            .offline-pill .label { display: none; }
+        }
+
         :root {
             --navy-950: #251d3a;
             --navy-900: #251d3a;
@@ -464,6 +497,14 @@
             font-size: clamp(1.3rem, 1rem + 1.4vw, 1.9rem); margin: 0 0 0.4rem;
         }
         .dashboard-header-block p { color: rgba(255,255,255,0.72); font-size: var(--fs-sm); line-height: 1.5; margin: 0 0 0.6rem; max-width: 34rem; }
+        .dashboard-offline-note {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            background: rgba(245,158,11,0.16); color: #fbbf24;
+            border: 1px solid rgba(245,158,11,0.35);
+            padding: 0.35rem 0.9rem; border-radius: 50px;
+            font-size: var(--fs-xs) !important; font-weight: 700;
+            max-width: none !important;
+        }
 
         /* KPI summary strip — glass tiles floating on the hero backdrop */
         .kpi-strip {
@@ -741,6 +782,10 @@
 </head>
 <body>
 
+    <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — showing the last data loaded while you were connected.">
+        <span class="dot"></span><span class="label">Viewing Offline</span>
+    </span>
+
     <div class="bg-image"></div>
     <div class="bg-overlay"></div>
 
@@ -791,6 +836,7 @@
                     <span class="section-eyebrow">Data &amp; Transparency</span>
                     <h2 class="section-title">Transparency Dashboard</h2>
                     <p>Live satisfaction survey results across clusters and offices. <span class="hover-only-text">Hover to see details, click to drill down.</span><span class="tap-only-text">Tap a chart to drill down.</span></p>
+                    <p id="dashboardOfflineNote" class="dashboard-offline-note d-none"><i class="fas fa-wifi-slash me-1"></i>Viewing offline — showing the last data loaded while connected.</p>
                 </div>
 
                 <div class="dashboard-toolbar" data-reveal="fade-up" data-reveal-delay="100">
@@ -1576,48 +1622,69 @@
         // picked manually isn't silently reset back to the default every refresh.
         let hasLoadedPeriodOptions = false;
 
+        // Cached separately from CLIENT_HISTORY_CACHE_KEY/CLIENT_PROFILE_CACHE_KEY
+        // in client-survey.ejs (this is public data, not per-account) — lets the
+        // dashboard still show real numbers offline instead of the all-zero
+        // placeholder `datasets` above, which is all a fresh page load has until
+        // the first successful fetch.
+        const DASHBOARD_CACHE_KEY = 'cspc_public_dashboard_cache';
+
+        function applyDashboardData(dynamicData, fromCache) {
+            if (dynamicData.clusterList && dynamicData.clusterList.length > 0) {
+                clusterFullNames = dynamicData.clusterList;
+                clusterLabels = dynamicData.clusterList.map(shortenLabel);
+            }
+            if (dynamicData.officeList && dynamicData.officeList.length > 0) {
+                officeFullNames = dynamicData.officeList;
+                officeLabels = dynamicData.officeList.map(shortenLabel);
+            }
+            if (dynamicData.officeCluster) {
+                officeClusterMap = dynamicData.officeCluster;
+            }
+            if (dynamicData.chartData) {
+                datasets = dynamicData.chartData;
+            }
+
+            populateOfficeClusterFilter();
+
+            // Period select is built once from the real, exact period list — this
+            // is what makes the dashboard "real-time": it defaults to whichever
+            // period actually covers today's date (dynamicData.currentPeriod), so
+            // it flips from Jan-Jun to Jul-Dec on its own once the calendar rolls
+            // over. Only done on the first load — see hasLoadedPeriodOptions.
+            if (!hasLoadedPeriodOptions && dynamicData.periodOptions && dynamicData.periodOptions.length > 0) {
+                const periodSelect = document.getElementById('periodSelect');
+                const defaultPeriod = dynamicData.currentPeriod || dynamicData.periodOptions[0].value;
+                periodSelect.innerHTML = dynamicData.periodOptions.map(opt =>
+                    `<option value="${opt.value}"${opt.value === defaultPeriod ? ' selected' : ''}>${opt.label}</option>`
+                ).join('');
+                activePeriod = defaultPeriod;
+                hasLoadedPeriodOptions = true;
+            }
+
+            const offlineNoteEl = document.getElementById('dashboardOfflineNote');
+            if (offlineNoteEl) offlineNoteEl.classList.toggle('d-none', !fromCache);
+
+            changePeriod();
+        }
+
         async function fetchDynamicDashboardData() {
             try {
-                const response = await fetch('/api/public-dashboard');
+                // Timeout-guarded: on a flaky connection a bare fetch() can hang far
+                // longer than this dashboard's own 15s poll interval, effectively
+                // stacking up pending requests instead of ever falling back to the
+                // cached data below.
+                const response = await fetchWithTimeout('/api/public-dashboard', {}, 5000);
                 if (response.ok) {
                     const dynamicData = await response.json();
-
-                    if (dynamicData.clusterList && dynamicData.clusterList.length > 0) {
-                        clusterFullNames = dynamicData.clusterList;
-                        clusterLabels = dynamicData.clusterList.map(shortenLabel);
-                    }
-                    if (dynamicData.officeList && dynamicData.officeList.length > 0) {
-                        officeFullNames = dynamicData.officeList;
-                        officeLabels = dynamicData.officeList.map(shortenLabel);
-                    }
-                    if (dynamicData.officeCluster) {
-                        officeClusterMap = dynamicData.officeCluster;
-                    }
-                    if (dynamicData.chartData) {
-                        datasets = dynamicData.chartData;
-                    }
-
-                    populateOfficeClusterFilter();
-
-                    // Period select is built once from the real, exact period list — this
-                    // is what makes the dashboard "real-time": it defaults to whichever
-                    // period actually covers today's date (dynamicData.currentPeriod), so
-                    // it flips from Jan-Jun to Jul-Dec on its own once the calendar rolls
-                    // over. Only done on the first load — see hasLoadedPeriodOptions.
-                    if (!hasLoadedPeriodOptions && dynamicData.periodOptions && dynamicData.periodOptions.length > 0) {
-                        const periodSelect = document.getElementById('periodSelect');
-                        const defaultPeriod = dynamicData.currentPeriod || dynamicData.periodOptions[0].value;
-                        periodSelect.innerHTML = dynamicData.periodOptions.map(opt =>
-                            `<option value="${opt.value}"${opt.value === defaultPeriod ? ' selected' : ''}>${opt.label}</option>`
-                        ).join('');
-                        activePeriod = defaultPeriod;
-                        hasLoadedPeriodOptions = true;
-                    }
-
-                    changePeriod();
+                    try { localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(dynamicData)); } catch (e) { /* localStorage unavailable — offline fallback just won't apply */ }
+                    applyDashboardData(dynamicData, false);
                 }
             } catch (error) {
-                console.error("Error fetching dynamic database data:", error);
+                console.error("Error fetching dynamic dashboard data, falling back to cache:", error);
+                let cached = null;
+                try { cached = JSON.parse(localStorage.getItem(DASHBOARD_CACHE_KEY) || 'null'); } catch (e) { /* corrupt/unavailable cache */ }
+                if (cached) applyDashboardData(cached, true);
             }
         }
 
@@ -2251,6 +2318,14 @@
     </script>
 
     <script>
+        function updateOfflineIndicator() {
+            const el = document.getElementById('offlineIndicator');
+            if (el) el.classList.toggle('is-visible', !navigator.onLine);
+        }
+        window.addEventListener('online', updateOfflineIndicator);
+        window.addEventListener('offline', updateOfflineIndicator);
+        updateOfflineIndicator();
+
         // This public landing page is what cqacapstone.me's bare domain
         // serves, and is the very first page most visitors ever load — so
         // it's the page that has to register the service worker for the
