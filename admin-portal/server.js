@@ -265,8 +265,8 @@ function isCspcEmail(email) {
 
 // Whether enough time has passed since `lastEventAt` (the most recent APPROVED
 // submission for a given office+service+account) for that account to submit
-// again, based on the service's configured cadence (services.availability).
-// NULL/unset availability means one-time-only — never eligible again.
+// again, based on the service's configured cadence (services.availability),
+// which is one of daily/weekly/monthly/yearly (column is NOT NULL, default 'daily').
 function isEligibleForResubmission(lastEventAt, availability) {
     if (!lastEventAt) return true;
     const diffDays = (Date.now() - new Date(lastEventAt).getTime()) / 86400000;
@@ -1792,10 +1792,14 @@ db.query(createClustersTableQuery, (err) => {
                     else {
                         console.log('✅ services table verified/created successfully!');
                         // How often the same account may re-survey this service: daily/weekly/
-                        // monthly/yearly, or NULL (default) for one-time-only — see
-                        // isEligibleForResubmission(). Existing services keep the one-time-only
-                        // default until the admin explicitly sets a frequency.
-                        db.query("ALTER TABLE services ADD COLUMN availability VARCHAR(20) NULL", () => {});
+                        // monthly/yearly — see isEligibleForResubmission(). Defaults to 'daily'
+                        // for every service, existing or new.
+                        db.query("ALTER TABLE services ADD COLUMN availability VARCHAR(20) NOT NULL DEFAULT 'daily'", () => {
+                            // Column already existed (pre-migration DBs): backfill NULLs and
+                            // enforce the NOT NULL DEFAULT 'daily' constraint on it too.
+                            db.query("UPDATE services SET availability = 'daily' WHERE availability IS NULL", () => {});
+                            db.query("ALTER TABLE services MODIFY COLUMN availability VARCHAR(20) NOT NULL DEFAULT 'daily'", () => {});
+                        });
                     }
                 });
 
@@ -4140,11 +4144,11 @@ app.post('/offices/add', ensureAdminAuth, async (req, res) => {
 // "Service Availed" dropdown, see officeServices in /client-survey below)
 // ==========================================
 const VALID_SERVICE_AVAILABILITY = ['daily', 'weekly', 'monthly', 'yearly'];
-// Normalizes the Availability dropdown's posted value to a valid enum or NULL
-// (blank/unrecognized => one-time-only — see isEligibleForResubmission).
+// Normalizes the Availability dropdown's posted value to a valid enum,
+// defaulting blank/unrecognized values to 'daily' (column is NOT NULL).
 function cleanAvailability(val) {
     const v = (val || '').trim().toLowerCase();
-    return VALID_SERVICE_AVAILABILITY.includes(v) ? v : null;
+    return VALID_SERVICE_AVAILABILITY.includes(v) ? v : 'daily';
 }
 
 app.post('/services/add', ensureAdminAuth, (req, res) => {

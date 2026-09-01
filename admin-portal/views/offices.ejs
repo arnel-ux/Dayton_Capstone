@@ -741,7 +741,7 @@
                 nameWrap.appendChild(nameSpan);
                 const availSpan = document.createElement('span');
                 availSpan.className = 'badge bg-secondary-subtle text-secondary ms-2';
-                availSpan.textContent = availabilityLabels[svc.availability] || 'One-time only';
+                availSpan.textContent = availabilityLabels[svc.availability] || 'Daily';
                 nameWrap.appendChild(availSpan);
 
                 const actions = document.createElement('div');
@@ -761,7 +761,6 @@
                         <option value="weekly" ${svc.availability === 'weekly' ? 'selected' : ''}>Weekly</option>
                         <option value="monthly" ${svc.availability === 'monthly' ? 'selected' : ''}>Monthly</option>
                         <option value="yearly" ${svc.availability === 'yearly' ? 'selected' : ''}>Yearly</option>
-                        <option value="" ${!svc.availability ? 'selected' : ''}>One-time only</option>
                     </select>
                 `;
                 actions.appendChild(editForm);
