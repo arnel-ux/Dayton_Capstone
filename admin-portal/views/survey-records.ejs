@@ -122,6 +122,14 @@
         .search-bar .form-control:focus { box-shadow: none; background: var(--card-bg); color: var(--text-main); }
         .search-hint { color: var(--text-faint); font-size: 0.75rem; margin-top: var(--sp-3); }
 
+        .sort-control { min-width: 220px; }
+        .sort-control .form-select {
+            background-color: var(--card-bg);
+            color: var(--text-main);
+            border: 1px solid var(--border-strong);
+            font-size: 0.85rem;
+        }
+
         .scroll-container {
             max-height: 700px;
             overflow-y: auto;
@@ -476,12 +484,25 @@
         <div class="container-fluid px-4">
             <div class="records-card">
 
-                <div class="search-toolbar">
-                    <div class="input-group search-bar">
-                        <span class="input-group-text"><i class="fas fa-search text-primary"></i></span>
-                        <input type="text" id="searchInput" class="form-control" placeholder="Search by name, college, or concern..." title="Search survey records">
+                <div class="search-toolbar d-md-flex justify-content-between align-items-start gap-3">
+                    <div>
+                        <div class="input-group search-bar">
+                            <span class="input-group-text"><i class="fas fa-search text-primary"></i></span>
+                            <input type="text" id="searchInput" class="form-control" placeholder="Search by name, college, or concern..." title="Search survey records">
+                        </div>
+                        <p class="search-hint mb-0">Search results filter by name, topic, or office college.</p>
                     </div>
-                    <p class="search-hint mb-0">Search results filter by name, topic, or office college.</p>
+                    <div class="mt-3 mt-md-0 sort-control">
+                        <label for="sortSelect" class="form-label small text-muted mb-1">Sort by</label>
+                        <select id="sortSelect" class="form-select form-select-sm" title="Sort survey records">
+                            <option value="">Default (Office Group)</option>
+                            <option value="name">Name (A–Z)</option>
+                            <option value="date_desc">Date (Newest First)</option>
+                            <option value="date_asc">Date (Oldest First)</option>
+                            <option value="sentiment">Sentiment (Positive → Negative)</option>
+                            <option value="office">Office (A–Z)</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="scroll-container">
@@ -520,7 +541,7 @@
                                     </thead>
                                     <tbody>
                                         <% recordsByCluster[cluster].forEach(record => { %>
-                                            <tr class="record-row">
+                                            <tr class="record-row" data-name="<%= record.name %>" data-date="<%= record.dateRaw %>" data-sentiment="<%= record.sentimentClass.replace('bg-sentiment-', '') %>">
                                                 <td class="office-name-cell text-muted small" data-full="<%= record.officeName %>" title="<%= record.officeName %>" data-bs-toggle="tooltip" data-bs-placement="top"><span class="cell-truncate"><%= record.officeName %></span></td>
                                                 <td class="name-cell" title="<%= record.name %>" data-bs-toggle="tooltip" data-bs-placement="top"><span class="respondent-name cell-truncate"><%= record.name %></span></td>
                                                 <td class="text-center text-muted small text-nowrap" title="<%= record.officeVisitedTime %>" data-bs-toggle="tooltip" data-bs-placement="top"><%= record.officeVisitedTime %></td>
@@ -854,7 +875,58 @@
     // the native `title` tooltip is still there as a fallback.
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
 
+    // Sort by: name, date, sentiment, or office. Reorders the record rows within
+    // each office group (all four modes) and, for "office", also reorders the
+    // office groups themselves alphabetically. "Default" restores server order
+    // (grouped by office cluster, newest response first).
+    const SENTIMENT_SORT_ORDER = { positive: 1, neutral: 2, negative: 3 };
+
+    function initSorting() {
+        const sortSelect = document.getElementById('sortSelect');
+        const scrollContainer = document.querySelector('.scroll-container');
+        if (!sortSelect || !scrollContainer) return;
+
+        const originalSectionOrder = Array.from(document.querySelectorAll('.office-section'));
+        const originalRowOrder = new Map();
+        originalSectionOrder.forEach(section => {
+            originalRowOrder.set(section, Array.from(section.querySelectorAll('.record-row')));
+        });
+
+        sortSelect.addEventListener('change', function() {
+            const mode = sortSelect.value;
+            const sections = Array.from(document.querySelectorAll('.office-section'));
+
+            if (mode === 'office') {
+                sections.sort((a, b) => a.querySelector('.office-group-header span').innerText.localeCompare(b.querySelector('.office-group-header span').innerText));
+            } else {
+                sections.sort((a, b) => originalSectionOrder.indexOf(a) - originalSectionOrder.indexOf(b));
+            }
+
+            sections.forEach(section => {
+                const tbody = section.querySelector('tbody');
+                let rows = Array.from(tbody.querySelectorAll('.record-row'));
+
+                if (mode === 'name') {
+                    rows.sort((a, b) => a.dataset.name.toLowerCase().localeCompare(b.dataset.name.toLowerCase()));
+                } else if (mode === 'date_desc') {
+                    rows.sort((a, b) => new Date(b.dataset.date) - new Date(a.dataset.date));
+                } else if (mode === 'date_asc') {
+                    rows.sort((a, b) => new Date(a.dataset.date) - new Date(b.dataset.date));
+                } else if (mode === 'sentiment') {
+                    rows.sort((a, b) => (SENTIMENT_SORT_ORDER[a.dataset.sentiment] || 9) - (SENTIMENT_SORT_ORDER[b.dataset.sentiment] || 9));
+                } else {
+                    rows = originalRowOrder.get(section) || rows;
+                }
+
+                rows.forEach(row => tbody.appendChild(row));
+                section.parentElement.appendChild(section);
+            });
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
+        initSorting();
+
         const searchInput = document.getElementById('searchInput');
         const officeSections = document.querySelectorAll('.office-section');
         const noResults = document.getElementById('noResults');

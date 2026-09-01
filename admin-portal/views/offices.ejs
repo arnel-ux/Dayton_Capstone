@@ -5,6 +5,44 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <style>
+        :root {
+            --primary-indigo: #251d3a;
+            --primary-indigo-hover: #2a2550;
+            --accent-indigo: #3452a5;
+            --border-strong: #dde3ec;
+            --surface-subtle: #f8fafc;
+            --radius-sm: 6px;
+        }
+
+        /* Icon-only action buttons — tooltip (title + data-bs-toggle) reveals the
+           action on hover/focus instead of showing text on the button itself. */
+        .btn-icon {
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-strong);
+            background: #fff;
+            color: #64748b;
+            padding: 0;
+            font-size: 0.85rem;
+            transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+        }
+        .btn-icon + .btn-icon,
+        .btn-icon + .btn-icon-form,
+        .btn-icon-form + .btn-icon,
+        .btn-icon-form + .btn-icon-form { margin-left: 6px; }
+        .btn-icon-form { display: inline-block; }
+        .btn-icon:hover { transform: translateY(-1px); }
+        .btn-icon-edit:hover { background-color: var(--accent-indigo); border-color: var(--accent-indigo); color: #fff; }
+        .btn-icon-services:hover { background-color: #e0f2fe; border-color: #7dd3fc; color: #0369a1; }
+        .btn-icon-archive:hover { background-color: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+        .btn-icon-restore:hover { background-color: #dcfce7; border-color: #86efac; color: #15803d; }
+        .btn-icon-delete:hover,
+        .btn-icon-export:hover { background-color: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+
         .cluster-toggle {
             cursor: pointer;
             user-select: none;
@@ -132,14 +170,14 @@
                             <input class="form-check-input" type="checkbox" id="showArchivedToggle" title="Show or hide archived offices">
                             <label class="form-check-label small text-muted" for="showArchivedToggle">Show Archived</label>
                         </div>
-                        <button class="btn btn-outline-danger btn-sm me-2" type="button" title="Preview the list of offices and services before printing or downloading" onclick="openExportPreview();">
-                            <i class="fas fa-file-export me-1"></i> Export
+                        <button class="btn-icon btn-icon-export" type="button" title="Preview the list of offices and services before printing or downloading" data-bs-toggle="tooltip" data-bs-placement="top" onclick="openExportPreview();">
+                            <i class="fas fa-file-export"></i>
                         </button>
-                        <button class="btn btn-secondary btn-sm me-2" title="Add a new cluster" data-bs-toggle="modal" data-bs-target="#addClusterModal">
-                            <i class="fas fa-layer-group me-1"></i> Add Cluster
+                        <button class="btn-icon btn-icon-services" title="Add a new cluster" data-bs-toggle="tooltip" data-bs-placement="top" onclick="new bootstrap.Modal(document.getElementById('addClusterModal')).show();">
+                            <i class="fas fa-layer-group"></i>
                         </button>
-                        <button class="btn btn-primary btn-sm" title="Add a new office" data-bs-toggle="modal" data-bs-target="#addOfficeModal">
-                            <i class="fas fa-plus me-1"></i> Add Office
+                        <button class="btn-icon btn-icon-edit" title="Add a new office" data-bs-toggle="tooltip" data-bs-placement="top" onclick="new bootstrap.Modal(document.getElementById('addOfficeModal')).show();">
+                            <i class="fas fa-plus"></i>
                         </button>
                     </div>
                 </div>
@@ -193,25 +231,25 @@
                                             </td>
                                             <td class="px-4 py-3 text-end text-nowrap">
                                                 <% if (meta) { %>
-                                                    <button type="button" class="btn btn-sm btn-outline-primary me-1" title="Edit this cluster"
+                                                    <button type="button" class="btn-icon btn-icon-edit" title="Edit this cluster" data-bs-toggle="tooltip" data-bs-placement="top"
                                                             onclick="event.stopPropagation(); openEditClusterModal('<%= meta.id %>', '<%= cluster %>')">
-                                                        <i class="fas fa-edit"></i> Edit
+                                                        <i class="fas fa-edit"></i>
                                                     </button>
                                                     <% if (clusterArchived) { %>
-                                                        <form action="/clusters/restore/<%= meta.id %>" method="POST" style="display:inline;" onclick="event.stopPropagation();">
-                                                            <button type="submit" class="btn btn-sm btn-outline-success" title="Restore this cluster">
-                                                                <i class="fas fa-undo"></i> Restore
+                                                        <form action="/clusters/restore/<%= meta.id %>" method="POST" class="btn-icon-form" onclick="event.stopPropagation();">
+                                                            <button type="submit" class="btn-icon btn-icon-restore" title="Restore this cluster" data-bs-toggle="tooltip" data-bs-placement="top">
+                                                                <i class="fas fa-undo"></i>
                                                             </button>
                                                         </form>
-                                                        <form action="/clusters/permanent-delete/<%= meta.id %>" method="POST" style="display:inline;" class="permanent-delete-cluster-form" onclick="event.stopPropagation();">
-                                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Permanently delete this cluster">
-                                                                <i class="fas fa-trash"></i> Delete
+                                                        <form action="/clusters/permanent-delete/<%= meta.id %>" method="POST" class="btn-icon-form permanent-delete-cluster-form" onclick="event.stopPropagation();">
+                                                            <button type="submit" class="btn-icon btn-icon-delete" title="Permanently delete this cluster" data-bs-toggle="tooltip" data-bs-placement="top">
+                                                                <i class="fas fa-trash"></i>
                                                             </button>
                                                         </form>
                                                     <% } else { %>
-                                                        <form action="/clusters/delete/<%= meta.id %>" method="POST" style="display:inline;" class="archive-cluster-form" onclick="event.stopPropagation();">
-                                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Archive this cluster">
-                                                                <i class="fas fa-box-archive"></i> Archive
+                                                        <form action="/clusters/delete/<%= meta.id %>" method="POST" class="btn-icon-form archive-cluster-form" onclick="event.stopPropagation();">
+                                                            <button type="submit" class="btn-icon btn-icon-archive" title="Archive this cluster" data-bs-toggle="tooltip" data-bs-placement="top">
+                                                                <i class="fas fa-box-archive"></i>
                                                             </button>
                                                         </form>
                                                     <% } %>
@@ -233,31 +271,31 @@
                                                     <td class="text-muted"><%= office.head_director %></td>
                                                     <td><%= office.email_address %></td>
                                                     <td class="px-4 py-2 text-end text-nowrap">
-                                                        <button type="button" class="btn btn-sm btn-outline-secondary me-1 open-services-btn" title="Manage services availed at this office"
+                                                        <button type="button" class="btn-icon btn-icon-services open-services-btn" title="Manage services availed at this office" data-bs-toggle="tooltip" data-bs-placement="top"
                                                                 data-office-id="<%= office.id %>"
                                                                 data-office-name="<%= office.office_name %>"
                                                                 data-office-services="<%= JSON.stringify((typeof officeServicesData !== 'undefined' && officeServicesData[office.id]) || []) %>">
-                                                            <i class="fas fa-list-check"></i> Services
+                                                            <i class="fas fa-list-check"></i>
                                                         </button>
-                                                        <button class="btn btn-sm btn-outline-primary me-1" title="Edit this office"
+                                                        <button class="btn-icon btn-icon-edit" title="Edit this office" data-bs-toggle="tooltip" data-bs-placement="top"
                                                                 onclick="openEditModal('<%= office.id %>', '<%= office.cluster_name %>', '<%= office.office_name %>', '<%= office.head_director %>', '<%= office.email_address %>')">
-                                                            <i class="fas fa-edit"></i> Edit
+                                                            <i class="fas fa-edit"></i>
                                                         </button>
                                                         <% if (office.is_archived) { %>
-                                                            <form action="/offices/restore/<%= office.id %>" method="POST" style="display:inline;">
-                                                                <button type="submit" class="btn btn-sm btn-outline-success" title="Restore this office">
-                                                                    <i class="fas fa-undo"></i> Restore
+                                                            <form action="/offices/restore/<%= office.id %>" method="POST" class="btn-icon-form">
+                                                                <button type="submit" class="btn-icon btn-icon-restore" title="Restore this office" data-bs-toggle="tooltip" data-bs-placement="top">
+                                                                    <i class="fas fa-undo"></i>
                                                                 </button>
                                                             </form>
-                                                            <form action="/offices/permanent-delete/<%= office.id %>" method="POST" style="display:inline;" class="permanent-delete-office-form">
-                                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Permanently delete this office">
-                                                                    <i class="fas fa-trash"></i> Delete
+                                                            <form action="/offices/permanent-delete/<%= office.id %>" method="POST" class="btn-icon-form permanent-delete-office-form">
+                                                                <button type="submit" class="btn-icon btn-icon-delete" title="Permanently delete this office" data-bs-toggle="tooltip" data-bs-placement="top">
+                                                                    <i class="fas fa-trash"></i>
                                                                 </button>
                                                             </form>
                                                         <% } else { %>
-                                                            <form action="/offices/delete/<%= office.id %>" method="POST" style="display:inline;" class="archive-office-form">
-                                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Archive this office">
-                                                                    <i class="fas fa-box-archive"></i> Archive
+                                                            <form action="/offices/delete/<%= office.id %>" method="POST" class="btn-icon-form archive-office-form">
+                                                                <button type="submit" class="btn-icon btn-icon-archive" title="Archive this office" data-bs-toggle="tooltip" data-bs-placement="top">
+                                                                    <i class="fas fa-box-archive"></i>
                                                                 </button>
                                                             </form>
                                                         <% } %>
@@ -477,7 +515,7 @@
                 <div id="addServiceRows">
                     <div class="input-group mb-2">
                         <input type="text" name="service_name" class="form-control" placeholder="E.g., Requesting for Clearance">
-                        <button type="button" class="btn btn-outline-secondary" onclick="addServiceRow()" title="Add another service">
+                        <button type="button" class="btn btn-outline-secondary" onclick="addServiceRow()" title="Add another service" data-bs-toggle="tooltip" data-bs-placement="top">
                             <i class="fas fa-plus"></i>
                         </button>
                     </div>
@@ -579,6 +617,9 @@
         // Show the result of the last create/edit/archive/delete redirect as a
         // toast (?success=... / ?error=... set by server.js), then clean the URL.
         AppAlert.autoShowFromQuery();
+
+        // Icon-only action buttons rely on Bootstrap tooltips to reveal what each icon does.
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
 
         // Archived offices/clusters are hidden by default via the CSS in <head>
         // (no flash on load) — toggling this body class is all that's needed
@@ -699,12 +740,14 @@
         row.className = 'input-group mb-2';
         row.innerHTML = `
             <input type="text" name="service_name" class="form-control" placeholder="E.g., Requesting for Clearance">
-            <button type="button" class="btn btn-outline-danger" title="Remove this row">
+            <button type="button" class="btn btn-outline-danger" title="Remove this row" data-bs-toggle="tooltip" data-bs-placement="top">
                 <i class="fas fa-minus"></i>
             </button>
         `;
-        row.querySelector('button').addEventListener('click', () => row.remove());
+        const removeBtn = row.querySelector('button');
+        removeBtn.addEventListener('click', () => row.remove());
         wrap.appendChild(row);
+        new bootstrap.Tooltip(removeBtn);
     }
 
     // Wired via data-* attributes (rather than inline onclick with interpolated
@@ -769,7 +812,7 @@
                 deleteForm.action = `/services/delete/${svc.id}`;
                 deleteForm.method = 'POST';
                 deleteForm.className = 'delete-service-form';
-                deleteForm.innerHTML = '<button type="submit" class="btn btn-sm btn-outline-danger" title="Remove this service"><i class="fas fa-trash"></i></button>';
+                deleteForm.innerHTML = '<button type="submit" class="btn btn-sm btn-outline-danger" title="Remove this service" data-bs-toggle="tooltip" data-bs-placement="top"><i class="fas fa-trash"></i></button>';
                 actions.appendChild(deleteForm);
 
                 li.appendChild(nameWrap);
@@ -777,6 +820,8 @@
                 list.appendChild(li);
             });
         }
+
+        list.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
 
         list.querySelectorAll('.delete-service-form').forEach(form => {
             form.addEventListener('submit', async function (e) {
