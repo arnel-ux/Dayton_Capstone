@@ -57,6 +57,7 @@
             justify-content: flex-start;
             padding: 1rem;
             padding-top: clamp(1.5rem, 9vh, 4rem);
+            padding-bottom: 5rem;
             z-index: 1;
             overflow-y: auto; /* Safety fallback: scroll instead of clipping on short viewports */
         }
@@ -239,8 +240,6 @@
             .sub-title { font-size: 0.85rem; }
             .portal-text { font-size: 0.7rem; padding: 0.35rem 1rem; }
 
-            /* Fixed top-left "Home" pill was a ~30px-tall tap target. */
-            .btn-home { padding: 0.65rem 1.15rem; font-size: 0.85rem; }
         }
 
         .card-custom .cqa-logo {
@@ -428,25 +427,34 @@
         }
 
         /* Home button (top-left, floating over the blurred background) */
+        /* Home button — floating circular icon button, centered at the
+           bottom of the viewport so it reads as a proper mobile-friendly
+           FAB instead of a text pill competing with the header above it. */
         .btn-home {
             position: fixed;
-            top: 1.25rem;
-            left: 1.25rem;
+            bottom: 1.25rem;
+            left: 50%;
+            transform: translateX(-50%);
             z-index: 10;
+            width: 3rem;
+            height: 3rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             background: rgba(255, 255, 255, 0.12);
             color: #ffffff;
             border: 1px solid rgba(255, 255, 255, 0.4);
-            border-radius: 50px;
-            padding: 0.5rem 1.1rem;
-            font-weight: 600;
-            font-size: 0.85rem;
+            border-radius: 50%;
+            font-size: 1.05rem;
             backdrop-filter: blur(6px);
+            box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.45);
             transition: all 0.3s ease;
             text-decoration: none;
         }
         .btn-home:hover {
             background: rgba(255, 255, 255, 0.25);
             color: #ffffff;
+            transform: translateX(-50%) translateY(-2px);
         }
 
         /* Same "viewing offline" pill as client-login.ejs / index.ejs. */
@@ -508,8 +516,8 @@
     <div class="bg-blurred"></div>
     <div class="bg-overlay"></div>
 
-    <a href="/" class="btn-home" title="Return to Home Page">
-        <i class="fas fa-home me-1"></i> Home
+    <a href="/" class="btn-home" title="Return to Home Page" aria-label="Return to Home Page">
+        <i class="fas fa-home"></i>
     </a>
 
     <div class="login-wrapper">

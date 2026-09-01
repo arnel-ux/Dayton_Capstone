@@ -672,16 +672,20 @@
             .footer-main { grid-template-columns: 1fr 1fr; gap: var(--sp-5) var(--sp-4); }
         }
         @media (max-width: 36rem) {
-            .footer-main { grid-template-columns: 1fr; padding: var(--sp-3) var(--sp-3) var(--sp-2); gap: var(--sp-2); text-align: center; }
+            .footer-main { grid-template-columns: 1fr; padding: var(--sp-3) var(--sp-3) var(--sp-2); gap: var(--sp-4); text-align: center; }
             .footer-heading { margin-bottom: 0.6rem; font-size: 0.78rem; }
             .footer-heading::after { left: 50%; transform: translateX(-50%); }
             .footer-brand-logo { justify-content: center; margin-bottom: 0.4rem; }
             .footer-brand-logo img { width: 34px; height: 34px; }
             .footer-desc { line-height: 1.45; font-size: 0.78rem; }
-            /* Quick Links and Contact Us as a 2-column grid instead of one
-               long vertical stack — same info, roughly half the height. */
-            .footer-links { display: grid; grid-template-columns: 1fr 1fr; align-items: start; justify-items: center; gap: 0.35rem 0.5rem; }
-            .footer-links a { padding: 0.25rem 0; }
+            /* Single centered column, not a 2-up grid — "Transparency
+               Dashboard" wraps to two lines at this width, and a grid row
+               pins its neighbor ("Our Services") to that same tall row
+               height, leaving it stranded with a gap above it. A single
+               column keeps every link's own height independent. */
+            .footer-links { display: flex; flex-direction: column; align-items: center; gap: 0.55rem; }
+            .footer-links a { padding: 0.15rem 0; align-items: flex-start; text-align: left; }
+            .footer-links a i { margin-top: 0.25rem; }
             .footer-socials { justify-content: center; margin-top: 0.4rem; }
             .footer-contact { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem 0.5rem; }
             .footer-contact li:first-child { grid-column: 1 / -1; flex-direction: row; justify-content: center; text-align: left; }
@@ -691,7 +695,10 @@
                unevenly and looked lopsided; stacked-and-centered reads as
                deliberate regardless of each item's text length. */
             .footer-contact li { flex-direction: column; align-items: center; text-align: center; gap: 0.3rem; font-size: 0.78rem; }
-            .footer-bottom { padding: var(--sp-2) var(--sp-3); font-size: 0.72rem; }
+            /* Extra right clearance so the centered copyright line never
+               runs under the fixed dark-mode toggle FAB parked in that
+               corner (layout/theme-toggle.ejs). */
+            .footer-bottom { padding: var(--sp-2) 3rem; font-size: 0.72rem; }
         }
 
         @media (max-width: 62rem) {
