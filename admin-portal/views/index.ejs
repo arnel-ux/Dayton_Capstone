@@ -28,17 +28,20 @@
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
 
     <style>
-        /* Persistent "you're viewing offline" pill — matches client-login.ejs /
-           client-survey.ejs. Fixed top-right, above everything, shown/hidden by
-           navigator.onLine (see the script near the closing </body> tag). */
+        /* Persistent "you're viewing offline" pill — same font-size/padding
+           as login.ejs / client-login.ejs for a consistent look everywhere.
+           Sat fixed top-right before, which overlapped the Login button on
+           narrow screens; now it's a normal in-flow element (see the
+           .offline-pill-row wrapper right under the header in the markup),
+           centered under the header instead of floating over it. Shown/
+           hidden by navigator.onLine (see the script near the closing
+           </body> tag). */
+        .offline-pill-row { text-align: center; }
         .offline-pill {
             display: none;
             align-items: center;
             gap: 0.4rem;
-            position: fixed;
-            top: 1rem;
-            right: 1rem;
-            z-index: 2000;
+            margin: 0.75rem 0;
             padding: 0.35rem 0.85rem;
             border-radius: 50px;
             background: #fef3c7;
@@ -55,18 +58,6 @@
             animation: offlinePulse 1.6s ease-in-out infinite;
         }
         @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-        @media (max-width: 480px) {
-            /* The full "Viewing Offline" pill was wide enough to crowd the
-               Login button next to it (both fixed to the same top-right
-               corner), so the label used to just be hidden outright —
-               leaving only a bare dot with no indication of what it meant.
-               Dropping just the "Viewing " prefix keeps the one word that
-               actually matters ("Offline") visible, centered, and small
-               enough to fit alongside Login. */
-            .offline-pill.is-visible { padding: 0.35rem 0.6rem; gap: 0.3rem; }
-            .offline-pill .label { font-size: 0.68rem; line-height: 1; }
-            .offline-pill .label-full { display: none; }
-        }
 
         :root {
             --navy-950: #251d3a;
@@ -797,10 +788,6 @@
 </head>
 <body>
 
-    <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — showing the last data loaded while you were connected.">
-        <span class="dot"></span><span class="label"><span class="label-full">Viewing </span>Offline</span>
-    </span>
-
     <div class="bg-image"></div>
     <div class="bg-overlay"></div>
 
@@ -839,6 +826,12 @@
     </div>
 
     <div id="header-spacer"></div>
+
+    <div class="offline-pill-row">
+        <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — showing the last data loaded while you were connected.">
+            <span class="dot"></span><span class="label">Viewing Offline</span>
+        </span>
+    </div>
 
     <div class="page-content">
 

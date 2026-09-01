@@ -298,6 +298,33 @@
             background: #34d399;
             box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25);
         }
+
+        /* "Viewing offline" pill — same amber style, font-size and padding
+           as index.ejs / login.ejs for a consistent look across the whole
+           system. Placed in its own centered row under the topbar instead
+           of squeezed in next to Logout/the portal-status pill, so it never
+           overlaps or covers those on narrow screens. */
+        .offline-pill-row { text-align: center; background: #f0f3f9; }
+        .offline-pill-row:has(.offline-pill.is-visible) { padding: 0.6rem 1rem 0; }
+        .offline-pill {
+            display: none;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.85rem;
+            border-radius: 50px;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+            font-size: 0.78rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .offline-pill.is-visible { display: inline-flex; }
+        .offline-pill .dot {
+            width: 7px; height: 7px; border-radius: 50%; background: #d97706; flex: none;
+            animation: offlinePulse 1.6s ease-in-out infinite;
+        }
+        @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
         .btn-logout {
             background: rgba(255,255,255,0.12);
             border: 1px solid rgba(255,255,255,0.35);
@@ -919,6 +946,12 @@
         </nav>
     </aside>
 
+    <div class="offline-pill-row">
+        <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — showing the last data loaded while you were connected.">
+            <span class="dot"></span><span class="label">Viewing Offline</span>
+        </span>
+    </div>
+
     <div class="content-wrap">
 
         <div class="page-header">
@@ -1039,6 +1072,15 @@
             tooltipTriggerList.forEach(function (el) {
                 new bootstrap.Tooltip(el, { trigger: 'hover focus' });
             });
+
+            // "Viewing offline" pill — same pattern as index.ejs/login.ejs.
+            function updateOfflineIndicator() {
+                var pill = document.getElementById('offlineIndicator');
+                if (pill) pill.classList.toggle('is-visible', !navigator.onLine);
+            }
+            window.addEventListener('online', updateOfflineIndicator);
+            window.addEventListener('offline', updateOfflineIndicator);
+            updateOfflineIndicator();
 
             // Sidebar: off-canvas panel toggled from the topbar's upper-left
             // hamburger button. Pending / History are separate pages now, so

@@ -457,14 +457,18 @@
             transform: translateX(-50%) translateY(-2px);
         }
 
-        /* Same "viewing offline" pill as client-login.ejs / index.ejs. */
+        /* Same "viewing offline" pill as client-login.ejs / index.ejs —
+           centered (not pinned to the top-right corner) so it reads as a
+           deliberate status banner rather than a notification badge, and
+           matches index.ejs's centered placement under its header. */
         .offline-pill {
             display: none;
             align-items: center;
             gap: 0.4rem;
             position: fixed;
             top: 1rem;
-            right: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
             z-index: 20;
             padding: 0.35rem 0.85rem;
             border-radius: 50px;

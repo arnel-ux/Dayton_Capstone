@@ -306,12 +306,45 @@
             color: #ffffff;
             transform: translateX(-50%) translateY(-2px);
         }
+
+        /* "Viewing offline" pill — same amber style, font-size, padding and
+           centered top placement as login.ejs, for a consistent look across
+           the whole system. Sits at the top, opposite the bottom-centered
+           Home button, so the two never overlap. */
+        .offline-pill {
+            display: none;
+            align-items: center;
+            gap: 0.4rem;
+            position: fixed;
+            top: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            padding: 0.35rem 0.85rem;
+            border-radius: 50px;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+            font-size: 0.78rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .offline-pill.is-visible { display: inline-flex; }
+        .offline-pill .dot {
+            width: 7px; height: 7px; border-radius: 50%; background: #d97706; flex: none;
+            animation: offlinePulse 1.6s ease-in-out infinite;
+        }
+        @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
     </style>
 </head>
 <body>
 
     <div class="bg-blurred"></div>
     <div class="bg-overlay"></div>
+
+    <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — signing in needs an internet connection to verify your account.">
+        <span class="dot"></span><span class="label">Viewing Offline</span>
+    </span>
 
     <a href="/" class="btn-home" title="Return to Home Page" aria-label="Return to Home Page">
         <i class="fas fa-home"></i>
@@ -368,6 +401,15 @@
             AppAlert.error(officeLoginError, 'Login Failed');
             window.history.replaceState({}, document.title, window.location.pathname);
         }
+
+        // "Viewing offline" pill — same pattern as index.ejs/login.ejs.
+        function updateOfflineIndicator() {
+            const pill = document.getElementById('offlineIndicator');
+            if (pill) pill.classList.toggle('is-visible', !navigator.onLine);
+        }
+        window.addEventListener('online', updateOfflineIndicator);
+        window.addEventListener('offline', updateOfflineIndicator);
+        updateOfflineIndicator();
     </script>
 </body>
 </html>
