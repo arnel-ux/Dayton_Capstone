@@ -1803,6 +1803,8 @@
 
                         <div id="profileContent" class="d-none">
 
+                            <div id="profileOfflineNote" class="history-meta mb-3 d-none"><i class="bi bi-wifi-off me-1"></i>Viewing offline — showing your last-loaded profile.</div>
+
                             <!-- ================= VIEW MODE ================= -->
                             <!-- Static account summary. Hidden (via .d-none) once Edit Profile is clicked. -->
                             <div id="profileViewMode">
@@ -2464,14 +2466,14 @@ function switchView(view) {
     return false;
 }
 
-function loadProfileView() {
-    fetch('/api/client-profile')
-        .then(res => res.json())
-        .then(data => {
-            if (!data.success) throw new Error(data.message || 'Failed to load profile.');
-            profileLoaded = true;
-            const p = data.profile || {};
+// Cache key is per-account, same convention as CLIENT_HISTORY_CACHE_KEY, so
+// a different person signing in on this browser never sees someone else's
+// cached profile.
+const CLIENT_PROFILE_CACHE_KEY = currentClientEmail
+    ? 'cspc_client_profile_cache_' + currentClientEmail.toLowerCase()
+    : null;
 
+function renderProfileView(p, fromCache) {
             // Server has nothing yet (no client_accounts row) — fall back to what
             // this browser last saved locally, so the page isn't stuck on
             // "Not set yet" for someone who has, in fact, answered before.
@@ -2503,15 +2505,46 @@ function loadProfileView() {
                     : `<span>${value}</span>`)
                 : `<span class="profile-unset">Not set yet — captured on your first survey submission</span>`;
 
-            document.getElementById('pf-region').innerHTML = lockedOrUnset(region, !!p.region, 'Locked after your first survey');
-            document.getElementById('pf-age').innerHTML = lockedOrUnset(age, !!p.age, 'Locked after your first survey');
-            document.getElementById('pf-gender').innerHTML = lockedOrUnset(gender, !!p.gender, 'Locked after your first survey');
+    document.getElementById('pf-region').innerHTML = lockedOrUnset(region, !!p.region, 'Locked after your first survey');
+    document.getElementById('pf-age').innerHTML = lockedOrUnset(age, !!p.age, 'Locked after your first survey');
+    document.getElementById('pf-gender').innerHTML = lockedOrUnset(gender, !!p.gender, 'Locked after your first survey');
 
-            document.getElementById('profileLoading').classList.add('d-none');
-            document.getElementById('profileContent').classList.remove('d-none');
+    const offlineNoteEl = document.getElementById('profileOfflineNote');
+    if (offlineNoteEl) offlineNoteEl.classList.toggle('d-none', !fromCache);
+
+    document.getElementById('profileLoading').classList.add('d-none');
+    document.getElementById('profileContent').classList.remove('d-none');
+}
+
+function loadProfileView() {
+    fetch('/api/client-profile')
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed to load profile.');
+            profileLoaded = true;
+            const p = data.profile || {};
+
+            if (CLIENT_PROFILE_CACHE_KEY) {
+                try { localStorage.setItem(CLIENT_PROFILE_CACHE_KEY, JSON.stringify(p)); } catch (e) { /* localStorage unavailable — offline fallback just won't apply */ }
+            }
+
+            renderProfileView(p, false);
         })
         .catch(err => {
-            console.error('Error loading profile:', err);
+            console.error('Error loading profile, falling back to cache:', err);
+
+            let cached = null;
+            if (CLIENT_PROFILE_CACHE_KEY) {
+                try { cached = JSON.parse(localStorage.getItem(CLIENT_PROFILE_CACHE_KEY) || 'null'); } catch (e) { /* corrupt/unavailable cache */ }
+            }
+
+            if (cached) {
+                // Deliberately leave profileLoaded false so reopening this
+                // view retries the network once connectivity returns.
+                renderProfileView(cached, true);
+                return;
+            }
+
             document.getElementById('profileLoading').innerHTML =
                 '<p class="text-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i> Could not load your profile. Please try again.</p>';
         });
@@ -2539,6 +2572,11 @@ function saveProfile(event) {
     const name = nameInput.value.trim();
     if (!name) {
         AppAlert.warning('Please enter your name.');
+        return false;
+    }
+
+    if (!navigator.onLine) {
+        AppAlert.warning('You are offline. Profile name changes need a connection — please try again once you\'re back online.', 'Offline');
         return false;
     }
 

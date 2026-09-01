@@ -2249,5 +2249,36 @@
             initChartsMarquee();
         });
     </script>
+
+    <script>
+        // This public landing page is what cqacapstone.me's bare domain
+        // serves, and is the very first page most visitors ever load — so
+        // it's the page that has to register the service worker for the
+        // whole origin (scope '/'). Without this, a visitor who only ever
+        // opens the root URL never gets the survey app's offline support
+        // installed at all, since a service worker can never intercept a
+        // page's own first-ever load.
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .catch((err) => console.error('[PWA] Service worker registration failed:', err));
+            });
+        }
+
+        // Offline visitors landing on the root URL almost certainly want the
+        // survey app, not this live-stats dashboard (which needs a network
+        // connection to mean anything). If this browser already has a cached
+        // client session (see client-survey.ejs), send them straight there —
+        // same cached-session bypass client-login.ejs uses.
+        (function () {
+            if (navigator.onLine) return;
+            try {
+                const cached = JSON.parse(localStorage.getItem('cspc_client_session') || 'null');
+                if (cached && cached.email) {
+                    window.location.href = '/client-survey';
+                }
+            } catch (e) { /* no cached session — stay on the landing page */ }
+        })();
+    </script>
 </body>
 </html>
