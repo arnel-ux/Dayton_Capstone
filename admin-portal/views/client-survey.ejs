@@ -2336,7 +2336,7 @@ function toggleAutofillClientProfile(enabled) {
             gender: document.querySelector('input[name="gender"]:checked')?.value ?? ''
         };
 
-        fetch('/api/client-profile')
+        fetchWithTimeout('/api/client-profile', {}, 5000)
             .then(res => res.json())
             .then(data => {
                 const p = (data.success && data.profile) ? data.profile : {};
@@ -2517,7 +2517,7 @@ function renderProfileView(p, fromCache) {
 }
 
 function loadProfileView() {
-    fetch('/api/client-profile')
+    fetchWithTimeout('/api/client-profile', {}, 5000)
         .then(res => res.json())
         .then(data => {
             if (!data.success) throw new Error(data.message || 'Failed to load profile.');
@@ -2654,7 +2654,7 @@ function renderHistoryList(history, fromCache) {
 }
 
 function loadHistoryView() {
-    fetch('/api/client-history')
+    fetchWithTimeout('/api/client-history', {}, 5000)
         .then(res => res.json())
         .then(data => {
             if (!data.success) throw new Error(data.message || 'Failed to load history.');
@@ -2706,7 +2706,7 @@ function openHistoryDetail(id) {
     const modal = new bootstrap.Modal(modalEl);
     modal.show();
 
-    fetch('/api/client-history/' + encodeURIComponent(id))
+    fetchWithTimeout('/api/client-history/' + encodeURIComponent(id), {}, 5000)
         .then(res => res.json())
         .then(data => {
             if (!data.success) throw new Error(data.message || 'Failed to load this survey.');
@@ -3521,11 +3521,15 @@ function submitAll(event) {
     }
 
     // 3. IPAPASA ANG MGA SAGOT DIREKTA SA API
-    fetch('/submit-survey', {
+    // Timeout-guarded: on a flaky connection (as opposed to a clean offline
+    // failure) a bare fetch() can hang far longer than a client should be
+    // expected to wait — forcing a fast failure here means it falls through
+    // to the offline queue below instead of leaving them on a spinner.
+    fetchWithTimeout('/submit-survey', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
-    })
+    }, 8000)
     .then(response => response.json())
     .then(resData => {
         if (resData.success) {

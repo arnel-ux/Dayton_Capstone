@@ -4,12 +4,13 @@
 
 importScripts('/js/offline-db.js');
 
-const STATIC_CACHE = 'cspc-static-v2';
-const RUNTIME_CACHE = 'cspc-runtime-v2';
+const STATIC_CACHE = 'cspc-static-v3';
+const RUNTIME_CACHE = 'cspc-runtime-v3';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
 const PRECACHE_URLS = [
+    '/',
     '/manifest.json',
     '/offline.html',
     '/js/alerts.js',
@@ -32,7 +33,7 @@ const CDN_PRECACHE_URLS = [
     'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap'
 ];
 
-const RUNTIME_CACHE_HOSTS = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];
+const RUNTIME_CACHE_HOSTS = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com', 'cdnjs.cloudflare.com'];
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
@@ -96,9 +97,19 @@ self.addEventListener('fetch', (event) => {
     }
 });
 
+// 4s is generous for a live connection (the app shell is small, same-origin)
+// but short enough that a flaky/partial connection — Wi-Fi still "connected"
+// with no real route out, a captive portal, a hung TCP handshake — fails
+// over to the cache quickly instead of leaving the tab on a spinner until the
+// browser's own multi-second-to-tens-of-seconds connection timeout fires
+// (which surfaces as the browser's native "took too long to respond" page,
+// never even reaching the offline fallback below).
+const NAVIGATION_TIMEOUT_MS = 4000;
+const ASSET_TIMEOUT_MS = 6000;
+
 async function handleNavigation(request) {
     try {
-        const response = await fetch(request);
+        const response = await fetchWithTimeout(request, {}, NAVIGATION_TIMEOUT_MS);
         const cache = await caches.open(RUNTIME_CACHE);
         cache.put(request, response.clone());
         return response;
@@ -113,7 +124,7 @@ async function handleNavigation(request) {
 async function staleWhileRevalidate(request, cacheName) {
     const cache = await caches.open(cacheName);
     const cached = await cache.match(request);
-    const networkFetch = fetch(request)
+    const networkFetch = fetchWithTimeout(request, {}, ASSET_TIMEOUT_MS)
         .then((response) => {
             if (response && response.ok) cache.put(request, response.clone());
             return response;
@@ -126,7 +137,7 @@ async function cacheFirst(request, cacheName) {
     const cached = await caches.match(request);
     if (cached) return cached;
     try {
-        const response = await fetch(request);
+        const response = await fetchWithTimeout(request, {}, ASSET_TIMEOUT_MS);
         if (response && response.ok) {
             const cache = await caches.open(cacheName);
             cache.put(request, response.clone());

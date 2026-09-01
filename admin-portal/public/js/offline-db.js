@@ -7,6 +7,30 @@ var OFFLINE_DB_NAME = 'cspc-survey-offline';
 var OFFLINE_DB_VERSION = 1;
 var OUTBOX_STORE = 'unsent-surveys';
 
+// Plain fetch() has no built-in timeout, so on a flaky/partial connection
+// (Wi-Fi still "connected" but no route to the internet, a captive portal, a
+// stale DNS entry, etc.) it can hang for the browser's full connection
+// timeout — tens of seconds — before ever rejecting. That's fatal for any
+// offline-first fallback (serve from cache/queue locally instead), which
+// only runs once the live request fails. This forces a fast, predictable
+// failure via AbortController so the fallback kicks in promptly instead of
+// leaving the user staring at a spinner (or the browser's own "took too
+// long to respond" page, for navigations — see handleNavigation below).
+function fetchWithTimeout(resource, options, timeoutMs) {
+    options = options || {};
+    var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    if (controller) {
+        options = Object.assign({}, options, { signal: controller.signal });
+    }
+    var timer = setTimeout(function () {
+        if (controller) controller.abort();
+    }, timeoutMs);
+    return fetch(resource, options).then(
+        function (response) { clearTimeout(timer); return response; },
+        function (err) { clearTimeout(timer); throw err; }
+    );
+}
+
 function openOfflineDB() {
     return new Promise(function (resolve, reject) {
         var req = indexedDB.open(OFFLINE_DB_NAME, OFFLINE_DB_VERSION);
@@ -65,14 +89,18 @@ function runOfflineSurveySync() {
     return getAllOutboxSurveys().then(function (surveys) {
         if (!surveys.length) return { syncedCount: 0, failedResults: [] };
 
-        return fetch('/sync-surveys', {
+        // Generous timeout — the server awaits AI sentiment/topic analysis for
+        // every queued survey before replying, which can legitimately take a
+        // while for a large batch. This guards against a hung connection, not
+        // against a slow-but-working one.
+        return fetchWithTimeout('/sync-surveys', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
             body: JSON.stringify({
                 surveys: surveys.map(function (s) { return { localId: s.localId, payload: s.payload }; })
             })
-        }).then(function (response) {
+        }, 30000).then(function (response) {
             if (!response.ok) return { syncedCount: 0, failedResults: [] };
             return response.json();
         }).then(function (data) {
