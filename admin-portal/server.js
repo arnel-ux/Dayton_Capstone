@@ -2483,7 +2483,7 @@ app.post('/office-login', loginRateLimiter('/office-login'), (req, res) => {
 
 app.get('/office-logout', noCache, (req, res) => {
     destroyAdminSession(req, res);
-    res.redirect('/office-login');
+    res.redirect('/login');
 });
 
 // Approval/decline history count only — used to show a badge on the sidebar's
