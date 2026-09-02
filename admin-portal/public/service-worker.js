@@ -11,14 +11,13 @@
 
 importScripts('/js/offline-db.js');
 
-const STATIC_CACHE = 'cspc-static-v8';
-const RUNTIME_CACHE = 'cspc-runtime-v8';
+const STATIC_CACHE = 'cspc-static-v9';
+const RUNTIME_CACHE = 'cspc-runtime-v9';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
 const PRECACHE_URLS = [
     '/',
-    '/offline.html',
     '/js/alerts.js',
     '/js/offline-db.js',
     '/js/pwa-client.js',
@@ -103,10 +102,16 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Full-page navigations (e.g. opening /client-survey, /login): try the
-    // network first so authenticated/dynamic content stays fresh, but fall
-    // back to whatever was last cached — or the offline fallback page —
-    // when there's no connection.
+    // Full-page navigations (e.g. opening /survey-offline, /client-survey,
+    // /login): try the network first so authenticated/dynamic content stays
+    // fresh, but fall back to that EXACT page's own cached copy when
+    // there's no connection — /survey-offline included, since it's
+    // precached above specifically so it works with zero prior
+    // authentication. There is deliberately no generic "you're offline"
+    // fallback page for anything not already cached: a page that was never
+    // cached simply fails the navigation, same as any ordinary broken/
+    // unreachable request — this worker doesn't paper over that with a
+    // substitute page.
     if (request.mode === 'navigate') {
         event.respondWith(handleNavigation(request));
         return;
@@ -161,8 +166,14 @@ async function handleNavigation(request) {
 
         const cached = await caches.match(request);
         if (cached) return cached;
-        const fallback = await caches.match('/offline.html');
-        return fallback || Response.error();
+
+        // No generic offline fallback page anymore — a navigation to a page
+        // that was never cached (and the network is unreachable) simply
+        // fails naturally here. The browser shows its own native offline
+        // error for that case, which is correct: there is nothing this
+        // worker can substitute in that isn't misleading (see the comment
+        // on the fetch handler above for why that page was removed).
+        throw err;
     }
 }
 
