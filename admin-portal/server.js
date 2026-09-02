@@ -1607,6 +1607,7 @@ function sendPasswordResetEmail(toEmail, resetUrl) {
 // to spam an arbitrary typed-in address.
 function sendOfflineSurveySyncedEmail(toEmail, details) {
     if (!mailTransporter || !toEmail) return;
+    console.log('[Mailer] Sending offline survey email');
 
     const html = `<!DOCTYPE html>
 <html>
@@ -1649,8 +1650,10 @@ function sendOfflineSurveySyncedEmail(toEmail, details) {
         html
     }).then(() => {
         console.log(`✅ [Mail] Offline sync success notification sent to ${toEmail}`);
+        console.log('[Mailer] Email accepted');
     }).catch((err) => {
         console.error(`❌ [Mail] Failed to send offline sync success notification to ${toEmail}:`, err.message);
+        console.error('[Mailer] Send failed:', err.message);
     });
 }
 
@@ -1659,6 +1662,7 @@ function sendOfflineSurveySyncedEmail(toEmail, details) {
 // same non-abuse reasoning as sendOfflineSurveySyncedEmail above.
 function sendOfflineSurveyPendingEmail(toEmail, details) {
     if (!mailTransporter || !toEmail) return;
+    console.log('[Mailer] Sending offline survey email');
 
     const html = `<!DOCTYPE html>
 <html>
@@ -1698,8 +1702,10 @@ function sendOfflineSurveyPendingEmail(toEmail, details) {
         html
     }).then(() => {
         console.log(`✅ [Mail] Offline sync pending-approval notification sent to ${toEmail}`);
+        console.log('[Mailer] Email accepted');
     }).catch((err) => {
         console.error(`❌ [Mail] Failed to send offline sync pending-approval notification to ${toEmail}:`, err.message);
+        console.error('[Mailer] Send failed:', err.message);
     });
 }
 
@@ -4006,6 +4012,7 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
         return res.status(401).json({ success: false, status: 'verification_failed', message: OFFLINE_VERIFY_GENERIC_MESSAGE });
     }
     clearOfflineVerifyFailures(identifier);
+    console.log('[Offline Verify] Account verification succeeded');
 
     // Use the DB's stored casing from here on, not whatever casing was typed.
     const verifiedEmail = account.email;
@@ -4172,6 +4179,7 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
         await conn.beginTransaction();
 
         if (isCspc) {
+            console.log('[Offline Verify] CSPC branch selected');
             const surveyResponseId = await insertVerifiedSurveyOnConnection(conn, verifiedEmail, {
                 officeId: finalOfficeId, respondentName: finalName, topic, sentiment, region: finalRegion,
                 cc1: finalCc1, cc2: finalCc2, cc3: finalCc3, sqdValues,
@@ -4188,8 +4196,10 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
             );
 
             await conn.commit();
+            console.log('[Offline Verify] Transaction committed');
             result = { status: 'synced', surveyResponseId };
         } else {
+            console.log('[Offline Verify] External branch selected');
             // External/Gmail — account ownership just proven by password,
             // but still routed for office review, exactly like the
             // authenticated /sync-surveys path already does for these
@@ -4215,6 +4225,7 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
             );
 
             await conn.commit();
+            console.log('[Offline Verify] Transaction committed');
             result = { status: 'pending_approval' };
         }
     } catch (err) {

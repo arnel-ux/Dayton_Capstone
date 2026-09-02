@@ -106,6 +106,217 @@
     // password first.
     // ==========================================
 
+    function normalizeIdentifier(identifier) {
+        return (identifier || '').trim().toLowerCase();
+    }
+
+    // ------------------------------------------------------------------
+    // RAM-only credential store. Holds an offline survey's account
+    // password ONLY in page memory (this closure's Map) — never written to
+    // IndexedDB/localStorage/sessionStorage/cookies/any cache, never
+    // logged, never included in a survey payload. Cleared on successful
+    // sync, on a confirmed-wrong-password (401), after its TTL expires, or
+    // whenever this page/tab is closed or reloaded (memory simply goes
+    // away). Only these four functions touch the Map; only `remember` and
+    // `forget` are exposed on window (client-survey.ejs needs both).
+    // ------------------------------------------------------------------
+    const DEFAULT_OFFLINE_CREDENTIAL_TTL_MS = 2 * 60 * 60 * 1000; // 2h default (3h absolute max never enforced beyond this — TTL is fixed at 2h)
+    const temporaryOfflineCredentials = new Map(); // normalized identifier -> { password, expiresAt }
+
+    function rememberOfflineCredential(identifier, password) {
+        const key = normalizeIdentifier(identifier);
+        if (!key || !password) return;
+        temporaryOfflineCredentials.set(key, { password, expiresAt: Date.now() + DEFAULT_OFFLINE_CREDENTIAL_TTL_MS });
+        // A freshly remembered credential means the user just supplied a
+        // (presumably corrected) password for this identifier — clear any
+        // stale retry/block state so verification is attempted fresh.
+        clearRetryState(key);
+    }
+
+    function getOfflineCredential(identifier) {
+        const key = normalizeIdentifier(identifier);
+        const entry = temporaryOfflineCredentials.get(key);
+        if (!entry) return null;
+        if (Date.now() >= entry.expiresAt) {
+            temporaryOfflineCredentials.delete(key);
+            return null;
+        }
+        return entry.password;
+    }
+
+    function forgetOfflineCredential(identifier) {
+        temporaryOfflineCredentials.delete(normalizeIdentifier(identifier));
+    }
+
+    function clearExpiredOfflineCredentials() {
+        const now = Date.now();
+        for (const [key, entry] of temporaryOfflineCredentials) {
+            if (now >= entry.expiresAt) temporaryOfflineCredentials.delete(key);
+        }
+    }
+
+    setInterval(clearExpiredOfflineCredentials, 5 * 60 * 1000);
+
+    // ------------------------------------------------------------------
+    // Retry/backoff state — separate from the credential store. Distinguishes
+    // TEMPORARY failures (network drop, 429, 5xx — timed backoff, retried
+    // automatically) from a CONFIRMED-WRONG-PASSWORD 401 (automaticBlocked —
+    // never retried automatically again; only a deliberate manual retry, via
+    // manualRetryOfflineVerification below, can clear it).
+    // ------------------------------------------------------------------
+    const identifierRetryState = new Map(); // normalized identifier -> { failureCount, nextRetryAt, automaticBlocked }
+    const RETRY_BACKOFF_MS = [5000, 15000, 30000];
+
+    function recordTemporaryFailure(identifier) {
+        const key = normalizeIdentifier(identifier);
+        const entry = identifierRetryState.get(key) || { failureCount: 0, automaticBlocked: false };
+        entry.failureCount++;
+        entry.nextRetryAt = Date.now() + RETRY_BACKOFF_MS[Math.min(entry.failureCount, RETRY_BACKOFF_MS.length) - 1];
+        entry.automaticBlocked = false;
+        identifierRetryState.set(key, entry);
+    }
+
+    function markVerificationBlocked(identifier) {
+        identifierRetryState.set(normalizeIdentifier(identifier), { failureCount: 0, nextRetryAt: 0, automaticBlocked: true });
+    }
+
+    function clearRetryState(identifier) {
+        identifierRetryState.delete(normalizeIdentifier(identifier));
+    }
+
+    function canAttemptNow(identifier) {
+        const entry = identifierRetryState.get(normalizeIdentifier(identifier));
+        if (!entry) return true;
+        if (entry.automaticBlocked) return false;
+        return Date.now() >= (entry.nextRetryAt || 0);
+    }
+
+    // A genuine 'online' transition resets TEMPORARY backoff timers (no
+    // reason to make a fresh reconnect wait out a stale delay) but
+    // deliberately leaves automaticBlocked (401) entries untouched — those
+    // only clear via rememberOfflineCredential (i.e. a deliberate manual
+    // retry with a corrected password).
+    function resetTemporaryBackoffs() {
+        for (const [key, entry] of identifierRetryState) {
+            if (!entry.automaticBlocked) identifierRetryState.delete(key);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Masked identifier for any user-visible UI (verification-failed
+    // banner). The real identifier is still used internally for matching
+    // records/calling the server — only the rendered text is masked, and
+    // it is built with DOM APIs only (never innerHTML) since the
+    // identifier is user-controlled data.
+    // ------------------------------------------------------------------
+    function maskIdentifierForDisplay(identifier) {
+        const id = identifier || '';
+        const at = id.indexOf('@');
+        if (at <= 0) return '***';
+        const user = id.slice(0, at);
+        const domain = id.slice(at);
+        return user.slice(0, Math.min(2, user.length)) + '***' + domain;
+    }
+
+    // Renders/refreshes the "Verification failed" banner listing every
+    // identifier currently blocked on a 401, each with a "Verify Account"
+    // button that starts the manual retry flow. No-op if the banner
+    // container isn't present on this page.
+    async function updateVerificationFailedBanner() {
+        const container = document.getElementById('offlineVerifyFailedBanner');
+        if (!container) return;
+
+        let unverified;
+        try {
+            unverified = await getUnverifiedOutboxSurveys();
+        } catch (err) {
+            console.error('[Offline Sync] Failed to read outbox for banner update:', err);
+            return;
+        }
+
+        const failedIdentifiers = new Set();
+        for (const record of unverified) {
+            if (record.syncStatus === 'verification_failed' && record.registeredIdentifier) {
+                failedIdentifiers.add(normalizeIdentifier(record.registeredIdentifier));
+            }
+        }
+
+        if (!failedIdentifiers.size) {
+            container.replaceChildren();
+            container.hidden = true;
+            return;
+        }
+
+        const rows = [];
+        failedIdentifiers.forEach((identifier) => {
+            const row = document.createElement('div');
+            row.className = 'offline-verify-failed-row';
+            row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;padding:0.15rem 0;';
+
+            const label = document.createElement('span');
+            label.textContent = 'Verification failed for ' + maskIdentifierForDisplay(identifier);
+            row.appendChild(label);
+
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn btn-sm btn-outline-primary offline-verify-retry-btn';
+            button.textContent = 'Verify Account';
+            button.dataset.identifier = identifier;
+            button.addEventListener('click', async () => {
+                if (button.disabled) return;
+
+                button.disabled = true;
+                try {
+                    await manualRetryOfflineVerification(
+                        button.dataset.identifier
+                    );
+                } finally {
+                    if (button.isConnected) {
+                        button.disabled = false;
+                    }
+                }
+            });
+            row.appendChild(button);
+
+            rows.push(row);
+        });
+
+        container.replaceChildren(...rows);
+        container.hidden = false;
+    }
+
+    // Deliberate user action to retry a blocked (401) identifier without
+    // requiring a brand-new offline submission. Opens the same masked
+    // SweetAlert2 modal used elsewhere, remembers the corrected password
+    // (which also clears the automaticBlocked state), then immediately
+    // re-attempts verification for that identifier's still-queued records —
+    // bypassing canAttemptNow on purpose, since this IS the manual override.
+    async function manualRetryOfflineVerification(identifier) {
+        const password = await promptForOfflineVerificationPassword(identifier);
+        if (!password) {
+            // Cancelled, or the verification UI wasn't available — leave
+            // everything exactly as it was.
+            return;
+        }
+
+        if (typeof window.rememberOfflineCredential === 'function') {
+            window.rememberOfflineCredential(identifier, password);
+        }
+
+        try {
+            const unverified = await getUnverifiedOutboxSurveys();
+            const groups = groupUnverifiedByIdentifier(unverified);
+            const records = groups[normalizeIdentifier(identifier)] || [];
+            if (records.length) {
+                await verifyAndSyncGroup(identifier, records);
+            }
+        } catch (err) {
+            console.error('[Offline Sync] Manual retry failed:', err);
+        }
+
+        await updateVerificationFailedBanner();
+    }
+
     // Password entry ONLY ever happens through SweetAlert2's own masked
     // `input: 'password'` field — never window.prompt(), which is a plain
     // text prompt with no masking and no guarantee about how the browser
@@ -176,7 +387,13 @@
     // trying it again against the remaining surveys in the same group would
     // just fail identically, since they share the same account.
     async function verifyAndSyncGroup(identifier, records) {
-        let password = await promptForOfflineVerificationPassword(identifier);
+        let password = getOfflineCredential(identifier);
+        let usedRamCredential = !!password;
+        console.log('[Offline Sync] Temporary credential available:', usedRamCredential ? 'yes' : 'no');
+
+        if (!password) {
+            password = await promptForOfflineVerificationPassword(identifier);
+        }
 
         if (password === undefined) {
             // Verification UI wasn't available — nothing was shown, nothing
@@ -195,12 +412,15 @@
             return;
         }
 
+        console.log('[Offline Sync] Starting verification');
+
         try {
             for (const record of records) {
                 await setOutboxSyncStatus(record.localId, 'verifying');
 
                 let res;
                 try {
+                    console.log('[Offline Sync] Calling verify-and-sync endpoint');
                     res = await fetchWithTimeout('/api/offline-surveys/verify-and-sync', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -218,9 +438,13 @@
                     // out — a TEMPORARY failure, not a wrong password and
                     // not a rejected survey. Leave this (and every
                     // remaining record in the group) retryable; stop the
-                    // group here rather than guessing at the rest.
-                    console.error('[Offline Verify] Request failed:', networkErr);
+                    // group here rather than guessing at the rest. The
+                    // RAM credential is deliberately NOT cleared here — a
+                    // temporary network problem says nothing about whether
+                    // the password itself was correct.
+                    console.error('[Offline Sync] Network request failed:', networkErr);
                     await setOutboxSyncStatus(record.localId, 'sync_failed');
+                    recordTemporaryFailure(identifier);
                     notifyOfflineVerifyOutcome('sync_failed', null);
                     return;
                 }
@@ -230,6 +454,7 @@
 
                 if (res.ok && data && data.success) {
                     await removeSurveyFromOutbox(record.localId);
+                    console.log('[Offline Sync] Local record removed');
                     notifyOfflineVerifyOutcome(data.status, data.message);
                     continue;
                 }
@@ -240,12 +465,20 @@
                     // server route). This SAME password will fail for every
                     // remaining record in this group too (same account), so
                     // mark the rest failed and stop the group — but never
-                    // touch any OTHER identifier's group.
+                    // touch any OTHER identifier's group. The password is
+                    // now confirmed wrong (or unusable): drop it from RAM
+                    // and block further AUTOMATIC attempts for this
+                    // identifier until a deliberate manual retry supplies a
+                    // corrected password.
+                    console.log('[Offline Sync] Endpoint returned 401');
                     const remainingFromHere = records.slice(records.indexOf(record));
                     for (const remaining of remainingFromHere) {
                         await setOutboxSyncStatus(remaining.localId, 'verification_failed');
                     }
+                    forgetOfflineCredential(identifier);
+                    markVerificationBlocked(identifier);
                     notifyOfflineVerifyOutcome('verification_failed', data && data.message);
+                    await updateVerificationFailedBanner();
                     return;
                 }
 
@@ -253,8 +486,11 @@
                     // Rate-limited — temporary, but deliberately NOT
                     // retried immediately (that would just get rate-limited
                     // again). Leave queued, tell the user to wait, stop the
-                    // whole flow for now.
+                    // whole flow for now. Credential kept — this says
+                    // nothing about whether the password was correct.
+                    console.log('[Offline Sync] Endpoint returned 429');
                     await setOutboxSyncStatus(record.localId, 'sync_failed');
+                    recordTemporaryFailure(identifier);
                     notifyOfflineVerifyOutcome('rate_limited', data && data.message);
                     return;
                 }
@@ -263,8 +499,10 @@
                     // Server/infra trouble — temporary, retryable. Stop
                     // this group (continuing would likely fail identically
                     // for the rest); the outer flow retries on the next
-                    // 'online' event or app load.
+                    // 'online' event or app load. Credential kept.
+                    console.log('[Offline Sync] Endpoint returned', res.status);
                     await setOutboxSyncStatus(record.localId, 'sync_failed');
+                    recordTemporaryFailure(identifier);
                     notifyOfflineVerifyOutcome('sync_failed', data && data.message);
                     return;
                 }
@@ -278,10 +516,19 @@
                 // offline-db.js, which does not include 'submission_rejected').
                 // It stays in IndexedDB for the user to review, but the
                 // group otherwise continues — this one survey's problem
-                // doesn't block the rest of this account's queue.
+                // doesn't block the rest of this account's queue. Credential
+                // and retry-state both untouched.
                 await setOutboxSyncStatus(record.localId, 'submission_rejected');
                 notifyOfflineVerifyOutcome('submission_rejected', data && data.message);
             }
+
+            // Every record in this group either synced or was permanently
+            // rejected for its own data reasons — none remain that need
+            // this password again. The account is proven correct: forget
+            // the credential (no reason to keep it in RAM once its job is
+            // done) and clear any stale retry state.
+            forgetOfflineCredential(identifier);
+            clearRetryState(identifier);
         } finally {
             // Deliberate: drop this function's only reference to the
             // password as soon as the group is done, rather than letting it
@@ -289,7 +536,9 @@
             // immutable (this can't force the underlying memory to be
             // overwritten), but the reference itself is cleared immediately
             // rather than left reachable — the smallest amount of "deliberate"
-            // available at the language level.
+            // available at the language level. This is independent of (and
+            // in addition to) the RAM credential store above, which manages
+            // its own lifecycle across multiple calls to this function.
             password = null;
         }
     }
@@ -307,12 +556,21 @@
         offlineVerificationFlowRunning = true;
         try {
             const unverified = await getUnverifiedOutboxSurveys();
+            console.log('[Offline Sync] Pending surveys found:', unverified.length);
             if (!unverified.length) return;
             const groups = groupUnverifiedByIdentifier(unverified);
             for (const identifier of Object.keys(groups)) {
                 if (!navigator.onLine) break; // connection dropped mid-flow — stop, retry later
+                // Automatic paths only: an identifier currently
+                // automaticBlocked (401) or still inside its temporary
+                // backoff window is skipped here. It remains reachable
+                // through the manual "Verify Account" banner action
+                // (manualRetryOfflineVerification), which calls
+                // verifyAndSyncGroup directly and bypasses this guard.
+                if (!canAttemptNow(identifier)) continue;
                 await verifyAndSyncGroup(identifier, groups[identifier]);
             }
+            await updateVerificationFailedBanner();
         } catch (err) {
             console.error('[Offline Verify] Verification flow failed:', err);
         } finally {
@@ -320,12 +578,82 @@
         }
     }
 
-    window.addEventListener('online', runOfflineVerificationFlow);
-    window.addEventListener('load', () => {
-        if (navigator.onLine) runOfflineVerificationFlow();
+    // navigator.onLine turning true is necessary but not sufficient — it can
+    // be true while the server (or the wider network path to it) is still
+    // unreachable (flaky Wi-Fi, captive portal, server restart in
+    // progress). This checks actual server reachability via /api/health
+    // before attempting verification, and skips that round-trip entirely
+    // when nothing pending is currently eligible for an automatic attempt.
+    async function attemptReconnectSync() {
+        if (!navigator.onLine) return;
+
+        let pending;
+        try {
+            pending = await getUnverifiedOutboxSurveys();
+        } catch (err) {
+            console.error('[Offline Sync] Failed to read outbox:', err);
+            return;
+        }
+        if (!pending.length) {
+            console.log('[Offline Sync] No pending records found');
+            return;
+        }
+
+        const groups = groupUnverifiedByIdentifier(pending);
+        const eligible = Object.keys(groups).some((id) => canAttemptNow(id));
+        if (!eligible) {
+            console.log('[Offline Sync] All pending identifiers are blocked or backing off — skipping health check');
+            return;
+        }
+
+        console.log('[Offline Sync] Checking server reachability');
+        try {
+            const res = await fetchWithTimeout('/api/health', {}, 4000);
+            if (!res.ok) {
+                console.log('[Offline Sync] Health check failed');
+                return;
+            }
+        } catch (err) {
+            console.log('[Offline Sync] Health check failed');
+            return;
+        }
+
+        await runOfflineVerificationFlow();
+    }
+
+    window.addEventListener('online', () => {
+        console.log('[Offline Sync] Browser online event detected');
+        resetTemporaryBackoffs();
+        attemptReconnectSync();
+        syncOfflineSurveysFromPage();
     });
+    window.addEventListener('load', () => {
+        if (navigator.onLine) {
+            attemptReconnectSync();
+        }
+    });
+
+    // Periodic fallback in case the 'online' event never fires (some
+    // browsers/OSes don't reliably dispatch it on every real reconnect) —
+    // only does anything while pending unverified records actually exist,
+    // and attemptReconnectSync's own eligibility/health checks keep this
+    // from hammering the server. offlineVerificationFlowRunning prevents
+    // any overlap with a run already in progress.
+    setInterval(async () => {
+        let pending;
+        try {
+            pending = await getUnverifiedOutboxSurveys();
+        } catch (err) {
+            return;
+        }
+        if (pending.length) attemptReconnectSync();
+    }, 12000);
 
     window.queueSurveyOffline = queueSurveyOffline;
     window.syncOfflineSurveysFromPage = syncOfflineSurveysFromPage;
     window.runOfflineVerificationFlow = runOfflineVerificationFlow;
+    window.attemptReconnectSync = attemptReconnectSync;
+    window.rememberOfflineCredential = rememberOfflineCredential;
+    window.forgetOfflineCredential = forgetOfflineCredential;
+    window.manualRetryOfflineVerification = manualRetryOfflineVerification;
 })();

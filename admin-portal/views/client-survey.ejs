@@ -1570,6 +1570,21 @@
                             <input type="email" name="email" id="offlineEmailInput" class="form-control" placeholder="e.g. juan.delacruz@my.cspc.edu.ph" required>
                             <p class="field-hint mb-0 mt-1" style="font-size:0.78rem;color:var(--ink-600);">Your account will be verified securely once an internet connection is available.</p>
                         </div>
+                        <!-- Deliberately no `name` attribute — this field must never be able to
+                             enter the survey's FormData/payload object, even by accident. The
+                             password is read directly from this input by submitAll() and kept
+                             only in page memory (see rememberOfflineCredential in pwa-client.js);
+                             it is never written to IndexedDB, localStorage, sessionStorage, a
+                             cookie, or any request body other than the one verify-and-sync call
+                             made once connectivity returns. -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-dark fs-6" for="offlinePasswordInput">Password</label>
+                            <input type="password" id="offlinePasswordInput" class="form-control" autocomplete="current-password" placeholder="Your account password" required>
+                            <p class="field-hint mb-0 mt-1" style="font-size:0.78rem;color:var(--ink-600);">Your password is used only to verify your registered account when internet connectivity becomes available. It is never permanently stored.</p>
+                        </div>
+                        <div class="col-12">
+                            <div id="offlineVerifyFailedBanner" hidden style="background:#fff3f3;border:1px solid #f5c2c2;border-radius:8px;padding:0.6rem 0.9rem;font-size:0.85rem;color:#7a1f1f;"></div>
+                        </div>
                         <% } else { %>
                         <!-- Signed-in Google account (used to enforce 1 survey per office). Visually hidden
                              per design request — the value is still bound, readonly, and submitted with the
@@ -3636,7 +3651,7 @@ function renderReviewSummary() {
 // =====================================
 // FORM SUBMISSION PAPUNTA SA SERVER.JS
 // =====================================
-function submitAll(event) {
+async function submitAll(event) {
     if (event) event.preventDefault();
 
     // Re-validate every stage (Terms, Profile, CC, SQD) before allowing submission
@@ -3682,18 +3697,56 @@ function submitAll(event) {
     // prompts for the account's password almost immediately; if genuinely
     // offline, it waits for the 'online' event like any other queued item.
     if (OFFLINE_MODE) {
-        queueUnverifiedOfflineSurvey(data).then(() => {
+        const passwordInput = document.getElementById('offlinePasswordInput');
+        const password = passwordInput ? passwordInput.value : '';
+        const identifier = (data.email || '').trim().toLowerCase();
+
+        if (!identifier || !password) {
+            if (window.AppAlert) {
+                AppAlert.warning('Please enter both your registered email and password.');
+            }
+            return;
+        }
+
+        try {
+            await queueUnverifiedOfflineSurvey(data);
+
+            if (typeof window.rememberOfflineCredential === 'function') {
+                window.rememberOfflineCredential(identifier, password);
+            } else {
+                // The survey is already safely saved to IndexedDB at this
+                // point — a missing credential manager only costs a
+                // re-entered password at reconnect (the modal fallback in
+                // pwa-client.js still works), never the survey itself.
+                console.error('[Offline Sync] Temporary credential manager unavailable');
+            }
+
+            // Only cleared now — after the survey is confirmed saved and
+            // credential handling has been attempted, never before.
+            if (passwordInput) passwordInput.value = '';
+
             if (window.AppAlert) {
                 AppAlert.info(
-                    "Your response has been securely saved on this device. It will be synchronized when an internet connection becomes available — account verification may be required before it's included in the official survey results.",
+                    "Your survey has been safely queued on this device. When internet connectivity becomes available, the system will automatically verify your registered account and synchronize your response. You normally will not need to enter your password again while this page remains open.\n\nIf this page is refreshed, closed, or the browser removes it from memory before synchronization, you may need to enter your password again.",
                     'Survey Saved Offline'
                 );
             }
+
+            // Deliberately no location.reload()/location.href/window.location
+            // change here — that would destroy the RAM-held password before
+            // it can ever be used. The document stays alive; showThankYou()
+            // only updates the DOM in place.
             showThankYou();
-            if (navigator.onLine && window.runOfflineVerificationFlow) {
-                window.runOfflineVerificationFlow();
+
+            if (navigator.onLine && typeof window.attemptReconnectSync === 'function') {
+                window.attemptReconnectSync();
             }
-        });
+        } catch (err) {
+            console.error('[Offline Queue] Failed to save survey', err);
+            if (window.AppAlert) {
+                AppAlert.error('The survey could not be saved offline. Please try again.');
+            }
+        }
         return;
     }
 

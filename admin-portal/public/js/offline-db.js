@@ -191,7 +191,12 @@ function queueUnverifiedOfflineSurvey(payload) {
         createdOfflineAt: new Date().toISOString(),
         savedAt: Date.now()
     };
-    return addSurveyToOutbox(record).then(function () { return record; });
+    return addSurveyToOutbox(record).then(function () {
+        console.log('[Offline Queue] Survey queued');
+        console.log('[Offline Queue] Submission ID:', record.offlineSubmissionId);
+        console.log('[Offline Queue] Mode:', record.mode);
+        return record;
+    });
 }
 
 // Updates just the syncStatus of one outbox record in place (put() requires

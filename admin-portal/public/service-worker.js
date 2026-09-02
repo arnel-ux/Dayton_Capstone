@@ -11,8 +11,8 @@
 
 importScripts('/js/offline-db.js');
 
-const STATIC_CACHE = 'cspc-static-v9';
-const RUNTIME_CACHE = 'cspc-runtime-v9';
+const STATIC_CACHE = 'cspc-static-v10';
+const RUNTIME_CACHE = 'cspc-runtime-v10';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
