@@ -1372,15 +1372,23 @@
         <nav class="sidebar-nav">
             <a href="#" data-view="home" class="nav-item-link active" onclick="return switchView('home');"><i class="bi bi-house-door-fill"></i> Home</a>
             <a href="#" data-view="survey" class="nav-item-link" onclick="return switchView('survey');"><i class="bi bi-clipboard2-check-fill"></i> Take Survey</a>
+            <% if (!offlineMode) { %>
             <a href="#" data-view="profile" class="nav-item-link" onclick="return switchView('profile');"><i class="bi bi-person-fill"></i> Profile</a>
             <a href="#" data-view="history" class="nav-item-link" onclick="return switchView('history');"><i class="bi bi-clock-history"></i> History</a>
+            <% } %>
         </nav>
 
         <div class="sidebar-footer">
+            <% if (offlineMode) { %>
+            <div class="signed-in-email" title="Not yet verified — your account is checked once you're back online">
+                <i class="bi bi-wifi-off me-1"></i>Unverified — Offline
+            </div>
+            <% } else { %>
             <div class="signed-in-email" title="Signed in with Google">
                 <i class="bi bi-google me-1"></i><%= typeof clientEmail !== 'undefined' ? clientEmail : '' %>
             </div>
             <button type="button" class="btn-logout-side" onclick="logout()"><i class="bi bi-box-arrow-right"></i> Logout</button>
+            <% } %>
         </div>
     </aside>
 
@@ -1551,6 +1559,18 @@
                             <input type="text" name="respondent_name" class="form-control" data-i18n-placeholder="ph_name" placeholder="e.g. Juan Dela Cruz">
                         </div>
 
+                        <% if (offlineMode) { %>
+                        <!-- Offline mode: there is no authenticated session to pull an email
+                             from, so this is a plain required field instead of the hidden/
+                             readonly one below — see §5 in server.js's verify-and-sync route
+                             for why "email," never "username." Nothing here is verified yet;
+                             that only happens once back online. -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-dark fs-6" for="offlineEmailInput">Registered CSPC Email / Gmail</label>
+                            <input type="email" name="email" id="offlineEmailInput" class="form-control" placeholder="e.g. juan.delacruz@my.cspc.edu.ph" required>
+                            <p class="field-hint mb-0 mt-1" style="font-size:0.78rem;color:var(--ink-600);">Your account will be verified securely once an internet connection is available.</p>
+                        </div>
+                        <% } else { %>
                         <!-- Signed-in Google account (used to enforce 1 survey per office). Visually hidden
                              per design request — the value is still bound, readonly, and submitted with the
                              form normally; `d-none` only removes it from layout/view, not from FormData. -->
@@ -1558,6 +1578,7 @@
                             <label class="form-label fw-semibold text-dark fs-6">Google Account</label>
                             <input type="email" name="email" class="form-control" value="<%= typeof clientEmail !== 'undefined' ? clientEmail : '' %>" readonly>
                         </div>
+                        <% } %>
 
                         <div class="col-md-6">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_client_type"></label>
@@ -2316,6 +2337,15 @@ const savedClientProfile = <%- JSON.stringify(typeof clientProfile !== 'undefine
 // page markup itself is served from the service worker's cache in that case.
 const CLIENT_SESSION_KEY = 'cspc_client_session';
 const currentClientEmail = <%- JSON.stringify(typeof clientEmail !== 'undefined' ? clientEmail : null) %>;
+
+// True only on /survey-offline — no authenticated session exists on this
+// page at all, so submitAll() below must never attempt a direct
+// /submit-survey POST (it would just 401): every submission here queues
+// for POST /api/offline-surveys/verify-and-sync instead, which performs
+// real server-side password verification once back online. See
+// runOfflineVerificationFlow in pwa-client.js.
+const OFFLINE_MODE = <%- JSON.stringify(!!offlineMode) %>;
+
 if (currentClientEmail) {
     try {
         localStorage.setItem(CLIENT_SESSION_KEY, JSON.stringify({ email: currentClientEmail, cachedAt: Date.now() }));
@@ -3644,8 +3674,32 @@ function submitAll(event) {
     // (mirrors the server-rendered blockedCombos disabling on page load).
     markServiceAsTaken(data.office_id, data.service_availed);
 
-    // Offline: skip the network call entirely and queue the survey locally —
-    // it will be replayed automatically once the connection returns.
+    // /survey-offline: no authenticated session exists on this page at all
+    // (POST /submit-survey would just 401), so every submission here always
+    // queues for POST /api/offline-surveys/verify-and-sync — regardless of
+    // current connectivity. If we happen to already be online,
+    // runOfflineVerificationFlow (kicked off right below) picks it up and
+    // prompts for the account's password almost immediately; if genuinely
+    // offline, it waits for the 'online' event like any other queued item.
+    if (OFFLINE_MODE) {
+        queueUnverifiedOfflineSurvey(data).then(() => {
+            if (window.AppAlert) {
+                AppAlert.info(
+                    "Your response has been securely saved on this device. It will be synchronized when an internet connection becomes available — account verification may be required before it's included in the official survey results.",
+                    'Survey Saved Offline'
+                );
+            }
+            showThankYou();
+            if (navigator.onLine && window.runOfflineVerificationFlow) {
+                window.runOfflineVerificationFlow();
+            }
+        });
+        return;
+    }
+
+    // Offline (authenticated session): skip the network call entirely and
+    // queue the survey locally — it will be replayed automatically once the
+    // connection returns.
     if (!navigator.onLine) {
         saveAutofillProfile(data);
         queueSurveyOffline(data, data.email).then(showThankYou);

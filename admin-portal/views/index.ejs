@@ -59,6 +59,26 @@
         }
         @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
+        /* Same visibility rule as the pill above — navigator.onLine only,
+           never auto-navigated to. Matches login.ejs's .btn-login look. */
+        .offline-survey-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin: 0.75rem 0 0;
+            padding: 0.55rem 1.1rem;
+            border-radius: 10px;
+            background: #251d3a;
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 0.85rem;
+            text-decoration: none;
+            box-shadow: 0 6px 16px -4px rgba(0,0,0,0.35);
+            transition: transform 0.15s ease;
+        }
+        .offline-survey-btn:hover { color: #ffffff; transform: translateY(-1px); }
+        .offline-survey-btn.d-none { display: none; }
+
         :root {
             --navy-950: #251d3a;
             --navy-900: #251d3a;
@@ -835,6 +855,21 @@
         <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — showing the last data loaded while you were connected.">
             <span class="dot"></span><span class="label">Viewing Offline</span>
         </span>
+        <!-- Visibility driven purely by navigator.onLine (see updateOfflineIndicator
+             below) — never auto-navigated to; the user must click it themselves.
+             Real account verification for whatever gets submitted through it only
+             happens once back online, at POST /api/offline-surveys/verify-and-sync. -->
+        <a href="/survey-offline" id="offlineSurveyBtn" class="offline-survey-btn d-none" title="Complete the survey now — your account is verified once you're back online">
+            <i class="fas fa-clipboard-list"></i> Take Survey Offline
+        </a>
+        <!-- Same base .offline-pill class as #offlineIndicator (display:none
+             until .is-visible is added) — deliberately the SAME visibility
+             mechanism, not a mix of that and inline styles/Bootstrap's
+             d-none, so there's exactly one way this element's visibility is
+             ever controlled. -->
+        <div id="serverUnavailableNotice" class="offline-pill" role="status" style="background:#fee2e2;color:#991b1b;border-color:#fecaca;">
+            <i class="fas fa-triangle-exclamation"></i><span class="label">Server temporarily unavailable. Please try again.</span>
+        </div>
     </div>
 
     <div class="page-content">
@@ -2330,13 +2365,39 @@
     </script>
 
     <script>
+        // Visibility of both the pill and the "Take Survey Offline" button is
+        // driven purely by navigator.onLine — never automatically navigated
+        // anywhere; the user clicks the button themselves. /api/health (see
+        // checkServerHealth below) is a separate, independent signal for the
+        // very different "browser online but server unreachable" case, and
+        // never shows or implies this button either.
         function updateOfflineIndicator() {
+            const offline = !navigator.onLine;
             const el = document.getElementById('offlineIndicator');
-            if (el) el.classList.toggle('is-visible', !navigator.onLine);
+            if (el) el.classList.toggle('is-visible', offline);
+            const offlineSurveyBtn = document.getElementById('offlineSurveyBtn');
+            if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !offline);
         }
         window.addEventListener('online', updateOfflineIndicator);
         window.addEventListener('offline', updateOfflineIndicator);
         updateOfflineIndicator();
+
+        async function checkServerHealth() {
+            const notice = document.getElementById('serverUnavailableNotice');
+            if (!notice) return;
+            if (!navigator.onLine) {
+                notice.classList.remove('is-visible');
+                return;
+            }
+            try {
+                const res = await fetchWithTimeout('/api/health', {}, 4000);
+                notice.classList.toggle('is-visible', !res.ok);
+            } catch (err) {
+                notice.classList.add('is-visible');
+            }
+        }
+        window.addEventListener('online', checkServerHealth);
+        checkServerHealth();
 
         // This public landing page is what cqacapstone.me's bare domain
         // serves, and is the very first page most visitors ever load — so

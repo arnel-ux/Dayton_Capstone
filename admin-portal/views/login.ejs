@@ -491,6 +491,21 @@
         }
         @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
+        .offline-login-notice {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+            border-radius: 10px;
+            padding: 0.65rem 0.85rem;
+            font-size: 0.82rem;
+            font-weight: 600;
+            line-height: 1.4;
+            margin-bottom: 0.85rem;
+        }
+
     </style>
 </head>
 <body>
@@ -522,6 +537,21 @@
                 <div class="divider-soft"></div>
                 <p class="text-muted text-xsmall mb-0">Sign in to your account</p>
             </div>
+
+            <div id="serverUnavailableNotice" class="offline-login-notice d-none">
+                <i class="fas fa-triangle-exclamation"></i>
+                <span>Server temporarily unavailable. Please try again.</span>
+            </div>
+
+            <!-- Offline: signing in for real always needs the server (there is
+                 no way to check a password with zero network access), so this
+                 replaces the login form entirely rather than pretending it can
+                 still work. Leads to the unauthenticated /survey-offline flow,
+                 whose own account/password verification happens once back
+                 online — see offline-db.js / pwa-client.js. -->
+            <a href="/survey-offline" id="offlineSurveyBtn" class="btn btn-login w-100 d-none text-decoration-none mb-3" title="Complete the survey now — your account is verified once you're back online">
+                <i class="fas fa-clipboard-list me-2"></i> Take Survey Offline
+            </a>
 
             <!-- UNIFIED LOGIN FORM (POST REQUEST) -->
             <form action="/auth-login" method="POST" id="loginForm">
@@ -579,6 +609,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="/js/alerts.js"></script>
+    <script src="/js/offline-db.js"></script>
     <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     <script>
         // The Login button stays disabled until the "I'm not a robot" checkbox
@@ -675,84 +706,59 @@
     </script>
 
     <script>
-        // reCAPTCHA is a live, external Google script — it simply can't load
-        // with no internet, so the widget is swapped for the form's own
-        // offline path below instead of being left as a broken/blank iframe.
+        // Connectivity indicator: purely navigator.onLine. This is the ONLY
+        // signal that controls the "Take Survey Offline" button — kept
+        // strictly decoupled from the /api/health probe below, which drives
+        // a separate "server unavailable" notice for the very different case
+        // of the browser being online but unable to reach this app's server.
+        // The normal login form (username/password + reCAPTCHA) is never
+        // touched by either state — a real sign-in always needs the network
+        // regardless of which of these two things is failing, so there is no
+        // "offline login" shortcut here anymore; see /survey-offline instead.
         function updateOfflineIndicator() {
             const offline = !navigator.onLine;
 
             const pill = document.getElementById('offlineIndicator');
             if (pill) pill.classList.toggle('is-visible', offline);
 
-            const recaptchaWrap = document.getElementById('recaptchaWrap');
-            if (recaptchaWrap) recaptchaWrap.classList.toggle('d-none', offline);
-
-            // Online: normal behavior — button starts disabled until the
-            // reCAPTCHA checkbox is checked (enableLoginSubmit()/
-            // disableLoginSubmit() above). Offline: reCAPTCHA is hidden, so
-            // there's nothing to wait on — the button is enabled up front
-            // and submitting takes the offline path below instead of a POST.
-            const submitBtn = document.getElementById('loginSubmitBtn');
-            if (submitBtn && offline) submitBtn.disabled = false;
+            const offlineSurveyBtn = document.getElementById('offlineSurveyBtn');
+            if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !offline);
         }
         window.addEventListener('online', updateOfflineIndicator);
         window.addEventListener('offline', updateOfflineIndicator);
         updateOfflineIndicator();
 
-        // OFFLINE SIGN-IN: a real password check against the database is
-        // impossible with no network — there's no server to ask. What this
-        // verifies instead is device history: did THIS browser already cache
-        // a session for the email being entered, from a previous successful
-        // ONLINE login (password or Google, both cache the same
-        // cspc_client_session — see client-survey.ejs)? If so, the browser
-        // already has that account's authenticated survey page cached by the
-        // service worker, so redirecting there works with zero network
-        // requests. If the typed email doesn't match anything cached on this
-        // device, there is nothing to fall back to — no combination of
-        // client code can verify a password without reaching the server, so
-        // that case is reported plainly rather than silently failing.
-        function attemptOfflineLogin(event) {
-            if (navigator.onLine) return true; // let the normal online POST proceed
-
-            event.preventDefault();
-
-            const emailInput = (document.getElementById('usernameInput').value || '').trim().toLowerCase();
-            let cached = null;
-            try { cached = JSON.parse(localStorage.getItem('cspc_client_session') || 'null'); } catch (e) { /* no cached session */ }
-
-            console.log('[Offline Login] typed email:', emailInput, '| cached session:', cached);
-
-            if (cached && cached.email && cached.email.toLowerCase() === emailInput) {
-                window.location.href = '/client-survey';
-                return false;
+        // Independent of navigator.onLine: the browser can report "online"
+        // while this app's own server is unreachable (down for maintenance,
+        // a network path issue between here and the server, etc). Only
+        // checked when navigator.onLine is true, since there's no point
+        // asking the server whether it's reachable when the OS already says
+        // there's no network at all — that case is already covered above.
+        async function checkServerHealth() {
+            const notice = document.getElementById('serverUnavailableNotice');
+            if (!notice) return;
+            if (!navigator.onLine) {
+                notice.classList.add('d-none');
+                return;
             }
-
-            const message = cached
-                ? 'This device\'s saved offline session is for a different account (' + cached.email + '). Connect to the internet and sign in as ' + emailInput + ' at least once first.'
-                : 'This device has no offline session saved yet. Connect to the internet and sign in once first — after that, this same account can sign in offline here.';
-
-            // Never let a failure to load the SweetAlert2 CDN library (itself
-            // possible while offline, e.g. this is the very first page ever
-            // opened in this browser) leave the user staring at a form that
-            // silently did nothing — an uncaught error inside an event
-            // listener shows nothing on screen. window.alert() has zero
-            // dependencies and always works.
             try {
-                if (window.AppAlert) {
-                    AppAlert.error(message, "Can't Sign In Offline");
-                } else {
-                    window.alert(message);
-                }
+                const res = await fetchWithTimeout('/api/health', {}, 4000);
+                notice.classList.toggle('d-none', res.ok);
             } catch (err) {
-                console.error('[Offline Login] AppAlert failed, falling back to window.alert:', err);
-                window.alert(message);
+                notice.classList.remove('d-none');
             }
-            return false;
         }
-        document.getElementById('loginForm').addEventListener('submit', attemptOfflineLogin);
+        window.addEventListener('online', checkServerHealth);
+        checkServerHealth();
 
-        // Landing here already offline with a cached session on this device —
-        // skip the form entirely instead of making them click Login first.
+        // Landing here already offline with a cached session on this device
+        // (from a previous successful ONLINE login, Google or password —
+        // both cache cspc_client_session, see client-survey.ejs) — skip
+        // straight to the already-authenticated survey app instead of
+        // making them re-decide between "Login" and "Take Survey Offline".
+        // This is resuming a session that was genuinely verified online
+        // earlier, not a new/unverified login attempt — unrelated to (and
+        // safe alongside) the unauthenticated /survey-offline path below.
         (function () {
             if (navigator.onLine) return;
             try {
@@ -760,7 +766,7 @@
                 if (cached && cached.email) {
                     window.location.href = '/client-survey';
                 }
-            } catch (e) { /* no cached session — stay on the login form */ }
+            } catch (e) { /* no cached session — stay on this page */ }
         })();
 
         if ('serviceWorker' in navigator) {

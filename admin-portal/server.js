@@ -435,6 +435,55 @@ function finalizeVerifiedSurveyAsync(googleEmail, fields) {
     });
 }
 
+// Transaction-scoped counterpart to finalizeVerifiedSurvey's core inserts
+// (survey_responses, client_profiles, client_accounts upsert) — the writes
+// that must commit/rollback atomically together with a caller's other
+// transactional writes (offline_survey_submissions tracking rows, the
+// pending_survey_submissions status flip on office approval). Runs every
+// query on the SAME dedicated pooled connection the caller passes in
+// (never the shared `db`/`dbQuery`), so it participates correctly in that
+// connection's transaction. Deliberately does NOT send a receipt email or
+// run AI analysis — both are slow/non-DB operations that must happen after
+// commit, outside the transaction; callers handle them themselves.
+async function insertVerifiedSurveyOnConnection(conn, googleEmail, fields) {
+    const {
+        officeId, respondentName, topic, sentiment, region, cc1, cc2, cc3,
+        sqdValues, comments, serviceAvailed, clientType, age, gender, officeVisitedTime, period
+    } = fields;
+
+    const [insertResult] = await conn.query(
+        `INSERT INTO survey_responses
+         (office_id, respondent_name, topic, sentiment, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email, service_availed)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            officeId, respondentName, topic || 'General Feedback', sentiment || 'Neutral', region,
+            cc1, cc2, cc3,
+            sqdValues[0], sqdValues[1], sqdValues[2], sqdValues[3], sqdValues[4], sqdValues[5], sqdValues[6], sqdValues[7], sqdValues[8],
+            comments || 'N/A', period, googleEmail, serviceAvailed
+        ]
+    );
+    const surveyResponseId = insertResult.insertId;
+
+    await conn.query(
+        `INSERT INTO client_profiles (survey_response_id, respondent_name, client_type, age, gender, region, email, office_visited_time)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [surveyResponseId, respondentName, clientType, age, gender, region, googleEmail, officeVisitedTime]
+    );
+
+    await conn.query(
+        `INSERT INTO client_accounts (email, respondent_name, region, age, gender)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+            respondent_name = VALUES(respondent_name),
+            region = COALESCE(region, VALUES(region)),
+            age = COALESCE(age, VALUES(age)),
+            gender = COALESCE(gender, VALUES(gender))`,
+        [googleEmail, respondentName, region, age, gender]
+    );
+
+    return surveyResponseId;
+}
+
 function getClientEmail(req) {
     if (req.isAuthenticated && req.isAuthenticated() && req.user && req.user.email) return req.user.email;
     if (req.session && req.session.clientEmail) return req.session.clientEmail;
@@ -991,6 +1040,25 @@ function allowlisted(value, allowedSet) {
     return (v && allowedSet.has(v)) ? v : null;
 }
 
+// Citizen's Charter option sets — mirrors the exact radio button values in
+// client-survey.ejs's CC1/CC2/CC3 fieldsets. Used by
+// POST /api/offline-surveys/verify-and-sync (an unauthenticated endpoint) to
+// coerce any out-of-set value to null via allowlisted(), same
+// fallback-to-null philosophy already used above for age/gender/region.
+const VALID_CC1 = new Set([
+    "I know what a CC is and I saw this office's CC.",
+    "I know what a CC is but I did not see this office's CC.",
+    "I learned of the CC only when I saw this office's CC.",
+    "I do not know what a CC is and I did not see one in this office"
+]);
+const VALID_CC2 = new Set(['Easy to see', 'Somewhat easy to see', 'Difficult to see', 'Not visible at all', 'N/A']);
+const VALID_CC3 = new Set(['Helped very much', 'Did not help', 'Somewhat helped', 'N/A']);
+
+// Same offline-verify-only cap — comments has no length ceiling elsewhere in
+// the app (an authenticated user typing too much is their own business);
+// this specific endpoint is unauthenticated, so it gets one.
+const OFFLINE_SURVEY_MAX_COMMENTS_LENGTH = 2000;
+
 const sqdStatementFor = (label) => {
     const idx = parseInt(String(label).replace(/[^0-9]/g, ''), 10);
     return Number.isInteger(idx) && SQD_STATEMENTS[idx] ? `${label}. ${SQD_STATEMENTS[idx]}` : label;
@@ -1532,6 +1600,109 @@ function sendPasswordResetEmail(toEmail, resetUrl) {
     });
 }
 
+// Sent only after a CSPC-institutional offline survey has been verified
+// (password matched) AND already inserted into survey_responses — see
+// POST /api/offline-surveys/verify-and-sync. Never sent to an address that
+// hasn't just proven ownership via a correct password, so this can't be used
+// to spam an arbitrary typed-in address.
+function sendOfflineSurveySyncedEmail(toEmail, details) {
+    if (!mailTransporter || !toEmail) return;
+
+    const html = `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#eef1f6;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6;padding:32px 0;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 8px 24px -12px rgba(15,23,42,.15);">
+                    <tr>
+                        <td style="background:#251d3a;padding:20px 28px;">
+                            <span style="color:#ffffff;font-weight:700;font-size:16px;">CSPC Center for Quality Assurance</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:28px;">
+                            <h2 style="margin:0 0 12px;color:#0f172a;font-size:18px;">CQA Survey Submission Successful</h2>
+                            <p style="margin:0 0 20px;color:#475569;font-size:13.5px;line-height:1.6;">
+                                Your Client Satisfaction Survey response — completed offline and verified once your device reconnected — has been successfully synchronized and submitted to the CQA system.
+                            </p>
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#334155;margin-bottom:20px;">
+                                <tr><td style="padding:4px 0;color:#64748b;">Office Visited:</td><td style="padding:4px 0;font-weight:600;">${details.officeName}</td></tr>
+                                <tr><td style="padding:4px 0;color:#64748b;">Service Availed:</td><td style="padding:4px 0;font-weight:600;">${details.serviceAvailed}</td></tr>
+                                <tr><td style="padding:4px 0;color:#64748b;">Date Submitted:</td><td style="padding:4px 0;font-weight:600;">${details.submittedAt}</td></tr>
+                                <tr><td style="padding:4px 0;color:#64748b;">Reference Number:</td><td style="padding:4px 0;font-weight:600;">CSM-${details.surveyResponseId}</td></tr>
+                            </table>
+                            <p style="margin:0;color:#94a3b8;font-size:11.5px;line-height:1.6;">Thank you for providing your feedback. This is an automated message — no further action is required.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>`;
+
+    mailTransporter.sendMail({
+        from: process.env.MAIL_FROM || `"CSPC Center for Quality Assurance" <${process.env.MAIL_USER}>`,
+        to: toEmail,
+        subject: `CQA Survey Submission Successful (Ref: CSM-${details.surveyResponseId})`,
+        html
+    }).then(() => {
+        console.log(`✅ [Mail] Offline sync success notification sent to ${toEmail}`);
+    }).catch((err) => {
+        console.error(`❌ [Mail] Failed to send offline sync success notification to ${toEmail}:`, err.message);
+    });
+}
+
+// Sent only after an external/Gmail offline survey has been verified
+// (password matched) AND already queued into pending_survey_submissions —
+// same non-abuse reasoning as sendOfflineSurveySyncedEmail above.
+function sendOfflineSurveyPendingEmail(toEmail, details) {
+    if (!mailTransporter || !toEmail) return;
+
+    const html = `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#eef1f6;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6;padding:32px 0;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 8px 24px -12px rgba(15,23,42,.15);">
+                    <tr>
+                        <td style="background:#251d3a;padding:20px 28px;">
+                            <span style="color:#ffffff;font-weight:700;font-size:16px;">CSPC Center for Quality Assurance</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:28px;">
+                            <h2 style="margin:0 0 12px;color:#0f172a;font-size:18px;">CQA Survey Submission Pending Verification</h2>
+                            <p style="margin:0 0 12px;color:#475569;font-size:13.5px;line-height:1.6;">
+                                Your survey — completed offline and verified once your device reconnected — has been successfully synchronized.
+                            </p>
+                            <p style="margin:0 0 20px;color:#475569;font-size:13.5px;line-height:1.6;">
+                                Because your account is not a CSPC institutional account, your response has been forwarded to <strong>${details.officeName}</strong> for review. You will be notified once the review is complete.
+                            </p>
+                            <p style="margin:0;color:#94a3b8;font-size:11.5px;line-height:1.6;">This is an automated message — no further action is required at this time.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>`;
+
+    mailTransporter.sendMail({
+        from: process.env.MAIL_FROM || `"CSPC Center for Quality Assurance" <${process.env.MAIL_USER}>`,
+        to: toEmail,
+        subject: 'CQA Survey Submission Pending Verification',
+        html
+    }).then(() => {
+        console.log(`✅ [Mail] Offline sync pending-approval notification sent to ${toEmail}`);
+    }).catch((err) => {
+        console.error(`❌ [Mail] Failed to send offline sync pending-approval notification to ${toEmail}:`, err.message);
+    });
+}
+
 // ==========================================
 // AUTO-CREATE TABLES & AUTO-UPDATE
 // ==========================================
@@ -1604,6 +1775,33 @@ CREATE TABLE IF NOT EXISTS pending_survey_submissions (
     reviewed_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE
+);`;
+
+// Tracks outcomes of the unauthenticated offline-survey verify-and-sync flow
+// (see POST /api/offline-surveys/verify-and-sync). Two jobs: (1) the
+// UNIQUE key on offline_submission_id is the idempotency guard — a retried
+// or duplicated sync request for the same client-generated UUID is answered
+// from this row instead of re-inserting: (2) a lightweight record of the
+// outcome. Deliberately holds NO password/hash/credential of any kind —
+// only ever written after a password has already been verified and
+// discarded, never on a failed attempt (nothing to be idempotent about, and
+// nothing worth recording tied to a guess).
+const createOfflineSurveySubmissionsTableQuery = `
+CREATE TABLE IF NOT EXISTS offline_survey_submissions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    offline_submission_id VARCHAR(64) NOT NULL,
+    registered_identifier VARCHAR(255) NOT NULL,
+    office_id INT NULL,
+    verification_status ENUM('verified','external_account') NOT NULL,
+    -- 'pending' -> 'approved'/'rejected' once the visited office acts on the
+    -- linked pending_survey_submissions row — see the /office-approvals
+    -- approve/decline routes, which keep this column in sync.
+    approval_status ENUM('not_required','pending','approved','rejected') NOT NULL DEFAULT 'not_required',
+    survey_response_id INT NULL,
+    pending_submission_id INT NULL,
+    created_offline_at DATETIME NULL,
+    synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_offline_submission_id (offline_submission_id)
 );`;
 
 const createSettingsTableQuery = `
@@ -1834,6 +2032,11 @@ db.query(createClustersTableQuery, (err) => {
                 db.query(createPendingSurveySubmissionsTableQuery, (err) => {
                     if (err) console.error("❌ Error creating pending_survey_submissions table:", err);
                     else console.log('✅ pending_survey_submissions table verified/created successfully!');
+                });
+
+                db.query(createOfflineSurveySubmissionsTableQuery, (err) => {
+                    if (err) console.error("❌ Error creating offline_survey_submissions table:", err);
+                    else console.log('✅ offline_survey_submissions table verified/created successfully!');
                 });
 
                 // Isunod ang Survey Responses Table
@@ -2141,6 +2344,92 @@ setInterval(() => {
         if (now - entry.windowStart > LOGIN_RATE_LIMIT_WINDOW_MS) loginAttempts.delete(ip);
     }
 }, LOGIN_RATE_LIMIT_WINDOW_MS).unref();
+
+// JSON-response counterpart to loginRateLimiter — same per-IP sliding-window
+// Map pattern, but for API routes (offline sync/verify) where a redirect
+// makes no sense; returns the standardized 429 shape instead.
+function jsonRateLimiter(name, { windowMs, max }) {
+    const attempts = new Map(); // ip -> { count, windowStart }
+    setInterval(() => {
+        const now = Date.now();
+        for (const [ip, entry] of attempts) {
+            if (now - entry.windowStart > windowMs) attempts.delete(ip);
+        }
+    }, windowMs).unref();
+
+    return (req, res, next) => {
+        const ip = req.ip;
+        const now = Date.now();
+        let entry = attempts.get(ip);
+        if (!entry || now - entry.windowStart > windowMs) {
+            entry = { count: 0, windowStart: now };
+            attempts.set(ip, entry);
+        }
+        entry.count++;
+        if (entry.count > max) {
+            return res.status(429).json({ success: false, code: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests. Please try again later.' });
+        }
+        next();
+    };
+}
+
+// Offline sync (no password involved — just writing already-verified
+// results) gets a generous IP-based ceiling; many CSPC students can
+// legitimately be reconnecting from the same building's shared IP/NAT at
+// once.
+const offlineSyncLimiter = jsonRateLimiter('offline-sync', { windowMs: 15 * 60 * 1000, max: 30 });
+
+// Offline VERIFICATION accepts a password, so it needs to be much stricter —
+// but IP alone is the wrong axis here too (same NAT concern), so this is
+// primarily ACCOUNT-aware: failed attempts are tracked per normalized
+// registeredIdentifier, independent of loginAttempts/failedLoginsByAccount
+// above (which are scoped to /auth-login and are not reused here). A looser
+// IP ceiling sits alongside it purely as a sweep/abuse backstop.
+const offlineVerifyFailuresByIdentifier = new Map(); // identifier -> { count, windowStart }
+const OFFLINE_VERIFY_ACCOUNT_MAX = 8;
+const OFFLINE_VERIFY_ACCOUNT_WINDOW_MS = 15 * 60 * 1000;
+
+function isOfflineVerifyIdentifierLocked(identifier) {
+    const key = String(identifier || '').trim().toLowerCase();
+    if (!key) return false;
+    const entry = offlineVerifyFailuresByIdentifier.get(key);
+    if (!entry) return false;
+    if (Date.now() - entry.windowStart > OFFLINE_VERIFY_ACCOUNT_WINDOW_MS) {
+        offlineVerifyFailuresByIdentifier.delete(key);
+        return false;
+    }
+    return entry.count >= OFFLINE_VERIFY_ACCOUNT_MAX;
+}
+
+function recordOfflineVerifyFailure(identifier) {
+    const key = String(identifier || '').trim().toLowerCase();
+    if (!key) return;
+    const now = Date.now();
+    let entry = offlineVerifyFailuresByIdentifier.get(key);
+    if (!entry || now - entry.windowStart > OFFLINE_VERIFY_ACCOUNT_WINDOW_MS) {
+        entry = { count: 0, windowStart: now };
+    }
+    entry.count++;
+    offlineVerifyFailuresByIdentifier.set(key, entry);
+}
+
+function clearOfflineVerifyFailures(identifier) {
+    const key = String(identifier || '').trim().toLowerCase();
+    if (key) offlineVerifyFailuresByIdentifier.delete(key);
+}
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of offlineVerifyFailuresByIdentifier) {
+        if (now - entry.windowStart > OFFLINE_VERIFY_ACCOUNT_WINDOW_MS) offlineVerifyFailuresByIdentifier.delete(key);
+    }
+}, OFFLINE_VERIFY_ACCOUNT_WINDOW_MS).unref();
+
+// Same non-revealing message as a normal verification failure — never
+// distinguishes "locked out" from "wrong credentials" in the response text.
+const OFFLINE_VERIFY_GENERIC_MESSAGE = 'Unable to verify the registered account information provided.';
+
+const offlineVerifyLimiter = jsonRateLimiter('offline-verify', { windowMs: 15 * 60 * 1000, max: 40 });
 
 // Per-ACCOUNT login lockout — separate from the per-IP limiter above. That one
 // caps request volume from a single IP; this one protects one specific
@@ -2574,97 +2863,152 @@ app.get('/office-approvals/history', ensureOfficeAuth, noCache, (req, res) => {
     );
 });
 
-app.post('/office-approvals/:id/approve', ensureOfficeAuth, (req, res) => {
+// Fully transactional: claim + finalize (survey_responses/client_profiles/
+// client_accounts) + pending_survey_submissions status flip + the
+// offline_survey_submissions tracking update (relevant only when this
+// submission originated from the offline verify-and-sync flow — a no-op
+// UPDATE otherwise) all commit or roll back together on one dedicated
+// pooled connection. A crash/error at any point leaves nothing
+// half-applied: the claim itself rolls back too, so a failed attempt
+// naturally reverts to 'pending' with no separate "revert the claim" query
+// needed (unlike the old non-transactional version). AI sentiment/topic
+// analysis and the approval email are deliberately kept OUTSIDE the
+// transaction — both are slow, non-database operations that must never
+// hold a DB connection open (same reasoning as verify-and-sync).
+app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => {
     const officeId = req.adminSession.user.id;
-    // Atomically claim the row FIRST (flip to an interim 'processing' status
-    // conditioned on it still being 'pending') before doing any of the actual
-    // finalize work. A plain SELECT check here (the previous approach) lets
-    // two concurrent requests for the same submission — a double-click, two
-    // open tabs, or a race with /decline — both pass the pending check before
-    // either write lands, both call finalizeVerifiedSurvey, and double-insert
-    // the same respondent into survey_responses. Conditioning this UPDATE on
-    // status='pending' (same pattern /decline already uses) means only one
-    // concurrent request can ever win the claim; the loser's affectedRows
-    // comes back 0 and it bails out before finalizing anything.
-    db.query(
-        "UPDATE pending_survey_submissions SET status = 'processing' WHERE id = ? AND office_id = ? AND status = 'pending'",
-        [req.params.id, officeId],
-        (claimErr, claimResult) => {
-            if (claimErr || !claimResult || claimResult.affectedRows === 0) {
-                return res.redirect('/office-approvals?error=' + encodeURIComponent('This submission was already processed or is unavailable.'));
-            }
-            db.query(
-                "SELECT * FROM pending_survey_submissions WHERE id = ? LIMIT 1",
-                [req.params.id],
-                (err, rows) => {
-                    if (err || !rows || rows.length === 0) {
-                        return res.redirect('/office-approvals?error=' + encodeURIComponent('Unable to process the submission. Please try again.'));
-                    }
-                    const row = rows[0];
-                    let payload;
-                    try { payload = JSON.parse(row.payload); } catch (e) {
-                        console.error("❌ [Office Approval] Corrupt payload for pending submission", row.id, e);
-                        // Revert the claim so this doesn't get stuck as 'processing'
-                        // forever with no way to retry or decline it.
-                        db.query("UPDATE pending_survey_submissions SET status = 'pending' WHERE id = ?", [row.id], () => {});
-                        return res.redirect('/office-approvals?error=' + encodeURIComponent('Unable to process the submission. Please try again.'));
-                    }
+    const submissionId = req.params.id;
 
-                    // This survey was already submitted by the client — the generic "thanks
-                    // for submitting" receipt doesn't fit here. Send the dedicated approval
-                    // notification (with the result embedded right in the email) below instead.
-                    payload.skipReceiptEmail = true;
+    const conn = await db.promise().getConnection();
+    let payload = null;
+    let googleEmail = null;
+    let surveyResponseId = null;
+    let claimFailed = false;
 
-                    finalizeVerifiedSurvey(row.google_email, payload, (finalizeErr, surveyResponseId) => {
-                        if (finalizeErr) {
-                            console.error("❌ [Office Approval] Error finalizing approved survey:", finalizeErr);
-                            // Revert the claim so the office can retry instead of the
-                            // submission being stuck unfinalized in 'processing' forever.
-                            db.query("UPDATE pending_survey_submissions SET status = 'pending' WHERE id = ?", [row.id], () => {});
-                            return res.redirect('/office-approvals?error=' + encodeURIComponent('Unable to process the submission. Please try again.'));
-                        }
-                        db.query(
-                            "UPDATE pending_survey_submissions SET status = 'approved', reviewed_at = NOW() WHERE id = ?",
-                            [row.id],
-                            () => res.redirect('/office-approvals?success=' + encodeURIComponent('Survey submission approved successfully.'))
-                        );
+    try {
+        await conn.beginTransaction();
 
-                        db.query('SELECT office_name, cluster_name FROM offices WHERE id = ? LIMIT 1', [payload.officeId], (officeErr, officeRows) => {
-                            const office = (!officeErr && officeRows && officeRows[0]) ? officeRows[0] : null;
-                            sendSurveyApprovedEmail(row.google_email, {
-                                name: payload.respondentName,
-                                officeName: office ? office.office_name : 'Selected Office',
-                                clusterName: office ? office.cluster_name : '',
-                                clientType: payload.clientType,
-                                serviceAvailed: payload.serviceAvailed || 'Not specified',
-                                submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
-                                surveyResponseId,
-                                cc1: payload.cc1, cc2: payload.cc2, cc3: payload.cc3,
-                                sqd: (payload.sqdValues || []).map((v, i) => ({ label: 'SQD' + i, value: v })),
-                                comments: payload.comments || 'N/A'
-                            });
-                        });
-                    });
-                }
-            );
+        // Atomically claim the row FIRST (flip to an interim 'processing'
+        // status conditioned on it still being 'pending' AND belonging to
+        // this office) before any finalize work — same anti-double-approval
+        // reasoning as before (two open tabs, a double-click, a race with
+        // /decline), now as this transaction's first write.
+        const [claimResult] = await conn.query(
+            "UPDATE pending_survey_submissions SET status = 'processing' WHERE id = ? AND office_id = ? AND status = 'pending'",
+            [submissionId, officeId]
+        );
+        if (!claimResult || claimResult.affectedRows === 0) {
+            claimFailed = true;
+            throw new Error('CLAIM_FAILED');
         }
-    );
+
+        const [rows] = await conn.query("SELECT * FROM pending_survey_submissions WHERE id = ? LIMIT 1", [submissionId]);
+        if (!rows || rows.length === 0) {
+            throw new Error('SUBMISSION_NOT_FOUND');
+        }
+        const row = rows[0];
+        googleEmail = row.google_email;
+        payload = JSON.parse(row.payload); // throws on corrupt JSON — caught below, same as before
+
+        surveyResponseId = await insertVerifiedSurveyOnConnection(conn, googleEmail, {
+            officeId: payload.officeId, respondentName: payload.respondentName, topic: payload.topic,
+            sentiment: payload.sentiment, region: payload.region, cc1: payload.cc1, cc2: payload.cc2, cc3: payload.cc3,
+            sqdValues: payload.sqdValues, comments: payload.comments, serviceAvailed: payload.serviceAvailed,
+            clientType: payload.clientType, age: payload.age, gender: payload.gender,
+            officeVisitedTime: payload.officeVisitedTime, period: payload.period
+        });
+
+        await conn.query("UPDATE pending_survey_submissions SET status = 'approved', reviewed_at = NOW() WHERE id = ?", [row.id]);
+
+        // affectedRows = 0 here is expected/fine — a submission that arrived
+        // via the normal online flow simply has no matching offline row.
+        // Only a genuine SQL error (caught below) rolls the transaction back.
+        await conn.query(
+            "UPDATE offline_survey_submissions SET approval_status = 'approved', survey_response_id = ? WHERE pending_submission_id = ?",
+            [surveyResponseId, row.id]
+        );
+
+        await conn.commit();
+    } catch (err) {
+        try { await conn.rollback(); } catch (rollbackErr) { /* connection may already be unusable */ }
+        conn.release();
+
+        if (claimFailed) {
+            return res.redirect('/office-approvals?error=' + encodeURIComponent('This submission was already processed or is unavailable.'));
+        }
+        console.error("❌ [Office Approval] Error finalizing approved survey:", err);
+        return res.redirect('/office-approvals?error=' + encodeURIComponent('Unable to process the submission. Please try again.'));
+    }
+    conn.release();
+
+    res.redirect('/office-approvals?success=' + encodeURIComponent('Survey submission approved successfully.'));
+
+    // Fire-and-forget, after commit, same as the pre-transaction version's
+    // timing — AI analysis only if this submission's payload didn't already
+    // carry a sentiment/topic (mirrors finalizeVerifiedSurvey's own tail).
+    if (payload.comments && payload.comments.trim() !== "") {
+        analyzeComment(payload.comments, false, payload.officeId).then(({ sentiment: aiSentiment, topic: aiTopic }) => {
+            if (aiSentiment && aiTopic) {
+                db.query('UPDATE survey_responses SET sentiment = ?, topic = ? WHERE id = ?', [aiSentiment, aiTopic, surveyResponseId]);
+            }
+        });
+    }
+
+    db.query('SELECT office_name, cluster_name FROM offices WHERE id = ? LIMIT 1', [payload.officeId], (officeErr, officeRows) => {
+        const office = (!officeErr && officeRows && officeRows[0]) ? officeRows[0] : null;
+        sendSurveyApprovedEmail(googleEmail, {
+            name: payload.respondentName,
+            officeName: office ? office.office_name : 'Selected Office',
+            clusterName: office ? office.cluster_name : '',
+            clientType: payload.clientType,
+            serviceAvailed: payload.serviceAvailed || 'Not specified',
+            submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
+            surveyResponseId,
+            cc1: payload.cc1, cc2: payload.cc2, cc3: payload.cc3,
+            sqd: (payload.sqdValues || []).map((v, i) => ({ label: 'SQD' + i, value: v })),
+            comments: payload.comments || 'N/A'
+        });
+    });
 });
 
-app.post('/office-approvals/:id/decline', ensureOfficeAuth, (req, res) => {
+// Transactional for the same reason as approve above — the
+// pending_survey_submissions decline and the offline_survey_submissions
+// tracking update (again a no-op when this didn't originate offline) commit
+// or roll back together on one dedicated pooled connection.
+app.post('/office-approvals/:id/decline', ensureOfficeAuth, async (req, res) => {
     const officeId = req.adminSession.user.id;
     const reason = String(req.body.decline_reason || '').trim().slice(0, 255) || null;
-    db.query(
-        "UPDATE pending_survey_submissions SET status = 'declined', reviewed_at = NOW(), decline_reason = ? WHERE id = ? AND office_id = ? AND status = 'pending'",
-        [reason, req.params.id, officeId],
-        (err) => {
-            if (err) {
-                console.error("❌ [Office Decline] Error declining submission:", err);
-                return res.redirect('/office-approvals?error=' + encodeURIComponent('Unable to process the submission. Please try again.'));
-            }
-            res.redirect('/office-approvals?success=' + encodeURIComponent('Survey submission declined successfully.'));
-        }
-    );
+    const submissionId = req.params.id;
+
+    const conn = await db.promise().getConnection();
+    try {
+        await conn.beginTransaction();
+
+        // No affectedRows guard here — same as the pre-transaction behavior,
+        // the WHERE clause (status='pending' + this office) is the guard
+        // against double-processing/wrong-office at the data level; a 0-row
+        // match (already processed, wrong office, doesn't exist) still
+        // reports success, unchanged from before.
+        await conn.query(
+            "UPDATE pending_survey_submissions SET status = 'declined', reviewed_at = NOW(), decline_reason = ? WHERE id = ? AND office_id = ? AND status = 'pending'",
+            [reason, submissionId, officeId]
+        );
+
+        await conn.query(
+            "UPDATE offline_survey_submissions SET approval_status = 'rejected' WHERE pending_submission_id = ?",
+            [submissionId]
+        );
+
+        await conn.commit();
+    } catch (err) {
+        try { await conn.rollback(); } catch (rollbackErr) { /* connection may already be unusable */ }
+        console.error("❌ [Office Decline] Error declining submission:", err);
+        return res.redirect('/office-approvals?error=' + encodeURIComponent('Unable to process the submission. Please try again.'));
+    } finally {
+        conn.release();
+    }
+
+    res.redirect('/office-approvals?success=' + encodeURIComponent('Survey submission declined successfully.'));
 });
 
 // ==========================================
@@ -3013,7 +3357,7 @@ app.get('/client-survey', ensureClientAuth, noCache, (req, res) => {
     const clientEmail = req.clientEmail;
 
     db.query('SELECT * FROM offices WHERE is_archived = 0 ORDER BY office_name ASC', (err, offices) => {
-        if (err) return res.render('client-survey', { offices: [], clientEmail, blockedCombos: {}, blockedUntil: {}, serviceAvailability: {}, clientProfile: null, officeServices: {} });
+        if (err) return res.render('client-survey', { offices: [], clientEmail, blockedCombos: {}, blockedUntil: {}, serviceAvailability: {}, clientProfile: null, officeServices: {}, offlineMode: false });
 
         // All active services, grouped by office_id — powers the dependent
         // "Service Availed" dropdown (#serviceSelect) on the client side. Also
@@ -3074,7 +3418,7 @@ app.get('/client-survey', ensureClientAuth, noCache, (req, res) => {
                             // whether this is the account's first or a later visit.
                             db.query('SELECT respondent_name, region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [clientEmail], (err3, profileRows) => {
                                 const clientProfile = (!err3 && profileRows && profileRows.length > 0) ? profileRows[0] : null;
-                                res.render('client-survey', { offices, clientEmail, blockedCombos, blockedUntil, serviceAvailability, clientProfile, officeServices });
+                                res.render('client-survey', { offices, clientEmail, blockedCombos, blockedUntil, serviceAvailability, clientProfile, officeServices, offlineMode: false });
                             });
                         }
                     );
@@ -3438,6 +3782,469 @@ async function syncOneSurvey(googleEmail, body) {
         topic: topic || 'General Feedback'
     };
 }
+
+// ==========================================
+// OFFLINE SURVEY — unauthenticated entry point, verified only at sync time
+// ==========================================
+// Trivial, unauthenticated liveness probe. Purely for the client-side
+// "Server temporarily unavailable" indicator (login.ejs/index.ejs) —
+// intentionally decoupled from navigator.onLine, which alone controls the
+// "Take Survey Offline" button. Excluded from the service worker's /api/
+// bypass rule like every other /api/ route (always live, never cached).
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok' });
+});
+
+// No ensureClientAuth — this is the whole point. A device with zero
+// connectivity cannot authenticate against the database at all, so this
+// page collects the survey plus only a plain "registered identifier" (an
+// email — see the §5 note on POST /api/offline-surveys/verify-and-sync
+// below for why not a username), never a password, and defers real account
+// verification to that endpoint once the connection returns. Reuses
+// client-survey.ejs (via offlineMode) rather than a parallel template —
+// offices/services are public, non-sensitive lookup data, safe to serve to
+// an unauthenticated visitor.
+app.get('/survey-offline', noCache, (req, res) => {
+    db.query('SELECT * FROM offices WHERE is_archived = 0 ORDER BY office_name ASC', (err, offices) => {
+        if (err) {
+            return res.render('client-survey', {
+                offices: [], clientEmail: null, blockedCombos: {}, blockedUntil: {},
+                serviceAvailability: {}, clientProfile: null, officeServices: {}, offlineMode: true
+            });
+        }
+
+        db.query('SELECT office_id, service_name, availability FROM services ORDER BY office_id, id', (errServices, serviceRows) => {
+            const officeServices = {};
+            const serviceAvailability = {};
+            if (!errServices && serviceRows) {
+                serviceRows.forEach(row => {
+                    if (!officeServices[row.office_id]) officeServices[row.office_id] = [];
+                    officeServices[row.office_id].push(row.service_name);
+                    serviceAvailability[row.office_id + '::' + row.service_name] = row.availability;
+                });
+            }
+
+            res.render('client-survey', {
+                offices, clientEmail: null, blockedCombos: {}, blockedUntil: {},
+                serviceAvailability, clientProfile: null, officeServices, offlineMode: true
+            });
+        });
+    });
+});
+
+// Fixed dummy hash, computed once at startup — bcrypt.compare()'d against
+// whenever the submitted identifier doesn't resolve to a real account, so a
+// "no such account" response takes the same time as a "wrong password"
+// response. Without this, response timing alone could be used to enumerate
+// which registered identifiers exist.
+const DUMMY_BCRYPT_HASH_FOR_TIMING = bcrypt.hashSync('offline-verify-timing-guard', 10);
+
+const OFFLINE_SUBMISSION_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Parses/validates the client's "when this was actually saved offline"
+// timestamp — kept distinct from offline_survey_submissions.synced_at
+// (server-generated, at write time) so the two can differ and both be
+// shown ("completed offline at X, synced at Y"). Rejects nonsense (garbage
+// strings, or a timestamp implausibly far in the future — more than a day
+// past now, generous enough for real device clock drift) by falling back
+// to null rather than failing the whole sync over a bad clock.
+function parseCreatedOfflineAt(raw) {
+    if (!raw) return null;
+    const parsed = new Date(raw);
+    if (isNaN(parsed.getTime())) return null;
+    if (parsed.getTime() > Date.now() + 24 * 60 * 60 * 1000) return null;
+    return parsed;
+}
+
+// Strict positive-integer parse — accepts only a real number/numeric string
+// representing a positive integer, unlike parseInt() (which would let
+// "5abc" silently become 5). Returns null for anything else, including
+// non-string/non-number types (arrays/objects) and non-integers/negatives.
+function parseStrictPositiveInt(raw) {
+    if (raw === undefined || raw === null || raw === '') return null;
+    if (typeof raw !== 'number' && typeof raw !== 'string') return null;
+    const normalized = typeof raw === 'number' ? raw : raw.trim();
+    if (normalized === '') return null;
+    const n = Number(normalized);
+    return (Number.isInteger(n) && n > 0) ? n : null;
+}
+
+// Strict integer-in-[0,5] check for one SQD answer — same reasoning as
+// parseStrictPositiveInt above, just range-bounded (0 = N/A ... 5 = Strongly
+// Agree, per the existing sqdRatingLabels scale). { ok: true, value: null }
+// means "legitimately unanswered" — distinct from { ok: false }, "a value
+// was supplied and it's invalid" (e.g. "5abc", "2.5", "Infinity", an
+// array/object).
+function parseStrictSqdValue(raw) {
+    if (raw === undefined || raw === null || raw === '') return { ok: true, value: null };
+    if (typeof raw !== 'number' && typeof raw !== 'string') return { ok: false };
+    const normalized = typeof raw === 'number' ? raw : raw.trim();
+    if (normalized === '') return { ok: true, value: null };
+    const n = Number(normalized);
+    if (!Number.isInteger(n) || n < 0 || n > 5) return { ok: false };
+    return { ok: true, value: n };
+}
+
+// Strict counterpart to allowlisted() (server.js's existing age/gender/
+// region helper, which silently falls back to null for anything not in the
+// set). This endpoint has no session to fall back on, so it must instead
+// distinguish "field absent/blank" (a legitimate unanswered field — value:
+// null) from "field supplied but not one of the exact allowed values" (a
+// malformed/tampered submission — ok: false, rejected outright rather than
+// silently coerced to null/"Not Specified"). Requires the value to actually
+// BE a string before comparing — every real submission from the form sends
+// these as strings, so anything else (an array/object, e.g. ["Male"]) is
+// rejected immediately rather than being coerced by String(value) into
+// matching the allowlist by accident.
+function strictAllowlisted(value, allowedSet) {
+    if (value === undefined || value === null) return { ok: true, value: null };
+    if (typeof value !== 'string') return { ok: false };
+    const v = value.trim();
+    if (v === '') return { ok: true, value: null };
+    if (!allowedSet.has(v)) return { ok: false };
+    return { ok: true, value: v };
+}
+
+// age/gender/region are "locked after first submission" — once
+// client_accounts already has a value, THAT trusted, previously-validated
+// DB value always wins over whatever this request submitted (mirrors
+// /submit-survey and syncOneSurvey). Strict validation therefore only ever
+// applies to the submitted value in the no-saved-value case, where it's the
+// one actually being used.
+function resolveLockedField(savedValue, submittedValue, allowedSet) {
+    if (savedValue) return { ok: true, value: savedValue };
+    return strictAllowlisted(submittedValue, allowedSet);
+}
+
+// ==========================================
+// POST /api/offline-surveys/verify-and-sync
+// The ONLY place a client-typed identifier is ever trusted enough to write
+// to the official database — and only after its password is verified here,
+// server-side, against the real bcrypt hash. One survey per call; the
+// client (pwa-client.js) loops this sequentially over the surveys queued
+// under one identifier, reusing that single in-memory password only within
+// that loop, never across a different identifier's surveys.
+//
+// §5 note: client_accounts has no separate username column (confirmed
+// against /auth-login's own handleClientLogin, which looks accounts up by
+// email only) — so this, like /auth-login, only ever accepts a registered
+// CSPC email or Gmail as the identifier, never a "username." The UI label
+// says exactly that ("Registered CSPC Email / Gmail"), not "username."
+// ==========================================
+app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (req, res) => {
+    const submissionId = String(req.body.offlineSubmissionId || '').trim();
+    const identifier = String(req.body.registeredIdentifier || '').trim().toLowerCase();
+    const password = req.body.password;
+    const payload = req.body.survey || {};
+
+    // --- Strict input validation, BEFORE any database work — this is a
+    // public, unauthenticated endpoint. ---
+    if (!OFFLINE_SUBMISSION_UUID_RE.test(submissionId)) {
+        return res.status(400).json({ success: false, message: 'Invalid submission ID.' });
+    }
+    if (!identifier || identifier.length > 255) {
+        return res.status(400).json({ success: false, message: 'Invalid account identifier.' });
+    }
+    if (typeof password !== 'string' || password.length < 1 || password.length > 200) {
+        return res.status(400).json({ success: false, message: 'Invalid request.' });
+    }
+
+    // 1. Idempotency short-circuit — a retried/duplicated request for a UUID
+    // that already finished is answered from the tracking row's CURRENT
+    // state (which reflects any office approve/decline action since), no
+    // password re-check, no re-insert.
+    let existingRows;
+    try {
+        existingRows = await dbQuery('SELECT approval_status FROM offline_survey_submissions WHERE offline_submission_id = ? LIMIT 1', [submissionId]);
+    } catch (err) {
+        console.error('❌ [Offline Verify] Idempotency lookup failed:', err);
+        return res.status(500).json({ success: false, message: 'Server error. Please try again.' });
+    }
+    if (existingRows && existingRows.length > 0) {
+        const status = existingRows[0].approval_status;
+        if (status === 'rejected') {
+            return res.json({ success: true, status: 'rejected', message: 'This submission was reviewed and was not included in the official results.' });
+        }
+        const isPending = status === 'pending';
+        return res.json({
+            success: true,
+            status: isPending ? 'pending_approval' : 'synced',
+            message: isPending ? 'Survey synchronized and is pending office approval.' : 'Survey successfully submitted.'
+        });
+    }
+
+    // 2. Account-aware lockout (independent of the IP-based limiter above).
+    if (isOfflineVerifyIdentifierLocked(identifier)) {
+        return res.status(401).json({ success: false, status: 'verification_failed', message: OFFLINE_VERIFY_GENERIC_MESSAGE });
+    }
+
+    // 3. Look up the account.
+    let accountRows;
+    try {
+        accountRows = await dbQuery('SELECT email, password FROM client_accounts WHERE email = ? LIMIT 1', [identifier]);
+    } catch (err) {
+        console.error('❌ [Offline Verify] Account lookup failed:', err);
+        return res.status(500).json({ success: false, message: 'Server error. Please try again.' });
+    }
+    const account = (accountRows && accountRows.length > 0) ? accountRows[0] : null;
+
+    // 4. Verify the password. ALWAYS runs bcrypt.compare — even against the
+    // fixed dummy hash for a nonexistent account — so a "no such account"
+    // response and a "wrong password" response are indistinguishable both
+    // in message AND in timing (prevents account-enumeration via either
+    // channel).
+    const hashToCompare = (account && account.password) ? account.password : DUMMY_BCRYPT_HASH_FOR_TIMING;
+    let passwordMatches = false;
+    try {
+        passwordMatches = await bcrypt.compare(password, hashToCompare);
+    } catch (err) {
+        passwordMatches = false;
+    }
+
+    if (!account || !account.password || !passwordMatches) {
+        recordOfflineVerifyFailure(identifier);
+        return res.status(401).json({ success: false, status: 'verification_failed', message: OFFLINE_VERIFY_GENERIC_MESSAGE });
+    }
+    clearOfflineVerifyFailures(identifier);
+
+    // Use the DB's stored casing from here on, not whatever casing was typed.
+    const verifiedEmail = account.email;
+    const createdOfflineAt = parseCreatedOfflineAt(req.body.createdOfflineAt);
+
+    // 5. Clean/validate the survey fields — strict, since this endpoint has
+    // no session/auth to fall back on: a malformed or out-of-range value is
+    // rejected outright, never silently defaulted (unlike the authenticated
+    // /submit-survey path, which is trusted more because it requires a live
+    // session first).
+    const cleanStr = (val) => (val !== undefined && val !== null && String(val).trim() !== "") ? String(val).trim() : null;
+
+    const { office_id, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, office_visited_time, service_availed } = payload;
+    const finalOfficeId = parseStrictPositiveInt(office_id);
+    if (!finalOfficeId) {
+        return res.status(400).json({ success: false, message: 'Missing or invalid office ID.' });
+    }
+
+    // Office must exist and not be archived.
+    let officeRow = null;
+    try {
+        const officeRows = await dbQuery('SELECT office_name FROM offices WHERE id = ? AND is_archived = 0 LIMIT 1', [finalOfficeId]);
+        officeRow = (officeRows && officeRows[0]) ? officeRows[0] : null;
+    } catch (err) {
+        console.error('❌ [Offline Verify] Office lookup failed:', err);
+        return res.status(500).json({ success: false, message: 'Server error. Please try again.' });
+    }
+    if (!officeRow) {
+        return res.status(400).json({ success: false, message: 'Selected office is invalid or no longer available.' });
+    }
+    const officeName = officeRow.office_name;
+
+    const finalServiceAvailed = cleanStr(service_availed);
+    // Service, when given, must actually belong to the selected office.
+    if (finalServiceAvailed) {
+        let serviceExists = false;
+        try {
+            const serviceRows = await dbQuery('SELECT 1 FROM services WHERE office_id = ? AND service_name = ? LIMIT 1', [finalOfficeId, finalServiceAvailed]);
+            serviceExists = !!(serviceRows && serviceRows.length > 0);
+        } catch (err) {
+            console.error('❌ [Offline Verify] Service lookup failed:', err);
+            return res.status(500).json({ success: false, message: 'Server error. Please try again.' });
+        }
+        if (!serviceExists) {
+            return res.status(400).json({ success: false, message: 'Selected service is invalid for that office.' });
+        }
+    }
+
+    // SQD0-8 — see parseStrictSqdValue: rejects anything that isn't cleanly
+    // an in-range integer (e.g. "5abc", "2.5", "Infinity", an array/object),
+    // not just whatever parseInt() happens to salvage from the front of it.
+    const rawSqd = [sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8];
+    const sqdValues = [];
+    for (const raw of rawSqd) {
+        const parsedSqd = parseStrictSqdValue(raw);
+        if (!parsedSqd.ok) {
+            return res.status(400).json({ success: false, message: 'Invalid rating value submitted.' });
+        }
+        sqdValues.push(parsedSqd.value);
+    }
+
+    const rawComments = cleanStr(comments);
+    if (rawComments && rawComments.length > OFFLINE_SURVEY_MAX_COMMENTS_LENGTH) {
+        return res.status(400).json({ success: false, message: 'Comments are too long.' });
+    }
+
+    // CC1/CC2/CC3 — supplied-but-invalid is rejected outright (400), never
+    // silently turned into "unanswered." Absent/blank is fine (unanswered).
+    const cc1Check = strictAllowlisted(cc1, VALID_CC1);
+    if (!cc1Check.ok) return res.status(400).json({ success: false, message: "Invalid Citizen's Charter (CC1) value submitted." });
+    const cc2Check = strictAllowlisted(cc2, VALID_CC2);
+    if (!cc2Check.ok) return res.status(400).json({ success: false, message: "Invalid Citizen's Charter (CC2) value submitted." });
+    const cc3Check = strictAllowlisted(cc3, VALID_CC3);
+    if (!cc3Check.ok) return res.status(400).json({ success: false, message: "Invalid Citizen's Charter (CC3) value submitted." });
+
+    const respondent_name = payload.respondent_name || payload.respondentName || payload.client_name || payload.name;
+    const client_type = payload.client_type || payload.clientType || payload.client_role;
+
+    let savedProfile = null;
+    try {
+        const profileRows = await dbQuery('SELECT region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [verifiedEmail]);
+        savedProfile = (profileRows && profileRows.length > 0) ? profileRows[0] : null;
+    } catch (err) {
+        console.error('❌ [Offline Verify] Profile lookup error:', err);
+    }
+
+    // region/age/gender: the saved DB value (if any) always wins — see
+    // resolveLockedField — so strict rejection only ever fires on a
+    // genuinely user-supplied, invalid value for a field that has no saved
+    // value to fall back on yet.
+    const regionCheck = resolveLockedField(savedProfile && savedProfile.region, payload.region, VALID_REGIONS);
+    if (!regionCheck.ok) return res.status(400).json({ success: false, message: 'Invalid region submitted.' });
+    const ageCheck = resolveLockedField(savedProfile && savedProfile.age, payload.age || payload.clientAge || payload.client_age, VALID_AGE_BRACKETS);
+    if (!ageCheck.ok) return res.status(400).json({ success: false, message: 'Invalid age bracket submitted.' });
+    const genderCheck = resolveLockedField(savedProfile && savedProfile.gender, payload.gender || payload.clientGender || payload.client_gender, VALID_GENDERS);
+    if (!genderCheck.ok) return res.status(400).json({ success: false, message: 'Invalid gender submitted.' });
+
+    // client_type: validated against the actual client_types table (same
+    // source the normal survey UI populates its dropdown from) instead of
+    // accepted as arbitrary free text — a non-empty, unrecognized value is
+    // rejected; an absent/blank one falls back to 'Citizen', same default
+    // used everywhere else in this app (/submit-survey, syncOneSurvey).
+    const rawClientType = cleanStr(client_type);
+    let finalClientType = 'Citizen';
+    if (rawClientType) {
+        let clientTypeExists = false;
+        try {
+            const ctRows = await dbQuery('SELECT 1 FROM client_types WHERE type_name = ? LIMIT 1', [rawClientType]);
+            clientTypeExists = !!(ctRows && ctRows.length > 0);
+        } catch (err) {
+            console.error('❌ [Offline Verify] Client type lookup failed:', err);
+            return res.status(500).json({ success: false, message: 'Server error. Please try again.' });
+        }
+        if (!clientTypeExists) {
+            return res.status(400).json({ success: false, message: 'Invalid client type submitted.' });
+        }
+        finalClientType = rawClientType;
+    }
+
+    // VARCHAR(255) in every table this ends up in (survey_responses,
+    // client_profiles, client_accounts) — capped the same width here.
+    const finalName = (cleanStr(respondent_name) || 'Anonymous').slice(0, 255);
+    const finalAge = ageCheck.value || 'Not Specified';
+    const finalGender = genderCheck.value || 'Not Specified';
+    const finalRegion = regionCheck.value || 'Not Specified';
+    const finalCc1 = cc1Check.value;
+    const finalCc2 = cc2Check.value;
+    const finalCc3 = cc3Check.value;
+    const finalOfficeVisitedTime = cleanTime(office_visited_time);
+
+    // 6. Resubmission-eligibility check — read-only, fine on the shared
+    // pool, no need for it to be inside the transaction below.
+    const eligibility = await checkResubmissionEligibilityAsync(finalOfficeId, verifiedEmail, finalServiceAvailed);
+    if (!eligibility.eligible) {
+        return res.status(409).json({ success: false, message: eligibility.message });
+    }
+
+    const currentPeriod = getPeriodCovered();
+    const isCspc = isCspcEmail(verifiedEmail);
+
+    // 7. AI sentiment/topic analysis — a slow, non-database call — runs
+    // BEFORE opening any DB connection/transaction, never while one is held
+    // open. Mirrors syncOneSurvey's offline=true fast-heuristic path.
+    let sentiment = 'Neutral';
+    let topic = 'General Feedback';
+    if (isCspc) {
+        try {
+            const aiResult = await analyzeComment(rawComments, true, finalOfficeId);
+            sentiment = aiResult.sentiment || sentiment;
+            topic = aiResult.topic || topic;
+        } catch (err) {
+            console.error('❌ [Offline Verify] AI analysis threw unexpectedly, defaulting:', err);
+        }
+    }
+
+    // 8. CSPC vs external, both inside one SHORT transaction (writes only)
+    // with the offline_survey_submissions tracking insert — on a DEDICATED
+    // pooled connection (never the shared `db`/`dbQuery`, since the pool is
+    // capped at DB_CONNECTION_LIMIT and a bare `db.query('START
+    // TRANSACTION')` could interleave with a different pooled connection).
+    const conn = await db.promise().getConnection();
+    let result;
+    try {
+        await conn.beginTransaction();
+
+        if (isCspc) {
+            const surveyResponseId = await insertVerifiedSurveyOnConnection(conn, verifiedEmail, {
+                officeId: finalOfficeId, respondentName: finalName, topic, sentiment, region: finalRegion,
+                cc1: finalCc1, cc2: finalCc2, cc3: finalCc3, sqdValues,
+                comments: rawComments, serviceAvailed: finalServiceAvailed,
+                clientType: finalClientType, age: finalAge, gender: finalGender,
+                officeVisitedTime: finalOfficeVisitedTime, period: currentPeriod
+            });
+
+            await conn.query(
+                `INSERT INTO offline_survey_submissions
+                 (offline_submission_id, registered_identifier, office_id, verification_status, approval_status, survey_response_id, created_offline_at)
+                 VALUES (?, ?, ?, 'verified', 'not_required', ?, ?)`,
+                [submissionId, verifiedEmail, finalOfficeId, surveyResponseId, createdOfflineAt]
+            );
+
+            await conn.commit();
+            result = { status: 'synced', surveyResponseId };
+        } else {
+            // External/Gmail — account ownership just proven by password,
+            // but still routed for office review, exactly like the
+            // authenticated /sync-surveys path already does for these
+            // accounts.
+            const pendingPayload = {
+                officeId: finalOfficeId, respondentName: finalName, topic: null, region: finalRegion,
+                cc1: finalCc1, cc2: finalCc2, cc3: finalCc3, sqdValues,
+                comments: rawComments, serviceAvailed: finalServiceAvailed,
+                clientType: finalClientType, age: finalAge, gender: finalGender,
+                officeVisitedTime: finalOfficeVisitedTime, period: currentPeriod
+            };
+
+            const [pendingResult] = await conn.query(
+                'INSERT INTO pending_survey_submissions (office_id, google_email, service_availed, payload) VALUES (?, ?, ?, ?)',
+                [finalOfficeId, verifiedEmail, finalServiceAvailed, JSON.stringify(pendingPayload)]
+            );
+
+            await conn.query(
+                `INSERT INTO offline_survey_submissions
+                 (offline_submission_id, registered_identifier, office_id, verification_status, approval_status, pending_submission_id, created_offline_at)
+                 VALUES (?, ?, ?, 'external_account', 'pending', ?, ?)`,
+                [submissionId, verifiedEmail, finalOfficeId, pendingResult.insertId, createdOfflineAt]
+            );
+
+            await conn.commit();
+            result = { status: 'pending_approval' };
+        }
+    } catch (err) {
+        try { await conn.rollback(); } catch (rollbackErr) { /* connection may already be unusable */ }
+        conn.release();
+
+        if (err.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ success: false, message: 'You have already evaluated this office, or this survey was already synced.' });
+        }
+        console.error('❌ [Offline Verify] Transaction failed:', err);
+        return res.status(500).json({ success: false, message: 'Database error while syncing your survey.' });
+    }
+    conn.release();
+
+    // 9. Email — AFTER commit, outside the transaction, only ever sent to
+    // an address that just proved ownership via a correct password (never
+    // to an arbitrary typed-in address that failed verification).
+    if (result.status === 'synced') {
+        sendOfflineSurveySyncedEmail(verifiedEmail, {
+            officeName,
+            serviceAvailed: finalServiceAvailed || 'Not specified',
+            submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
+            surveyResponseId: result.surveyResponseId
+        });
+        return res.json({ success: true, status: 'synced', submissionId: String(result.surveyResponseId), message: 'Survey successfully synchronized.' });
+    }
+
+    sendOfflineSurveyPendingEmail(verifiedEmail, { officeName });
+    return res.json({ success: true, status: 'pending_approval', message: 'Survey synchronized and is pending office approval.' });
+});
 
 // ==========================================
 // 2. Admin Dashboard Routes

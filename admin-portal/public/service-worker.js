@@ -11,8 +11,8 @@
 
 importScripts('/js/offline-db.js');
 
-const STATIC_CACHE = 'cspc-static-v7';
-const RUNTIME_CACHE = 'cspc-runtime-v7';
+const STATIC_CACHE = 'cspc-static-v8';
+const RUNTIME_CACHE = 'cspc-runtime-v8';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
@@ -31,7 +31,12 @@ const PRECACHE_URLS = [
     // same as cspc-logo.png above, with no separate CDN entry needed.
     '/images/campus-monument.jpg',
     '/client-login',
-    '/login'
+    '/login',
+    // The unauthenticated "Take Survey Offline" entry point — precaching it
+    // is the actual fix for offline access working without ever having
+    // logged in first: a visitor only needs ONE prior online visit to the
+    // site (any page), not a prior login, before this works offline.
+    '/survey-offline'
 ];
 
 // Third-party libraries the survey/login pages load from a CDN. Cached
