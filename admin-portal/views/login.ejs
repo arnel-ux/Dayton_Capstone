@@ -491,29 +491,6 @@
         }
         @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
-        /* Shown instead of the reCAPTCHA widget/Login button when offline —
-           see updateOfflineIndicator() below. Signing in (admin, client, or
-           office — this one form serves all three) always needs a live
-           request to the database, so there's no functional difference
-           between "captcha off" and "captcha on" once offline: the request
-           can't reach the server either way. This makes that limitation
-           honest instead of leaving a broken, un-loadable captcha widget and
-           a submit button that will just fail. */
-        .offline-login-notice {
-            display: none;
-            align-items: center;
-            gap: 0.5rem;
-            background: #fef3c7;
-            color: #92400e;
-            border: 1px solid #fde68a;
-            border-radius: 10px;
-            padding: 0.65rem 0.85rem;
-            font-size: 0.82rem;
-            font-weight: 600;
-            line-height: 1.4;
-            margin-bottom: 0.85rem;
-        }
-        .offline-login-notice.is-visible { display: flex; }
     </style>
 </head>
 <body>
@@ -548,11 +525,6 @@
 
             <!-- UNIFIED LOGIN FORM (POST REQUEST) -->
             <form action="/auth-login" method="POST" id="loginForm">
-                <div id="offlineLoginNotice" class="offline-login-notice">
-                    <i class="fas fa-wifi-slash"></i>
-                    <span>You're offline — signing in needs an internet connection to verify your account. If you've signed in on this device before, <a href="/client-login">go back to the survey app</a> instead.</span>
-                </div>
-
                 <div class="field-group">
                     <label class="field-label" for="usernameInput">Username or Email</label>
                     <div class="input-modern">
@@ -703,48 +675,68 @@
     </script>
 
     <script>
-        // Signing in — admin, client, or office; this one form serves all
-        // three (see /auth-login in server.js) — always needs a live request
-        // to the database, so there's no such thing as "logging in offline."
-        // reCAPTCHA can't even load offline in the first place (it's Google's
-        // own external script), so rather than leave a broken widget and a
-        // submit button that will just fail with a network error, swap in a
-        // plain, honest notice and disable every sign-in path while offline.
+        // reCAPTCHA is a live, external Google script — it simply can't load
+        // with no internet, so the widget is swapped for the form's own
+        // offline path below instead of being left as a broken/blank iframe.
         function updateOfflineIndicator() {
             const offline = !navigator.onLine;
 
             const pill = document.getElementById('offlineIndicator');
             if (pill) pill.classList.toggle('is-visible', offline);
 
-            const notice = document.getElementById('offlineLoginNotice');
-            if (notice) notice.classList.toggle('is-visible', offline);
-
             const recaptchaWrap = document.getElementById('recaptchaWrap');
             if (recaptchaWrap) recaptchaWrap.classList.toggle('d-none', offline);
 
+            // Online: normal behavior — button starts disabled until the
+            // reCAPTCHA checkbox is checked (enableLoginSubmit()/
+            // disableLoginSubmit() above). Offline: reCAPTCHA is hidden, so
+            // there's nothing to wait on — the button is enabled up front
+            // and submitting takes the offline path below instead of a POST.
             const submitBtn = document.getElementById('loginSubmitBtn');
-            if (submitBtn) submitBtn.disabled = offline;
-
-            const googleBtn = document.getElementById('googleSignInBtn');
-            if (googleBtn) {
-                googleBtn.classList.toggle('disabled', offline);
-                googleBtn.setAttribute('aria-disabled', offline ? 'true' : 'false');
-                if (offline) {
-                    googleBtn.dataset.href = googleBtn.dataset.href || googleBtn.getAttribute('href');
-                    googleBtn.removeAttribute('href');
-                } else if (googleBtn.dataset.href) {
-                    googleBtn.setAttribute('href', googleBtn.dataset.href);
-                }
-            }
+            if (submitBtn && offline) submitBtn.disabled = false;
         }
         window.addEventListener('online', updateOfflineIndicator);
         window.addEventListener('offline', updateOfflineIndicator);
         updateOfflineIndicator();
 
-        // A client who signed in on this device before (via this form or via
-        // Google — both land on /client-survey and cache the same session,
-        // see client-survey.ejs) can skip straight back to the survey app
-        // instead of staring at a login form they can't submit while offline.
+        // OFFLINE SIGN-IN: a real password check against the database is
+        // impossible with no network — there's no server to ask. What this
+        // verifies instead is device history: did THIS browser already cache
+        // a session for the email being entered, from a previous successful
+        // ONLINE login (password or Google, both cache the same
+        // cspc_client_session — see client-survey.ejs)? If so, the browser
+        // already has that account's authenticated survey page cached by the
+        // service worker, so redirecting there works with zero network
+        // requests. If the typed email doesn't match anything cached on this
+        // device, there is nothing to fall back to — no combination of
+        // client code can verify a password without reaching the server, so
+        // that case is reported plainly rather than silently failing.
+        function attemptOfflineLogin(event) {
+            if (navigator.onLine) return true; // let the normal online POST proceed
+
+            event.preventDefault();
+
+            const emailInput = (document.getElementById('usernameInput').value || '').trim().toLowerCase();
+            let cached = null;
+            try { cached = JSON.parse(localStorage.getItem('cspc_client_session') || 'null'); } catch (e) { /* no cached session */ }
+
+            if (cached && cached.email && cached.email.toLowerCase() === emailInput) {
+                window.location.href = '/client-survey';
+                return false;
+            }
+
+            if (window.AppAlert) {
+                AppAlert.error(
+                    'This device has no offline session saved for that account yet. Connect to the internet and sign in once first — after that, this same account can sign in offline here.',
+                    "Can't Verify Offline"
+                );
+            }
+            return false;
+        }
+        document.getElementById('loginForm').addEventListener('submit', attemptOfflineLogin);
+
+        // Landing here already offline with a cached session on this device —
+        // skip the form entirely instead of making them click Login first.
         (function () {
             if (navigator.onLine) return;
             try {
