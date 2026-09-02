@@ -2,10 +2,12 @@
 <html lang="en">
 <head>
     <%- include('layout/header', { forceLightMode: true }) %>
-    <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#2554c7">
+    <!-- Deliberately no <link rel="manifest">: this project must stay a
+         plain website, never an installable PWA (no "Add to Home Screen" /
+         install prompt). The service worker below still provides offline
+         caching — that's independent of installability, manifest.json is
+         what Chrome/Edge actually key the install criteria on. -->
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="/icons/icon.svg">
     <style>
         /* Reset and Base Styles */
         html, body {

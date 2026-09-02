@@ -1,17 +1,23 @@
-// Service worker for the CSPC CSM Survey PWA — caches the app shell so the
+// Service worker for the CSPC CSM Survey site — caches the app shell so the
 // client survey loads offline, and replays queued offline survey submissions
 // (IndexedDB outbox, see /js/offline-db.js) via the Background Sync API.
+//
+// Deliberately NOT an installable PWA: no page links a web app manifest (see
+// the comment in client-login.ejs/client-survey.ejs's <head>), which is what
+// Chrome/Edge actually key "Add to Home Screen" / the install prompt on —
+// this worker's offline caching works independently of that. Don't add a
+// <link rel="manifest"> back to any page without checking that constraint
+// first.
 
 importScripts('/js/offline-db.js');
 
-const STATIC_CACHE = 'cspc-static-v6';
-const RUNTIME_CACHE = 'cspc-runtime-v6';
+const STATIC_CACHE = 'cspc-static-v7';
+const RUNTIME_CACHE = 'cspc-runtime-v7';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
 const PRECACHE_URLS = [
     '/',
-    '/manifest.json',
     '/offline.html',
     '/js/alerts.js',
     '/js/offline-db.js',
