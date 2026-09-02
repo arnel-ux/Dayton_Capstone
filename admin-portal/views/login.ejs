@@ -720,16 +720,32 @@
             let cached = null;
             try { cached = JSON.parse(localStorage.getItem('cspc_client_session') || 'null'); } catch (e) { /* no cached session */ }
 
+            console.log('[Offline Login] typed email:', emailInput, '| cached session:', cached);
+
             if (cached && cached.email && cached.email.toLowerCase() === emailInput) {
                 window.location.href = '/client-survey';
                 return false;
             }
 
-            if (window.AppAlert) {
-                AppAlert.error(
-                    'This device has no offline session saved for that account yet. Connect to the internet and sign in once first — after that, this same account can sign in offline here.',
-                    "Can't Verify Offline"
-                );
+            const message = cached
+                ? 'This device\'s saved offline session is for a different account (' + cached.email + '). Connect to the internet and sign in as ' + emailInput + ' at least once first.'
+                : 'This device has no offline session saved yet. Connect to the internet and sign in once first — after that, this same account can sign in offline here.';
+
+            // Never let a failure to load the SweetAlert2 CDN library (itself
+            // possible while offline, e.g. this is the very first page ever
+            // opened in this browser) leave the user staring at a form that
+            // silently did nothing — an uncaught error inside an event
+            // listener shows nothing on screen. window.alert() has zero
+            // dependencies and always works.
+            try {
+                if (window.AppAlert) {
+                    AppAlert.error(message, "Can't Sign In Offline");
+                } else {
+                    window.alert(message);
+                }
+            } catch (err) {
+                console.error('[Offline Login] AppAlert failed, falling back to window.alert:', err);
+                window.alert(message);
             }
             return false;
         }
