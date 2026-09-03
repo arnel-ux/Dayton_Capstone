@@ -1717,6 +1717,41 @@ function sendOfflineSurveyPendingEmail(toEmail, details) {
 }
 
 // ==========================================
+// IN-APP CLIENT NOTIFICATIONS
+// ==========================================
+// Creates one client notification for a real server event — never for a
+// purely local/browser condition (offline, network unavailable, a
+// temporary 429/5xx, a retry still pending) since the server never
+// observes those and cannot truthfully report an event it didn't receive.
+//
+// Idempotent via `dedupe_key`'s UNIQUE constraint: INSERT IGNORE silently
+// no-ops on a repeat (an offline sync retry, a race between two requests)
+// instead of erroring or duplicating — and because a soft-deleted
+// notification's row still physically exists (only deleted_at is set), the
+// same dedupe_key also can never resurrect one the user already deleted.
+//
+// Deliberately fire-and-forget / non-blocking: this is always called AFTER
+// its caller's own core transaction (survey insert, office approval) has
+// already committed, so a failure here must never roll that back — it's
+// logged and swallowed, exactly like the mailer calls right above it.
+function createClientNotification({
+    clientEmail, type, title, message,
+    surveyResponseId = null, pendingSubmissionId = null, offlineSubmissionId = null,
+    dedupeKey
+}) {
+    if (!clientEmail || !dedupeKey) return;
+    db.query(
+        `INSERT IGNORE INTO client_notifications
+         (client_email, type, title, message, survey_response_id, pending_submission_id, offline_submission_id, dedupe_key)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [clientEmail, type, title, message, surveyResponseId, pendingSubmissionId, offlineSubmissionId, dedupeKey],
+        (err) => {
+            if (err) console.error('❌ [Notifications] Failed to create notification:', err.message);
+        }
+    );
+}
+
+// ==========================================
 // AUTO-CREATE TABLES & AUTO-UPDATE
 // ==========================================
 
@@ -1815,6 +1850,40 @@ CREATE TABLE IF NOT EXISTS offline_survey_submissions (
     created_offline_at DATETIME NULL,
     synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_offline_submission_id (offline_submission_id)
+);`;
+
+// In-app client notification inbox. `client_email` matches this app's
+// existing stable account identifier (client_accounts.email — the same
+// value req.clientEmail/googleEmail/verifiedEmail carries everywhere else
+// in this file; no separate numeric account id is used consistently enough
+// elsewhere to prefer it here). dedupe_key's UNIQUE constraint is what
+// makes notification creation idempotent — see createClientNotification
+// below: an offline sync retry (or a race between two tabs) safely no-ops
+// via INSERT IGNORE instead of creating a duplicate, and critically, this
+// also means a notification the user already soft-deleted (deleted_at set,
+// row still physically present) is never recreated by a later replay of
+// the same event, since the UNIQUE constraint still matches the existing
+// row regardless of deleted_at. Soft delete only (deleted_at) — a
+// notification is never physically removed by this app.
+const createClientNotificationsTableQuery = `
+CREATE TABLE IF NOT EXISTS client_notifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    client_email VARCHAR(255) NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    survey_response_id INT NULL,
+    pending_submission_id INT NULL,
+    offline_submission_id VARCHAR(64) NULL,
+    dedupe_key VARCHAR(191) NOT NULL,
+    is_read TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    read_at TIMESTAMP NULL DEFAULT NULL,
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
+    UNIQUE KEY unique_client_notification_dedupe (dedupe_key),
+    INDEX idx_client_notifications_email (client_email),
+    INDEX idx_client_notifications_inbox (client_email, deleted_at, created_at),
+    INDEX idx_client_notifications_unread (client_email, is_read, deleted_at)
 );`;
 
 const createSettingsTableQuery = `
@@ -2050,6 +2119,11 @@ db.query(createClustersTableQuery, (err) => {
                 db.query(createOfflineSurveySubmissionsTableQuery, (err) => {
                     if (err) console.error("❌ Error creating offline_survey_submissions table:", err);
                     else console.log('✅ offline_survey_submissions table verified/created successfully!');
+                });
+
+                db.query(createClientNotificationsTableQuery, (err) => {
+                    if (err) console.error("❌ Error creating client_notifications table:", err);
+                    else console.log('✅ client_notifications table verified/created successfully!');
                 });
 
                 // Isunod ang Survey Responses Table
@@ -2956,6 +3030,16 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
 
     res.redirect('/office-approvals?success=' + encodeURIComponent('Survey submission approved successfully.'));
 
+    createClientNotification({
+        clientEmail: googleEmail,
+        type: 'pending_approved',
+        title: 'Survey Approved',
+        message: 'Your survey response was approved by the selected office.',
+        surveyResponseId,
+        pendingSubmissionId: submissionId,
+        dedupeKey: 'pending-approved:' + submissionId
+    });
+
     // Fire-and-forget, after commit, same as the pre-transaction version's
     // timing — AI analysis only if this submission's payload didn't already
     // carry a sentiment/topic (mirrors finalizeVerifiedSurvey's own tail).
@@ -2994,18 +3078,26 @@ app.post('/office-approvals/:id/decline', ensureOfficeAuth, async (req, res) => 
     const submissionId = req.params.id;
 
     const conn = await db.promise().getConnection();
+    let googleEmail = null;
+    let declined = false;
     try {
         await conn.beginTransaction();
 
-        // No affectedRows guard here — same as the pre-transaction behavior,
-        // the WHERE clause (status='pending' + this office) is the guard
-        // against double-processing/wrong-office at the data level; a 0-row
-        // match (already processed, wrong office, doesn't exist) still
-        // reports success, unchanged from before.
-        await conn.query(
+        // No affectedRows guard on the UPDATE below — same as the
+        // pre-transaction behavior, the WHERE clause (status='pending' +
+        // this office) is the guard against double-processing/wrong-office
+        // at the data level; a 0-row match (already processed, wrong
+        // office, doesn't exist) still reports success, unchanged from
+        // before. `declined` (from that UPDATE's own affectedRows) only
+        // gates whether a notification fires below — never the response.
+        const [rows] = await conn.query('SELECT google_email FROM pending_survey_submissions WHERE id = ? LIMIT 1', [submissionId]);
+        googleEmail = (rows && rows[0]) ? rows[0].google_email : null;
+
+        const [declineResult] = await conn.query(
             "UPDATE pending_survey_submissions SET status = 'declined', reviewed_at = NOW(), decline_reason = ? WHERE id = ? AND office_id = ? AND status = 'pending'",
             [reason, submissionId, officeId]
         );
+        declined = !!(declineResult && declineResult.affectedRows > 0);
 
         await conn.query(
             "UPDATE offline_survey_submissions SET approval_status = 'rejected' WHERE pending_submission_id = ?",
@@ -3022,6 +3114,17 @@ app.post('/office-approvals/:id/decline', ensureOfficeAuth, async (req, res) => 
     }
 
     res.redirect('/office-approvals?success=' + encodeURIComponent('Survey submission declined successfully.'));
+
+    if (declined && googleEmail) {
+        createClientNotification({
+            clientEmail: googleEmail,
+            type: 'pending_rejected',
+            title: 'Survey Not Approved',
+            message: 'Your survey response was not approved by the selected office.',
+            pendingSubmissionId: submissionId,
+            dedupeKey: 'pending-rejected:' + submissionId
+        });
+    }
 });
 
 // ==========================================
@@ -3559,6 +3662,97 @@ app.get('/api/client/offline-context', ensureClientAuth, noCache, async (req, re
     }
 });
 
+// ==========================================
+// CLIENT NOTIFICATIONS API
+// ==========================================
+// Every route below is ensureClientAuth'd and every query is scoped by
+// req.clientEmail (the server-derived session identity) — NEVER by
+// anything the request body/query supplies. This is the only thing that
+// prevents Account A from reading/marking/deleting Account B's
+// notifications by editing an id in DevTools: the WHERE clause itself
+// makes a mismatched id simply match zero rows, not an authorization
+// bypass. Deletes are soft (deleted_at) — see client_notifications' schema
+// comment above; nothing here ever touches survey_responses,
+// pending_survey_submissions, offline_survey_submissions, client_accounts,
+// or any offline/IndexedDB state.
+app.get('/api/client/notifications', ensureClientAuth, noCache, async (req, res) => {
+    try {
+        const rows = await dbQuery(
+            `SELECT id, type, title, message, survey_response_id, pending_submission_id, offline_submission_id,
+                    is_read, created_at, read_at
+             FROM client_notifications
+             WHERE client_email = ? AND deleted_at IS NULL
+             ORDER BY created_at DESC
+             LIMIT 50`,
+            [req.clientEmail]
+        );
+        const unreadRow = await dbQuery(
+            'SELECT COUNT(*) AS unread FROM client_notifications WHERE client_email = ? AND is_read = 0 AND deleted_at IS NULL',
+            [req.clientEmail]
+        );
+        res.json({ success: true, notifications: rows, unreadCount: (unreadRow && unreadRow[0]) ? unreadRow[0].unread : 0 });
+    } catch (err) {
+        console.error('❌ [Notifications] Failed to load notifications:', err);
+        res.status(500).json({ success: false, message: 'Server error loading notifications.' });
+    }
+});
+
+app.patch('/api/client/notifications/read-all', ensureClientAuth, async (req, res) => {
+    try {
+        await dbQuery(
+            "UPDATE client_notifications SET is_read = 1, read_at = CURRENT_TIMESTAMP WHERE client_email = ? AND is_read = 0 AND deleted_at IS NULL",
+            [req.clientEmail]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error('❌ [Notifications] Failed to mark all read:', err);
+        res.status(500).json({ success: false, message: 'Server error updating notifications.' });
+    }
+});
+
+app.patch('/api/client/notifications/:id/read', ensureClientAuth, async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ success: false, message: 'Invalid notification id.' });
+    try {
+        await dbQuery(
+            "UPDATE client_notifications SET is_read = 1, read_at = CURRENT_TIMESTAMP WHERE id = ? AND client_email = ? AND deleted_at IS NULL",
+            [id, req.clientEmail]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error('❌ [Notifications] Failed to mark notification read:', err);
+        res.status(500).json({ success: false, message: 'Server error updating notification.' });
+    }
+});
+
+app.delete('/api/client/notifications', ensureClientAuth, async (req, res) => {
+    try {
+        await dbQuery(
+            'UPDATE client_notifications SET deleted_at = CURRENT_TIMESTAMP WHERE client_email = ? AND deleted_at IS NULL',
+            [req.clientEmail]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error('❌ [Notifications] Failed to clear notifications:', err);
+        res.status(500).json({ success: false, message: 'Server error clearing notifications.' });
+    }
+});
+
+app.delete('/api/client/notifications/:id', ensureClientAuth, async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ success: false, message: 'Invalid notification id.' });
+    try {
+        await dbQuery(
+            'UPDATE client_notifications SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND client_email = ? AND deleted_at IS NULL',
+            [id, req.clientEmail]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error('❌ [Notifications] Failed to delete notification:', err);
+        res.status(500).json({ success: false, message: 'Server error deleting notification.' });
+    }
+});
+
 app.post('/api/client-profile', ensureClientAuth, (req, res) => {
     const respondentName = String(req.body.respondent_name || '').trim().slice(0, 255);
     if (!respondentName) {
@@ -4060,13 +4254,53 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
     // password re-check, no re-insert.
     let existingRows;
     try {
-        existingRows = await dbQuery('SELECT approval_status FROM offline_survey_submissions WHERE offline_submission_id = ? LIMIT 1', [submissionId]);
+        existingRows = await dbQuery(
+            'SELECT approval_status, verification_status, registered_identifier, survey_response_id, pending_submission_id FROM offline_survey_submissions WHERE offline_submission_id = ? LIMIT 1',
+            [submissionId]
+        );
     } catch (err) {
         console.error('❌ [Offline Verify] Idempotency lookup failed:', err);
         return res.status(500).json({ success: false, message: 'Server error. Please try again.' });
     }
     if (existingRows && existingRows.length > 0) {
-        const status = existingRows[0].approval_status;
+        const existing = existingRows[0];
+        const status = existing.approval_status;
+
+        // Ensure the ORIGINAL sync notification exists before answering
+        // from the idempotent short-circuit — covers the case where the
+        // survey/pending row committed successfully on an earlier attempt
+        // but the notification insert itself failed that time (logged and
+        // swallowed, per createClientNotification's own contract, so
+        // nothing here retried it automatically until now). dedupe_key's
+        // UNIQUE constraint makes this exactly as safe on the 1st, 2nd, or
+        // 100th replay: already exists -> INSERT IGNORE no-ops; the user
+        // already soft-deleted it -> the row (with deleted_at set) still
+        // physically exists and still matches the same dedupe_key, so it's
+        // never resurrected either way. Never re-runs the survey
+        // transaction, never re-sends the receipt/pending email — only
+        // this one INSERT IGNORE happens here.
+        if (existing.verification_status === 'verified') {
+            createClientNotification({
+                clientEmail: existing.registered_identifier,
+                type: 'offline_synced',
+                title: 'Survey Synchronized',
+                message: 'Your offline survey response was successfully synchronized and submitted.',
+                surveyResponseId: existing.survey_response_id,
+                offlineSubmissionId: submissionId,
+                dedupeKey: 'offline-synced:' + submissionId
+            });
+        } else {
+            createClientNotification({
+                clientEmail: existing.registered_identifier,
+                type: 'offline_pending',
+                title: 'Pending Office Approval',
+                message: 'Your offline survey response was synchronized successfully and is awaiting office approval.',
+                pendingSubmissionId: existing.pending_submission_id,
+                offlineSubmissionId: submissionId,
+                dedupeKey: 'offline-pending:' + submissionId
+            });
+        }
+
         if (status === 'rejected') {
             return res.json({ success: true, status: 'rejected', message: 'This submission was reviewed and was not included in the official results.' });
         }
@@ -4254,6 +4488,21 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
         // client may have shown before this request). pwa-client.js must
         // treat this status as `eligibility_conflict`: no password retry, no
         // automatic 12s re-attempt, record kept for the user to review/edit.
+        // The password already verified successfully above (this is reached
+        // only after that), so the account IS notification-worthy even
+        // though no survey_responses/pending_survey_submissions row was
+        // ever written — reference only the offline submission id, no
+        // survey/pending row id exists to attach.
+        createClientNotification({
+            clientEmail: verifiedEmail,
+            type: 'eligibility_conflict',
+            title: 'Offline Response Not Submitted',
+            message: eligibility.nextEligibleAt
+                ? `Your offline response could not be submitted because the selected service is currently unavailable for another response. You may submit another response for this service after ${new Date(eligibility.nextEligibleAt).toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' })}.`
+                : 'Your offline response could not be submitted because the selected service is currently unavailable for another response.',
+            offlineSubmissionId: submissionId,
+            dedupeKey: 'offline-conflict:' + submissionId
+        });
         return res.status(409).json({
             success: false, status: 'eligibility_conflict', message: eligibility.message,
             nextEligibleAt: eligibility.nextEligibleAt || null
@@ -4336,7 +4585,7 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
 
             await conn.commit();
             console.log('[Offline Verify] Transaction committed');
-            result = { status: 'pending_approval' };
+            result = { status: 'pending_approval', pendingSubmissionId: pendingResult.insertId };
         }
     } catch (err) {
         try { await conn.rollback(); } catch (rollbackErr) { /* connection may already be unusable */ }
@@ -4375,6 +4624,15 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
             submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
             surveyResponseId: result.surveyResponseId
         });
+        createClientNotification({
+            clientEmail: verifiedEmail,
+            type: 'offline_synced',
+            title: 'Survey Synchronized',
+            message: 'Your offline survey response was successfully synchronized and submitted.',
+            surveyResponseId: result.surveyResponseId,
+            offlineSubmissionId: submissionId,
+            dedupeKey: 'offline-synced:' + submissionId
+        });
         return res.json({
             success: true, status: 'synced', submissionId: String(result.surveyResponseId),
             message: 'Survey successfully synchronized.', offlineContext: refreshedOfflineContext
@@ -4382,6 +4640,15 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
     }
 
     sendOfflineSurveyPendingEmail(verifiedEmail, { officeName });
+    createClientNotification({
+        clientEmail: verifiedEmail,
+        type: 'offline_pending',
+        title: 'Pending Office Approval',
+        message: 'Your offline survey response was synchronized successfully and is awaiting office approval.',
+        pendingSubmissionId: result.pendingSubmissionId,
+        offlineSubmissionId: submissionId,
+        dedupeKey: 'offline-pending:' + submissionId
+    });
     return res.json({
         success: true, status: 'pending_approval',
         message: 'Survey synchronized and is pending office approval.', offlineContext: refreshedOfflineContext

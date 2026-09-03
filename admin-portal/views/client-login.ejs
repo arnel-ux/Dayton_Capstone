@@ -49,12 +49,14 @@
             left: 0;
             width: 100vw;
             height: 100vh;
+            max-height: 100vh;
             display: flex;
             flex-direction: column; /* Para magpatong ang titles at card */
             align-items: center;    /* Centers vertically/horizontally */
-            justify-content: center;   
+            justify-content: center;
             z-index: 1;
             padding: 1rem;
+            overflow-y: auto; /* safety fallback: scroll instead of clipping on short viewports — matches login.ejs/reset-password.ejs/complete-google-registration.ejs, which already had this and this file was missing */
         }
 
         /* --- BAGONG DAGDAG NA HEADER STYLES & ANIMATIONS --- */

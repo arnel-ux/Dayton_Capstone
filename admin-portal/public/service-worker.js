@@ -11,14 +11,17 @@
 
 importScripts('/js/offline-db.js');
 
-// v13: client-survey.ejs (the /survey-offline document), offline-db.js, and
-// pwa-client.js all changed again (eligibility-conflict terminal UI +
-// nextEligibleAt, getEligibilityConflictSurveys, email-field 'change'
-// handling) — bumping forces every client to discard v12 (see the activate
-// handler's existing cleanup, unchanged) and re-fetch the updated versions
-// of those three precached resources.
-const STATIC_CACHE = 'cspc-static-v13';
-const RUNTIME_CACHE = 'cspc-runtime-v13';
+// v15: follow-up gap fixes — client-login.ejs (a precached route,
+// '/client-login' below) gained the same overflow-y:auto short-viewport
+// safety fallback its 3 sibling auth pages already had (login.ejs,
+// reset-password.ejs, complete-google-registration.ejs, none of which
+// needed further changes this pass). No other precached file's content
+// changed in this follow-up (server.js's notification-replay-recovery fix
+// only affects the API route handler, never a precached asset). Bumping
+// forces every client to discard v14 (see the activate handler's existing
+// cleanup, unchanged) and re-fetch the updated /client-login document.
+const STATIC_CACHE = 'cspc-static-v15';
+const RUNTIME_CACHE = 'cspc-runtime-v15';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.

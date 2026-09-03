@@ -473,6 +473,14 @@
             confirmButtonColor: '#2554c7',
             allowOutsideClick: false,
             inputValidator: (value) => (value ? undefined : 'Please enter your password.'),
+            // Same show/hide toggle as every other client-facing password
+            // field — see initPasswordToggles in alerts.js. This modal's
+            // input is created fresh by SweetAlert2 on each open, so it
+            // can't be caught by that file's one-time DOMContentLoaded scan
+            // and needs this explicit call once the popup actually exists.
+            didOpen: (popupEl) => {
+                if (typeof window.initPasswordToggles === 'function') window.initPasswordToggles(popupEl);
+            },
             // Belt-and-suspenders on top of SweetAlert2's own DOM teardown —
             // explicitly blank the input before the popup unmounts, so
             // nothing password-shaped lingers in the DOM even momentarily.

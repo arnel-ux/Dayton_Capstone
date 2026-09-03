@@ -180,6 +180,66 @@ const AppAlert = {
     }
 };
 
+// Accessible show/hide toggle for every password input on client/office
+// pages that load this shared file (admin pages don't load it, so this
+// never touches admin forms). Auto-runs on DOMContentLoaded below; also
+// exposed on window so dynamically-created password inputs (e.g. the
+// SweetAlert2 "Verify Account" modal in pwa-client.js) can call it against
+// just their own root element once rendered. Never reads, logs, copies, or
+// persists the value anywhere — the click handler only ever flips the
+// input's own `type` attribute back and forth.
+function initPasswordToggles(root) {
+    root = root || document;
+    root.querySelectorAll('input[type="password"]').forEach((input) => {
+        if (input.dataset.pwToggleInit) return;
+        input.dataset.pwToggleInit = '1';
+
+        const btn = document.createElement('button');
+        btn.type = 'button'; // never a submit trigger
+        btn.className = 'pw-toggle-btn';
+        btn.setAttribute('aria-label', 'Show password');
+        btn.innerHTML = '<i class="bi bi-eye"></i>';
+        btn.addEventListener('click', () => {
+            const showing = input.type === 'text';
+            input.type = showing ? 'password' : 'text';
+            const icon = btn.querySelector('i');
+            if (icon) icon.className = showing ? 'bi bi-eye' : 'bi bi-eye-slash';
+            btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+        });
+
+        // .input-modern (this app's own custom field wrapper) and Bootstrap's
+        // .input-group are both already flex + built to hold a trailing
+        // addon — appended directly as a sibling of the input, never
+        // wrapping it, so their existing CSS (including .input-group's
+        // direct-child flex-sizing selectors) stays intact.
+        const group = input.closest('.input-modern') || input.closest('.input-group');
+        if (group) {
+            if (group.classList.contains('input-group')) {
+                btn.className += ' btn btn-outline-secondary';
+            } else {
+                btn.style.cssText = 'background:none;border:none;padding:0 0.75rem;color:#6b7280;display:flex;align-items:center;';
+            }
+            group.appendChild(btn);
+            return;
+        }
+
+        // No existing icon-field wrapper — wrap just the input itself
+        // (never its <label> or any sibling, and never its `name`
+        // attribute — some client-facing password inputs deliberately
+        // have none so they can never end up in a form's FormData).
+        const wrap = document.createElement('span');
+        wrap.style.cssText = 'position:relative;display:block;';
+        input.parentNode.insertBefore(wrap, input);
+        wrap.appendChild(input);
+        input.style.paddingRight = '3rem';
+        // min 44px tap target (mobile accessibility guideline) without the
+        // icon itself looking oversized — padding provides the extra hit area.
+        btn.style.cssText = 'position:absolute;right:0.2rem;top:50%;transform:translateY(-50%);border:none;background:none;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;line-height:1;color:#6b7280;cursor:pointer;';
+        wrap.appendChild(btn);
+    });
+}
+document.addEventListener('DOMContentLoaded', () => initPasswordToggles());
+
 // Requested global convenience API: showAlert({ type, title, message }).
 // Thin wrapper around AppAlert so both call styles are available everywhere
 // AppAlert is (i.e. everywhere layout/footer.ejs or a page's own script tags

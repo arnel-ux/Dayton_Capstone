@@ -275,6 +275,68 @@
         }
         @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
+        /* Green (not amber like .offline-pill): this is good news, not the
+           "you're on your own" state the amber pill represents. */
+        .back-online-banner {
+            background: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            color: #065f46;
+            border-radius: 14px;
+            padding: 0.9rem 1.1rem;
+            margin-bottom: 1.25rem;
+        }
+        [data-bs-theme="dark"] .back-online-banner { background: rgba(16,185,129,0.12); color: #6ee7b7; border-color: rgba(16,185,129,0.35); }
+        .back-online-banner-title { font-weight: 700; display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.25rem; }
+        .back-online-banner-text { margin: 0 0 0.7rem; font-size: 0.88rem; }
+        .back-online-banner-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+        /* =========================================================
+           NOTIFICATION BELL + PANEL — authenticated client pages only
+        ========================================================= */
+        .notif-bell-wrap { position: relative; }
+        .notif-unread-badge {
+            position: absolute; top: -2px; right: -2px;
+            background: #dc3545; color: #fff; border-radius: 999px;
+            font-size: 0.65rem; font-weight: 700; line-height: 1;
+            min-width: 16px; height: 16px; padding: 0 3px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .notif-panel {
+            position: absolute; top: calc(100% + 0.5rem); right: 0;
+            width: 360px; max-width: calc(100vw - 2rem);
+            max-height: 70vh; overflow-y: auto;
+            background: var(--bs-body-bg, #fff); color: var(--bs-body-color, #1f2937);
+            border: 1px solid rgba(0,0,0,0.1); border-radius: 14px;
+            box-shadow: 0 24px 48px -16px rgba(10,20,40,0.35);
+            z-index: 1050;
+        }
+        .notif-panel-header {
+            display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.4rem;
+            padding: 0.85rem 1rem; border-bottom: 1px solid rgba(0,0,0,0.08);
+        }
+        .notif-panel-header-actions { display: flex; gap: 0.75rem; font-size: 0.8rem; }
+        .notif-list { padding: 0.25rem 0; }
+        .notif-item { display: flex; gap: 0.6rem; padding: 0.7rem 1rem; border-bottom: 1px solid rgba(0,0,0,0.05); align-items: flex-start; }
+        .notif-item.is-unread { background: rgba(37,84,199,0.06); }
+        .notif-item-dot { width: 8px; height: 8px; border-radius: 50%; background: #2554c7; margin-top: 0.4rem; flex: none; }
+        .notif-item.is-unread .notif-item-dot { visibility: visible; }
+        .notif-item:not(.is-unread) .notif-item-dot { visibility: hidden; }
+        .notif-item-body { flex: 1 1 auto; min-width: 0; }
+        .notif-item-title { font-weight: 600; font-size: 0.88rem; word-break: break-word; }
+        .notif-item-message { font-size: 0.82rem; color: #6b7280; margin: 0.15rem 0; word-break: break-word; }
+        .notif-item-time { font-size: 0.72rem; color: #9ca3af; }
+        .notif-item-delete { background: none; border: none; color: #9ca3af; padding: 0.25rem; flex: none; min-width: 32px; min-height: 32px; }
+        .notif-item-delete:hover { color: #dc3545; }
+        .notif-empty { padding: 2rem 1rem; text-align: center; color: #9ca3af; font-size: 0.85rem; }
+
+        @media (max-width: 480px) {
+            .notif-panel {
+                position: fixed; top: auto; bottom: 0; left: 0; right: 0;
+                width: 100%; max-width: 100%; max-height: 80vh;
+                border-radius: 16px 16px 0 0;
+            }
+        }
+
         .content-body { padding: 2rem 1.75rem 3.5rem; flex-grow: 1; }
 
         /* =========================================================
@@ -1389,6 +1451,11 @@
             <% if (!offlineMode) { %>
             <a href="#" data-view="profile" class="nav-item-link" onclick="return switchView('profile');"><i class="bi bi-person-fill"></i> Profile</a>
             <a href="#" data-view="history" class="nav-item-link" onclick="return switchView('history');"><i class="bi bi-clock-history"></i> History</a>
+            <% } else { %>
+            <!-- Offline entry point only — the authenticated survey already has
+                 its own Home view for this; this exists only because /survey-offline
+                 has no "Home" concept of its own to return to. -->
+            <a href="/" class="nav-item-link" id="offlineBackToDashboardLink" onclick="return confirmLeaveOfflineSurvey('/', event);"><i class="bi bi-house-door"></i> Back to Dashboard</a>
             <% } %>
         </nav>
 
@@ -1423,6 +1490,26 @@
                 <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — your answers are saved on this device and will sync automatically once you're back online.">
                     <span class="dot"></span><span class="label"><span class="label-full">Viewing </span>Offline</span>
                 </span>
+                <% if (!offlineMode) { %>
+                <!-- Authenticated only — an anonymous /survey-offline visitor has no
+                     account session to fetch notifications for. -->
+                <div class="notif-bell-wrap">
+                    <button id="btn-notif-bell" type="button" class="btn-fullscreen" title="Notifications" aria-label="Notifications" onclick="toggleNotificationPanel()">
+                        <i class="bi bi-bell"></i>
+                        <span id="notifUnreadBadge" class="notif-unread-badge" hidden>0</span>
+                    </button>
+                    <div id="notifPanel" class="notif-panel" hidden>
+                        <div class="notif-panel-header">
+                            <span class="fw-semibold">Notifications</span>
+                            <div class="notif-panel-header-actions">
+                                <button type="button" class="btn btn-link btn-sm p-0" onclick="markAllNotificationsRead()">Mark all read</button>
+                                <button type="button" class="btn btn-link btn-sm p-0 text-danger" onclick="clearAllNotifications()">Clear all</button>
+                            </div>
+                        </div>
+                        <div id="notifList" class="notif-list"></div>
+                    </div>
+                </div>
+                <% } %>
                 <button id="btn-fullscreen" type="button" onclick="toggleFullscreen()" class="btn-fullscreen" title="Toggle full screen" aria-label="Toggle full screen">
                     <i class="bi bi-arrows-fullscreen"></i>
                 </button>
@@ -1434,6 +1521,23 @@
         </header>
 
         <div class="content-body">
+
+        <% if (offlineMode) { %>
+        <!-- Shown by showBackOnlineBanner() (pwa-client.js-adjacent script below)
+             when the 'online' event fires on THIS page. Deliberately never
+             auto-navigates or reloads — see confirmLeaveOfflineSurvey() — so an
+             in-progress survey, the RAM-only password, and any already-queued
+             IndexedDB records all survive regardless of what the user picks. -->
+        <div id="backOnlineBanner" class="back-online-banner" hidden>
+            <div class="back-online-banner-title"><i class="bi bi-wifi"></i> You're Back Online</div>
+            <p class="back-online-banner-text">Your internet connection has been restored. Offline responses will synchronize automatically when eligible.</p>
+            <div class="back-online-banner-actions">
+                <button type="button" class="btn btn-sm btn-primary" onclick="confirmLeaveOfflineSurvey('/')">Go to Dashboard</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="confirmLeaveOfflineSurvey('/login')">Login</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="dismissBackOnlineBanner()">Stay Here</button>
+            </div>
+        </div>
+        <% } %>
 
         <div class="app-view active" id="view-home">
         <div class="card border-0 view-card home-card">
@@ -2433,6 +2537,173 @@ if (!OFFLINE_MODE) {
 }
 
 // ==========================================
+// NOTIFICATION BELL — authenticated client pages only. Real server-backed
+// notifications (GET/PATCH/DELETE /api/client/notifications*, all
+// ensureClientAuth'd and scoped by session email server-side) — this code
+// only renders what the server returns and never trusts/sends any
+// client-asserted identity for authorization.
+// ==========================================
+function timeAgo(isoString) {
+    const then = new Date(isoString).getTime();
+    if (isNaN(then)) return '';
+    const diffSec = Math.max(0, Math.floor((Date.now() - then) / 1000));
+    if (diffSec < 60) return 'Just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return diffMin + (diffMin === 1 ? ' minute ago' : ' minutes ago');
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return diffHr + (diffHr === 1 ? ' hour ago' : ' hours ago');
+    const diffDay = Math.floor(diffHr / 24);
+    if (diffDay === 1) return 'Yesterday';
+    if (diffDay < 7) return diffDay + ' days ago';
+    return new Date(isoString).toLocaleDateString('en-PH', { dateStyle: 'medium' });
+}
+
+function renderNotifications(notifications) {
+    const list = document.getElementById('notifList');
+    if (!list) return;
+
+    if (!notifications.length) {
+        const empty = document.createElement('div');
+        empty.className = 'notif-empty';
+        empty.textContent = 'No notifications yet.';
+        list.replaceChildren(empty);
+        return;
+    }
+
+    const items = notifications.map((n) => {
+        const item = document.createElement('div');
+        item.className = 'notif-item' + (n.is_read ? '' : ' is-unread');
+
+        const dot = document.createElement('span');
+        dot.className = 'notif-item-dot';
+        item.appendChild(dot);
+
+        const body = document.createElement('div');
+        body.className = 'notif-item-body';
+        body.addEventListener('click', () => { if (!n.is_read) markNotificationRead(n.id); });
+
+        const title = document.createElement('div');
+        title.className = 'notif-item-title';
+        title.textContent = n.title;
+        body.appendChild(title);
+
+        const message = document.createElement('div');
+        message.className = 'notif-item-message';
+        message.textContent = n.message;
+        body.appendChild(message);
+
+        const time = document.createElement('div');
+        time.className = 'notif-item-time';
+        time.textContent = timeAgo(n.created_at);
+        body.appendChild(time);
+
+        item.appendChild(body);
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'notif-item-delete';
+        delBtn.setAttribute('aria-label', 'Delete notification');
+        delBtn.innerHTML = '<i class="bi bi-trash"></i>';
+        delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteNotification(n.id); });
+        item.appendChild(delBtn);
+
+        return item;
+    });
+
+    list.replaceChildren(...items);
+}
+
+function updateNotifBadge(count) {
+    const badge = document.getElementById('notifUnreadBadge');
+    if (!badge) return;
+    if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.hidden = false;
+    } else {
+        badge.hidden = true;
+    }
+}
+
+let notificationsLoaded = false;
+function loadNotifications() {
+    if (OFFLINE_MODE || !navigator.onLine) return;
+    fetchWithTimeout('/api/client/notifications', {}, 8000)
+        .then(res => res.json())
+        .then(data => {
+            if (!data || !data.success) return;
+            notificationsLoaded = true;
+            renderNotifications(data.notifications || []);
+            updateNotifBadge(data.unreadCount || 0);
+        })
+        .catch(err => console.error('[Notifications] Failed to load:', err));
+}
+
+function toggleNotificationPanel() {
+    const panel = document.getElementById('notifPanel');
+    if (!panel) return;
+    const opening = panel.hidden;
+    panel.hidden = !opening;
+    if (opening && !notificationsLoaded) loadNotifications();
+}
+document.addEventListener('click', (e) => {
+    const panel = document.getElementById('notifPanel');
+    const bell = document.getElementById('btn-notif-bell');
+    if (!panel || panel.hidden) return;
+    if (panel.contains(e.target) || (bell && bell.contains(e.target))) return;
+    panel.hidden = true;
+});
+
+function markNotificationRead(id) {
+    fetchWithTimeout('/api/client/notifications/' + encodeURIComponent(id) + '/read', { method: 'PATCH' }, 8000)
+        .then(() => loadNotifications())
+        .catch(err => console.error('[Notifications] Failed to mark read:', err));
+}
+
+function markAllNotificationsRead() {
+    fetchWithTimeout('/api/client/notifications/read-all', { method: 'PATCH' }, 8000)
+        .then(() => loadNotifications())
+        .catch(err => console.error('[Notifications] Failed to mark all read:', err));
+}
+
+async function deleteNotification(id) {
+    let confirmed;
+    if (window.AppAlert && typeof AppAlert.confirm === 'function') {
+        confirmed = await AppAlert.confirm('Delete this notification?', { title: 'Delete Notification?', confirmText: 'Delete' });
+    } else {
+        confirmed = window.confirm('Delete this notification?');
+    }
+    if (!confirmed) return;
+    fetchWithTimeout('/api/client/notifications/' + encodeURIComponent(id), { method: 'DELETE' }, 8000)
+        .then(() => loadNotifications())
+        .catch(err => console.error('[Notifications] Failed to delete:', err));
+}
+
+async function clearAllNotifications() {
+    let confirmed;
+    const text = 'This will remove notifications from your notification inbox. It will NOT delete your surveys or change their status.';
+    if (window.AppAlert && typeof AppAlert.confirm === 'function') {
+        confirmed = await AppAlert.confirm(text, { title: 'Clear all notifications?', confirmText: 'Clear All' });
+    } else {
+        confirmed = window.confirm('Clear all notifications? ' + text);
+    }
+    if (!confirmed) return;
+    fetchWithTimeout('/api/client/notifications', { method: 'DELETE' }, 8000)
+        .then(() => loadNotifications())
+        .catch(err => console.error('[Notifications] Failed to clear all:', err));
+}
+
+if (!OFFLINE_MODE) {
+    window.addEventListener('load', loadNotifications);
+    // Reasonable poll while the page stays open and authenticated — no
+    // WebSocket/realtime infrastructure exists to push these instead.
+    // Paused while the tab is hidden so a backgrounded tab doesn't keep
+    // polling needlessly.
+    setInterval(() => {
+        if (document.visibilityState === 'visible') loadNotifications();
+    }, 45000);
+}
+
+// ==========================================
 // /survey-offline ONLY — applies a cached offlineAccountContext (see
 // offline-db.js) once the user types a registered email this device has
 // previously seen during an authenticated online session. Purely a UX
@@ -2552,6 +2823,65 @@ window.addEventListener('online', updateOfflineIndicator);
 window.addEventListener('offline', updateOfflineIndicator);
 document.addEventListener('DOMContentLoaded', updateOfflineIndicator);
 updateOfflineIndicator();
+
+// ==========================================
+// BACK-ONLINE BANNER — offlineMode only. Deliberately never reloads or
+// auto-navigates: an automatic redirect could discard unfinished answers,
+// the current step, or the RAM-only credential. The user decides.
+// ==========================================
+function showBackOnlineBanner() {
+    if (!OFFLINE_MODE) return;
+    const banner = document.getElementById('backOnlineBanner');
+    if (banner) banner.hidden = false;
+}
+function dismissBackOnlineBanner() {
+    const banner = document.getElementById('backOnlineBanner');
+    if (banner) banner.hidden = true;
+}
+
+// Heuristic for "there is unfinished, unsubmitted survey information worth
+// warning about before navigating away" — past Stage 1 (Terms) counts,
+// since nothing has been entered yet at Stage 1 itself.
+function hasUnsavedSurveyProgress() {
+    const activePage = document.querySelector('#surveyForm .page.active');
+    if (!activePage) return false;
+    const stage = parseInt(activePage.id.replace('stage', ''), 10);
+    return stage > 1;
+}
+
+// Used by both the sidebar's "Back to Dashboard" link and the back-online
+// banner's "Go to Dashboard"/"Login" buttons. `event` is only passed by the
+// <a> (to synchronously block its default navigation while the confirm — if
+// shown — is still pending); plain <button>s have no default action to
+// prevent. Never touches the RAM password or IndexedDB outbox itself — a
+// real navigation away would drop the in-memory password regardless of
+// this function, which is exactly why it asks first instead of trying to
+// persist it.
+function confirmLeaveOfflineSurvey(url, event) {
+    if (event) event.preventDefault();
+    (async () => {
+        if (hasUnsavedSurveyProgress()) {
+            let confirmed;
+            if (window.AppAlert && typeof AppAlert.confirm === 'function') {
+                confirmed = await AppAlert.confirm(
+                    'You have unfinished survey information. Leaving this page may discard the unfinished form.',
+                    { title: 'Leave Offline Survey?', confirmText: 'Leave' }
+                );
+            } else {
+                confirmed = window.confirm('You have unfinished survey information. Leaving this page may discard the unfinished form.');
+            }
+            if (!confirmed) return;
+        }
+        window.location.href = url;
+    })();
+    return false;
+}
+
+if (OFFLINE_MODE) {
+    // A real reconnect is the only thing that should show this — never on
+    // initial page load (the page may have been opened while already online).
+    window.addEventListener('online', showBackOnlineBanner);
+}
 
 // Local, client-side fallback autofill. Independent of the server's
 // client_accounts lookup (which only has data for users whose account row
@@ -3684,8 +4014,23 @@ const i18n = {
 // I-render ang SQD Table na may tamang value (5, 4, 3, 2, 1, 0) para sa Database
 function renderSQD() {
     const tbody = document.getElementById('sqd-body');
+
+    // ROOT CAUSE of "language switch resets survey answers": this function
+    // rebuilds the entire SQD table from scratch on every call (needed
+    // because the rating labels themselves are translated), and a freshly
+    // created <input type="radio"> is never `checked` — so the previous
+    // selections were silently destroyed every time setLanguage() ran.
+    // Snapshot what's currently selected before tearing the table down,
+    // then reapply it after rebuilding — the DOM nodes are new, but the
+    // user's answers survive.
+    const previousSqdSelections = {};
+    for (let i = 0; i < 9; i++) {
+        const checked = tbody.querySelector(`input[name="sqd${i}"]:checked`);
+        if (checked) previousSqdSelections[i] = checked.value;
+    }
+
     tbody.innerHTML = '';
-    
+
     // Each rating cell wraps its radio in a full-cell <label> so clicking anywhere
     // in the cell (not just the tiny circle) selects it — native <label>-for-<input>
     // behavior, so it needs no JS click handler and survives renderSQD() re-running
@@ -3720,6 +4065,12 @@ function renderSQD() {
                 ${ratingCell(index, 0)}
             </tr>
         `;
+    });
+
+    Object.keys(previousSqdSelections).forEach((index) => {
+        const value = previousSqdSelections[index];
+        const radio = tbody.querySelector(`input[name="sqd${index}"][value="${CSS.escape(value)}"]`);
+        if (radio) radio.checked = true;
     });
 }
 
