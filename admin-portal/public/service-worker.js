@@ -11,8 +11,15 @@
 
 importScripts('/js/offline-db.js');
 
-const STATIC_CACHE = 'cspc-static-v10';
-const RUNTIME_CACHE = 'cspc-runtime-v10';
+// v11: hardens precaching against ever storing a redirected/non-200 response
+// under a route's cache key (see the CRITICAL_PRECACHE_URLS validation below
+// and the redirect checks added to every runtime caching path) — a stale v10
+// install could otherwise be holding a poisoned /survey-offline entry from
+// before that validation existed. Bumping forces every client to discard v9/
+// v10 (see the activate handler's existing cleanup, unchanged) and re-fetch
+// everything fresh under the new cache names.
+const STATIC_CACHE = 'cspc-static-v11';
+const RUNTIME_CACHE = 'cspc-runtime-v11';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
@@ -38,6 +45,14 @@ const PRECACHE_URLS = [
     '/survey-offline'
 ];
 
+// Resources the offline survey cannot function without — precached with
+// strict validation (see cacheCriticalUrl below): a redirected, non-200, or
+// wrong-path response is refused rather than silently cached under the
+// wrong key. A failure here is logged loudly, unlike the best-effort
+// PRECACHE_URLS/CDN_PRECACHE_URLS entries below (e.g. a decorative image),
+// where one bad resource staying uncached is harmless.
+const CRITICAL_PRECACHE_URLS = ['/survey-offline', '/js/pwa-client.js', '/js/offline-db.js', '/js/alerts.js'];
+
 // Third-party libraries the survey/login pages load from a CDN. Cached
 // individually (not via cache.addAll) so one failure doesn't abort install.
 const CDN_PRECACHE_URLS = [
@@ -52,17 +67,55 @@ const CDN_PRECACHE_URLS = [
 
 const RUNTIME_CACHE_HOSTS = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com', 'cdnjs.cloudflare.com', 'spims.cspc.edu.ph'];
 
+// Fetches and validates one CRITICAL_PRECACHE_URLS entry before storing it —
+// unlike plain cache.add(url), which stores whatever response it gets
+// (including one that silently followed a redirect elsewhere), this refuses
+// anything that isn't a genuine, unredirected 200 for the exact path asked
+// for. Never lets a redirected/login/error page get cached under a critical
+// route's own key.
+async function cacheCriticalUrl(cache, url) {
+    console.log('[SW] Precaching', url);
+    const response = await fetch(url, { cache: 'reload', credentials: 'same-origin' });
+
+    if (!response.ok) {
+        throw new Error('non-OK status ' + response.status);
+    }
+    if (response.redirected) {
+        console.warn('[SW] Refused redirected precache response for', url);
+        throw new Error('response was redirected');
+    }
+    if (new URL(response.url).pathname !== url) {
+        console.warn('[SW] Refused precache response with unexpected path for', url);
+        throw new Error('response path mismatch');
+    }
+
+    await cache.put(url, response.clone());
+    console.log('[SW] Cached', url, 'successfully');
+}
+
 self.addEventListener('install', (event) => {
     self.skipWaiting();
     event.waitUntil((async () => {
+        const cache = await caches.open(STATIC_CACHE);
+
+        // Critical resources: validated individually (see cacheCriticalUrl)
+        // and loudly logged on failure — the offline survey depends on
+        // these actually being correct, not just present.
+        await Promise.allSettled(
+            CRITICAL_PRECACHE_URLS.map((url) =>
+                cacheCriticalUrl(cache, url).catch((err) => console.error('[SW] Failed to precache critical resource', url, err))
+            )
+        );
+
         // Deliberately NOT cache.addAll(PRECACHE_URLS) — addAll is all-or-nothing,
         // so a single transient failure (one blip on one resource, a session-state
         // redirect on /client-login, ...) would silently fail the ENTIRE install
         // and leave nothing precached at all, with offline support then depending
         // entirely on whatever incidental runtime caching happened to occur later.
         // Precaching every URL independently means one bad resource costs only
-        // that resource.
-        const cache = await caches.open(STATIC_CACHE);
+        // that resource. The remaining (non-critical, best-effort) entries here
+        // may include duplicates of the critical URLs above — cache.add() simply
+        // overwrites with an equally-fresh copy in that case, which is harmless.
         await Promise.allSettled(
             PRECACHE_URLS.map((url) =>
                 cache.add(url).catch((err) => console.warn('[SW] Failed to precache', url, err))
@@ -144,8 +197,20 @@ const ASSET_TIMEOUT_MS = 6000;
 async function handleNavigation(request) {
     try {
         const response = await fetchWithTimeout(request, {}, NAVIGATION_TIMEOUT_MS);
-        const cache = await caches.open(RUNTIME_CACHE);
-        cache.put(request, response.clone());
+
+        // Only cache a genuine, unredirected 200 for the exact URL requested.
+        // fetch() transparently follows redirects (e.g. ensureClientAuth's
+        // res.redirect(302, '/login') for an unauthenticated /client-survey
+        // request) — without this check, that redirected login page would
+        // get cached under the ORIGINAL request's key, so a later offline
+        // navigation to that original page would silently serve the wrong
+        // cached page instead of failing naturally. The response is still
+        // returned to the browser normally either way (an online user's
+        // redirect must still work) — this only refuses to cache it.
+        if (response.ok && !response.redirected) {
+            const cache = await caches.open(RUNTIME_CACHE);
+            cache.put(request, response.clone());
+        }
         return response;
     } catch (err) {
         // Check RUNTIME_CACHE before STATIC_CACHE. Pages like '/', '/login',
@@ -160,12 +225,19 @@ async function handleNavigation(request) {
         // later online visit. Checking RUNTIME_CACHE explicitly first means
         // any page that's ever been fetched fresh always wins over the
         // stale precached copy.
+        console.log('[SW] Navigation network failed; checking exact cache');
         const runtimeCache = await caches.open(RUNTIME_CACHE);
         const freshCached = await runtimeCache.match(request);
-        if (freshCached) return freshCached;
+        if (freshCached) {
+            console.log('[SW] Serving cached', new URL(request.url).pathname);
+            return freshCached;
+        }
 
         const cached = await caches.match(request);
-        if (cached) return cached;
+        if (cached) {
+            console.log('[SW] Serving cached', new URL(request.url).pathname);
+            return cached;
+        }
 
         // No generic offline fallback page anymore — a navigation to a page
         // that was never cached (and the network is unreachable) simply
@@ -182,7 +254,10 @@ async function staleWhileRevalidate(request, cacheName) {
     const cached = await cache.match(request);
     const networkFetch = fetchWithTimeout(request, {}, ASSET_TIMEOUT_MS)
         .then((response) => {
-            if (response && response.ok) cache.put(request, response.clone());
+            // !response.redirected: same reasoning as handleNavigation above —
+            // never let a redirected response get cached under a different
+            // asset's key.
+            if (response && response.ok && !response.redirected) cache.put(request, response.clone());
             return response;
         })
         .catch(() => cached);
@@ -194,7 +269,7 @@ async function cacheFirst(request, cacheName) {
     if (cached) return cached;
     try {
         const response = await fetchWithTimeout(request, {}, ASSET_TIMEOUT_MS);
-        if (response && response.ok) {
+        if (response && response.ok && !response.redirected) {
             const cache = await caches.open(cacheName);
             cache.put(request, response.clone());
         }
