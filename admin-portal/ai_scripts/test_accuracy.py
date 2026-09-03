@@ -43,8 +43,19 @@ CASES = [
     ("Nakakalito ang online system, hindi ko alam saan mag-login.", "Negative", "Online System and Portal - Login/Account", None),
     ("Madaling gamitin ang portal, user-friendly talaga.", "Positive", "Ease of Use - User-Friendly Design", None),
     ("Sira ang aircon sa opisina, sobrang init.", "Negative", "Aircon and Cooling - Air Conditioning Unit", None),
-    ("Malinis ang comfort room ngayon, salamat.", "Positive", "Restroom - Restroom/CR", None),
-    ("Marumi ang banyo, nakakadiri.", "Negative", "Restroom - Restroom/CR", None),
+    # Deliberate taxonomy change (2026-09): a cleanliness word ("malinis"/
+    # "marumi") + a bare restroom-location word now resolves to "Cleanliness
+    # - Restroom/CR", not the plain "Restroom" topic — the ISSUE is
+    # cleanliness, the restroom is only the location/subtopic. Previously
+    # this and "Restroom" both scored 1 hit and "Restroom" won purely
+    # because it's listed earlier in TOPIC_KEYWORDS; cleanliness/appearance
+    # descriptors are now weighted 1.5 in that dict specifically so the
+    # issue word outranks the bare location noun on a tie (see topic_common
+    # Cleanliness comment). "Restroom" the topic is still correct for a
+    # restroom complaint that ISN'T about cleanliness (e.g. "walang tissue",
+    # "sira ang gripo sa CR").
+    ("Malinis ang comfort room ngayon, salamat.", "Positive", "Cleanliness - Restroom/CR", None),
+    ("Marumi ang banyo, nakakadiri.", "Negative", "Cleanliness - Restroom/CR", None),
     ("Sirang silya ang nakita ko sa waiting area.", "Negative", "Seating and Furniture - Chairs", None),
     ("Walang kuryente kanina, nag-brownout ng ilang oras.", "Negative", "Power and Lighting - Power Outage", None),
     ("Bastos ang guard sa gate, hindi magalang.", "Negative", "Courtesy and Attitude - Security Guard", None),
@@ -130,16 +141,22 @@ CASES = [
     ("Parang nasa ibang mundo ako, ang haba ng oras na lumipas bago ako naasikaso.", "Negative", "Queueing and Waiting Time", None),
     ("Bumalik ako ng ilang beses dahil laging kulang yung requirements na sinasabi nila, iba-iba sagot kada tanong.", "Negative", "Communication and Information - Inconsistent/Contradicting Information", None),
     ("Sa totoo lang di ko masabing masama, pero di rin naman siya kahanga-hanga, ganon lang siya.", "Positive", "General Feedback", None),
-    ("Grabe yung pasensya ng nag-asikaso sa akin, kahit paulit-ulit kong tinatanong, buong-buo pa rin sinasagot niya.", "Negative", "Courtesy and Attitude", None),
+    # Reworded 2026-09 — "nag-asikaso" collided with the new Courtesy and
+    # Attitude "Accommodation/Assistance" item keywords added for the
+    # lexicon-accuracy pass (see topic_common.py), same "anchor word added
+    # later, reword to keep exercising the AI fallback" pattern as the
+    # "naasikaso" case above.
+    ("Grabe yung pasensya ng taong kausap ko, kahit paulit-ulit kong tinatanong, buong-buo pa rin sinasagot niya.", "Negative", "Courtesy and Attitude", None),
     ("Parang wala silang paki kung anong oras ka dumating, ganon pa rin bilis ng galaw nila.", "Negative", "Process Efficiency", None),
     ("Kung babalikan ko yung karanasan, sasabihin kong okay lang siya, walang espesyal pero tapos naman.", "Neutral", "General Feedback", None),
     ("Ang galing nila ipaliwanag yung bawat hakbang, kahit unang beses ko lang gawin naintindihan ko agad.", "Positive", "Communication and Information", None),
     ("Grabe, akala mo simple lang yung kailangan kong gawin pero umabot pa ako ng tatlong beses bumalik.", "Negative", "General Feedback", None),
     ("Hindi ko alam kung dapat ba akong magalit o magpasalamat, magkahalo yung nangyari sa akin.", "Neutral", "General Feedback", None),
     # Reworded 2026-08-31 — same "naghintay" anchor collision as above, same
-    # fix.
-    ("Kahit medyo maraming tao, hindi naman ako natagalan, bigla na lang na-asikaso ako.", "Negative", "General Feedback", None),
-    ("Yung nag-asikaso sa akin parang gustong-gusto na akong umalis, halatang ayaw makipag-usap.", "Negative", "Courtesy and Attitude", None),
+    # fix. Reworded again 2026-09 to also avoid "na-asikaso" (see the
+    # Courtesy and Attitude comment above).
+    ("Kahit medyo maraming tao, hindi naman ako natagalan, bigla na lang may lumapit sa akin.", "Negative", "General Feedback", None),
+    ("Yung kausap ko parang gustong-gusto na akong umalis, halatang ayaw makipag-usap.", "Negative", "Courtesy and Attitude", None),
     ("Nagulat ako sa bilis, akala ko matatagalan pa ako pero bago pa man ako maupo tapos na agad.", "Positive", "Transaction Speed - Transaction Duration", None),
     ("Sa dami ng beses kong pumunta, wala pa rin akong maayos na sagot kung ano talaga ang kailangan ko.", "Positive", "Communication and Information", None),
     ("Kung tutuusin, di ko naramdaman kahit anong pagbabago mula noong huli akong pumunta rito.", "Neutral", "General Feedback", None),

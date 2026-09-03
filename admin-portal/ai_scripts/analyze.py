@@ -9,7 +9,7 @@ os.environ['TRANSFORMERS_VERBOSITY'] = 'error'
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from topic_common import GENERAL_FEEDBACK, fast_sentiment, fast_topic
+from topic_common import fast_sentiment, fast_topic, is_no_feedback
 
 # ---------------------------------------------------------------------------
 # INPUT PROTOCOL
@@ -42,9 +42,14 @@ if raw_input.startswith('{'):
         pass  # not JSON after all — treat raw_input as the plain comment text
 
 try:
-    if client_comment == "":
-        final_sentiment = "Neutral"
-        final_topic = GENERAL_FEEDBACK
+    # Blank AND common "nothing to say" placeholders ("N/A", "none", "no
+    # comment", ...) must never receive a fabricated classification — see
+    # is_no_feedback's docstring. None here becomes a real JSON null, which
+    # server.js's analyzeComment() already treats the same way a blank
+    # comment always has (never a default "Neutral"/"General Feedback").
+    if is_no_feedback(client_comment):
+        final_sentiment = None
+        final_topic = None
 
     elif is_offline:
         # Fast path: no model import, no model load, no network — just the

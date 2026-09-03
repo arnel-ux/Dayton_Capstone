@@ -7,6 +7,46 @@ heuristic path and the full model path can never silently drift apart.
 import re
 
 # ---------------------------------------------------------------------------
+# NO-FEEDBACK DETECTION — must run BEFORE any lexicon/AI classification.
+# A blank comment or an explicit "nothing to say" placeholder ("N/A", "none",
+# "no comment", ...) has no actual content to classify — forcing it through
+# the lexicon/AI pipeline previously produced a fabricated "General Feedback
+# / Neutral" result, which reads to an admin as a real (if generic) opinion
+# rather than "this respondent didn't write anything." Callers (analyze.py,
+# model_server.py, server.js's analyzeComment) must check this FIRST and
+# short-circuit to no classification at all (topic=None, sentiment=None) —
+# see each caller for how that maps to the database (NULL, not a string).
+# ---------------------------------------------------------------------------
+NO_FEEDBACK_PHRASES = {
+    "na", "n/a", "none", "nil", "no comment", "no comments", "not applicable",
+}
+
+
+def is_no_feedback(text):
+    """
+    True for a blank/whitespace-only comment, or one of the common "nothing
+    to say" placeholders in any case/spacing and with or without periods or
+    dashes — "N/A", "n/a", "NA", "N.A.", "None", "NONE", "nil", "Nil",
+    "No Comment", "not applicable", "-", "--", "..." all normalize to a
+    match here. Anything with real content (even a single real word) is not
+    a no-feedback comment, however short.
+    """
+    if text is None:
+        return True
+    trimmed = str(text).strip()
+    if trimmed == "":
+        return True
+    # Dashes/periods stripped before comparing: "N.A." -> "na", "--"/"..." -> ""
+    # (caught by the blank check below), without touching real words that
+    # merely contain a period/dash elsewhere (e.g. "wi-fi", "e.g." in a real
+    # sentence never reduce to one of the exact phrases below).
+    stripped = re.sub(r'[.\-]', '', trimmed.lower())
+    stripped = re.sub(r'\s+', ' ', stripped).strip()
+    if stripped == "":
+        return True
+    return stripped in NO_FEEDBACK_PHRASES
+
+# ---------------------------------------------------------------------------
 # HYPHEN-TOLERANT KEYWORD MATCHING
 # Real feedback typed by Filipino users on a phone keyboard very often drops
 # hyphens ("naghang" / "nag hang" instead of "nag-hang", "wifi" instead of
@@ -197,9 +237,24 @@ TOPIC_KEYWORDS = {
         "glitch", "glitchy", "buggy", "crashed", "crashing", "nag-crash",
         "nag-hang", "hanging", "nag-error", "system error",
     ],
+    # "mainit"/"init" (hot/heat) and "malamig"/"lamig" (cold) added — a
+    # room-temperature complaint doesn't always name the aircon itself
+    # ("mainit sa office" never mentions "aircon" at all), so the bare
+    # temperature descriptor needs to anchor this topic on its own, not only
+    # the equipment noun. "napaka-"/"sobrang"/"masyadong" prefixed forms are
+    # listed explicitly (same convention as the rest of this file, e.g.
+    # "hindi marunong"/"hindi madunong" above) since _kw_pattern's word
+    # boundaries don't match a concatenated intensifier prefix.
     "Aircon and Cooling": [
         "aircon", "air-con", "air condition", "aircondition", "air conditioning",
         "electric fan", "bentilador", "pabentilador",
+        "mainit", "ang init", "sobrang init", "napakainit", "napaka init",
+        "masyadong mainit", "too hot", "very hot", "hot room", "hot office",
+        "stuffy", "kulob", "maalinsangan",
+        "malamig", "sobrang lamig", "napakalamig", "too cold", "very cold",
+        "walang aircon", "walang air con", "sira ang aircon", "sirang aircon",
+        "mahina ang aircon", "mahina aircon", "walang ventilation",
+        "poor ventilation", "kulang ventilation", "walang bentilasyon",
     ],
     # Restroom-specific words only — split from the old combined "Restroom
     # and Cleanliness" topic on 2026-08-31 (see candidate_topics comment
@@ -217,9 +272,45 @@ TOPIC_KEYWORDS = {
     # (messy/cluttered) and "magulo" (disorganized/messy) added 2026-08-31
     # after a real comment ("makalat ang office nila") had no anchor at all
     # in either the old combined topic or this one.
+    #
+    # Weighted 1.5 (the bare location nouns in Restroom/Office-type topics
+    # stay at the default 1): a comment like "napakabaho ng CR" previously
+    # tied 1-1 against "Restroom" (bare "cr") and lost the tie-break purely
+    # because "Restroom" is listed earlier in this dict — even though the
+    # ACTUAL complaint (baho = smell) is a cleanliness issue, "cr" is just
+    # the location. Per the taxonomy: the issue word must outrank a bare
+    # location noun, so a real cleanliness descriptor now always wins that
+    # tie instead of losing it by dict-order accident.
+    #
+    # Deliberately HYGIENE-ONLY (dirt/dust/smell/sanitation) — appearance
+    # words ("pangit", "kaaya-aya", "unpresentable", ...) were removed from
+    # here 2026-09 and moved to Facilities and Equipment's own Appearance/
+    # Presentation item instead. "Di kaaya-ayang tignan ang office" is not
+    # evidence of anything being unclean; conflating the two meant an
+    # appearance-only complaint with no dirt/smell/mess word at all was
+    # still being tagged Cleanliness, which overstates what the respondent
+    # actually said. A comment naming BOTH ("pangit at madumi") still
+    # correctly resolves to Cleanliness on its own merits — "madumi" alone
+    # already outweighs "office" the same way it always has.
     "Cleanliness": [
-        "kalinisan", "cleanliness", "malinis", "marumi", "dumi", "madumi",
-        "makalat", "magulo",
+        ("kalinisan", 1.5), ("cleanliness", 1.5), ("malinis", 1.5),
+        ("marumi", 1.5), ("rumi", 1.5), ("dumi", 1.5), ("madumi", 1.5),
+        ("makalat", 1.5), ("kalat", 1.5), ("magulo", 1.5),
+        ("dirty", 1.5), ("unclean", 1.5), ("not clean", 1.5),
+        ("maalikabok", 1.5), ("alikabok", 1.5), ("dusty", 1.5),
+        # Intensifier prefix is listed both concatenated ("napakabaho") and
+        # spaced ("napaka baho") — real typing varies, and _kw_pattern's
+        # word-boundary matching treats these as two genuinely different
+        # strings (no boundary exists inside "napakabaho" for a bare "baho"
+        # to match through).
+        ("mabaho", 1.5), ("ambaho", 1.5), ("napakabaho", 1.5),
+        ("napaka baho", 1.5), ("sobrang baho", 1.5), ("ang baho", 1.5),
+        ("masyadong mabaho", 1.5), ("masangsang", 1.5), ("mabahong amoy", 1.5),
+        ("amoy mabaho", 1.5), ("smelly", 1.5), ("stinky", 1.5),
+        ("foul smell", 1.5), ("bad smell", 1.5), ("unsanitary", 1.5),
+        ("poor sanitation", 1.5), ("filthy", 1.5), ("messy", 1.5),
+        ("napakalinis", 1.5), ("napaka linis", 1.5), ("sobrang linis", 1.5),
+        ("maayos at malinis", 1.5), ("well cleaned", 1.5), ("sanitary", 1.5),
     ],
     "Seating and Furniture": [
         "upuan", "silya", "mesa", "bangko", "furniture", "chairs", "seats", "muwebles",
@@ -296,12 +387,30 @@ TOPIC_KEYWORDS = {
     # "bastos" is a real, unambiguous courtesy signal on its own, so it
     # keeps the default weight of 1.
     "Courtesy and Attitude": [
-        ("staff", 0.5), ("kawani", 0.5), ("empleyado", 0.5), ("tauhan", 0.5),
-        ("employee", 0.5), ("receptionist", 0.5), ("guard", 0.5),
-        ("security", 0.5), ("clerk", 0.5), ("faculty", 0.5),
+        # "staffs" (common plural typo) added alongside "staff" — the bare
+        # word boundary regex \bstaff\b never matched "staffs" (the boundary
+        # after "staff" sits between two word characters, "f" and "s", not
+        # an actual boundary), so real feedback that pluralized it this way
+        # (very common in Taglish) scored zero role-noun signal before this.
+        ("staff", 0.5), ("staffs", 0.5), ("kawani", 0.5), ("empleyado", 0.5),
+        ("tauhan", 0.5), ("employee", 0.5), ("receptionist", 0.5),
+        ("guard", 0.5), ("security", 0.5), ("clerk", 0.5), ("faculty", 0.5),
         ("professor", 0.5), ("guro", 0.5), ("adviser", 0.5),
         ("ma'am", 0.5), ("sir", 0.5),
         "bastos", "hindi magalang", "suplado", "suplada", "masungit",
+        # Accommodation/assistance — previously entirely missing from this
+        # topic (and from every other topic): "hindi maayos yung pag
+        # accommodate ng staffs" had no topic anchor at all before this
+        # ("accommodate" matched nothing, and "staffs" didn't match "staff"
+        # — see above), so it fell all the way through to General Feedback
+        # despite being a clear staff-service complaint. Weighted like
+        # "bastos" (1, not 0.5) since these are specific enough complaints
+        # on their own, unlike the bare role nouns above.
+        "accommodate", "accommodating", "accommodation",
+        "inasikaso", "inaasikaso", "aasikasuhin", "asikaso",
+        "pinansin", "pinapansin", "entertained",
+        "walang assistance", "walang tumutulong", "poor assistance",
+        "poor service", "bad attitude", "unhelpful", "not helpful",
     ],
     # Idle outsiders/non-clients hanging around the area — a people/noise
     # complaint, not a facility or staff complaint. Added 2026-08-31 after a
@@ -399,6 +508,12 @@ TOPIC_KEYWORDS = {
     "Transaction Speed": [
         "transaction", "pag-transact", "processing time", "release ng resulta",
         "ma-release", "na-release",
+        # Bare "processing" (not just the "processing time" phrase) — e.g.
+        # "sobrang bagal ng processing" names no other object noun at all.
+        # Weighted below default like "proseso"/"process" in Process
+        # Efficiency below (same reasoning: on its own it's a soft signal,
+        # easily outranked by a more specific competing topic).
+        ("processing", 0.75),
     ],
     # Compound Taglish/English phrases that unambiguously describe the
     # process itself being simple/tedious, not any specific object.
@@ -430,6 +545,47 @@ TOPIC_KEYWORDS = {
         "dormitory", "dorm", "bed space", "boarding house",
         "transportation", "sasakyan", "service vehicle", "shuttle",
         "printer", "computer lab", "computer laboratory", "computer shop",
+        # Appearance/presentation — moved here from "Cleanliness" 2026-09 (see
+        # that topic's comment). These describe how a place LOOKS, which is a
+        # judgment about upkeep/presentation, not a claim of dirt or odor —
+        # "pangit tignan ang office" carries no hygiene evidence at all, so it
+        # belongs under this broader physical-facility topic instead. Weighted
+        # 1.5 to match Cleanliness's own issue-word weighting, so an
+        # appearance complaint reliably outranks a bare location noun the
+        # same way a real cleanliness complaint already does.
+        ("pangit", 1.5), ("pangit tignan", 1.5), ("pangit tingnan", 1.5),
+        ("di magandang tignan", 1.5), ("hindi magandang tignan", 1.5),
+        ("di magandang tingnan", 1.5), ("hindi magandang tingnan", 1.5),
+        ("di kaaya aya", 1.5), ("hindi kaaya aya", 1.5), ("kaaya aya", 1.5),
+        ("kaaya-aya", 1.5), ("di kaayang aya", 1.5), ("hindi kaayang aya", 1.5),
+        ("kaayang aya", 1.5),
+        ("di kaayang ayang", 1.5), ("hindi kaayang ayang", 1.5),
+        ("kaayang ayang", 1.5),
+        # "kaaya ayang"/"kaaya-ayang" (linker "-ng" attached before "tignan",
+        # e.g. "kaaya-ayang tignan") is yet another real spelling, distinct
+        # from "kaayang ayang"/"kaayang aya" above — Filipino attaches the
+        # linker to whichever syllable precedes the following word, so both
+        # renderings occur in real feedback.
+        ("di kaaya ayang", 1.5), ("hindi kaaya ayang", 1.5),
+        ("kaaya ayang", 1.5),
+        ("di kaaya-ayang", 1.5), ("hindi kaaya-ayang", 1.5),
+        ("kaaya-ayang", 1.5),
+        ("hindi presentable", 1.5), ("di presentable", 1.5),
+        ("unpresentable", 1.5), ("unattractive", 1.5),
+        ("unpleasant looking", 1.5), ("poor appearance", 1.5),
+        ("poorly maintained", 1.5),
+        # Positive appearance — kept distinct from Cleanliness's own positive
+        # vocabulary ("malinis", "napakalinis", ...), same split as negative.
+        # Deliberately NOT bare "maganda"/"presentable" as topic anchors: both
+        # are too generic on their own (regression-tested — "maganda naman
+        # siguro pero wala akong masabi, ordinaryo lang" is filler/no-topic
+        # text, not a facility-appearance comment, and got mis-tagged when
+        # bare "maganda" was tried here). Same "ambiguous bare descriptor"
+        # problem this file already avoids elsewhere (see FAST_POSITIVE_WORDS'
+        # note on "asikaso"). Only compound/phrase forms, which are specific
+        # enough to reliably mean facility appearance, are used as anchors.
+        ("maayos tignan", 1.5), ("maayos tingnan", 1.5),
+        ("pleasant looking", 1.5), ("well maintained", 1.5),
     ],
     "Health and Medical Services": [
         "clinic", "klinika", "doktor", "doctor", "dentista", "dentist",
@@ -502,9 +658,25 @@ TOPIC_ITEM_KEYWORDS = {
         ]),
     ],
     "Aircon and Cooling": [
+        # Equipment-noun items listed FIRST: when a comment names the actual
+        # broken/missing unit (e.g. "sira ang aircon, sobrang init"), that's
+        # the more specific, actionable complaint — the temperature is a
+        # symptom of it, not a separate issue. A comment naming ONLY a
+        # temperature word (no aircon/fan mentioned at all, e.g. "mainit sa
+        # office") still resolves correctly to Temperature/Ventilation below
+        # since it's the only item with any match at all.
         ("Aircon and Cooling - Electric Fan", ["electric fan", "bentilador", "pabentilador"]),
         ("Aircon and Cooling - Air Conditioning Unit", [
             "aircon", "air-con", "air condition", "aircondition", "air conditioning",
+            "walang aircon", "walang air con", "sira ang aircon", "sirang aircon",
+            "mahina ang aircon", "mahina aircon",
+        ]),
+        ("Aircon and Cooling - Temperature/Ventilation", [
+            "mainit", "ang init", "sobrang init", "napakainit", "napaka init",
+            "masyadong mainit", "too hot", "very hot", "hot room", "hot office",
+            "stuffy", "kulob", "maalinsangan", "malamig", "sobrang lamig",
+            "napakalamig", "too cold", "very cold", "walang ventilation",
+            "poor ventilation", "kulang ventilation", "walang bentilasyon",
         ]),
     ],
     "Restroom": [
@@ -514,6 +686,37 @@ TOPIC_ITEM_KEYWORDS = {
         ("Restroom - Restroom/CR", [
             "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
         ]),
+    ],
+    # Cleanliness itself previously had NO item breakdown at all — every
+    # cleanliness comment landed at the bare "Cleanliness" label with no
+    # location. LOCATION is the item here (the issue is always "cleanliness"
+    # — that's the topic already); "Restroom/CR" is listed first since it's
+    # the single most common cleanliness complaint location, reusing the
+    # exact same CR/banyo keywords as the Restroom topic above rather than a
+    # separate list, so the two stay in sync automatically. "Office" is the
+    # fallback default (last, per this file's tie-break convention: first
+    # listed wins a tie, so more specific locations must come before it) —
+    # matches the existing default used elsewhere in this codebase (e.g.
+    # `client_type` defaulting to 'Citizen') when no more specific location
+    # is actually named.
+    "Cleanliness": [
+        ("Cleanliness - Restroom/CR", [
+            "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
+        ]),
+        ("Cleanliness - Classroom", ["classroom", "class room", "silid aralan"]),
+        ("Cleanliness - Laboratory", [
+            "laboratory", "lab", "computer laboratory", "computer lab",
+        ]),
+        ("Cleanliness - Library", ["library", "aklatan", "lib"]),
+        ("Cleanliness - Canteen", ["canteen", "cafeteria"]),
+        ("Cleanliness - Clinic", ["clinic", "klinika"]),
+        ("Cleanliness - Waiting Area", ["waiting area", "waiting room"]),
+        ("Cleanliness - Hallway/Corridor", ["hallway", "corridor", "pasilyo"]),
+        ("Cleanliness - Lobby", ["lobby"]),
+        ("Cleanliness - Grounds", [
+            "grounds", "campus", "surroundings", "paligid", "labas",
+        ]),
+        ("Cleanliness - Office", ["office", "opisina", "room"]),
     ],
     "Seating and Furniture": [
         ("Seating and Furniture - Chairs", ["upuan", "silya", "chairs", "seats"]),
@@ -528,6 +731,21 @@ TOPIC_ITEM_KEYWORDS = {
         ("Power and Lighting - Lighting", ["ilaw", "lighting"]),
     ],
     "Facilities and Equipment": [
+        ("Facilities and Equipment - Appearance/Presentation", [
+            "pangit", "pangit tignan", "pangit tingnan",
+            "di magandang tignan", "hindi magandang tignan",
+            "di magandang tingnan", "hindi magandang tingnan",
+            "di kaaya aya", "hindi kaaya aya", "kaaya aya", "kaaya-aya",
+            "di kaayang aya", "hindi kaayang aya", "kaayang aya",
+            "di kaayang ayang", "hindi kaayang ayang", "kaayang ayang",
+            "di kaaya ayang", "hindi kaaya ayang", "kaaya ayang",
+            "di kaaya-ayang", "hindi kaaya-ayang", "kaaya-ayang",
+            "hindi presentable", "di presentable", "unpresentable",
+            "unattractive", "unpleasant looking", "poor appearance",
+            "poorly maintained",
+            "maayos tignan", "maayos tingnan", "pleasant looking",
+            "well maintained",
+        ]),
         ("Facilities and Equipment - Parking", ["parking", "paradahan"]),
         ("Facilities and Equipment - Library", [
             "library", "aklatan", "librong hiniram", "libro", "book", "books",
@@ -655,6 +873,17 @@ TOPIC_ITEM_KEYWORDS = {
     # in this file — a comment naming e.g. both "guard" and "staff" resolves
     # to the more specific Security Guard item.
     "Courtesy and Attitude": [
+        # Listed first — a comment naming both an accommodation phrase AND a
+        # bare role noun (e.g. "hindi maayos mag-accommodate yung staff")
+        # resolves to the more specific item, same tie-break convention as
+        # the rest of this file.
+        ("Courtesy and Attitude - Accommodation/Assistance", [
+            "accommodate", "accommodating", "accommodation",
+            "inasikaso", "inaasikaso", "aasikasuhin", "asikaso",
+            "pinansin", "pinapansin", "entertained",
+            "walang assistance", "walang tumutulong", "poor assistance",
+            "unhelpful", "not helpful",
+        ]),
         ("Courtesy and Attitude - Security Guard", ["guard", "security"]),
         ("Courtesy and Attitude - Front Desk/Clerk", ["receptionist", "clerk"]),
         ("Courtesy and Attitude - Faculty/Adviser", [
@@ -664,7 +893,7 @@ TOPIC_ITEM_KEYWORDS = {
             "estudyante", "mag-aaral", "student", "students",
         ]),
         ("Courtesy and Attitude - Staff/Employee", [
-            "staff", "kawani", "empleyado", "tauhan", "employee",
+            "staff", "staffs", "kawani", "empleyado", "tauhan", "employee",
         ]),
     ],
     "Communication and Information": [
@@ -1066,6 +1295,39 @@ FAST_NEGATIVE_WORDS = [
     "unreliable", "chaotic", "disorganized", "incomplete", "faulty",
     "malfunctioning", "glitch", "glitchy", "buggy", "crashed", "crashing",
     "nag-crash", "nag-hang", "hanging",
+    # "antagal" (informal contraction of "ang tagal") — verified missing:
+    # "tagal"/"matagal"/"bagal" above only match their own word boundary, and
+    # "antagal" has no word boundary between "an" and "tagal" (concatenated,
+    # not two separate words), so it never matched any existing entry.
+    "antagal",
+    # Temperature complaints — same word as the Aircon and Cooling topic
+    # anchor above, but needed here too since sentiment and topic are scored
+    # independently; without this, "mainit sa office" resolved the topic
+    # correctly but scored no sentiment at all (stayed Neutral).
+    "mainit", "ang init", "sobrang init", "napakainit", "napaka init",
+    "masyadong mainit", "maalinsangan", "kulob", "too hot", "very hot",
+    # Cleanliness/odor complaints — "malinis"/"marumi"/"madumi" already exist
+    # via the Cleanliness topic keywords (which double as this file's own
+    # sentiment signal there), but smell specifically had zero coverage in
+    # either lexicon.
+    "mabaho", "ambaho", "napakabaho", "napaka baho", "sobrang baho",
+    "ang baho", "masyadong mabaho", "masangsang",
+    "mabahong amoy", "amoy mabaho", "smelly", "stinky", "foul smell",
+    "bad smell", "unsanitary",
+    # Appearance/presentability — "di kaaya-aya"/"hindi kaaya-aya" is caught
+    # by the existing negation mechanism against "kaaya-aya" (already a
+    # FAST_POSITIVE_WORDS entry below), but a bare negative descriptor with
+    # no positive counterpart to negate ("pangit", "unpresentable") had no
+    # anchor at all.
+    "pangit", "unpresentable", "hindi presentable", "unattractive",
+    "poor appearance", "poorly maintained",
+    # Staff accommodation/assistance — "hindi accommodating"/"not helpful"
+    # already negate correctly via the existing mechanism (see
+    # "accommodating"/"helpful" in FAST_POSITIVE_WORDS), but these bare
+    # negative phrasings have no positive counterpart to negate against.
+    "hindi inaasikaso", "di inaasikaso", "hindi pinapansin", "di pinapansin",
+    "walang assistance", "walang tumutulong", "poor assistance", "poor service",
+    "bad attitude",
 ]
 FAST_POSITIVE_WORDS = [
     "maganda", "magandang", "mabilis", "magaling", "mabait", "salamat",
@@ -1097,6 +1359,31 @@ FAST_POSITIVE_WORDS = [
     "considerate", "welcoming", "sulit", "astig", "solid", "top-notch",
     "seamless", "responsive", "on-time", "prompt",
     "organized", "spot on", "kaaya-aya", "mapagkalinga",
+    # NOTE: "asikaso"/"inaasikaso"/"pinapansin" deliberately do NOT appear
+    # here as bare sentiment anchors (tried and reverted — see git history):
+    # against the project's existing regression suite (test_accuracy.py)
+    # they mis-scored several genuinely nuanced Taglish sentences that use
+    # "(na/nag-)asikaso" in ways the surrounding context reverses (e.g.
+    # "parang gustong-gusto na akong umalis, halatang ayaw makipag-usap"
+    # after "yung nag-asikaso sa akin" is actually a complaint, not praise).
+    # Same "ambiguous bare descriptor" problem this file already avoids
+    # elsewhere (see the TAGLISH KEYWORD ANCHORS module comment above:
+    # "never bare descriptors... since those are ambiguous"). The specific,
+    # unambiguous negative PHRASES ("hindi inaasikaso", "di pinapansin", ...)
+    # are still covered directly in FAST_NEGATIVE_WORDS above, and
+    # "accommodate"/"asikaso"/etc remain safe as TOPIC (not sentiment)
+    # keywords — a topic mis-tag is a much smaller consequence than a
+    # flipped sentiment polarity, so that risk/reward tradeoff is different.
+    #
+    # Cleanliness — intensified positive forms ("napakalinis" etc.) needed
+    # here too since sentiment and topic are scored independently; without
+    # this, "Napakalinis ng laboratory" resolved no sentiment at all.
+    "napakalinis", "napaka linis", "sobrang linis", "maayos at malinis",
+    "very clean", "well maintained",
+    # Appearance — bare positive so "di/hindi kaayang aya(ng)" correctly
+    # negates via the existing negation mechanism, same reasoning as
+    # inaasikaso/asikaso above. "kaaya-aya" (hyphenated) was already covered.
+    "kaayang aya", "kaayang ayang", "kaaya ayang", "kaaya-ayang",
 ]
 
 # Filler phrases that read as flat/neutral on their own — matched only when

@@ -24,7 +24,7 @@ os.environ.setdefault('TRANSFORMERS_VERBOSITY', 'error')
 from flask import Flask, request, jsonify
 
 import heavy_model
-from topic_common import GENERAL_FEEDBACK
+from topic_common import is_no_feedback
 
 app = Flask(__name__)
 
@@ -40,8 +40,13 @@ def analyze_route():
     comment = str(data.get("comment", "") or "").strip()
     office_hint = str(data.get("office", "") or "").strip() or None
 
-    if not comment:
-        return jsonify({"sentiment": "Neutral", "topic": GENERAL_FEEDBACK})
+    # Blank AND common "nothing to say" placeholders must never receive a
+    # fabricated classification — see is_no_feedback's docstring in
+    # topic_common.py. `null` here (not "Neutral"/"General Feedback") is
+    # what server.js's analyzeComment() already expects for "no real
+    # classification" in every other case.
+    if is_no_feedback(comment):
+        return jsonify({"sentiment": None, "topic": None})
 
     try:
         sentiment, topic = heavy_model.analyze(comment, office_hint=office_hint)

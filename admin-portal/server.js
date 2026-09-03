@@ -368,8 +368,17 @@ function finalizeVerifiedSurvey(googleEmail, fields, callback) {
         (office_id, respondent_name, topic, sentiment, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email, service_availed)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
+    // A no-feedback comment ("N/A", "none", blank, ...) gets NULL for both
+    // columns, never the "General Feedback"/"Neutral" placeholder — that
+    // placeholder only makes sense while genuinely awaiting the async AI
+    // re-analysis below (line ~skipAiAnalysis check), which is itself
+    // skipped for a no-feedback comment, so nothing would ever correct a
+    // wrongly-defaulted value afterward. See isNoFeedbackComment.
+    const noFeedback = isNoFeedbackComment(comments);
+    const finalTopic = noFeedback ? null : (topic || 'General Feedback');
+    const finalSentiment = noFeedback ? null : (sentiment || 'Neutral');
     const values = [
-        officeId, respondentName, topic || 'General Feedback', sentiment || 'Neutral', region,
+        officeId, respondentName, finalTopic, finalSentiment, region,
         cc1, cc2, cc3,
         sqdValues[0], sqdValues[1], sqdValues[2], sqdValues[3], sqdValues[4], sqdValues[5], sqdValues[6], sqdValues[7], sqdValues[8],
         comments || 'N/A', period, googleEmail, serviceAvailed
@@ -420,7 +429,7 @@ function finalizeVerifiedSurvey(googleEmail, fields, callback) {
             });
         }
 
-        if (!skipAiAnalysis && comments && comments.trim() !== "") {
+        if (!skipAiAnalysis && !noFeedback) {
             analyzeComment(comments, false, officeId).then(({ sentiment: aiSentiment, topic: aiTopic }) => {
                 if (aiSentiment && aiTopic) {
                     db.query('UPDATE survey_responses SET sentiment = ?, topic = ? WHERE id = ?', [aiSentiment, aiTopic, surveyResponseId]);
@@ -458,12 +467,18 @@ async function insertVerifiedSurveyOnConnection(conn, googleEmail, fields) {
         sqdValues, comments, serviceAvailed, clientType, age, gender, officeVisitedTime, period
     } = fields;
 
+    // Same reasoning as finalizeVerifiedSurvey above — a no-feedback comment
+    // gets NULL, never the placeholder default, since nothing ever corrects
+    // it afterward for a comment that has no real content to (re-)analyze.
+    const noFeedback = isNoFeedbackComment(comments);
+    const finalTopic = noFeedback ? null : (topic || 'General Feedback');
+    const finalSentiment = noFeedback ? null : (sentiment || 'Neutral');
     const [insertResult] = await conn.query(
         `INSERT INTO survey_responses
          (office_id, respondent_name, topic, sentiment, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email, service_availed)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-            officeId, respondentName, topic || 'General Feedback', sentiment || 'Neutral', region,
+            officeId, respondentName, finalTopic, finalSentiment, region,
             cc1, cc2, cc3,
             sqdValues[0], sqdValues[1], sqdValues[2], sqdValues[3], sqdValues[4], sqdValues[5], sqdValues[6], sqdValues[7], sqdValues[8],
             comments || 'N/A', period, googleEmail, serviceAvailed
@@ -893,13 +908,34 @@ function analyzeViaPythonScript(comment, offline, officeHint) {
     });
 }
 
+// Mirrors ai_scripts/topic_common.py's is_no_feedback() exactly (same
+// normalized phrase set) — checked here FIRST, before ever spawning Python
+// or calling the model server, so a blank/placeholder comment costs nothing
+// beyond a string comparison. Kept as a plain, independent JS function
+// (not shelling out to Python just to check this) since server.js is the
+// actual gatekeeper every comment passes through before analysis of any
+// kind — see analyzeComment below and finalizeVerifiedSurvey/
+// insertVerifiedSurveyOnConnection, which both use this too.
+const NO_FEEDBACK_PHRASES = new Set([
+    'na', 'n/a', 'none', 'nil', 'no comment', 'no comments', 'not applicable'
+]);
+function isNoFeedbackComment(text) {
+    if (text === null || text === undefined) return true;
+    const trimmed = String(text).trim();
+    if (trimmed === '') return true;
+    const stripped = trimmed.toLowerCase().replace(/[.\-]/g, '').replace(/\s+/g, ' ').trim();
+    if (stripped === '') return true; // "-", "--", "...", etc. reduce to nothing
+    return NO_FEEDBACK_PHRASES.has(stripped);
+}
+
 // Resolves { sentiment, topic } for a comment. Used by both the live
 // /submit-survey route (fire-and-forget, applied via an UPDATE after the
 // fact) and the /sync-surveys batch route (awaited before the row is even
-// inserted). Never rejects — a missing/blank comment resolves with nulls
-// (so DB defaults apply), and any failure resolves with the "Neutral" /
-// "General Feedback" fallback instead of throwing, so one bad comment can
-// never crash a batch sync.
+// inserted). Never rejects — a missing/blank/no-feedback comment resolves
+// with nulls (so the DB gets NULL, not a fabricated "General Feedback"/
+// "Neutral" — see isNoFeedbackComment above), and any failure resolves
+// with the "Neutral" / "General Feedback" fallback instead of throwing, so
+// one bad comment can never crash a batch sync.
 //
 // `offline` should be true for comments coming from the /sync-surveys queue
 // (submitted while the client was offline, synced later in bulk) — those
@@ -913,7 +949,7 @@ function analyzeViaPythonScript(comment, offline, officeHint) {
 // office_hint_topics) — never a hard override, just a tie-break nudge.
 function analyzeComment(comment, offline = false, officeId = null) {
     return new Promise((resolve) => {
-        if (!comment || !String(comment).trim()) {
+        if (isNoFeedbackComment(comment)) {
             return resolve({ sentiment: null, topic: null });
         }
 
@@ -3043,7 +3079,7 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
     // Fire-and-forget, after commit, same as the pre-transaction version's
     // timing — AI analysis only if this submission's payload didn't already
     // carry a sentiment/topic (mirrors finalizeVerifiedSurvey's own tail).
-    if (payload.comments && payload.comments.trim() !== "") {
+    if (!isNoFeedbackComment(payload.comments)) {
         analyzeComment(payload.comments, false, payload.officeId).then(({ sentiment: aiSentiment, topic: aiTopic }) => {
             if (aiSentiment && aiTopic) {
                 db.query('UPDATE survey_responses SET sentiment = ?, topic = ? WHERE id = ?', [aiSentiment, aiTopic, surveyResponseId]);
@@ -5258,9 +5294,18 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                     const cluster = row.cluster_name || 'Other Offices';
                     if (!recordsByCluster[cluster]) recordsByCluster[cluster] = [];
 
+                    // A NULL topic/sentiment means this comment was blank or
+                    // an explicit "N/A"/"none"/... placeholder (see
+                    // isNoFeedbackComment) — there is genuinely nothing to
+                    // classify, so this must display as "No feedback", never
+                    // the fabricated "General Feedback"/"Neutral" that a
+                    // bare `|| 'General Feedback'` fallback would show here.
+                    const hasFeedback = row.topic !== null && row.topic !== undefined;
+
                     let badgeClass = 'bg-general';
                     const topicLower = (row.topic || '').toLowerCase();
-                    if (topicLower.includes('restroom') || topicLower.includes('cleanliness')) badgeClass = 'bg-cr';
+                    if (!hasFeedback) badgeClass = 'bg-no-feedback';
+                    else if (topicLower.includes('restroom') || topicLower.includes('cleanliness')) badgeClass = 'bg-cr';
                     else if (topicLower.includes('aircon') || topicLower.includes('cooling')) badgeClass = 'bg-aircon';
                     else if (
                         topicLower.includes('facility') || topicLower.includes('equipment') ||
@@ -5273,13 +5318,14 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                     else if (topicLower.includes('online') || topicLower.includes('portal') || topicLower.includes('internet')) badgeClass = 'bg-online';
                     else if (topicLower.includes('health') || topicLower.includes('medical') || topicLower.includes('guidance') || topicLower.includes('counseling') || topicLower.includes('scholarship')) badgeClass = 'bg-health';
 
-                    const sentimentValue = row.sentiment || 'Neutral';
+                    const sentimentValue = hasFeedback ? (row.sentiment || 'Neutral') : 'No feedback';
                     const sentimentLower = sentimentValue.toLowerCase();
                     let sentimentClass = 'bg-sentiment-neutral';
-                    if (sentimentLower.includes('positive')) sentimentClass = 'bg-sentiment-positive';
+                    if (!hasFeedback) sentimentClass = 'bg-sentiment-none';
+                    else if (sentimentLower.includes('positive')) sentimentClass = 'bg-sentiment-positive';
                     else if (sentimentLower.includes('negative')) sentimentClass = 'bg-sentiment-negative';
 
-                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', officeName: row.office_name || 'N/A', topic: row.topic || 'General Feedback', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: row.comments || 'No comments provided.', date: row.formatted_date, dateRaw: row.created_at ? new Date(row.created_at).toISOString() : '', officeVisitedTime: row.office_visited_time_formatted || 'N/A' });
+                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', officeName: row.office_name || 'N/A', topic: hasFeedback ? row.topic : 'No feedback', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: row.comments || 'No comments provided.', date: row.formatted_date, dateRaw: row.created_at ? new Date(row.created_at).toISOString() : '', officeVisitedTime: row.office_visited_time_formatted || 'N/A' });
                 });
             }
             res.render('survey-records', { recordsByCluster, clusterRatings });
