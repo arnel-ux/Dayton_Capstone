@@ -329,7 +329,14 @@ function checkResubmissionEligibility(officeId, googleEmail, serviceAvailed, cal
                             const message = nextDate
                                 ? `You can retake this survey for this service starting ${nextDate}.`
                                 : "You have already evaluated this service. You cannot submit again.";
-                            return callback({ eligible: false, message });
+                            // Absolute timestamp alongside the human-readable message — lets a
+                            // caller (POST /api/offline-surveys/verify-and-sync) hand the client
+                            // a real ISO instant to display/count down to, computed server-side
+                            // from real server time + database history, never the offline
+                            // device's own clock. null for a permanently one-time-only service,
+                            // same case where nextDate is also null above.
+                            const nextTs = nextEligibleTimestamp(lastEventAt, availability);
+                            return callback({ eligible: false, message, nextEligibleAt: nextTs ? new Date(nextTs).toISOString() : null });
                         }
                     );
                 }
@@ -3460,6 +3467,98 @@ app.get('/api/client-profile', ensureClientAuth, noCache, (req, res) => {
     );
 });
 
+// Builds the non-secret (but still personal — see the account-identifying
+// fields it returns) offline-context snapshot for one account: its
+// registered profile (age/sex/region) plus current office/service
+// eligibility. Reuses the EXACT SAME eligibility rules /client-survey's
+// route already computes (isEligibleForResubmission/nextEligibleTimestamp,
+// keyed the same "officeId::serviceName" way as blockedCombos/blockedUntil
+// on the client) — never a separate cooldown algorithm. This app has no
+// office-level cooldown (confirmed: no such column/table exists — cooldown
+// is purely per office+service pair, see checkResubmissionEligibility), so
+// unlike the office-level "eligible"/"cooldownUntil" shape a generic offline
+// spec might expect, offices here only carry id/name for offline display;
+// all eligibility lives on `services`. Shared by GET /api/client/offline-
+// context (below) and the post-sync refresh in POST /api/offline-surveys/
+// verify-and-sync. Contains no password, hash, token, cookie, or session
+// data — but the email/age/gender/region/service-activity it DOES return
+// are personal account information, not "non-sensitive" in any absolute
+// sense; only what's needed to improve offline UX is included.
+async function buildClientOfflineContext(clientEmail) {
+    const [officeRows, serviceRows, approvedRows, pendingRows, profileRows] = await Promise.all([
+        dbQuery('SELECT id, office_name FROM offices WHERE is_archived = 0 ORDER BY office_name ASC'),
+        dbQuery('SELECT office_id, service_name, availability FROM services ORDER BY office_id, id'),
+        dbQuery('SELECT office_id, service_availed, MAX(created_at) AS last_at FROM survey_responses WHERE google_email = ? GROUP BY office_id, service_availed', [clientEmail]),
+        dbQuery("SELECT office_id, service_availed FROM pending_survey_submissions WHERE google_email = ? AND status = 'pending'", [clientEmail]),
+        dbQuery('SELECT region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [clientEmail])
+    ]);
+
+    const serviceAvailability = {};
+    (serviceRows || []).forEach((row) => {
+        serviceAvailability[row.office_id + '::' + row.service_name] = row.availability;
+    });
+
+    // Same precedence as /client-survey's blockedCombos: a pending review
+    // blocks regardless of cadence; otherwise fall back to the cadence-based
+    // resubmission check against the most recent APPROVED submission.
+    const blockedKeys = new Set();
+    const cooldownUntilMs = {};
+    (pendingRows || []).forEach((row) => {
+        blockedKeys.add(row.office_id + '::' + row.service_availed);
+    });
+    (approvedRows || []).forEach((row) => {
+        const key = row.office_id + '::' + row.service_availed;
+        if (blockedKeys.has(key)) return;
+        const availability = serviceAvailability[key];
+        if (!isEligibleForResubmission(row.last_at, availability)) {
+            blockedKeys.add(key);
+            const nextTs = nextEligibleTimestamp(row.last_at, availability);
+            if (nextTs) cooldownUntilMs[key] = nextTs;
+        }
+    });
+
+    const services = (serviceRows || []).map((row) => {
+        const key = row.office_id + '::' + row.service_name;
+        return {
+            officeId: row.office_id,
+            serviceName: row.service_name,
+            eligible: !blockedKeys.has(key),
+            cooldownUntil: cooldownUntilMs[key] ? new Date(cooldownUntilMs[key]).toISOString() : null
+        };
+    });
+
+    const profileRow = (profileRows && profileRows[0]) || null;
+
+    return {
+        accountIdentifier: clientEmail,
+        profile: {
+            age: (profileRow && profileRow.age) || null,
+            sex: (profileRow && profileRow.gender) || null,
+            region: (profileRow && profileRow.region) || null
+        },
+        offices: (officeRows || []).map((o) => ({ officeId: o.id, officeName: o.office_name })),
+        services,
+        cachedAt: new Date().toISOString()
+    };
+}
+
+// GET /api/client/offline-context
+// Called silently by client-survey.ejs right after an authenticated page
+// load (and after a successful online submission) so the browser can cache
+// this account's non-secret (personal, but never a credential) profile/
+// eligibility snapshot in IndexedDB (offlineAccountContext store — see
+// offline-db.js) for /survey-offline to use later. Never includes a
+// password, hash, token, or session identifier.
+app.get('/api/client/offline-context', ensureClientAuth, noCache, async (req, res) => {
+    try {
+        const context = await buildClientOfflineContext(req.clientEmail);
+        res.json({ success: true, ...context });
+    } catch (err) {
+        console.error('❌ [Offline Context] Failed to build context:', err);
+        res.status(500).json({ success: false, message: 'Server error loading offline context.' });
+    }
+});
+
 app.post('/api/client-profile', ensureClientAuth, (req, res) => {
     const respondentName = String(req.body.respondent_name || '').trim().slice(0, 255);
     if (!respondentName) {
@@ -4147,7 +4246,18 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
     // pool, no need for it to be inside the transaction below.
     const eligibility = await checkResubmissionEligibilityAsync(finalOfficeId, verifiedEmail, finalServiceAvailed);
     if (!eligibility.eligible) {
-        return res.status(409).json({ success: false, message: eligibility.message });
+        // Distinct from a wrong-password 401 (verification_failed) and from
+        // the idempotency-duplicate 409 below (ER_DUP_ENTRY) — the account
+        // and submitted data are both valid here; only the office/service is
+        // currently on cooldown (recalculated server-side, just now, using
+        // real server time + database history — never the offline cache the
+        // client may have shown before this request). pwa-client.js must
+        // treat this status as `eligibility_conflict`: no password retry, no
+        // automatic 12s re-attempt, record kept for the user to review/edit.
+        return res.status(409).json({
+            success: false, status: 'eligibility_conflict', message: eligibility.message,
+            nextEligibleAt: eligibility.nextEligibleAt || null
+        });
     }
 
     const currentPeriod = getPeriodCovered();
@@ -4243,6 +4353,21 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
     // 9. Email — AFTER commit, outside the transaction, only ever sent to
     // an address that just proved ownership via a correct password (never
     // to an arbitrary typed-in address that failed verification).
+    //
+    // Also refresh the offline-context snapshot (§28 of the offline-profile
+    // spec) — this endpoint never creates a login session, so the sync
+    // response itself is the only safe way to hand the browser an updated,
+    // non-secret (personal, credential-free) cooldown/profile snapshot (the service just answered is
+    // now on cooldown; a first-time CSPC submission may have just created
+    // this account's very first client_accounts row). Best-effort: a failure
+    // here never fails the sync itself, which already committed above.
+    let refreshedOfflineContext = null;
+    try {
+        refreshedOfflineContext = await buildClientOfflineContext(verifiedEmail);
+    } catch (err) {
+        console.error('❌ [Offline Verify] Failed to build refreshed offline context:', err);
+    }
+
     if (result.status === 'synced') {
         sendOfflineSurveySyncedEmail(verifiedEmail, {
             officeName,
@@ -4250,11 +4375,17 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
             submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
             surveyResponseId: result.surveyResponseId
         });
-        return res.json({ success: true, status: 'synced', submissionId: String(result.surveyResponseId), message: 'Survey successfully synchronized.' });
+        return res.json({
+            success: true, status: 'synced', submissionId: String(result.surveyResponseId),
+            message: 'Survey successfully synchronized.', offlineContext: refreshedOfflineContext
+        });
     }
 
     sendOfflineSurveyPendingEmail(verifiedEmail, { officeName });
-    return res.json({ success: true, status: 'pending_approval', message: 'Survey synchronized and is pending office approval.' });
+    return res.json({
+        success: true, status: 'pending_approval',
+        message: 'Survey synchronized and is pending office approval.', offlineContext: refreshedOfflineContext
+    });
 });
 
 // ==========================================

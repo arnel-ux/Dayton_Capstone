@@ -1599,6 +1599,20 @@
                         <div class="col-12">
                             <div id="offlineVerifyFailedBanner" hidden style="background:#fff3f3;border:1px solid #f5c2c2;border-radius:8px;padding:0.6rem 0.9rem;font-size:0.85rem;color:#7a1f1f;"></div>
                         </div>
+                        <!-- Terminal eligibility_conflict state (see updateEligibilityConflictBanner
+                             in pwa-client.js) — NOT an authentication problem (password already
+                             verified), so this is deliberately styled/worded differently from the
+                             verify-failed banner above and never offers a password retry. -->
+                        <div class="col-12">
+                            <div id="offlineEligibilityConflictBanner" hidden style="background:#fff8e6;border:1px solid #f0d9b5;border-radius:8px;padding:0.6rem 0.9rem;font-size:0.85rem;color:#6b5a1e;"></div>
+                        </div>
+                        <!-- Filled in by applyOfflineAccountContext() once the email field
+                             loses focus — reports whether this device has a cached profile/
+                             eligibility snapshot for that account (from a prior authenticated
+                             online session), never a list of other accounts ever used here. -->
+                        <div class="col-12">
+                            <div id="offlineAccountContextNote" style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:0.6rem 0.9rem;font-size:0.82rem;color:#3730a3;"></div>
+                        </div>
                         <% } else { %>
                         <!-- Signed-in Google account (used to enforce 1 survey per office). Visually hidden
                              per design request — the value is still bound, readonly, and submitted with the
@@ -2395,6 +2409,138 @@ if (currentClientEmail) {
     } catch (e) { /* localStorage unavailable — offline session bypass just won't apply */ }
 }
 
+// Silently refreshes this account's offline-context snapshot (registered
+// profile + office/service eligibility) into IndexedDB — see
+// buildClientOfflineContext in server.js and saveOfflineAccountContext in
+// offline-db.js. Authenticated-only (needs a real session to call the
+// endpoint); /survey-offline never calls this itself, it only ever READS
+// what a prior authenticated visit already cached. Silent by design — no
+// user-facing loading state, no failure toast; skipped entirely offline or
+// if IndexedDB/the endpoint is unavailable, since the existing cached
+// snapshot (if any) simply stays as-is.
+function refreshOfflineAccountContext() {
+    if (OFFLINE_MODE || !currentClientEmail || !navigator.onLine) return;
+    if (typeof saveOfflineAccountContext !== 'function') return;
+    fetchWithTimeout('/api/client/offline-context', {}, 8000)
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.success) return saveOfflineAccountContext(data);
+        })
+        .catch(err => console.error('[Offline Context] Refresh failed:', err));
+}
+if (!OFFLINE_MODE) {
+    window.addEventListener('load', refreshOfflineAccountContext);
+}
+
+// ==========================================
+// /survey-offline ONLY — applies a cached offlineAccountContext (see
+// offline-db.js) once the user types a registered email this device has
+// previously seen during an authenticated online session. Purely a UX
+// improvement: the server is the only thing that ever actually enforces
+// the registered profile or current cooldown state (resolveLockedField /
+// checkResubmissionEligibilityAsync in server.js, re-run at sync time) — a
+// manipulated or stale cache here can only ever make the offline form less
+// convenient, never let an ineligible/incorrect submission through.
+// ==========================================
+let offlineContextInjectedKeys = [];
+
+function clearInjectedOfflineEligibility() {
+    offlineContextInjectedKeys.forEach(key => {
+        delete blockedCombos[key];
+        delete blockedUntil[key];
+    });
+    offlineContextInjectedKeys = [];
+}
+
+function setOfflineAccountContextNote(text) {
+    const note = document.getElementById('offlineAccountContextNote');
+    if (note) note.textContent = text;
+}
+
+function applyOfflineAccountContext(identifier) {
+    if (!OFFLINE_MODE) return;
+    if (typeof getOfflineAccountContext !== 'function') return;
+
+    clearInjectedOfflineEligibility();
+    unlockProfileFields();
+
+    if (!identifier) {
+        setOfflineAccountContextNote('');
+        return;
+    }
+
+    getOfflineAccountContext(identifier).then(context => {
+        // The email field may have changed again while this lookup was in
+        // flight — only apply a result that still matches what's currently
+        // typed, so a slow lookup for an old keystroke can never clobber a
+        // newer one (and never mix two different accounts' context).
+        const currentIdentifier = (document.getElementById('offlineEmailInput')?.value || '').trim().toLowerCase();
+        if (currentIdentifier !== identifier) return;
+
+        if (!context) {
+            // Explicitly reassures a RETURNING user (who has a real
+            // registered profile the server already has) that anything
+            // typed below is only for this offline response — it can never
+            // overwrite their registered account, which resolveLockedField
+            // (server.js) already guarantees at sync time regardless of
+            // what this device sends.
+            setOfflineAccountContextNote(
+                'Account information is not available offline on this device. You may complete the required profile information for this offline response. ' +
+                'When internet connectivity returns, your registered account will be verified, and any existing profile information saved in your registered account will take precedence.'
+            );
+            return;
+        }
+
+        if (context.profile) {
+            applyLockedProfile({ region: context.profile.region, age: context.profile.age, sex: context.profile.sex });
+        }
+
+        (context.services || []).forEach(svc => {
+            if (svc.eligible) return;
+            const key = svc.officeId + '::' + svc.serviceName;
+            blockedCombos[key] = svc.cooldownUntil ? 'Available again soon.' : 'Currently unavailable for another response.';
+            if (svc.cooldownUntil) {
+                const ts = new Date(svc.cooldownUntil).getTime();
+                if (!isNaN(ts)) blockedUntil[key] = ts;
+            }
+            offlineContextInjectedKeys.push(key);
+        });
+
+        const officeSelect = document.getElementById('officeSelect');
+        if (officeSelect && officeSelect.value) {
+            populateServiceSelect(officeSelect.value);
+        }
+        updateAvailabilityNotice();
+
+        const cachedDate = context.cachedAt ? new Date(context.cachedAt) : null;
+        const cachedText = cachedDate && !isNaN(cachedDate.getTime())
+            ? ' (last updated ' + cachedDate.toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' }) + ')'
+            : '';
+        setOfflineAccountContextNote(
+            'Account information found on this device' + cachedText + '. Your profile is shown read-only below, and known unavailable services are disabled — both are re-verified against the server once you\'re back online.'
+        );
+    }).catch(err => {
+        console.error('[Offline Context] Lookup failed:', err);
+    });
+}
+
+if (OFFLINE_MODE) {
+    const offlineEmailInput = document.getElementById('offlineEmailInput');
+    if (offlineEmailInput) {
+        // 'blur' covers the normal desktop tab-away case; 'change' is added
+        // alongside it because some mobile keyboards/browsers don't reliably
+        // fire a timely blur when the user taps a different on-screen
+        // control (e.g. the next form field) without the OS keyboard itself
+        // losing focus first. Deliberately NOT bound to 'input' — this must
+        // never query IndexedDB on every keystroke.
+        const handleEmailFieldSettled = function () {
+            applyOfflineAccountContext(this.value.trim().toLowerCase());
+        };
+        offlineEmailInput.addEventListener('blur', handleEmailFieldSettled);
+        offlineEmailInput.addEventListener('change', handleEmailFieldSettled);
+    }
+}
+
 // Persistent "Viewing Offline" pill — reflects navigator.onLine live, not
 // just at page load, so it flips the instant the connection drops/returns
 // (same signal the autosave/auto-sync logic below already relies on).
@@ -2461,44 +2607,57 @@ function applyAutofillFromLocalStorage() {
     }
 }
 
-function applyLockedProfile() {
-    if (!savedClientProfile) return;
+// `profile` defaults to the server-rendered savedClientProfile (the
+// authenticated /client-survey case). /survey-offline has no server-
+// rendered profile (no session exists yet to look one up from) — it calls
+// this with a profile read from IndexedDB's offlineAccountContext store
+// instead, once the user types an email this device has cached context
+// for (see applyOfflineAccountContext below). Either way the server is the
+// one that actually enforces this precedence at sync time (resolveLockedField
+// in server.js) — this function only ever affects what the form displays.
+function applyLockedProfile(profile) {
+    profile = profile || savedClientProfile;
+    if (!profile) return;
 
     // Prefill (but never lock) the Name field from this account's registered
     // name — unlike region/age/gender below, the client can still edit it per
     // survey. Only fills an empty field so it never clobbers something the
     // client already typed or a name restored from autofillSnapshot.
-    if (savedClientProfile.respondent_name) {
+    if (profile.respondent_name) {
         const nameInput = document.querySelector('input[name="respondent_name"]');
         if (nameInput && !nameInput.disabled && !nameInput.value) {
-            nameInput.value = savedClientProfile.respondent_name;
+            nameInput.value = profile.respondent_name;
         }
     }
 
-    if (savedClientProfile.region) {
+    if (profile.region) {
         const regionSelect = document.querySelector('select[name="region"]');
         if (regionSelect) {
-            regionSelect.value = savedClientProfile.region;
+            regionSelect.value = profile.region;
             regionSelect.disabled = true;
         }
         const note = document.getElementById('region-lock-note');
         if (note) note.classList.remove('d-none');
     }
 
-    if (savedClientProfile.age) {
+    if (profile.age) {
         const ageSelect = document.querySelector('select[name="age"]');
         if (ageSelect) {
-            ageSelect.value = savedClientProfile.age;
+            ageSelect.value = profile.age;
             ageSelect.disabled = true;
         }
         const note = document.getElementById('age-lock-note');
         if (note) note.classList.remove('d-none');
     }
 
-    if (savedClientProfile.gender) {
+    // Offline context uses `sex` (matches the offline-profile spec's own
+    // schema); the authenticated savedClientProfile uses `gender` (matches
+    // the client_accounts column name) — accept either.
+    const genderValue = profile.gender || profile.sex;
+    if (genderValue) {
         document.querySelectorAll('input[name="gender"]').forEach(radio => {
             radio.disabled = true;
-            if (radio.value === savedClientProfile.gender) radio.checked = true;
+            if (radio.value === genderValue) radio.checked = true;
         });
         const note = document.getElementById('gender-lock-note');
         if (note) note.classList.remove('d-none');
@@ -2510,6 +2669,25 @@ function applyLockedProfile() {
     document.querySelectorAll('.lock-icon:not(.d-none)').forEach(el => {
         bootstrap.Tooltip.getOrCreateInstance(el);
     });
+}
+
+// Reverses applyLockedProfile — used only in offline mode, when the typed
+// email is changed to one this device has no (or different) cached context
+// for. Never used in authenticated mode: there, a lock reflects the actual
+// signed-in account's permanent database profile and must never be undone
+// client-side.
+function unlockProfileFields() {
+    const regionSelect = document.querySelector('select[name="region"]');
+    if (regionSelect) regionSelect.disabled = false;
+    document.getElementById('region-lock-note')?.classList.add('d-none');
+
+    const ageSelect = document.querySelector('select[name="age"]');
+    if (ageSelect) ageSelect.disabled = false;
+    document.getElementById('age-lock-note')?.classList.add('d-none');
+
+    document.querySelectorAll('input[name="gender"]').forEach(radio => { radio.disabled = false; });
+    document.getElementById('gender-lock-note')?.classList.add('d-none');
+    document.getElementById('gender-field-group')?.classList.remove('locked-field');
 }
 
 // Snapshot of Name/Sex/Age/Region taken right before the switch is turned on,
@@ -3807,6 +3985,10 @@ async function submitAll(event) {
             if (resData.pending) {
                 AppAlert.info(resData.message || "Submitted! The office you visited will verify your visit before this is recorded.", 'Awaiting Verification');
             }
+            // Cooldown eligibility for the just-answered service changes
+            // immediately — refresh the cached offline-context snapshot so a
+            // later offline visit doesn't show it as still available.
+            refreshOfflineAccountContext();
             showThankYou();
         } else {
             AppAlert.error("Nagkaroon ng problema: " + (resData.message || 'Database error'));

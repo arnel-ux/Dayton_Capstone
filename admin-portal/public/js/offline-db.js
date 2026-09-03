@@ -4,8 +4,14 @@
 // (indexedDB) and defines plain global functions — no ES module syntax.
 
 var OFFLINE_DB_NAME = 'cspc-survey-offline';
-var OFFLINE_DB_VERSION = 1;
+// v2 adds the offlineAccountContext store (see below) — a non-secret
+// (personal account information, but never a credential) per-account
+// profile/eligibility snapshot cached after authenticated online logins,
+// used to improve the /survey-offline UI. Never contains a password, hash,
+// token, or session identifier — see saveOfflineAccountContext.
+var OFFLINE_DB_VERSION = 2;
 var OUTBOX_STORE = 'unsent-surveys';
+var ACCOUNT_CONTEXT_STORE = 'offlineAccountContext';
 
 // Plain fetch() has no built-in timeout, so on a flaky/partial connection
 // (Wi-Fi still "connected" but no route to the internet, a captive portal, a
@@ -39,9 +45,67 @@ function openOfflineDB() {
             if (!db.objectStoreNames.contains(OUTBOX_STORE)) {
                 db.createObjectStore(OUTBOX_STORE, { keyPath: 'localId' });
             }
+            // Keyed by the normalized (trim().toLowerCase()) account
+            // identifier — one record per account, overwritten on every
+            // refresh. Deliberately a separate store from OUTBOX_STORE: this
+            // holds account-level display context, not queued submissions.
+            if (!db.objectStoreNames.contains(ACCOUNT_CONTEXT_STORE)) {
+                db.createObjectStore(ACCOUNT_CONTEXT_STORE, { keyPath: 'identifier' });
+            }
         };
         req.onsuccess = function () { resolve(req.result); };
         req.onerror = function () { reject(req.error); };
+    });
+}
+
+// Saves a non-secret account context snapshot (profile + office/service
+// eligibility — personal account information, but never a credential) —
+// see buildClientOfflineContext in server.js for the exact
+// shape. `context` must never contain a password, password hash, session
+// token, or cookie; callers only ever pass what GET /api/client/offline-
+// context (or a sync response's offlineContext field) returned, which
+// structurally cannot include those. Overwrites any existing record for
+// this identifier — always the most-recently-known snapshot, never merged
+// with a stale one.
+function saveOfflineAccountContext(context) {
+    if (!context || !context.accountIdentifier) return Promise.resolve();
+    var identifier = String(context.accountIdentifier).trim().toLowerCase();
+    var record = {
+        identifier: identifier,
+        profile: context.profile || null,
+        offices: context.offices || [],
+        services: context.services || [],
+        cachedAt: context.cachedAt || new Date().toISOString(),
+        schemaVersion: 1
+    };
+    return openOfflineDB().then(function (db) {
+        return new Promise(function (resolve, reject) {
+            var tx = db.transaction(ACCOUNT_CONTEXT_STORE, 'readwrite');
+            tx.objectStore(ACCOUNT_CONTEXT_STORE).put(record);
+            tx.oncomplete = function () {
+                console.log('[Offline Context] Account context cached');
+                resolve(record);
+            };
+            tx.onerror = function () { reject(tx.error); };
+        });
+    });
+}
+
+// Returns the cached context record for one normalized identifier, or null
+// if this device has never cached one for that account (see item 22/23 of
+// the offline-profile spec — a missing snapshot is expected and must not
+// block offline survey use, only skip the read-only-profile/known-cooldown
+// UX improvements).
+function getOfflineAccountContext(identifier) {
+    var key = String(identifier || '').trim().toLowerCase();
+    if (!key) return Promise.resolve(null);
+    return openOfflineDB().then(function (db) {
+        return new Promise(function (resolve, reject) {
+            var tx = db.transaction(ACCOUNT_CONTEXT_STORE, 'readonly');
+            var req = tx.objectStore(ACCOUNT_CONTEXT_STORE).get(key);
+            req.onsuccess = function () { resolve(req.result || null); };
+            req.onerror = function () { reject(req.error); };
+        });
     });
 }
 
@@ -89,9 +153,12 @@ function getAuthenticatedOutboxSurveys() {
 // silently retry the same failed password), and one that failed for a
 // transient network/server reason during the actual sync call
 // (sync_failed — must NOT be permanently stranded, so it stays retryable
-// too). Only a terminal 'synced'/'pending_approval' record is excluded —
-// those are removed from the store once the caller confirms the server
-// accepted them.
+// too). A terminal 'synced'/'pending_approval' record is excluded (removed
+// from the store once the caller confirms the server accepted it), and so
+// are 'submission_rejected' and 'eligibility_conflict' — both are permanent
+// problems with the survey's data/timing, not the account, so retrying the
+// identical request on a timer cannot succeed; they stay in the store only
+// for the user to review/edit/remove, never re-entering automatic sync.
 function getUnverifiedOutboxSurveys() {
     return getAllOutboxSurveys().then(function (all) {
         return all.filter(function (r) {
@@ -99,6 +166,21 @@ function getUnverifiedOutboxSurveys() {
                 (r.syncStatus === 'pending_sync' || r.syncStatus === 'verification_required' ||
                  r.syncStatus === 'verification_failed' || r.syncStatus === 'sync_failed');
         });
+    });
+}
+
+// Deliberately separate from getUnverifiedOutboxSurveys — a terminal
+// eligibility_conflict record must never re-enter the automatic sync/retry
+// pool (the account and password already proved correct; only the office/
+// service was on cooldown), so it's never included in that query's result.
+// This is the ONLY read path for these records — the conflict banner
+// (updateEligibilityConflictBanner in pwa-client.js) uses it to render the
+// terminal-state UI (§7 of the offline-context hardening spec), and the
+// only other thing that ever touches one of these rows again is an
+// explicit "Discard Local Response" click (removeSurveyFromOutbox).
+function getEligibilityConflictSurveys() {
+    return getAllOutboxSurveys().then(function (all) {
+        return all.filter(function (r) { return r.mode === 'unverified' && r.syncStatus === 'eligibility_conflict'; });
     });
 }
 
@@ -201,7 +283,11 @@ function queueUnverifiedOfflineSurvey(payload) {
 
 // Updates just the syncStatus of one outbox record in place (put() requires
 // the full object, so this reads-modifies-writes rather than patching).
-function setOutboxSyncStatus(localId, syncStatus) {
+// `extra` (optional) is shallow-merged onto the record — used only for
+// small, safe display fields (e.g. the eligibility_conflict message/
+// nextEligibleAt from POST /api/offline-surveys/verify-and-sync), never a
+// credential; callers only ever pass server-returned display strings here.
+function setOutboxSyncStatus(localId, syncStatus, extra) {
     return openOfflineDB().then(function (db) {
         return new Promise(function (resolve, reject) {
             var tx = db.transaction(OUTBOX_STORE, 'readwrite');
@@ -211,6 +297,9 @@ function setOutboxSyncStatus(localId, syncStatus) {
                 var record = getReq.result;
                 if (!record) { resolve(); return; }
                 record.syncStatus = syncStatus;
+                if (extra) {
+                    Object.keys(extra).forEach(function (key) { record[key] = extra[key]; });
+                }
                 store.put(record);
             };
             getReq.onerror = function () { reject(getReq.error); };

@@ -285,6 +285,133 @@
         container.hidden = false;
     }
 
+    // Renders/refreshes the terminal "eligibility conflict" notification —
+    // one row per still-queued eligibility_conflict record (not grouped by
+    // identifier like the verification-failed banner, since each record can
+    // name a different office/service and nextEligibleAt). This is NOT an
+    // authentication problem (the account and password already verified
+    // successfully) — never shows a password-retry action, never re-enters
+    // getUnverifiedOutboxSurveys/the automatic retry pool. No-op if the
+    // banner container isn't present on this page.
+    async function updateEligibilityConflictBanner() {
+        const container = document.getElementById('offlineEligibilityConflictBanner');
+        if (!container) return;
+
+        let conflicts;
+        try {
+            conflicts = await getEligibilityConflictSurveys();
+        } catch (err) {
+            console.error('[Offline Sync] Failed to read outbox for conflict banner update:', err);
+            return;
+        }
+
+        if (!conflicts.length) {
+            container.replaceChildren();
+            container.hidden = true;
+            return;
+        }
+
+        const rows = conflicts.map((record) => {
+            const row = document.createElement('div');
+            row.className = 'offline-eligibility-conflict-row';
+            row.style.cssText = 'display:flex;flex-direction:column;gap:0.35rem;padding:0.6rem 0;border-bottom:1px solid #f0d9b5;';
+
+            const title = document.createElement('div');
+            title.style.fontWeight = '600';
+            title.textContent = 'Offline Response Could Not Be Submitted';
+            row.appendChild(title);
+
+            const identLine = document.createElement('span');
+            identLine.style.fontSize = '0.8rem';
+            identLine.style.color = '#6b5a1e';
+            identLine.textContent = 'Account: ' + maskIdentifierForDisplay(record.registeredIdentifier || '');
+            row.appendChild(identLine);
+
+            const message = document.createElement('div');
+            message.textContent = record.conflictMessage || 'This service is currently unavailable for another response.';
+            row.appendChild(message);
+
+            const notSubmitted = document.createElement('div');
+            notSubmitted.style.cssText = 'font-size:0.78rem;font-style:italic;';
+            notSubmitted.textContent = 'Not submitted — this response was not added to the official survey records.';
+            row.appendChild(notSubmitted);
+
+            // Absolute server timestamp, never the offline device's own
+            // clock — see nextEligibleAt in checkResubmissionEligibility
+            // (server.js). Formatted in the viewer's local timezone, same
+            // as every other date shown on this page.
+            if (record.nextEligibleAt) {
+                const nextDate = new Date(record.nextEligibleAt);
+                if (!isNaN(nextDate.getTime())) {
+                    const nextLine = document.createElement('div');
+                    nextLine.style.fontSize = '0.8rem';
+                    nextLine.textContent = 'You may submit another response for this service after: ' +
+                        nextDate.toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' });
+                    row.appendChild(nextLine);
+                }
+            }
+
+            const actions = document.createElement('div');
+            actions.style.cssText = 'display:flex;gap:0.5rem;margin-top:0.25rem;flex-wrap:wrap;';
+
+            const discardBtn = document.createElement('button');
+            discardBtn.type = 'button';
+            discardBtn.className = 'btn btn-sm btn-outline-danger';
+            discardBtn.textContent = 'Discard Local Response';
+            discardBtn.addEventListener('click', async () => {
+                if (discardBtn.disabled) return;
+                let confirmed;
+                if (window.Swal) {
+                    const result = await Swal.fire({
+                        title: 'Discard this response?',
+                        text: 'This offline response will be permanently removed from this device. This cannot be undone.',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Discard',
+                        confirmButtonColor: '#dc3545'
+                    });
+                    confirmed = result.isConfirmed;
+                } else {
+                    confirmed = window.confirm('Discard this offline response? This cannot be undone.');
+                }
+                if (!confirmed) return;
+
+                discardBtn.disabled = true;
+                try {
+                    // Removes ONLY this one record — every other queued
+                    // survey, offlineAccountContext, other accounts' data,
+                    // and the Service Worker cache are all untouched.
+                    await removeSurveyFromOutbox(record.localId);
+                    await updateEligibilityConflictBanner();
+                } catch (err) {
+                    console.error('[Offline Sync] Failed to discard eligibility_conflict record:', err);
+                    discardBtn.disabled = false;
+                }
+            });
+            actions.appendChild(discardBtn);
+
+            const newSurveyBtn = document.createElement('button');
+            newSurveyBtn.type = 'button';
+            newSurveyBtn.className = 'btn btn-sm btn-outline-primary';
+            newSurveyBtn.textContent = 'Take New Survey';
+            newSurveyBtn.title = 'Starts a fresh survey — this terminal response stays exactly as-is until you discard it';
+            newSurveyBtn.addEventListener('click', () => {
+                // Resets the CURRENT form only (see startNewSurvey in
+                // client-survey.ejs) — never touches this or any other
+                // queued record, never auto-picks a different service for
+                // the old response.
+                if (typeof window.startNewSurvey === 'function') window.startNewSurvey();
+            });
+            actions.appendChild(newSurveyBtn);
+
+            row.appendChild(actions);
+            return row;
+        });
+
+        container.replaceChildren(...rows);
+        container.hidden = false;
+    }
+
     // Deliberate user action to retry a blocked (401) identifier without
     // requiring a brand-new offline submission. Opens the same masked
     // SweetAlert2 modal used elsewhere, remembers the corrected password
@@ -374,6 +501,8 @@
             AppAlert.error(message || 'Unable to verify the registered account information provided.', "Can't Verify Offline Survey");
         } else if (status === 'submission_rejected') {
             AppAlert.warning(message || 'This survey could not be accepted as submitted. It remains saved on this device for review.', 'Survey Rejected');
+        } else if (status === 'eligibility_conflict') {
+            AppAlert.warning(message || 'This service is currently unavailable for another response. Your offline response has not been submitted. Please choose an eligible service when available.', 'Currently Unavailable');
         } else if (status === 'rate_limited') {
             AppAlert.warning(message || 'Too many verification attempts. Please wait a few minutes before trying again.', 'Please Wait');
         } else {
@@ -455,7 +584,37 @@
                 if (res.ok && data && data.success) {
                     await removeSurveyFromOutbox(record.localId);
                     console.log('[Offline Sync] Local record removed');
+                    // Cooldown/profile eligibility may have just changed (the
+                    // service just synced is now on cooldown) — the sync
+                    // response includes a freshly-rebuilt, non-secret
+                    // snapshot for exactly this purpose (see
+                    // buildClientOfflineContext in server.js). Best-effort:
+                    // never blocks marking the survey synced above.
+                    if (data.offlineContext && typeof saveOfflineAccountContext === 'function') {
+                        saveOfflineAccountContext(data.offlineContext).catch((err) => console.error('[Offline Context] Failed to cache refreshed context:', err));
+                    }
                     notifyOfflineVerifyOutcome(data.status, data.message);
+                    continue;
+                }
+
+                if (res.status === 409 && data && data.status === 'eligibility_conflict') {
+                    // The account and survey data are both valid — only the
+                    // office/service is currently on cooldown (recalculated
+                    // server-side just now). This is NOT an auth problem:
+                    // never touch the RAM credential or the 401 automatic-
+                    // block state, and never re-enter the automatic retry
+                    // pool (see getUnverifiedOutboxSurveys in offline-db.js,
+                    // which excludes 'eligibility_conflict' the same way it
+                    // already excludes 'submission_rejected') — retrying the
+                    // exact same office/service later cannot succeed on its
+                    // own; it stays queued for the user to review or remove.
+                    console.log('[Offline Sync] Endpoint returned 409 eligibility_conflict');
+                    await setOutboxSyncStatus(record.localId, 'eligibility_conflict', {
+                        conflictMessage: data.message || null,
+                        nextEligibleAt: data.nextEligibleAt || null
+                    });
+                    notifyOfflineVerifyOutcome('eligibility_conflict', data.message);
+                    await updateEligibilityConflictBanner();
                     continue;
                 }
 
@@ -571,6 +730,7 @@
                 await verifyAndSyncGroup(identifier, groups[identifier]);
             }
             await updateVerificationFailedBanner();
+            await updateEligibilityConflictBanner();
         } catch (err) {
             console.error('[Offline Verify] Verification flow failed:', err);
         } finally {
@@ -631,6 +791,11 @@
         if (navigator.onLine) {
             attemptReconnectSync();
         }
+        // A terminal eligibility_conflict record from an earlier session
+        // must stay visible on return — never wait for the next sync
+        // attempt (there may not be one, since it's excluded from the
+        // automatic retry pool by design).
+        updateEligibilityConflictBanner();
     });
 
     // Periodic fallback in case the 'online' event never fires (some
@@ -656,4 +821,5 @@
     window.rememberOfflineCredential = rememberOfflineCredential;
     window.forgetOfflineCredential = forgetOfflineCredential;
     window.manualRetryOfflineVerification = manualRetryOfflineVerification;
+    window.updateEligibilityConflictBanner = updateEligibilityConflictBanner;
 })();

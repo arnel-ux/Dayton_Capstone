@@ -11,15 +11,14 @@
 
 importScripts('/js/offline-db.js');
 
-// v11: hardens precaching against ever storing a redirected/non-200 response
-// under a route's cache key (see the CRITICAL_PRECACHE_URLS validation below
-// and the redirect checks added to every runtime caching path) — a stale v10
-// install could otherwise be holding a poisoned /survey-offline entry from
-// before that validation existed. Bumping forces every client to discard v9/
-// v10 (see the activate handler's existing cleanup, unchanged) and re-fetch
-// everything fresh under the new cache names.
-const STATIC_CACHE = 'cspc-static-v11';
-const RUNTIME_CACHE = 'cspc-runtime-v11';
+// v13: client-survey.ejs (the /survey-offline document), offline-db.js, and
+// pwa-client.js all changed again (eligibility-conflict terminal UI +
+// nextEligibleAt, getEligibilityConflictSurveys, email-field 'change'
+// handling) — bumping forces every client to discard v12 (see the activate
+// handler's existing cleanup, unchanged) and re-fetch the updated versions
+// of those three precached resources.
+const STATIC_CACHE = 'cspc-static-v13';
+const RUNTIME_CACHE = 'cspc-runtime-v13';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
