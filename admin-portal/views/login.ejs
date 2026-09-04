@@ -560,6 +560,18 @@
                 <p class="text-muted text-xsmall mb-0">Sign in to your account</p>
             </div>
 
+            <!-- Blocks starting a NEW login while an old session's server-
+                 side logout is still unresolved — see the race condition
+                 explained on guardLoginAgainstPendingLogout() below. Reuses
+                 the same .offline-login-notice/.notice-retry-btn styling as
+                 #serverUnavailableNotice (an existing reusable pattern, not
+                 a new one) rather than introducing another notice design. -->
+            <div id="pendingLogoutNotice" class="offline-login-notice d-none">
+                <i id="pendingLogoutNoticeIcon" class="fas fa-hourglass-half"></i>
+                <span id="pendingLogoutNoticeText">Finishing your previous session…</span>
+                <button type="button" id="pendingLogoutRetryBtn" class="notice-retry-btn d-none">Retry</button>
+            </div>
+
             <div id="serverUnavailableNotice" class="offline-login-notice d-none">
                 <i id="serverUnavailableNoticeIcon" class="fas fa-triangle-exclamation"></i>
                 <span id="serverUnavailableNoticeText">Server temporarily unavailable. Please try again.</span>
@@ -800,6 +812,94 @@
         }
         window.addEventListener('online', checkServerHealth);
         checkServerHealth();
+
+        // ==========================================
+        // PENDING-LOGOUT / NEW-LOGIN RACE GUARD
+        //
+        // The race this closes: an old session goes offline, gets flagged
+        // pending (cspc_client_pending_logout, set in client-survey.ejs),
+        // and the /logout confirmation fails on a flaky reconnect — the
+        // marker correctly stays set. If the user could start a brand new
+        // login on THIS page in that window, and the stale pending
+        // /logout call finally reached the server AFTER the new session
+        // was created, it would destroy the NEW session instead of the old
+        // one — /logout?scope=client just destroys whatever session the
+        // request's client.sid cookie currently points to, and by then
+        // that cookie is the new login's, not the old one. There is no way
+        // to tell "old" and "new" apart from the cookie alone.
+        //
+        // The fix is to never let a new login start while the marker is
+        // unresolved: Google sign-in and the password form are both
+        // blocked until attemptPendingClientLogout() (offline-db.js)
+        // positively confirms the old session is gone, at which point the
+        // marker is cleared and it's safe to authenticate. This also means
+        // a stale marker can no longer coexist with a freshly-created
+        // session by the time /client-survey is reached — so its own
+        // existing showBackOnlineTransition()/attemptPendingClientLogout()
+        // handling (unchanged) never sees that combination either.
+        // ==========================================
+        (function () {
+            const notice = document.getElementById('pendingLogoutNotice');
+            const icon = document.getElementById('pendingLogoutNoticeIcon');
+            const text = document.getElementById('pendingLogoutNoticeText');
+            const retryBtn = document.getElementById('pendingLogoutRetryBtn');
+            const googleBtn = document.getElementById('googleSignInBtn');
+            const loginForm = document.getElementById('loginForm');
+            let blocked = false;
+
+            function setNotice(kind, message, showRetry) {
+                if (!notice) return;
+                notice.classList.toggle('d-none', !message);
+                notice.classList.toggle('is-error', kind === 'error');
+                if (icon) icon.className = kind === 'error' ? 'fas fa-triangle-exclamation' : 'fas fa-hourglass-half';
+                if (text) text.textContent = message || '';
+                if (retryBtn) retryBtn.classList.toggle('d-none', !showRetry);
+            }
+
+            function setBlocked(isBlocked) {
+                blocked = isBlocked;
+                if (googleBtn) googleBtn.classList.toggle('disabled', isBlocked);
+            }
+
+            function warnBlocked(e) {
+                if (!blocked) return;
+                e.preventDefault();
+                if (window.AppAlert) AppAlert.warning('Please wait until your previous session finishes closing before signing in.', 'One Moment');
+            }
+
+            function attempt() {
+                if (typeof hasPendingClientLogout !== 'function' || !hasPendingClientLogout()) {
+                    setBlocked(false);
+                    setNotice(null, '', false);
+                    return;
+                }
+                if (!navigator.onLine) {
+                    setBlocked(true);
+                    setNotice('warning', "You're offline. Reconnect to finish closing your previous session before signing in.", false);
+                    return;
+                }
+                setBlocked(true);
+                setNotice('warning', 'Finishing your previous session…', false);
+                attemptPendingClientLogout().then(function (success) {
+                    if (success) {
+                        setBlocked(false);
+                        setNotice(null, '', false);
+                    } else {
+                        // Does NOT claim the old session is gone — it isn't,
+                        // yet. Stays blocked; no automatic retry loop, just
+                        // the Retry button plus the next 'online' event.
+                        setNotice('error', "We couldn't close your previous session because the connection is unstable. Please retry once your connection improves.", true);
+                    }
+                });
+            }
+
+            if (retryBtn) retryBtn.addEventListener('click', attempt);
+            if (googleBtn) googleBtn.addEventListener('click', warnBlocked);
+            if (loginForm) loginForm.addEventListener('submit', warnBlocked);
+            window.addEventListener('online', attempt);
+
+            attempt();
+        })();
 
         // Landing here already offline with a cached session on this device
         // (from a previous successful ONLINE login, Google or password —

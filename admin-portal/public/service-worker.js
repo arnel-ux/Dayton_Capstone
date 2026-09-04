@@ -11,17 +11,13 @@
 
 importScripts('/js/offline-db.js');
 
-// v15: follow-up gap fixes — client-login.ejs (a precached route,
-// '/client-login' below) gained the same overflow-y:auto short-viewport
-// safety fallback its 3 sibling auth pages already had (login.ejs,
-// reset-password.ejs, complete-google-registration.ejs, none of which
-// needed further changes this pass). No other precached file's content
-// changed in this follow-up (server.js's notification-replay-recovery fix
-// only affects the API route handler, never a precached asset). Bumping
-// forces every client to discard v14 (see the activate handler's existing
-// cleanup, unchanged) and re-fetch the updated /client-login document.
-const STATIC_CACHE = 'cspc-static-v15';
-const RUNTIME_CACHE = 'cspc-runtime-v15';
+// v16: added the /logout bypass in the fetch handler below (pending-logout
+// retry — see attemptPendingClientLogout() in offline-db.js, which this
+// worker's importScripts() above already pulls in fresh on every activate).
+// No precached document content changed this pass. Bumping forces every
+// client to discard v15 and pick up the new fetch handler.
+const STATIC_CACHE = 'cspc-static-v16';
+const RUNTIME_CACHE = 'cspc-runtime-v16';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
@@ -154,6 +150,20 @@ self.addEventListener('fetch', (event) => {
     // this early bypass it would just as happily intercept and permanently
     // stale-cache admin-portal API calls as it does the public survey's.
     if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) {
+        return;
+    }
+
+    // /logout must always reach the live network directly, same reasoning
+    // as /api/ above — it's a plain GET (not request.mode:'navigate' when
+    // called via fetch() from attemptPendingClientLogout() in
+    // offline-db.js), so without this bypass it would otherwise fall
+    // through to the generic same-origin staleWhileRevalidate handler
+    // below. That path still works correctly today (it guards against
+    // caching a redirected response), but session termination is exactly
+    // the kind of request that should never be anywhere near a cache layer
+    // — this removes the ambiguity outright instead of relying on that
+    // guard continuing to hold.
+    if (url.origin === self.location.origin && url.pathname === '/logout') {
         return;
     }
 

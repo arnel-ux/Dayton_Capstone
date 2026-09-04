@@ -271,6 +271,50 @@
             animation: offlinePulse 1.6s ease-in-out infinite;
         }
         @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+        /* Same amber/red notice pattern as login.ejs's #pendingLogoutNotice
+           (and #serverUnavailableNotice) — blocks starting a NEW login here
+           while an old session's server-side logout is still unresolved.
+           See the JS comment near the bottom of this file for the race this
+           prevents. */
+        .pending-logout-notice {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+            border-radius: 10px;
+            padding: 0.65rem 0.85rem;
+            font-size: 0.82rem;
+            font-weight: 600;
+            line-height: 1.4;
+            margin-bottom: 0.85rem;
+        }
+        .pending-logout-notice.is-error { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+        .pending-logout-notice span { flex: 1 1 auto; }
+        .pending-logout-notice .notice-retry-btn {
+            flex: 0 0 auto;
+            background: rgba(255,255,255,0.55);
+            border: 1px solid currentColor;
+            color: inherit;
+            border-radius: 50px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 0.25rem 0.7rem;
+            min-height: 30px;
+        }
+        .pending-logout-notice .notice-retry-btn:hover { background: rgba(255,255,255,0.85); }
+        /* Visual affordance only — the actual block is a JS click handler on
+           the wrapping <a> (see the script below), not pointer-events, so
+           that handler still gets to fire and show the "please wait"
+           message instead of the click silently doing nothing. */
+        #clientGoogleSignInBtn.is-blocked { opacity: 0.55; cursor: not-allowed; }
+        /* .card-custom is a fixed 390x390 square by design (see its own
+           rule above) — only relaxed to fit the extra notice box while that
+           notice is actually shown, via this modifier class toggled in JS,
+           so the normal (no notice) state is completely unaffected. */
+        .card-custom.has-notice { height: auto; min-height: 390px; padding-bottom: 1.75rem; }
     </style>
 </head>
 <body>
@@ -305,7 +349,17 @@
                 </p>
             </div>
 
-            <a href="/auth/google" class="text-decoration-none">
+            <!-- Blocks starting a NEW login here while an old session's
+                 server-side logout is still unresolved — see the JS
+                 comment near the bottom of this file for the exact race
+                 this prevents. -->
+            <div id="pendingLogoutNotice" class="pending-logout-notice d-none">
+                <i id="pendingLogoutNoticeIcon" class="fas fa-hourglass-half"></i>
+                <span id="pendingLogoutNoticeText">Finishing your previous session…</span>
+                <button type="button" id="pendingLogoutRetryBtn" class="notice-retry-btn d-none">Retry</button>
+            </div>
+
+            <a href="/auth/google" class="text-decoration-none" id="clientGoogleSignInBtn">
                 <button type="button" class="btn btn-google w-100 py-3 shadow-sm">
                     <img src="https://www.freepnglogos.com/uploads/google-logo-png/google-logo-png-google-icon-logo-png-transparent-svg-vector-bie-supply-14.png" alt="Google Logo">
                     Sign in with Google
@@ -315,6 +369,10 @@
         </div>
     </div>
 
+    <!-- Needed for attemptPendingClientLogout() below (a previously-offline
+         session's server-side logout may still be pending) — this page
+         didn't load it before since it had no other use for offline-db.js. -->
+    <script src="/js/offline-db.js"></script>
     <script>
         function updateOfflineIndicator() {
             const el = document.getElementById('offlineIndicator');
@@ -323,6 +381,79 @@
         window.addEventListener('online', updateOfflineIndicator);
         window.addEventListener('offline', updateOfflineIndicator);
         updateOfflineIndicator();
+
+        // ==========================================
+        // PENDING-LOGOUT / NEW-LOGIN RACE GUARD — same mechanism and same
+        // reasoning as login.ejs's copy of this block: a stale pending
+        // /logout call that only lands AFTER a brand new login succeeded
+        // would destroy the NEW session (client.sid is just whatever
+        // cookie the request currently carries — there's no way to tell
+        // "old" and "new" apart from it alone). Blocking the one login
+        // control this page has (Google sign-in) until
+        // attemptPendingClientLogout() (offline-db.js) positively confirms
+        // the old session is gone prevents that outright.
+        // ==========================================
+        (function () {
+            const notice = document.getElementById('pendingLogoutNotice');
+            const icon = document.getElementById('pendingLogoutNoticeIcon');
+            const text = document.getElementById('pendingLogoutNoticeText');
+            const retryBtn = document.getElementById('pendingLogoutRetryBtn');
+            const googleBtn = document.getElementById('clientGoogleSignInBtn');
+            const card = document.querySelector('.card-custom');
+            let blocked = false;
+
+            function setNotice(kind, message, showRetry) {
+                if (!notice) return;
+                const visible = !!message;
+                notice.classList.toggle('d-none', !visible);
+                notice.classList.toggle('is-error', kind === 'error');
+                if (card) card.classList.toggle('has-notice', visible);
+                if (icon) icon.className = kind === 'error' ? 'fas fa-triangle-exclamation' : 'fas fa-hourglass-half';
+                if (text) text.textContent = message || '';
+                if (retryBtn) retryBtn.classList.toggle('d-none', !showRetry);
+            }
+
+            function setBlocked(isBlocked) {
+                blocked = isBlocked;
+                if (googleBtn) googleBtn.classList.toggle('is-blocked', isBlocked);
+            }
+
+            function attempt() {
+                if (typeof hasPendingClientLogout !== 'function' || !hasPendingClientLogout()) {
+                    setBlocked(false);
+                    setNotice(null, '', false);
+                    return;
+                }
+                if (!navigator.onLine) {
+                    setBlocked(true);
+                    setNotice('warning', "You're offline. Reconnect to finish closing your previous session before signing in.", false);
+                    return;
+                }
+                setBlocked(true);
+                setNotice('warning', 'Finishing your previous session…', false);
+                attemptPendingClientLogout().then(function (success) {
+                    if (success) {
+                        setBlocked(false);
+                        setNotice(null, '', false);
+                    } else {
+                        // Does not claim the old session is closed — it
+                        // isn't yet. Stays blocked; Retry + the next
+                        // 'online' event are the only retries, no loop.
+                        setNotice('error', "We couldn't close your previous session because the connection is unstable. Please retry once your connection improves.", true);
+                    }
+                });
+            }
+
+            if (retryBtn) retryBtn.addEventListener('click', attempt);
+            if (googleBtn) {
+                googleBtn.addEventListener('click', function (e) {
+                    if (blocked) e.preventDefault();
+                });
+            }
+            window.addEventListener('online', attempt);
+
+            attempt();
+        })();
 
         // Offline session bypass: if a survey was already opened once while
         // signed in, its session is cached in localStorage (see

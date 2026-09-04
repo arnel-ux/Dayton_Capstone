@@ -2447,6 +2447,22 @@
         window.addEventListener('online', checkServerHealth);
         checkServerHealth();
 
+        // Finishes a server-side logout that couldn't complete while the
+        // client portal was offline (see attemptPendingClientLogout() in
+        // offline-db.js, and client-survey.ejs's showBackOnlineTransition()
+        // for the fuller explanation). This is the public landing page, so
+        // it's one of the pages most likely to be the first thing loaded
+        // after a "Back to Dashboard" choice from the offline overlay. The
+        // marker is non-sensitive (a timestamp) and never treated as
+        // authentication — attempting it here is harmless even if nothing
+        // was ever pending.
+        if (navigator.onLine && typeof hasPendingClientLogout === 'function' && hasPendingClientLogout()) {
+            attemptPendingClientLogout();
+        }
+        window.addEventListener('online', function () {
+            if (typeof hasPendingClientLogout === 'function' && hasPendingClientLogout()) attemptPendingClientLogout();
+        });
+
         // This public landing page is what cqacapstone.me's bare domain
         // serves, and is the very first page most visitors ever load — so
         // it's the page that has to register the service worker for the

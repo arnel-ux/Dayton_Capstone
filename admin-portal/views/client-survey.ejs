@@ -297,6 +297,50 @@
         .back-online-banner-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
         /* =========================================================
+           ONLINE-SESSION OFFLINE TRANSITION — see the HTML comment on
+           #onlineOfflineTransition for what this is and why it exists.
+           z-index sits above everything else in this file (notif panel
+           1060, Bootstrap modals ~1055) — once this is up, nothing else
+           should be reachable underneath it.
+        ========================================================= */
+        .offline-transition-overlay {
+            position: fixed; inset: 0; z-index: 2000;
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(3px);
+            display: flex; align-items: center; justify-content: center;
+            padding: 1.25rem;
+            padding-top: calc(1.25rem + env(safe-area-inset-top, 0px));
+            padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+        }
+        .offline-transition-overlay[hidden] { display: none; }
+        .offline-transition-card {
+            background: var(--surface); border-radius: 20px;
+            padding: 2rem 1.85rem; max-width: 380px; width: 100%;
+            text-align: center; box-shadow: 0 30px 60px -15px rgba(0,0,0,0.5);
+        }
+        .offline-transition-icon {
+            width: 56px; height: 56px; border-radius: 50%; margin: 0 auto 1rem;
+            display: flex; align-items: center; justify-content: center; font-size: 1.5rem;
+            background: rgba(245, 158, 11, 0.14); color: #d97706;
+        }
+        /* Swapped in once connectivity returns — green reads as "good news
+           resolved", distinct from the amber "still waiting" state, matching
+           the same amber/green convention already used by .offline-pill and
+           .back-online-banner elsewhere in this file. */
+        .offline-transition-overlay.is-back-online .offline-transition-icon { background: rgba(16,185,129,0.14); color: #059669; }
+        .offline-transition-card h4 { font-weight: 700; margin-bottom: 0.5rem; color: var(--ink-900); }
+        .offline-transition-card p { color: var(--ink-600); font-size: 0.9rem; line-height: 1.5; margin-bottom: 1.5rem; }
+        .offline-transition-actions { display: flex; flex-direction: column; gap: 0.6rem; }
+        .offline-transition-actions .btn { width: 100%; min-height: 44px; }
+        [data-bs-theme="dark"] .offline-transition-overlay { background: rgba(4,8,18,0.82); }
+        @media (max-width: 480px) {
+            .offline-transition-card { padding: 1.5rem 1.25rem; border-radius: 16px; }
+            .offline-transition-icon { width: 48px; height: 48px; font-size: 1.25rem; margin-bottom: 0.85rem; }
+            .offline-transition-card h4 { font-size: 1.05rem; }
+            .offline-transition-card p { font-size: 0.85rem; margin-bottom: 1.25rem; }
+        }
+
+        /* =========================================================
            NOTIFICATION BELL + PANEL — authenticated client pages only
         ========================================================= */
         .notif-bell-wrap { position: relative; }
@@ -535,6 +579,28 @@
             .home-feature-row { margin-top: 0.7rem; }
         }
 
+        /* =========================================================
+           SHARED MOBILE BODY-DESCRIPTION TYPOGRAPHY
+           =========================================================
+           Root cause of "Help Us Serve You Better" reading larger than
+           Terms & Conditions on mobile: the two paragraphs never shared a
+           rule. The markup gives them different Bootstrap size utilities to
+           start with (fs-6 = 1rem on the qa-block paragraph vs the small
+           class = 0.875em on the terms paragraph), and — because each was
+           tuned in a separate, later, page-specific mobile pass — they'd
+           each picked up their OWN unrelated override: the qa-block
+           paragraph got `font-size: 0.85rem` with no line-height override
+           (inheriting Bootstrap's body-wide 1.5), while the terms paragraph
+           got `font-size: 0.76rem; line-height: 1.42`. Two different
+           selectors, two different values, same visual role. Consolidated
+           into one shared class both paragraphs now carry, instead of each
+           section re-deriving its own number. Headings/bullets/hints keep
+           their own sizes on purpose — only the ordinary description-text
+           role is unified. */
+        @media (max-width: 575.98px) {
+            .mobile-section-desc { font-size: 0.84rem; line-height: 1.48; }
+        }
+
         /* ---- Terms & Conditions box (stage 1) on phones ----
            #terms-box's Bootstrap p-4 (24px) padding + the bullet list's ps-4
            (24px) indent alone eat ~96px of width on a 320-360px screen
@@ -547,19 +613,24 @@
                the survey, and still the widest padding + biggest heading on
                the whole step even after the terms-box below it was already
                trimmed. p-4 (24px) is a Bootstrap !important utility, so the
-               override needs it too. */
+               override needs it too. Its description paragraph's font-size
+               now comes from .mobile-section-desc above, not a rule here. */
             #stage1 > .qa-block:first-child { padding: 1rem 0.9rem !important; margin-bottom: 1rem !important; }
             #stage1 > .qa-block:first-child h4 { font-size: 1.1rem; margin-bottom: 0.5rem !important; }
-            #stage1 > .qa-block:first-child p { font-size: 0.85rem; }
             /* Second pass: still too tall per direct feedback. Pushed padding,
                indent, and every text size down further, and tightened the
                mb-3 gaps between the title/bullets/button/checkbox blocks
-               (Bootstrap !important utility, needs !important to move). */
+               (Bootstrap !important utility, needs !important to move). The
+               intro paragraph's size now comes from .mobile-section-desc
+               above (shared with the qa-block description) rather than its
+               own one-off rule here; the bullet list keeps its own slightly
+               smaller size below — itemized fine print is a level down in
+               hierarchy from a normal description paragraph, not the same
+               role. */
             #terms-box { padding: 0.9rem 0.8rem !important; border-radius: 14px !important; }
             #terms-box .fs-5 { font-size: 0.94rem; }
             #terms-box .mb-3 { margin-bottom: 0.65rem !important; }
             #terms-points-list { padding-left: 1rem !important; font-size: 0.78rem; line-height: 1.42; margin-bottom: 0.65rem !important; }
-            #terms-box .text-secondary.small { font-size: 0.76rem; line-height: 1.42; }
             #terms-box .btn-sm { padding: 0.5rem 1rem; font-size: 0.8rem; }
             #terms-box .form-check { padding: 0.25rem 0 !important; gap: 0.5rem !important; }
             #termsAgreeRow .fs-6 { font-size: 0.82rem; }
@@ -1920,13 +1991,13 @@
                 <div id="stage1" class="page active">
                     <div class="qa-block p-4 text-center mb-4">
                         <h4 class="fw-semibold text-heading mb-3" data-i18n="s1_head">Help us serve you better!</h4>
-                        <p class="text-secondary mb-0 fs-6" data-i18n="s1_desc"></p>
+                        <p class="text-secondary mb-0 fs-6 mobile-section-desc" data-i18n="s1_desc"></p>
                     </div>
 
                     <div id="terms-box" class="mb-4 bg-white border rounded-4 p-4">
                         <div class="text-center mb-3">
                             <span class="fw-semibold text-heading fs-5" data-i18n="terms_title">Terms and Conditions</span>
-                            <p class="text-secondary small mb-0 mt-2" data-i18n="terms_summary"></p>
+                            <p class="text-secondary small mb-0 mt-2 mobile-section-desc" data-i18n="terms_summary"></p>
                         </div>
 
                         <ul id="terms-points-list" class="text-secondary small mb-3 ps-4"></ul>
@@ -2535,6 +2606,48 @@
     </div>
 </div>
 
+<% if (!offlineMode) { %>
+<!-- ONLINE-SESSION OFFLINE TRANSITION — authenticated /client-survey only.
+     /survey-offline (offlineMode) already has its own "you were always
+     offline" UI (the back-online banner above) and never had a real online
+     session to lose in the first place, so this doesn't apply there.
+
+     Why this exists: this page's session cookie (client.sid) is httpOnly —
+     no client-side script can ever read, write, or clear it — and the
+     account's actual login state lives entirely in server-side session
+     storage. So while genuinely offline, there is no way to really destroy
+     the login: the honest options are (a) leave the authenticated UI up and
+     let every action fail against an unreachable server, or (b) stop
+     presenting it as usable and make that explicit. This overlay is (b) —
+     a full-screen, opaque cover (not a teardown of the underlying DOM) that
+     blocks interaction with and visually hides account-specific content
+     (name/email/history/notifications) the instant navigator.onLine goes
+     false, and offers only routes that work without a session: the public
+     dashboard, /login, and the offline survey — never a way back into the
+     authenticated view without actually reaching the server again. See the
+     script block near the end of body for how it's driven. -->
+<div id="onlineOfflineTransition" class="offline-transition-overlay" hidden role="alertdialog" aria-modal="true" aria-labelledby="offlineTransitionTitle">
+    <div class="offline-transition-card">
+        <div class="offline-transition-icon"><i id="offlineTransitionIcon" class="bi bi-wifi-off"></i></div>
+        <h4 id="offlineTransitionTitle">You're Offline</h4>
+        <p id="offlineTransitionDesc">Your internet connection has been lost. Online account features are temporarily unavailable.</p>
+        <div class="offline-transition-actions">
+            <!-- Reuses confirmLeaveOfflineSurvey (already defined below, and
+                 already used by /survey-offline's own equivalent choices) —
+                 it warns before navigating away if the survey form has
+                 unsaved progress, otherwise just navigates. None of these
+                 three destinations require a live session: '/' and
+                 '/survey-offline' are both precached by the service worker
+                 for exactly this situation, and '/login' works offline too
+                 (it just can't complete a sign-in without connectivity). -->
+            <a href="/" class="btn btn-outline-primary fw-semibold" onclick="return confirmLeaveOfflineSurvey('/', event);">Back to Dashboard</a>
+            <a href="/survey-offline" class="btn btn-primary fw-semibold" onclick="return confirmLeaveOfflineSurvey('/survey-offline', event);">Go to Offline Survey</a>
+            <a href="/login" class="btn btn-outline-secondary fw-semibold" onclick="return confirmLeaveOfflineSurvey('/login', event);">Login</a>
+        </div>
+    </div>
+</div>
+<% } %>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
@@ -2800,6 +2913,100 @@ if (currentClientEmail) {
     try {
         localStorage.setItem(CLIENT_SESSION_KEY, JSON.stringify({ email: currentClientEmail, cachedAt: Date.now() }));
     } catch (e) { /* localStorage unavailable — offline session bypass just won't apply */ }
+}
+
+// ==========================================
+// ONLINE-SESSION OFFLINE TRANSITION — authenticated /client-survey only
+// (every function below no-ops under OFFLINE_MODE; declared at top level,
+// not inside an `if`, so logout() further down can always call them safely
+// regardless of hoisting semantics). See the HTML comment on
+// #onlineOfflineTransition for the full "why".
+//
+// Driven purely by navigator.onLine / the 'online'+'offline' events — never
+// by any individual fetch()'s success/failure. That's deliberate: a single
+// slow request or a genuine 5xx from the server must NOT be treated as "the
+// device is offline" (see the login.ejs/index.ejs checkServerHealth pattern
+// elsewhere in this codebase for that same distinction) — only the
+// browser's own connectivity signal drives this transition.
+//
+// The pending-server-logout marker itself (set/read/cleared, and the actual
+// /logout attempt) lives in offline-db.js as setPendingClientLogout() /
+// hasPendingClientLogout() / attemptPendingClientLogout() — shared with
+// login.ejs, index.ejs, and client-login.ejs, since the user can leave this
+// page (choosing Login or Dashboard while still offline) before
+// connectivity actually returns, and whichever page they land on when it
+// does needs to finish the job. See those pages' own scripts for the other
+// callers, and the comment on attemptPendingClientLogout() for exactly what
+// counts as a confirmed success vs. a failure worth retrying later.
+// ==========================================
+
+// Shows the "You're offline" state and marks the pending-logout marker, so
+// a later reload (still offline, or online again with the marker still
+// set) — on THIS page or any other one that checks it — knows to
+// re-evaluate instead of silently treating the account as still logged in.
+function showOfflineTransition() {
+    if (OFFLINE_MODE) return;
+    const overlay = document.getElementById('onlineOfflineTransition');
+    if (!overlay) return;
+    setPendingClientLogout();
+    overlay.classList.remove('is-back-online');
+    const icon = document.getElementById('offlineTransitionIcon');
+    const title = document.getElementById('offlineTransitionTitle');
+    const desc = document.getElementById('offlineTransitionDesc');
+    if (icon) icon.className = 'bi bi-wifi-off';
+    if (title) title.textContent = "You're Offline";
+    if (desc) desc.textContent = 'Your internet connection has been lost. Online account features are temporarily unavailable.';
+    overlay.hidden = false;
+}
+
+// Connectivity is back, but a server-side logout is still pending (this
+// load, or a prior one on this or another page that never got resolved) —
+// per the "log in again after reconnecting" security choice, this never
+// silently drops the user back into the authenticated view, regardless of
+// whether the logout attempt below actually succeeds. The wording
+// deliberately does NOT claim the previous session has been terminated —
+// only attemptPendingClientLogout() confirming a real server response gets
+// to make that true, and even then only clears the marker, not this
+// overlay's message (the overlay itself never invites the user back into
+// the authenticated view either way).
+function showBackOnlineTransition() {
+    if (OFFLINE_MODE) return;
+    const overlay = document.getElementById('onlineOfflineTransition');
+    if (!overlay) return;
+    overlay.classList.add('is-back-online');
+    const icon = document.getElementById('offlineTransitionIcon');
+    const title = document.getElementById('offlineTransitionTitle');
+    const desc = document.getElementById('offlineTransitionDesc');
+    if (icon) icon.className = 'bi bi-wifi';
+    if (title) title.textContent = "You're Back Online";
+    if (desc) desc.textContent = 'For your security, please sign in again to continue using your account.';
+    overlay.hidden = false;
+
+    attemptPendingClientLogout();
+}
+
+if (!OFFLINE_MODE) {
+    window.addEventListener('offline', showOfflineTransition);
+    window.addEventListener('online', function () {
+        // A plain reconnect blip on a page that was never actually put into
+        // the offline transition (e.g. a brief Wi-Fi handoff nobody
+        // noticed) shouldn't summon this at all.
+        if (hasPendingClientLogout()) showBackOnlineTransition();
+    });
+
+    // Page load/reload must re-evaluate current state, not just wait for the
+    // next 'offline'/'online' event — e.g. refreshing this page while
+    // already offline (Scenario F) must show the transition immediately
+    // instead of rendering the authenticated portal first and failing
+    // every request afterward. Checking hasPendingClientLogout() here (not
+    // just navigator.onLine) is what catches the case where the user left
+    // this page while offline and has now come back online (or straight
+    // back to this same page) with the marker still unresolved.
+    if (!navigator.onLine) {
+        showOfflineTransition();
+    } else if (hasPendingClientLogout()) {
+        showBackOnlineTransition();
+    }
 }
 
 // Silently refreshes this account's offline-context snapshot (registered
@@ -3234,6 +3441,19 @@ if (OFFLINE_MODE) {
     // permanently.
     if (navigator.onLine) showBackOnlineBanner();
     window.addEventListener('online', showBackOnlineBanner);
+
+    // This page (/survey-offline) is legitimately usable with no account
+    // session at all, but the pending-logout marker isn't scoped to "was
+    // THIS visit authenticated" — it means "the server may still think a
+    // previous session is valid" (e.g. the user chose Go to Offline Survey
+    // from the authenticated page's offline overlay while still offline).
+    // Retry it here too on the same terms as everywhere else: fire-and-
+    // forget, cleared only on a confirmed server response, never touching
+    // the offline survey form, IndexedDB outbox, or sync logic below.
+    if (navigator.onLine && hasPendingClientLogout()) attemptPendingClientLogout();
+    window.addEventListener('online', function () {
+        if (hasPendingClientLogout()) attemptPendingClientLogout();
+    });
 }
 
 // Local, client-side fallback autofill. Independent of the server's
@@ -4816,6 +5036,30 @@ function startNewSurvey() {
 }
 
 async function logout(){
+    // Logout is a plain navigation to /logout?scope=client — network-
+    // dependent, and /logout is not a precached route (unlike /login,
+    // /survey-offline, / — see service-worker.js), so attempting it while
+    // offline previously just failed the navigation outright (the browser's
+    // own connection-error page, or a misleading "Logout failed"). Offline,
+    // there is no server round-trip to make right now anyway: perform the
+    // same local transition used elsewhere in this file when connectivity
+    // drops, and let showBackOnlineTransition() actually reach /logout for
+    // real the next time this tab sees connectivity return.
+    if (!navigator.onLine) {
+        // Deliberately does not claim the server session IS closed — only a
+        // confirmed response from attemptPendingClientLogout() (fired by
+        // showOfflineTransition() below, and retried by any page that later
+        // sees this pending marker) gets to make that true.
+        const confirmedOffline = await AppAlert.confirm(
+            "You're offline, so Logout can't reach the server right now. You'll be signed out of this device immediately, and the app will try to close the server session automatically as soon as you're back online.",
+            { title: 'Logout While Offline?', confirmText: 'Yes, logout' }
+        );
+        if (!confirmedOffline) return;
+        try { localStorage.removeItem(CLIENT_SESSION_KEY); } catch (e) {}
+        showOfflineTransition();
+        return;
+    }
+
     const confirmed = await AppAlert.confirm("Are you sure you want to logout?", {
         title: 'Logout?',
         confirmText: 'Yes, logout'

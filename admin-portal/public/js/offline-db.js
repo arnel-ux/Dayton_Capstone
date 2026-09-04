@@ -37,6 +37,83 @@ function fetchWithTimeout(resource, options, timeoutMs) {
     );
 }
 
+// ==========================================
+// PENDING CLIENT LOGOUT — shared across every page that might need to
+// finish an offline-triggered logout (client-survey.ejs, login.ejs,
+// index.ejs, client-login.ejs). Lives here (not duplicated per-page)
+// because this file is already loaded by all of them, unlike
+// pwa-client.js/alerts.js which aren't universal.
+//
+// Uses localStorage, not sessionStorage: the marker must survive the user
+// navigating away from client-survey.ejs entirely (e.g. choosing "Login" or
+// "Dashboard" from the offline overlay while still offline, landing on a
+// different page/tab by the time connectivity actually returns) — plain
+// per-tab sessionStorage would not reliably follow them there.
+//
+// IMPORTANT: this is a non-sensitive UI hint only — a timestamp, nothing
+// else. It is never treated as proof of anything and never gates access to
+// any route; the server's own session/cookie check (ensureClientAuth) is
+// the only real authority on whether a request is authenticated. This
+// marker only decides whether a background page should retry telling the
+// server "please destroy that session" and whether client-survey.ejs should
+// show its offline/back-online overlay instead of the authenticated view.
+//
+// SAFE IN THE SERVICE WORKER TOO: these are plain function declarations —
+// nothing here runs at import time, and the service worker never calls any
+// of them (only page scripts do), so referencing `localStorage`/`navigator`
+// inside their bodies never executes in that context.
+// ==========================================
+var CLIENT_PENDING_LOGOUT_KEY = 'cspc_client_pending_logout';
+
+function setPendingClientLogout() {
+    try { localStorage.setItem(CLIENT_PENDING_LOGOUT_KEY, String(Date.now())); } catch (e) { /* localStorage unavailable — the offline overlay itself still works, just without surviving a navigation/refresh */ }
+}
+
+function hasPendingClientLogout() {
+    try { return !!localStorage.getItem(CLIENT_PENDING_LOGOUT_KEY); } catch (e) { return false; }
+}
+
+function clearPendingClientLogout() {
+    try { localStorage.removeItem(CLIENT_PENDING_LOGOUT_KEY); } catch (e) { /* ignore */ }
+}
+
+// Attempts the real server-side logout for a previously-flagged offline
+// session. Resolves true ONLY once the server has actually confirmed the
+// session is gone — a network failure, timeout, or any response that
+// doesn't look like a genuine completed logout leaves the marker in place
+// for the next call (a later page load or 'online' event elsewhere) to
+// retry. No retry loop of its own — callers invoke this once per
+// load/online event, which is enough; see the callers in each page.
+//
+// Detecting success: GET /logout?scope=client (server.js) destroys the
+// session and 302-redirects to /login. fetch() follows that redirect
+// transparently and reports the FINAL response, but exposes
+// response.redirected (true) and response.url (the final URL) — so
+// "redirected, and ended up on /login, with a normal 200" is what a real,
+// server-processed logout looks like from here. A network error/timeout
+// rejects the promise outright (never reaches .then), which is treated as
+// failure, not success — the marker is only ever cleared in the one branch
+// that actually observed the server's response.
+function attemptPendingClientLogout() {
+    if (!hasPendingClientLogout()) return Promise.resolve(false);
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return Promise.resolve(false);
+
+    return fetchWithTimeout('/logout?scope=client', { credentials: 'same-origin' }, 8000)
+        .then(function (res) {
+            var confirmedLoggedOut = false;
+            try {
+                confirmedLoggedOut = !!(res && res.ok && res.redirected && new URL(res.url).pathname === '/login');
+            } catch (e) { /* malformed/unexpected res.url — treat as not confirmed */ }
+            if (confirmedLoggedOut) clearPendingClientLogout();
+            return confirmedLoggedOut;
+        })
+        .catch(function () {
+            // Still offline, a captive portal, a timeout, etc. — leave the
+            // marker in place; nothing here claims the session was closed.
+            return false;
+        });
+}
+
 function openOfflineDB() {
     return new Promise(function (resolve, reject) {
         var req = indexedDB.open(OFFLINE_DB_NAME, OFFLINE_DB_VERSION);
