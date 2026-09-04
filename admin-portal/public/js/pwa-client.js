@@ -47,9 +47,15 @@
     // only (an already-logged-in session that went offline) — see
     // queueUnverifiedOfflineSurvey in offline-db.js for the unauthenticated
     // /survey-offline flow's own queuing function.
-    async function queueSurveyOffline(payload, clientEmail) {
+    //
+    // `preferredLocalId` (optional): lets a caller that already generated a
+    // stable attempt ID for this survey (see the active-draft autosave in
+    // client-survey.ejs) carry that SAME id into the outbox record instead
+    // of a brand new one — "one survey attempt = one ID" end to end, from
+    // the first autosave through to the queued submission.
+    async function queueSurveyOffline(payload, clientEmail, preferredLocalId) {
         const record = {
-            localId: generateLocalId(),
+            localId: preferredLocalId || generateLocalId(),
             mode: 'authenticated',
             payload: buildSafeOfflineSurveyPayload(payload),
             clientEmail: clientEmail || (payload && payload.email) || null,

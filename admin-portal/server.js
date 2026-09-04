@@ -351,22 +351,54 @@ function checkResubmissionEligibilityAsync(officeId, googleEmail, serviceAvailed
     return new Promise((resolve) => checkResubmissionEligibility(officeId, googleEmail, serviceAvailed, resolve));
 }
 
+// Looks up a survey_responses row by its client-generated submission id
+// (see finalizeVerifiedSurvey's clientSubmissionId param and the
+// unique_client_submission_id migration). Used to short-circuit BOTH the
+// resubmission-eligibility check and the insert itself for an idempotent
+// replay — resolves null (not an error) when nothing matches or no id was
+// given, which every caller treats as "proceed normally."
+function findSurveyByClientSubmissionId(clientSubmissionId) {
+    if (!clientSubmissionId) return Promise.resolve(null);
+    return dbQuery('SELECT id FROM survey_responses WHERE client_submission_id = ? LIMIT 1', [clientSubmissionId])
+        .then(rows => (rows && rows.length) ? rows[0] : null)
+        .catch(err => {
+            console.error("❌ [Idempotency] Lookup by client_submission_id failed:", err);
+            return null; // fail open to the normal flow rather than blocking a legitimate submission
+        });
+}
+
 // Inserts a fully-verified survey (either a direct @cspc.edu.ph submission, or
 // a personal-email submission the visited office just approved) through the
 // exact same path — survey_responses + client_profiles + client_accounts
 // upsert, then (unless told to skip) a receipt email and AI sentiment/topic
 // analysis. `fields.sqdValues` is an array of the 9 SQD answers (sqd0..sqd8).
+//
+// `fields.clientSubmissionId` (optional, but always sent by the current
+// client — see submitAll() in client-survey.ejs) is this survey attempt's
+// stable id (the same one used as the offline outbox record's localId).
+// Callers should call findSurveyByClientSubmissionId() themselves BEFORE
+// the resubmission-eligibility check (a genuine retry of an already-
+// recorded id must never be rejected by that check just because the row it
+// itself created now makes the office/service look "already answered").
+// This function additionally catches the id's UNIQUE-constraint violation
+// on the insert itself — the actual atomicity guarantee, since the
+// pre-check above is a plain SELECT-then-INSERT with its own TOCTOU gap
+// under true concurrency (two near-simultaneous sync attempts). Either way
+// a duplicate resolves to the EXISTING row's id via the normal success
+// callback, never an error — replaying the same submission id is
+// idempotent by design, not a rejection.
 function finalizeVerifiedSurvey(googleEmail, fields, callback) {
     const {
         officeId, respondentName, topic, sentiment, region, cc1, cc2, cc3,
         sqdValues, comments, serviceAvailed, clientType, age, gender,
-        officeVisitedTime, period, skipReceiptEmail, skipAiAnalysis
+        officeVisitedTime, period, skipReceiptEmail, skipAiAnalysis,
+        clientSubmissionId
     } = fields;
 
     const insertQuery = `
         INSERT INTO survey_responses
-        (office_id, respondent_name, topic, sentiment, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email, service_availed)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (office_id, respondent_name, topic, sentiment, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email, service_availed, client_submission_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     // A no-feedback comment ("N/A", "none", blank, ...) gets NULL for both
     // columns, never the "General Feedback"/"Neutral" placeholder — that
@@ -381,11 +413,23 @@ function finalizeVerifiedSurvey(googleEmail, fields, callback) {
         officeId, respondentName, finalTopic, finalSentiment, region,
         cc1, cc2, cc3,
         sqdValues[0], sqdValues[1], sqdValues[2], sqdValues[3], sqdValues[4], sqdValues[5], sqdValues[6], sqdValues[7], sqdValues[8],
-        comments || 'N/A', period, googleEmail, serviceAvailed
+        comments || 'N/A', period, googleEmail, serviceAvailed, clientSubmissionId || null
     ];
 
     db.query(insertQuery, values, (err, result) => {
-        if (err) return callback(err);
+        if (err) {
+            // unique_client_submission_id is the only constraint that can
+            // throw ER_DUP_ENTRY on this insert now (unique_office_google_email
+            // was deliberately dropped — see the migration comment). Resolve
+            // it as the existing row's success instead of an error.
+            if (err.code === 'ER_DUP_ENTRY' && clientSubmissionId) {
+                return findSurveyByClientSubmissionId(clientSubmissionId).then(existing => {
+                    if (existing) return callback(null, existing.id);
+                    callback(err); // constraint fired but the row is somehow gone — surface the real error
+                });
+            }
+            return callback(err);
+        }
         const surveyResponseId = result.insertId;
 
         db.query(
@@ -2188,6 +2232,22 @@ db.query(createClustersTableQuery, (err) => {
                         // per-service resubmission cooldown.
                         db.query("ALTER TABLE survey_responses ADD COLUMN service_availed VARCHAR(255) NULL", () => {});
 
+                        // Idempotency guard for the ONLINE authenticated survey path (both
+                        // direct /submit-survey and queued /sync-surveys retries) — the old
+                        // unique_office_google_email constraint above was correctly dropped
+                        // because a client CAN legitimately submit the same office more than
+                        // once now (different services, or the same service after its cooldown
+                        // elapses); it can never come back for that purpose. This is a
+                        // different, narrower guarantee: the SAME client-generated submission
+                        // ID (see client_submission_id in finalizeVerifiedSurvey) can never
+                        // create two rows, whether from a lost-response retry or two
+                        // near-simultaneous sync attempts racing each other. NULL is allowed
+                        // and multiple NULLs never collide (older rows, or a request that
+                        // genuinely didn't send one), so this is purely additive.
+                        db.query("ALTER TABLE survey_responses ADD COLUMN client_submission_id VARCHAR(64) NULL", () => {
+                            db.query("ALTER TABLE survey_responses ADD UNIQUE KEY unique_client_submission_id (client_submission_id)", () => {});
+                        });
+
                         // Pinakahuli ang Client Profiles
                         db.query(createClientProfilesTableQuery, (err) => {
                             if (err) console.error("❌ Error creating client_profiles table:", err);
@@ -3921,6 +3981,18 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
         const finalOfficeId = cleanInt(office_id);
         const finalOfficeVisitedTime = cleanTime(office_visited_time);
         const finalServiceAvailed = cleanStr(service_availed);
+        // This attempt's stable client-generated id (see activeSurveyDraftId
+        // in client-survey.ejs) — checked BEFORE the eligibility check below
+        // so a retried submit (e.g. a lost response, or the pending-logout
+        // race handled client-side by re-submitting after a 401) resolves
+        // to the same existing row instead of being rejected by the very
+        // eligibility state that row itself created.
+        const finalClientSubmissionId = cleanStr(req.body.client_submission_id || req.body.clientSubmissionId);
+
+        (finalClientSubmissionId ? findSurveyByClientSubmissionId(finalClientSubmissionId) : Promise.resolve(null)).then((existing) => {
+        if (existing) {
+            return res.json({ success: true, alreadyRecorded: true, message: "Survey recorded successfully!" });
+        }
 
         checkResubmissionEligibility(finalOfficeId, googleEmail, finalServiceAvailed, (eligibility) => {
             if (!eligibility.eligible) {
@@ -3933,7 +4005,8 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
                 region: finalRegion, cc1: cleanStr(cc1), cc2: cleanStr(cc2), cc3: cleanStr(cc3),
                 sqdValues, comments: cleanStr(comments), serviceAvailed: finalServiceAvailed,
                 clientType: finalClientType, age: finalAge, gender: finalGender,
-                officeVisitedTime: finalOfficeVisitedTime, period: getPeriodCovered()
+                officeVisitedTime: finalOfficeVisitedTime, period: getPeriodCovered(),
+                clientSubmissionId: finalClientSubmissionId
             };
             console.log("📤 [Survey Final Fields] (after profile merge, what actually gets stored):", fields);
 
@@ -3966,6 +4039,7 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
                 }
             );
         });
+        }); // end findSurveyByClientSubmissionId(...).then(...)
     });
 });
 
@@ -3996,7 +4070,12 @@ app.post('/sync-surveys', ensureClientAuth, async (req, res) => {
         const localId = item && item.localId;
         const payload = (item && item.payload) || item || {};
         try {
-            const result = await syncOneSurvey(googleEmail, payload);
+            // localId is this survey attempt's stable client-generated id
+            // (see activeSurveyDraftId in client-survey.ejs) — passed
+            // through as the idempotency key so a retried sync (a lost
+            // response, two near-simultaneous sync attempts) resolves to
+            // the same existing row instead of a second insert.
+            const result = await syncOneSurvey(googleEmail, payload, localId);
             results.push({ localId, ...result });
         } catch (err) {
             console.error("❌ [Sync] Unexpected error syncing survey:", err);
@@ -4007,9 +4086,22 @@ app.post('/sync-surveys', ensureClientAuth, async (req, res) => {
     res.status(200).json({ success: true, results });
 });
 
-async function syncOneSurvey(googleEmail, body) {
+async function syncOneSurvey(googleEmail, body, clientSubmissionId) {
     const cleanInt = (val) => (val !== undefined && val !== "" && val !== null && !isNaN(val)) ? parseInt(val, 10) : null;
     const cleanStr = (val) => (val !== undefined && val !== null && String(val).trim() !== "") ? String(val).trim() : null;
+
+    // A retry of an already-recorded submission id must resolve as success
+    // immediately — BEFORE the resubmission-eligibility check below, which
+    // would otherwise (correctly, for a genuinely NEW submission, but
+    // wrongly here) reject it: the row this exact id already created is
+    // itself what would make that office/service look "already answered".
+    const finalClientSubmissionId = cleanStr(clientSubmissionId);
+    if (finalClientSubmissionId) {
+        const existing = await findSurveyByClientSubmissionId(finalClientSubmissionId);
+        if (existing) {
+            return { success: true, alreadySynced: true, surveyResponseId: existing.id, sentiment: 'Neutral', topic: 'General Feedback' };
+        }
+    }
 
     const { office_id, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, office_visited_time, service_availed } = body;
 
@@ -4095,6 +4187,7 @@ async function syncOneSurvey(googleEmail, body) {
             comments: cleanStr(comments), serviceAvailed: finalServiceAvailed,
             clientType: finalClientType, age: finalAge, gender: finalGender,
             officeVisitedTime: finalOfficeVisitedTime, period: currentPeriod,
+            clientSubmissionId: finalClientSubmissionId,
             // The offline sync path has never sent a receipt email, and AI analysis
             // was already awaited above — don't repeat either.
             skipReceiptEmail: true, skipAiAnalysis: true

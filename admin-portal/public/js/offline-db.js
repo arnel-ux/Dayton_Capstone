@@ -9,9 +9,16 @@ var OFFLINE_DB_NAME = 'cspc-survey-offline';
 // profile/eligibility snapshot cached after authenticated online logins,
 // used to improve the /survey-offline UI. Never contains a password, hash,
 // token, or session identifier — see saveOfflineAccountContext.
-var OFFLINE_DB_VERSION = 2;
+// v3 adds ACTIVE_DRAFT_STORE (see below) — an in-progress, NOT-YET-SUBMITTED
+// online survey attempt, autosaved so a sudden internet loss (or an
+// accidental refresh/reopen while offline) can restore it. Deliberately a
+// separate store from OUTBOX_STORE: that store holds completed submissions
+// already queued for sync (runOfflineSurveySync would otherwise happily
+// try to sync a half-finished draft the moment it saw one there).
+var OFFLINE_DB_VERSION = 3;
 var OUTBOX_STORE = 'unsent-surveys';
 var ACCOUNT_CONTEXT_STORE = 'offlineAccountContext';
+var ACTIVE_DRAFT_STORE = 'activeSurveyDraft';
 
 // Plain fetch() has no built-in timeout, so on a flaky/partial connection
 // (Wi-Fi still "connected" but no route to the internet, a captive portal, a
@@ -129,6 +136,12 @@ function openOfflineDB() {
             if (!db.objectStoreNames.contains(ACCOUNT_CONTEXT_STORE)) {
                 db.createObjectStore(ACCOUNT_CONTEXT_STORE, { keyPath: 'identifier' });
             }
+            // One in-progress draft per account (keyed by the same normalized
+            // email convention as ACCOUNT_CONTEXT_STORE) — a fresh autosave
+            // simply overwrites the previous one for that account.
+            if (!db.objectStoreNames.contains(ACTIVE_DRAFT_STORE)) {
+                db.createObjectStore(ACTIVE_DRAFT_STORE, { keyPath: 'clientEmailKey' });
+            }
         };
         req.onsuccess = function () { resolve(req.result); };
         req.onerror = function () { reject(req.error); };
@@ -182,6 +195,69 @@ function getOfflineAccountContext(identifier) {
             var req = tx.objectStore(ACCOUNT_CONTEXT_STORE).get(key);
             req.onsuccess = function () { resolve(req.result || null); };
             req.onerror = function () { reject(req.error); };
+        });
+    });
+}
+
+// ==========================================
+// ACTIVE (IN-PROGRESS) ONLINE SURVEY DRAFT
+//
+// Distinct from the outbox above: this is a survey attempt that hasn't been
+// submitted yet — captured continuously while the authenticated /client-
+// survey form is being filled out (and immediately the instant 'offline'
+// fires), so it survives an accidental refresh/reopen. It only ever moves
+// into the outbox once the user actually clicks Submit; this store is
+// cleared at that point (see queueSurveyOffline's caller in
+// client-survey.ejs), never synced directly by runOfflineSurveySync.
+//
+// Reuses buildSafeOfflineSurveyPayload (below) for the field allowlist —
+// the exact same one already used for completed offline submissions — so
+// there is exactly one canonical field list for "what a survey payload
+// contains," not two schemas to keep in sync.
+// ==========================================
+function normalizeDraftAccountKey(clientEmail) {
+    return (clientEmail || '').trim().toLowerCase();
+}
+
+function saveActiveSurveyDraft(clientEmail, draft) {
+    var key = normalizeDraftAccountKey(clientEmail);
+    if (!key) return Promise.resolve(null);
+    var record = Object.assign({}, draft, { clientEmailKey: key, updatedAt: Date.now() });
+    return openOfflineDB().then(function (db) {
+        return new Promise(function (resolve, reject) {
+            var tx = db.transaction(ACTIVE_DRAFT_STORE, 'readwrite');
+            tx.objectStore(ACTIVE_DRAFT_STORE).put(record);
+            tx.oncomplete = function () { resolve(record); };
+            tx.onerror = function () { reject(tx.error); };
+        });
+    });
+}
+
+function getActiveSurveyDraft(clientEmail) {
+    var key = normalizeDraftAccountKey(clientEmail);
+    if (!key) return Promise.resolve(null);
+    return openOfflineDB().then(function (db) {
+        return new Promise(function (resolve, reject) {
+            var tx = db.transaction(ACTIVE_DRAFT_STORE, 'readonly');
+            var req = tx.objectStore(ACTIVE_DRAFT_STORE).get(key);
+            req.onsuccess = function () { resolve(req.result || null); };
+            req.onerror = function () { reject(req.error); };
+        });
+    });
+}
+
+// Called only once the draft has either become a real queued submission
+// (moved into the outbox) or the user explicitly discarded it — never just
+// because connectivity changed, sync started, or a request was sent.
+function clearActiveSurveyDraft(clientEmail) {
+    var key = normalizeDraftAccountKey(clientEmail);
+    if (!key) return Promise.resolve();
+    return openOfflineDB().then(function (db) {
+        return new Promise(function (resolve, reject) {
+            var tx = db.transaction(ACTIVE_DRAFT_STORE, 'readwrite');
+            tx.objectStore(ACTIVE_DRAFT_STORE).delete(key);
+            tx.oncomplete = function () { resolve(); };
+            tx.onerror = function () { reject(tx.error); };
         });
     });
 }

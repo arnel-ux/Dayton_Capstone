@@ -333,11 +333,25 @@
         .offline-transition-actions { display: flex; flex-direction: column; gap: 0.6rem; }
         .offline-transition-actions .btn { width: 100%; min-height: 44px; }
         [data-bs-theme="dark"] .offline-transition-overlay { background: rgba(4,8,18,0.82); }
+        /* Reassurance note — only shown when a real in-progress attempt was
+           found (see showOfflineTransition()). A quiet green-tinted strip,
+           not another alert box, so it reads as "good news" rather than
+           adding a second warning on top of "You're Offline". Kept compact
+           on purpose (item 3/54: four buttons is already enough for a
+           mobile popup — this must not add real height). */
+        .offline-transition-progress-note {
+            background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25);
+            border-radius: 10px; padding: 0.6rem 0.75rem !important;
+            font-size: 0.82rem !important; color: #047857 !important;
+            margin-bottom: 1rem !important; line-height: 1.4 !important;
+        }
+        [data-bs-theme="dark"] .offline-transition-progress-note { background: rgba(16,185,129,0.14); border-color: rgba(16,185,129,0.3); color: #6ee7b7 !important; }
         @media (max-width: 480px) {
             .offline-transition-card { padding: 1.5rem 1.25rem; border-radius: 16px; }
             .offline-transition-icon { width: 48px; height: 48px; font-size: 1.25rem; margin-bottom: 0.85rem; }
             .offline-transition-card h4 { font-size: 1.05rem; }
             .offline-transition-card p { font-size: 0.85rem; margin-bottom: 1.25rem; }
+            .offline-transition-progress-note { font-size: 0.78rem !important; padding: 0.5rem 0.65rem !important; }
         }
 
         /* =========================================================
@@ -2631,7 +2645,16 @@
         <div class="offline-transition-icon"><i id="offlineTransitionIcon" class="bi bi-wifi-off"></i></div>
         <h4 id="offlineTransitionTitle">You're Offline</h4>
         <p id="offlineTransitionDesc">Your internet connection has been lost. Online account features are temporarily unavailable.</p>
+        <!-- Shown only when hasUnsavedSurveyProgress() is true at the moment
+             the overlay opens — see showOfflineTransition(). -->
+        <p id="offlineTransitionProgressNote" class="offline-transition-progress-note" hidden>Your current survey progress has been saved on this device. You can continue answering it offline.</p>
         <div class="offline-transition-actions">
+            <!-- Primary action when a real in-progress attempt exists —
+                 dismisses the overlay in place. The survey form's own DOM/JS
+                 state was never touched by the overlay appearing, so there is
+                 nothing to "restore" here; the autosave below only matters
+                 for a refresh/reopen while this stays hidden. -->
+            <button type="button" id="continueSurveyBtn" class="btn btn-primary fw-semibold" onclick="dismissOfflineTransitionForContinue()" hidden>Continue Survey</button>
             <!-- Reuses confirmLeaveOfflineSurvey (already defined below, and
                  already used by /survey-offline's own equivalent choices) —
                  it warns before navigating away if the survey form has
@@ -2641,7 +2664,7 @@
                  for exactly this situation, and '/login' works offline too
                  (it just can't complete a sign-in without connectivity). -->
             <a href="/" class="btn btn-outline-primary fw-semibold" onclick="return confirmLeaveOfflineSurvey('/', event);">Back to Dashboard</a>
-            <a href="/survey-offline" class="btn btn-primary fw-semibold" onclick="return confirmLeaveOfflineSurvey('/survey-offline', event);">Go to Offline Survey</a>
+            <a href="/survey-offline" id="offlineTransitionGoOfflineSurveyBtn" class="btn btn-primary fw-semibold" onclick="return confirmLeaveOfflineSurvey('/survey-offline', event);">Go to Offline Survey</a>
             <a href="/login" class="btn btn-outline-secondary fw-semibold" onclick="return confirmLeaveOfflineSurvey('/login', event);">Login</a>
         </div>
     </div>
@@ -2940,12 +2963,156 @@ if (currentClientEmail) {
 // counts as a confirmed success vs. a failure worth retrying later.
 // ==========================================
 
+// ==========================================
+// ACTIVE ONLINE SURVEY DRAFT — autosave/restore bridge between the normal
+// online survey form and the existing offline outbox infrastructure.
+// Authenticated (!OFFLINE_MODE) only: /survey-offline is a different,
+// already-unauthenticated flow with its own separate save-on-submit
+// behavior (queueUnverifiedOfflineSurvey), untouched by any of this.
+//
+// One survey attempt = one ID, generated once (the first time there's
+// something worth saving) and reused for every autosave, the eventual
+// outbox record if Submit happens offline, and a restore after a refresh —
+// never regenerated by a stage change, a reconnect, or a reload that finds
+// an existing draft.
+// ==========================================
+let activeSurveyDraftId = null;
+let activeSurveyDraftRestored = false;
+// Set when showBackOnlineTransition() silently ran the sync-then-logout
+// sequence without interrupting an in-progress Continue Survey attempt —
+// checked by showThankYou() and switchView() to surface the "please sign
+// in again" screen once that's no longer disruptive.
+let backOnlinePromptSuppressed = false;
+
+function currentSurveyStageNumber() {
+    const activePage = document.querySelector('#surveyForm .page.active');
+    return activePage ? parseInt(activePage.id.replace('stage', ''), 10) : 1;
+}
+
+// Same allowlist-then-collect approach submitAll() already uses for a real
+// submission (FormData -> buildSafeOfflineSurveyPayload, both already
+// shared with the outbox) — no second field schema.
+function collectDraftableSurveyValues() {
+    const form = document.getElementById('surveyForm');
+    if (!form) return {};
+    return buildSafeOfflineSurveyPayload(Object.fromEntries(new FormData(form).entries()));
+}
+
+// Immediate (non-debounced) save — used right before the offline overlay
+// appears (item 5: answers must be safe before the popup even shows) and
+// when restoring/discarding. Ordinary typing/selecting uses the debounced
+// wrapper further below instead, so autosave doesn't run on every keystroke.
+function autosaveActiveSurveyDraftNow() {
+    if (OFFLINE_MODE || !currentClientEmail) return;
+    if (!hasUnsavedSurveyProgress()) return; // opening the form and touching nothing is not "progress"
+    if (!activeSurveyDraftId) {
+        activeSurveyDraftId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : generateOfflineSubmissionId();
+    }
+    saveActiveSurveyDraft(currentClientEmail, {
+        draftId: activeSurveyDraftId,
+        stage: currentSurveyStageNumber(),
+        values: collectDraftableSurveyValues(),
+        termsAccepted: true, // hasUnsavedSurveyProgress() already implies stage > 1, i.e. Terms was passed
+        language: typeof currentLang !== 'undefined' ? currentLang : 'en',
+        createdOrUpdatedAt: new Date().toISOString()
+    }).catch(err => console.error('[Survey Draft] Autosave failed:', err));
+}
+
+let autosaveDraftTimer = null;
+function autosaveActiveSurveyDraftDebounced() {
+    if (OFFLINE_MODE) return;
+    clearTimeout(autosaveDraftTimer);
+    autosaveDraftTimer = setTimeout(autosaveActiveSurveyDraftNow, 800);
+}
+
+// Wired to the whole form rather than individual fields — one place covers
+// every text input, select, radio, and the comments textarea, matching the
+// "input/change/radio/select/comment edits" list this needs to autosave on.
+if (!OFFLINE_MODE) {
+    const surveyFormEl = document.getElementById('surveyForm');
+    if (surveyFormEl) {
+        surveyFormEl.addEventListener('input', autosaveActiveSurveyDraftDebounced);
+        surveyFormEl.addEventListener('change', autosaveActiveSurveyDraftDebounced);
+    }
+}
+
+// Only ever called once the draft has become a real queued/synced
+// submission, or the user explicitly starts over — never merely because
+// connectivity changed or a sync attempt began.
+function discardActiveSurveyDraft() {
+    activeSurveyDraftId = null;
+    if (!OFFLINE_MODE && currentClientEmail) {
+        clearActiveSurveyDraft(currentClientEmail).catch(err => console.error('[Survey Draft] Failed to clear draft:', err));
+    }
+}
+
+// Restoring an in-progress draft found on page load. navigate(stage) only
+// validates the stage it's LEAVING (see navigate()'s own logic), so jumping
+// straight to e.g. stage 4 requires Stage 1's terms checkbox to already be
+// checked — true here since the draft only ever exists at all once
+// hasUnsavedSurveyProgress() was true (stage > 1) when it was saved.
+function restoreActiveSurveyDraftIntoForm(draft) {
+    const values = draft.values || {};
+    Object.keys(values).forEach(name => {
+        const field = document.querySelector(`#surveyForm [name="${CSS.escape(name)}"]`);
+        if (!field) return;
+        if (field.type === 'radio' || field.type === 'checkbox') {
+            const target = document.querySelector(`#surveyForm [name="${CSS.escape(name)}"][value="${CSS.escape(String(values[name]))}"]`);
+            if (target) target.checked = true;
+        } else {
+            field.value = values[name];
+        }
+    });
+
+    if (draft.termsAccepted) {
+        const termsBox = document.getElementById('agreeTermsStage1');
+        if (termsBox) termsBox.checked = true;
+        const startBtn = document.getElementById('btnStartSurvey');
+        if (startBtn) startBtn.disabled = false;
+    }
+
+    activeSurveyDraftId = draft.draftId || null;
+    activeSurveyDraftRestored = true;
+    const targetStage = draft.stage && draft.stage > 1 ? draft.stage : 1;
+    if (targetStage > 1) navigate(targetStage);
+
+    // Office -> Service is a dependent dropdown (populateServiceSelect only
+    // runs on the office <select>'s own change event) — restoring
+    // office_id's value directly doesn't repopulate or re-select the
+    // service list, so that has to happen explicitly here.
+    if (values.office_id) {
+        populateServiceSelect(values.office_id);
+        if (values.service_availed) {
+            const serviceSelect = document.getElementById('serviceSelect');
+            if (serviceSelect) serviceSelect.value = values.service_availed;
+        }
+        updateAvailabilityNotice();
+    }
+
+    if (window.AppAlert) AppAlert.toastInfo('Your saved survey has been restored.');
+}
+
+if (!OFFLINE_MODE && currentClientEmail) {
+    getActiveSurveyDraft(currentClientEmail).then(draft => {
+        if (draft && draft.values && Object.keys(draft.values).length) {
+            restoreActiveSurveyDraftIntoForm(draft);
+        }
+    }).catch(err => console.error('[Survey Draft] Restore failed:', err));
+}
+
 // Shows the "You're offline" state and marks the pending-logout marker, so
 // a later reload (still offline, or online again with the marker still
 // set) — on THIS page or any other one that checks it — knows to
 // re-evaluate instead of silently treating the account as still logged in.
+//
+// Item 5's ordering is deliberate: the draft is captured and persisted
+// BEFORE the overlay is ever shown, so the user's answers are already safe
+// on disk the instant this runs — they never have to click anything for
+// that to be true.
 function showOfflineTransition() {
     if (OFFLINE_MODE) return;
+    autosaveActiveSurveyDraftNow();
+
     const overlay = document.getElementById('onlineOfflineTransition');
     if (!overlay) return;
     setPendingClientLogout();
@@ -2953,10 +3120,37 @@ function showOfflineTransition() {
     const icon = document.getElementById('offlineTransitionIcon');
     const title = document.getElementById('offlineTransitionTitle');
     const desc = document.getElementById('offlineTransitionDesc');
+    const progressNote = document.getElementById('offlineTransitionProgressNote');
+    const continueBtn = document.getElementById('continueSurveyBtn');
+    const goOfflineSurveyBtn = document.getElementById('offlineTransitionGoOfflineSurveyBtn');
     if (icon) icon.className = 'bi bi-wifi-off';
     if (title) title.textContent = "You're Offline";
     if (desc) desc.textContent = 'Your internet connection has been lost. Online account features are temporarily unavailable.';
+
+    // "Continue Survey" only when there's real unfinished progress (item 4)
+    // — opening the survey and answering nothing does not count.
+    const hasRealProgress = hasUnsavedSurveyProgress();
+    if (progressNote) progressNote.hidden = !hasRealProgress;
+    if (continueBtn) continueBtn.hidden = !hasRealProgress;
+    // Keep exactly one visually-primary action: Continue Survey when it's
+    // available, "Go to Offline Survey" otherwise (its original role).
+    if (goOfflineSurveyBtn) {
+        goOfflineSurveyBtn.classList.toggle('btn-primary', !hasRealProgress);
+        goOfflineSurveyBtn.classList.toggle('btn-outline-primary', hasRealProgress);
+    }
+
     overlay.hidden = false;
+}
+
+// Dismisses the overlay without navigating anywhere — the survey form's own
+// DOM/JS state was never altered by the overlay appearing, so "continuing"
+// is simply making the form visible/interactive again. The pending-logout
+// marker set by showOfflineTransition() is untouched: choosing to keep
+// answering offline doesn't resolve it, and it still gets attempted the
+// next time connectivity actually returns (from this page or any other).
+function dismissOfflineTransitionForContinue() {
+    const overlay = document.getElementById('onlineOfflineTransition');
+    if (overlay) overlay.hidden = true;
 }
 
 // Connectivity is back, but a server-side logout is still pending (this
@@ -2969,18 +3163,75 @@ function showOfflineTransition() {
 // to make that true, and even then only clears the marker, not this
 // overlay's message (the overlay itself never invites the user back into
 // the authenticated view either way).
-function showBackOnlineTransition() {
+async function showBackOnlineTransition() {
     if (OFFLINE_MODE) return;
     const overlay = document.getElementById('onlineOfflineTransition');
     if (!overlay) return;
-    overlay.classList.add('is-back-online');
-    const icon = document.getElementById('offlineTransitionIcon');
-    const title = document.getElementById('offlineTransitionTitle');
-    const desc = document.getElementById('offlineTransitionDesc');
-    if (icon) icon.className = 'bi bi-wifi';
-    if (title) title.textContent = "You're Back Online";
-    if (desc) desc.textContent = 'For your security, please sign in again to continue using your account.';
-    overlay.hidden = false;
+
+    // ---- Step 1: best-effort sync attempt ----
+    // Any survey queued while this session was offline (queueSurveyOffline,
+    // mode:'authenticated') syncs via POST /sync-surveys, which requires
+    // THIS still-valid session (ensureClientAuth) — attemptPendingClientLogout()
+    // further down destroys that same session. Attempting sync first means a
+    // queued survey gets its chance on the session that's actually valid for
+    // it, before that session goes away.
+    if (typeof window.syncOfflineSurveysFromPage === 'function') {
+        try { await window.syncOfflineSurveysFromPage(); } catch (e) { /* swallowed below regardless — see the outbox check that follows */ }
+    }
+
+    // ---- Step 2: confirm the queue is ACTUALLY clear before logging out ----
+    // syncOfflineSurveysFromPage() (pwa-client.js) always resolves — it
+    // wraps runOfflineSurveySync() in its own try/catch purely to avoid an
+    // unhandled promise rejection, and returns normally either way. A
+    // resolved await above is therefore NOT proof every queued survey
+    // synced: it resolves identically whether nothing was queued, everything
+    // synced, or the whole /sync-surveys request failed outright (network
+    // error, timeout, 5xx before any JSON body). The outbox itself is the
+    // only reliable signal — runOfflineSurveySync() only removes a record
+    // once the server gave it an explicit per-item verdict (synced, or a
+    // permanent rejection like "already evaluated this office"); a record
+    // can only still be sitting here if the whole request never completed.
+    // If anything authenticated remains queued, this session is still
+    // needed to eventually sync it — logout is deliberately left unresolved
+    // (pending-logout marker untouched, queued survey untouched) rather than
+    // risk stranding that survey behind a session that's about to be
+    // destroyed. No retry timer is started: the next 'online' event or page
+    // load (both already wired elsewhere) re-runs this whole function,
+    // including this check, from scratch.
+    if (typeof getAuthenticatedOutboxSurveys === 'function') {
+        try {
+            const stillQueued = await getAuthenticatedOutboxSurveys();
+            if (stillQueued && stillQueued.length > 0) return;
+        } catch (e) {
+            return; // can't confirm the queue is actually clear — don't log out yet
+        }
+    }
+
+    // ---- Step 3: safe to proceed — no authenticated survey depends on this
+    // session anymore. Decide what the user sees, then log out. ----
+    // If the user dismissed the overlay via Continue Survey and is actively
+    // mid-attempt (item 34: reconnecting must not restart/discard/interrupt
+    // that), don't pop the full "please sign in again" screen back over
+    // their form. If they finish and hit Submit after the session is gone,
+    // the 401 fallback in submitAll() queues it safely; the reconnect screen
+    // still shows normally once they leave the form (any other view, or
+    // before Continue Survey was ever clicked).
+    const continuingSurvey = overlay.hidden && activeSurveyDraftId && document.querySelector('#view-survey.active');
+    if (continuingSurvey) {
+        // Surfaced later instead — see showThankYou() and switchView(),
+        // which re-check this once the interrupted attempt is actually
+        // finished or the user leaves the survey view on their own.
+        backOnlinePromptSuppressed = true;
+    } else {
+        overlay.classList.add('is-back-online');
+        const icon = document.getElementById('offlineTransitionIcon');
+        const title = document.getElementById('offlineTransitionTitle');
+        const desc = document.getElementById('offlineTransitionDesc');
+        if (icon) icon.className = 'bi bi-wifi';
+        if (title) title.textContent = "You're Back Online";
+        if (desc) desc.textContent = 'For your security, please sign in again to continue using your account.';
+        overlay.hidden = false;
+    }
 
     attemptPendingClientLogout();
 }
@@ -3763,6 +4014,16 @@ function switchView(view) {
 
     closeSidebarOnMobile();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Now that the switch is actually done, leaving the survey view is a
+    // safe, natural point to surface a "please sign in again" screen that
+    // showBackOnlineTransition() held back earlier so it wouldn't interrupt
+    // an in-progress Continue Survey attempt — see backOnlinePromptSuppressed.
+    if (view !== 'survey' && backOnlinePromptSuppressed) {
+        backOnlinePromptSuppressed = false;
+        if (typeof showBackOnlineTransition === 'function') showBackOnlineTransition();
+    }
+
     return false;
 }
 
@@ -4314,6 +4575,12 @@ function navigate(stage) {
     updateProgressStepper(stage);
     updateNextButtonLabel(stage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Stage changes are an explicit "meaningful progress" moment (item 6) —
+    // saved immediately rather than waiting for the debounce, so a stage
+    // change followed immediately by a refresh/offline event never loses
+    // the transition itself. No-ops on OFFLINE_MODE/no session/no progress.
+    if (typeof autosaveActiveSurveyDraftNow === 'function') autosaveActiveSurveyDraftNow();
 }
 
 // Diksyonaryo para sa Multilingual System at SQD Items
@@ -4822,6 +5089,17 @@ async function submitAll(event) {
     const formData = new FormData(formElement);
     const data = Object.fromEntries(formData.entries());
 
+    // This attempt's stable id — reuses whatever autosaveActiveSurveyDraftNow()
+    // already generated (the common case: virtually every attempt autosaves
+    // at least once past Stage 1), or mints one now for the rare case of a
+    // submit with no prior autosave. The server uses this as an idempotency
+    // key (see client_submission_id in server.js) so a lost response
+    // followed by a retry/resync can never insert two rows for the same
+    // attempt. Also becomes the offline outbox record's own localId below,
+    // via activeSurveyDraftId — one id, start to finish.
+    if (!activeSurveyDraftId) activeSurveyDraftId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : generateOfflineSubmissionId();
+    data.client_submission_id = activeSurveyDraftId;
+
     // 2. Magbigay ng default value kung blangko ang tinype o hindi sinagutan ang dropdown
     data.respondent_name = data.respondent_name?.trim() || 'Anonymous';
     data.email = data.email?.trim() || 'Not Specified';
@@ -4911,7 +5189,14 @@ async function submitAll(event) {
     // connection returns.
     if (!navigator.onLine) {
         saveAutofillProfile(data);
-        queueSurveyOffline(data, data.email).then(showThankYou);
+        // Carries over the SAME id the in-progress draft was autosaved
+        // under (if any) — "one survey attempt = one ID" end to end — and
+        // clears the now-superseded draft record once the completed
+        // submission is safely in the durable outbox instead.
+        queueSurveyOffline(data, data.email, activeSurveyDraftId).then(record => {
+            discardActiveSurveyDraft();
+            return record;
+        }).then(showThankYou);
         return;
     }
 
@@ -4925,10 +5210,14 @@ async function submitAll(event) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     }, 8000)
-    .then(response => response.json())
-    .then(resData => {
+    .then(response => response.json().then(resData => ({ status: response.status, resData })))
+    .then(({ status, resData }) => {
         if (resData.success) {
             saveAutofillProfile(data);
+            // Server confirmed the submission — this is the one point where
+            // clearing any in-progress draft is actually correct (item 37:
+            // only on confirmed success or explicit discard).
+            discardActiveSurveyDraft();
             // Personal-email accounts land in the office's approval queue instead
             // of being recorded immediately — let the client know before the
             // normal Thank You screen (see /submit-survey's isCspcEmail branch).
@@ -4940,6 +5229,20 @@ async function submitAll(event) {
             // later offline visit doesn't show it as still available.
             refreshOfflineAccountContext();
             showThankYou();
+        } else if (status === 401) {
+            // The session ended between opening this form and clicking
+            // Submit — most likely the pending-logout lifecycle resolving
+            // while this tab sat idle online. The answers are still good;
+            // there's just no live session left to take the normal
+            // authenticated route. Queue them the same as any other
+            // unreachable-server case instead of dead-ending on an error
+            // and losing what was just answered.
+            console.warn('[Submit] Session no longer valid at submit time — queuing offline instead.');
+            saveAutofillProfile(data);
+            queueSurveyOffline(data, data.email, activeSurveyDraftId).then(record => {
+                discardActiveSurveyDraft();
+                return record;
+            }).then(showThankYou);
         } else {
             AppAlert.error("Nagkaroon ng problema: " + (resData.message || 'Database error'));
         }
@@ -4949,7 +5252,14 @@ async function submitAll(event) {
         // the request never reached the server — most likely a lost connection.
         console.error("Error submitting survey:", err);
         saveAutofillProfile(data);
-        queueSurveyOffline(data, data.email).then(showThankYou);
+        // Carries over the SAME id the in-progress draft was autosaved
+        // under (if any) — "one survey attempt = one ID" end to end — and
+        // clears the now-superseded draft record once the completed
+        // submission is safely in the durable outbox instead.
+        queueSurveyOffline(data, data.email, activeSurveyDraftId).then(record => {
+            discardActiveSurveyDraft();
+            return record;
+        }).then(showThankYou);
     });
 }
 
@@ -4974,6 +5284,14 @@ function showThankYou() {
     const progressEl = document.getElementById('surveyProgress');
     if (progressEl) progressEl.style.display = 'none';
     exitFullscreen();
+
+    // The interrupted attempt just finished (submitted or safely queued) —
+    // if a "please sign in again" screen was held back earlier so it
+    // wouldn't interrupt them mid-answer, this is the moment to show it.
+    if (backOnlinePromptSuppressed) {
+        backOnlinePromptSuppressed = false;
+        if (typeof showBackOnlineTransition === 'function') showBackOnlineTransition();
+    }
 }
 
 // Mirrors isCspcEmail in server.js exactly — a @cspc.edu.ph/@my.cspc.edu.ph
@@ -5033,6 +5351,12 @@ function markServiceAsTaken(officeId, serviceName) {
 function startNewSurvey() {
     const form = document.getElementById('surveyForm');
     if (form) form.reset();
+
+    // A fresh attempt needs a fresh draft identity — the previous one was
+    // already discarded (discardActiveSurveyDraft()) right after its
+    // submission was confirmed/queued, before this function is ever called.
+    activeSurveyDraftId = null;
+    activeSurveyDraftRestored = false;
 
     // form.reset() clears values but not the `disabled` attribute on
     // already-locked profile fields, and doesn't restore today's date.

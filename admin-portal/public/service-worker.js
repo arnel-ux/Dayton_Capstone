@@ -11,15 +11,17 @@
 
 importScripts('/js/offline-db.js');
 
-// v17: removed the offline "if cached cspc_client_session, redirect to
-// /client-survey" script from /, /login, and /client-login — that redirect
-// was precached along with those three pages' HTML, and is what made the
-// offline overlay's Dashboard/Login buttons "blink and bounce back" (see
-// the comments left in each of those pages for the full explanation).
-// Bumping forces every client to discard v16's stale precached copies of
-// those three pages and fetch the corrected ones on next install.
-const STATIC_CACHE = 'cspc-static-v17';
-const RUNTIME_CACHE = 'cspc-runtime-v17';
+// v18: offline-db.js gained the active-survey-draft store (IndexedDB schema
+// v2->v3) and pwa-client.js's queueSurveyOffline() gained an optional
+// preferred-id parameter — both files are in CRITICAL_PRECACHE_URLS, so
+// clients must discard v17's precached copies to pick up the "Continue
+// Survey" bridge (see client-survey.ejs). No IndexedDB data is lost by this
+// bump — the *service worker* cache version is unrelated to and does not
+// clear the IndexedDB database itself (a separate, unversioned-by-this
+// mechanism origin store); onupgradeneeded only ever adds the new object
+// store alongside the existing ones.
+const STATIC_CACHE = 'cspc-static-v18';
+const RUNTIME_CACHE = 'cspc-runtime-v18';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
