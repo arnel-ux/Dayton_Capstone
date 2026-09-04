@@ -307,14 +307,36 @@
             min-width: 16px; height: 16px; padding: 0 3px;
             display: flex; align-items: center; justify-content: center;
         }
+        /* Root cause of "the panel gets cut off": .topbar is `position:
+           sticky` + `z-index:1020`, which makes it a stacking-context
+           boundary — every descendant's z-index (including this panel's,
+           however high) is only ever compared to OTHER children of
+           .topbar. From outside .topbar, the whole subtree behaves as a
+           single unit stacked at z-index:1020, so any sibling of .topbar
+           elsewhere in the page that happens to paint after it, or any
+           ancestor between .notif-bell-wrap and the page that constrains
+           overflow, can still cover or clip it regardless of this panel's
+           own z-index number. toggleNotificationPanel() (below, in the
+           script section) now portals this element to a direct child of
+           <body> the first time it opens and positions it with `position:
+           fixed` + inline top/right computed from the bell's real
+           on-screen rect — that removes it from .topbar's stacking context
+           entirely and from any ancestor's layout/overflow, rather than
+           just raising a number and hoping. Base position/right/top here
+           are only the pre-JS/no-JS fallback. */
         .notif-panel {
-            position: absolute; top: calc(100% + 0.5rem); right: 0;
+            /* Static fallback only (JS always overrides top/right inline
+               the instant it opens — see positionNotifPanel()). Percentage
+               offsets don't make sense once this is `position: fixed`
+               (they'd resolve against the viewport, not the bell), so this
+               is just a reasonable "somewhere under the topbar" default. */
+            position: fixed; top: 70px; right: 16px;
             width: 360px; max-width: calc(100vw - 2rem);
-            max-height: 70vh; overflow-y: auto;
+            max-height: 70vh; max-height: 70dvh; overflow-y: auto;
             background: var(--bs-body-bg, #fff); color: var(--bs-body-color, #1f2937);
             border: 1px solid rgba(0,0,0,0.1); border-radius: 14px;
             box-shadow: 0 24px 48px -16px rgba(10,20,40,0.35);
-            z-index: 1050;
+            z-index: 1060;
         }
         .notif-panel-header {
             display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.4rem;
@@ -338,7 +360,7 @@
         @media (max-width: 480px) {
             .notif-panel {
                 position: fixed; top: auto; bottom: 0; left: 0; right: 0;
-                width: 100%; max-width: 100%; max-height: 80vh;
+                width: 100%; max-width: 100%; max-height: 80vh; max-height: 80dvh;
                 border-radius: 16px 16px 0 0;
                 /* Clears the home-indicator bar on notched phones instead of
                    letting the last notification's delete button sit right
@@ -488,6 +510,29 @@
             .home-card > .card-body { padding: 1.5rem 1.1rem !important; }
             .home-feature-row { gap: 0.4rem; }
             .home-feature-chip { font-size: 0.68rem; padding: 0.35rem 0.65rem; }
+
+            /* A second visual pass found Home still reading as "one heading,
+               one paragraph, one oversized card per screen" even with the
+               reductions above. The actual driver: the CQA/CSM body
+               paragraphs are long institutional text, and paragraph height
+               for wrapped text scales with roughly font-size squared (fewer
+               chars fit per line at a bigger size, AND each of those extra
+               lines is itself taller) — so the 0.92rem/1.65 line-height
+               those paragraphs used cost far more height than it looks like
+               on a size chart. Trimmed the whole hero+card rhythm down a
+               notch instead of just the outer card shell. */
+            .home-hero { padding-bottom: 1rem; }
+            .home-hero .survey-hero-logo { width: 48px; height: 48px; }
+            .home-hero h2 { font-size: 1.25rem; }
+            .home-hero .survey-hero-eyebrow { font-size: 0.62rem; margin-bottom: 0.2rem; }
+            .home-hero p.home-subtitle-anim { font-size: 0.84rem; line-height: 1.45; margin-top: 0.6rem !important; }
+            #view-home .mb-5 { margin-bottom: 1.1rem !important; }
+            #view-home .row.g-4 { --bs-gutter-y: 0.85rem; --bs-gutter-x: 0.85rem; }
+            .home-info-card { padding: 1rem; }
+            .home-info-icon { width: 36px; height: 36px; font-size: 1rem; margin-bottom: 0.6rem; border-radius: 10px; }
+            .home-info-card h5 { font-size: 0.98rem; margin-bottom: 0.4rem; }
+            .home-info-card p { font-size: 0.82rem; line-height: 1.45; }
+            .home-feature-row { margin-top: 0.7rem; }
         }
 
         /* ---- Terms & Conditions box (stage 1) on phones ----
@@ -498,13 +543,29 @@
            had already shrunk everything else. Bootstrap's utility classes
            ship !important, so the padding/indent overrides need it too. */
         @media (max-width: 575.98px) {
-            #terms-box { padding: 1.15rem 1rem !important; border-radius: 16px !important; }
-            #terms-box .fs-5 { font-size: 1.02rem; }
-            #terms-points-list { padding-left: 1.15rem !important; font-size: 0.82rem; line-height: 1.5; }
-            #terms-box .text-secondary.small { font-size: 0.8rem; line-height: 1.5; }
-            #termsModal .modal-header, #termsModal .modal-footer { padding: 0.85rem 1rem; }
-            #termsModal .modal-body { font-size: 0.82rem !important; padding: 1rem; }
-            #termsModal .modal-title { font-size: 1rem; }
+            /* "Help us serve you better!" — the very first thing shown on
+               the survey, and still the widest padding + biggest heading on
+               the whole step even after the terms-box below it was already
+               trimmed. p-4 (24px) is a Bootstrap !important utility, so the
+               override needs it too. */
+            #stage1 > .qa-block:first-child { padding: 1rem 0.9rem !important; margin-bottom: 1rem !important; }
+            #stage1 > .qa-block:first-child h4 { font-size: 1.1rem; margin-bottom: 0.5rem !important; }
+            #stage1 > .qa-block:first-child p { font-size: 0.85rem; }
+            /* Second pass: still too tall per direct feedback. Pushed padding,
+               indent, and every text size down further, and tightened the
+               mb-3 gaps between the title/bullets/button/checkbox blocks
+               (Bootstrap !important utility, needs !important to move). */
+            #terms-box { padding: 0.9rem 0.8rem !important; border-radius: 14px !important; }
+            #terms-box .fs-5 { font-size: 0.94rem; }
+            #terms-box .mb-3 { margin-bottom: 0.65rem !important; }
+            #terms-points-list { padding-left: 1rem !important; font-size: 0.78rem; line-height: 1.42; margin-bottom: 0.65rem !important; }
+            #terms-box .text-secondary.small { font-size: 0.76rem; line-height: 1.42; }
+            #terms-box .btn-sm { padding: 0.5rem 1rem; font-size: 0.8rem; }
+            #terms-box .form-check { padding: 0.25rem 0 !important; gap: 0.5rem !important; }
+            #termsAgreeRow .fs-6 { font-size: 0.82rem; }
+            #termsModal .modal-header, #termsModal .modal-footer { padding: 0.7rem 0.9rem; }
+            #termsModal .modal-body { font-size: 0.78rem !important; line-height: 1.42 !important; padding: 0.9rem; }
+            #termsModal .modal-title { font-size: 0.94rem; }
         }
 
         /* ---- Touch targets + spacing across the survey flow (client info
@@ -560,6 +621,31 @@
 
         /* ---- Profile view ---- */
         .profile-view-card { overflow: hidden; }
+
+        /* View Profile reads as compact but visually top-heavy on a phone —
+           it's centered horizontally (view-card's own auto margins) but
+           just flows from the very top of .content-body, leaving a large
+           dead zone below whenever the card is shorter than the viewport.
+           Turning #view-profile into a flex column that centers its single
+           child fixes that WITHOUT a rigid height:100vh: min-height (not
+           height) means flexbox only centers when the card is shorter than
+           the available space — if profile-body content is ever taller
+           (long name, many fields), the container simply grows to fit and
+           the page scrolls exactly as before. 100dvh (not 100vh) tracks the
+           real visual viewport as mobile browser chrome shows/hides, and
+           var(--topbar-h) already tracks its own per-breakpoint value; the
+           flat 3rem approximates .content-body's own top+bottom padding at
+           this breakpoint (visual balance, not pixel-exact). Scoped to
+           ≤767.98 only — desktop already has ample room and this must not
+           touch it. */
+        @media (max-width: 767.98px) {
+            #view-profile.app-view.active {
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                min-height: calc(100dvh - var(--topbar-h) - 3rem);
+            }
+        }
         .profile-hero {
             display: flex; align-items: center; gap: 1.1rem;
             padding: 1.75rem clamp(1.25rem, 4vw, 3rem);
@@ -667,11 +753,11 @@
            without touching the underlying markup, data, or click/edit
            behavior — only sizing. */
         @media (max-width: 575.98px) {
-            .view-header { padding-bottom: 0.9rem; margin-bottom: 1.1rem; }
-            .view-header .view-icon { width: 40px; height: 40px; font-size: 1.15rem; margin-bottom: 0.6rem; border-radius: 12px; }
-            .view-header h3 { font-size: 1.1rem; margin-bottom: 0.2rem !important; }
-            .view-header p { font-size: 0.82rem; }
-            #view-history > .card > .card-body { padding: 1rem 0.85rem !important; }
+            .view-header { padding-bottom: 0.7rem; margin-bottom: 0.9rem; }
+            .view-header .view-icon { width: 34px; height: 34px; font-size: 1rem; margin-bottom: 0.5rem; border-radius: 10px; }
+            .view-header h3 { font-size: 1.02rem; margin-bottom: 0.15rem !important; }
+            .view-header p { font-size: 0.78rem; }
+            #view-history > .card > .card-body { padding: 0.9rem 0.75rem !important; }
 
             .profile-hero { padding: 1rem 0.9rem; gap: 0.75rem; }
             .profile-hero-avatar { width: 44px; height: 44px; font-size: 1.15rem; }
@@ -692,12 +778,15 @@
             /* History: same information, one line per field, in about half
                the vertical space — long office names still wrap naturally
                (no truncation), they just no longer drag the whole card
-               taller than it needs to be for a single-line one. */
-            .history-item { padding: 0.75rem 0.9rem; gap: 0.5rem 0.75rem; border-radius: 12px; }
-            .history-item + .history-item { margin-top: 0.6rem; }
-            .history-office { font-size: 0.9rem; }
-            .history-meta { font-size: 0.74rem; }
-            .history-badge { font-size: 0.68rem; padding: 0.28rem 0.65rem; }
+               taller than it needs to be for a single-line one. Feedback
+               after this pass was "better, but still a little too large" —
+               one more conservative notch below, not a redesign. */
+            .history-item { padding: 0.6rem 0.8rem; gap: 0.4rem 0.6rem; border-radius: 11px; }
+            .history-item + .history-item { margin-top: 0.5rem; }
+            .history-office { font-size: 0.86rem; margin-bottom: 0.1rem; }
+            .history-office i { font-size: 0.82rem; }
+            .history-meta { font-size: 0.72rem; line-height: 1.3; }
+            .history-badge { font-size: 0.66rem; padding: 0.22rem 0.55rem; }
         }
 
         /* ---- History detail modal ---- */
@@ -958,8 +1047,15 @@
                a lot of pure whitespace with nothing to do with touch size —
                g-4 only sets these two custom properties, so overriding them
                tightens the gap without touching the inputs themselves. */
-            #stage2 .row.g-4 { --bs-gutter-y: 0.85rem; --bs-gutter-x: 0.85rem; }
-            #stage2 .form-label { margin-bottom: 0.35rem; }
+            #stage2 .row.g-4 { --bs-gutter-y: 0.7rem; --bs-gutter-x: 0.85rem; }
+            /* Labels were fs-6 (1rem) — reasonable on desktop, oversized as
+               a field caption on a phone next to a same-height input.
+               Reduced the label only; the input/select itself (and its
+               touch height) is untouched. */
+            #stage2 .form-label { font-size: 0.86rem; margin-bottom: 0.3rem; }
+            #stage2 .form-text { font-size: 0.76rem; margin-top: 0.2rem; }
+            #stage2 .service-progress-badge { font-size: 0.7rem; }
+            #stage2 .availability-notice { padding: 0.3rem 0.6rem; font-size: 0.78rem; margin: 0.25rem 0; }
 
             /* Terms checkbox: show the label text first, checkbox centered
                below it — instead of a left-aligned row whose wrapped 2nd
@@ -1154,6 +1250,13 @@
         @media (max-width: 575.98px) {
             .content-body:has(#view-survey.active) { padding: 0.75rem; }
             .survey-card { border-radius: 16px; }
+            /* The survey card's OWN card-body still carried Bootstrap's p-4
+               (24px) on every stage — Terms, Client Profile, Citizen's
+               Charter, SQD, Review — stacked on top of the outer padding
+               above. That's real desktop-sized padding around the entire
+               survey flow, not just stage 1. p-4/p-md-5 are !important
+               utilities, so the override needs it too. */
+            .survey-card > .card-body { padding: 1.1rem 0.9rem !important; }
         }
 
         /* ---- "In progress" survey (Stage 2 onward) ----
@@ -1860,7 +1963,7 @@
                         <!-- IDINAGDAG: Pangalan -->
                         <div class="col-12">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_name">Name (Optional)</label>
-                            <input type="text" name="respondent_name" class="form-control" data-i18n-placeholder="ph_name" placeholder="e.g. Juan Dela Cruz">
+                            <input type="text" name="respondent_name" class="form-control" data-i18n-placeholder="ph_name" placeholder="Optional — leave blank to remain anonymous">
                         </div>
 
                         <% if (offlineMode) { %>
@@ -2824,13 +2927,63 @@ function loadNotifications() {
         .catch(err => console.error('[Notifications] Failed to load:', err));
 }
 
+// Moves #notifPanel to a direct child of <body> the first time it opens —
+// see the CSS comment on .notif-panel for why: nested inside .topbar (a
+// sticky + z-indexed stacking-context boundary), the panel's own z-index
+// only ever wins against OTHER things inside .topbar, so it could be
+// covered/clipped by unrelated page content regardless of how high that
+// number is set. Living at <body> level with `position: fixed` sidesteps
+// every ancestor's stacking context and overflow entirely. Positioning is
+// computed from the bell's live bounding rect rather than CSS anchoring to
+// a small icon, so it also survives the sidebar/topbar layout changing
+// underneath it.
+function positionNotifPanel(panel, bell) {
+    if (panel.parentElement !== document.body) {
+        document.body.appendChild(panel);
+    }
+    // The ≤480px bottom-sheet layout anchors to the viewport edges via CSS
+    // (bottom/left/right:0) — clear any leftover inline coordinates from a
+    // wider viewport so that CSS wins instead of a stale inline style.
+    if (window.innerWidth <= 480) {
+        panel.style.top = '';
+        panel.style.right = '';
+        panel.style.left = '';
+        return;
+    }
+    const gap = 8;
+    const rect = bell ? bell.getBoundingClientRect() : null;
+    const bottom = rect ? rect.bottom : 64;
+    const right = rect ? Math.max(16, window.innerWidth - rect.right) : 16;
+    panel.style.top = Math.round(bottom + gap) + 'px';
+    panel.style.right = Math.round(right) + 'px';
+    panel.style.left = 'auto';
+}
+
+function repositionNotifPanelIfOpen() {
+    const panel = document.getElementById('notifPanel');
+    if (!panel || panel.hidden) return;
+    positionNotifPanel(panel, document.getElementById('btn-notif-bell'));
+}
+
 function toggleNotificationPanel() {
     const panel = document.getElementById('notifPanel');
+    const bell = document.getElementById('btn-notif-bell');
     if (!panel) return;
     const opening = panel.hidden;
-    panel.hidden = !opening;
-    if (opening && !notificationsLoaded) loadNotifications();
+    if (opening) {
+        positionNotifPanel(panel, bell);
+        panel.hidden = false;
+        if (!notificationsLoaded) loadNotifications();
+    } else {
+        panel.hidden = true;
+    }
 }
+// Passive, lightweight listeners kept registered permanently (not added/
+// removed per open/close) — repositionNotifPanelIfOpen() itself is a no-op
+// whenever the panel is hidden, so there's no ongoing cost while closed.
+window.addEventListener('resize', repositionNotifPanelIfOpen);
+window.addEventListener('scroll', repositionNotifPanelIfOpen, true);
+
 document.addEventListener('click', (e) => {
     const panel = document.getElementById('notifPanel');
     const bell = document.getElementById('btn-notif-bell');
@@ -3064,8 +3217,22 @@ function confirmLeaveOfflineSurvey(url, event) {
 }
 
 if (OFFLINE_MODE) {
-    // A real reconnect is the only thing that should show this — never on
-    // initial page load (the page may have been opened while already online).
+    // Two ways to end up here with connectivity already restored:
+    // (1) a genuine reconnect while this tab stays open — the 'online'
+    //     event below — or (2) the user is on this same offline page,
+    //     online already, and reloads it (e.g. after Stay Here on a
+    //     previous visit, or just re-opening a bookmarked/PWA-cached copy).
+    // Only listening for the 'online' event misses case (2) entirely: that
+    // event only fires on an actual offline->online transition, never on a
+    // page load where the browser was already online the whole time — so a
+    // refresh here used to silently and permanently lose the recovery UI
+    // even though both conditions (still viewing the offline page, internet
+    // available) still hold. Re-evaluating navigator.onLine at load time
+    // covers case (2); no persisted "already dismissed" flag is used here,
+    // so a page reload always re-checks fresh — the banner is only ever
+    // absent for the remainder of THIS load after Stay Here is clicked, not
+    // permanently.
+    if (navigator.onLine) showBackOnlineBanner();
     window.addEventListener('online', showBackOnlineBanner);
 }
 
@@ -3135,16 +3302,11 @@ function applyLockedProfile(profile) {
     profile = profile || savedClientProfile;
     if (!profile) return;
 
-    // Prefill (but never lock) the Name field from this account's registered
-    // name — unlike region/age/gender below, the client can still edit it per
-    // survey. Only fills an empty field so it never clobbers something the
-    // client already typed or a name restored from autofillSnapshot.
-    if (profile.respondent_name) {
-        const nameInput = document.querySelector('input[name="respondent_name"]');
-        if (nameInput && !nameInput.disabled && !nameInput.value) {
-            nameInput.value = profile.respondent_name;
-        }
-    }
+    // Name is intentionally NOT prefilled here (and never was meant to be
+    // silently populated just because the account is logged in) — a survey
+    // respondent should stay anonymous by default. It's now filled ONLY by
+    // the explicit Autofill switch, via toggleAutofillClientProfile() below,
+    // which the user has to deliberately turn on.
 
     if (profile.region) {
         const regionSelect = document.querySelector('select[name="region"]');
@@ -3211,6 +3373,18 @@ function unlockProfileFields() {
 // already disabled/locked from a prior submission.
 let autofillSnapshot = null;
 
+// After an Autofill attempt (server profile, then the local fallback) has
+// had its chance to fill Name, tell the client plainly if neither source had
+// one — rather than silently leaving the field blank with no explanation,
+// or (the actual bug this replaces) ever writing a literal "undefined" /
+// "null" string into it.
+function notifyIfNoAutofillName() {
+    const nameInput = document.querySelector('input[name="respondent_name"]');
+    if (nameInput && !nameInput.value && window.AppAlert && typeof AppAlert.toastInfo === 'function') {
+        AppAlert.toastInfo('No name is saved in your profile.');
+    }
+}
+
 // Toggling on fills Name, Sex, Age, and Region from this account's saved profile
 // (same source as applyLockedProfile). Toggling off restores whatever those
 // fields held before the switch was turned on.
@@ -3246,11 +3420,13 @@ function toggleAutofillClientProfile(enabled) {
                 // (from a past submission on this browser) for whatever the
                 // server profile didn't cover.
                 applyAutofillFromLocalStorage();
+                notifyIfNoAutofillName();
             })
             .catch(err => {
                 console.error('Error autofilling profile:', err);
                 // Server lookup failed — still offer this account's local fallback.
                 applyAutofillFromLocalStorage();
+                notifyIfNoAutofillName();
             });
     } else if (autofillSnapshot) {
         const nameInput = document.querySelector('input[name="respondent_name"]');
@@ -3934,7 +4110,7 @@ const i18n = {
         client_prof: "Client Profile",
         pf_lbl_name: "Name",
         lbl_name: "Name (Optional)",
-        ph_name: "e.g. Juan Dela Cruz",
+        ph_name: "Optional — leave blank to remain anonymous",
         lbl_client_type: "Client Type:",
         opt_select_client_type: "Select Client Type...",
         opt_citizen: "Citizen",
@@ -4079,7 +4255,7 @@ const i18n = {
         client_prof: "Pagkakakilanlan ng Kliyente",
         pf_lbl_name: "Pangalan",
         lbl_name: "Pangalan (Opsyonal)",
-        ph_name: "hal. Juan Dela Cruz",
+        ph_name: "Opsyonal — iwanang blangko upang manatiling anonymous",
         lbl_client_type: "Uri ng Kliyente:",
         opt_select_client_type: "Pumili ng Uri ng Kliyente...",
         opt_citizen: "Mamamayan",
