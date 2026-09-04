@@ -901,23 +901,22 @@
             attempt();
         })();
 
-        // Landing here already offline with a cached session on this device
-        // (from a previous successful ONLINE login, Google or password —
-        // both cache cspc_client_session, see client-survey.ejs) — skip
-        // straight to the already-authenticated survey app instead of
-        // making them re-decide between "Login" and "Take Survey Offline".
-        // This is resuming a session that was genuinely verified online
-        // earlier, not a new/unverified login attempt — unrelated to (and
-        // safe alongside) the unauthenticated /survey-offline path below.
-        (function () {
-            if (navigator.onLine) return;
-            try {
-                const cached = JSON.parse(localStorage.getItem('cspc_client_session') || 'null');
-                if (cached && cached.email) {
-                    window.location.href = '/client-survey';
-                }
-            } catch (e) { /* no cached session — stay on this page */ }
-        })();
+        // REMOVED: this used to bounce straight to /client-survey while
+        // offline whenever a cached cspc_client_session existed — meant as
+        // a convenience ("resume the survey app instead of re-deciding
+        // between Login and Take Survey Offline"). That convenience is what
+        // made the offline overlay's own Login/Dashboard buttons "blink and
+        // do nothing": clicking either one navigates here (or to /), and
+        // this redirect immediately bounced right back to /client-survey's
+        // cached shell, whose own load-time check re-shows the exact same
+        // "You're Offline" overlay — a loop, not a shortcut. And since
+        // landing on /client-survey while offline shows that same overlay
+        // immediately anyway (see client-survey.ejs), this redirect never
+        // actually saved a step even in the cases it didn't loop — it only
+        // ever added one. A cached client-side session flag was never proof
+        // the live authenticated portal is usable while offline; removing
+        // this is what lets this page (and /) stay reachable on their own
+        // terms, as the offline overlay's Login/Dashboard buttons require.
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {

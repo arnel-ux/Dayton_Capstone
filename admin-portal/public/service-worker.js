@@ -11,13 +11,15 @@
 
 importScripts('/js/offline-db.js');
 
-// v16: added the /logout bypass in the fetch handler below (pending-logout
-// retry — see attemptPendingClientLogout() in offline-db.js, which this
-// worker's importScripts() above already pulls in fresh on every activate).
-// No precached document content changed this pass. Bumping forces every
-// client to discard v15 and pick up the new fetch handler.
-const STATIC_CACHE = 'cspc-static-v16';
-const RUNTIME_CACHE = 'cspc-runtime-v16';
+// v17: removed the offline "if cached cspc_client_session, redirect to
+// /client-survey" script from /, /login, and /client-login — that redirect
+// was precached along with those three pages' HTML, and is what made the
+// offline overlay's Dashboard/Login buttons "blink and bounce back" (see
+// the comments left in each of those pages for the full explanation).
+// Bumping forces every client to discard v16's stale precached copies of
+// those three pages and fetch the corrected ones on next install.
+const STATIC_CACHE = 'cspc-static-v17';
+const RUNTIME_CACHE = 'cspc-runtime-v17';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.

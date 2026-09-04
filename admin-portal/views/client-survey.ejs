@@ -3483,15 +3483,28 @@ function saveAutofillProfile(data) {
 // page load — so the Name field starts blank for every sign-in. Never
 // overwrites a field that already has a value or is locked/disabled (e.g.
 // by applyLockedProfile from a prior server-confirmed submission).
-function applyAutofillFromLocalStorage() {
+//
+// `opts.skipName` — set by toggleAutofillClientProfile() whenever the live
+// /api/client-profile request actually succeeded (even if it came back with
+// no name at all). The server is the one authoritative source for the Name
+// field specifically once it has answered at all — falling through to this
+// account's possibly months-old locally-cached name in that case would
+// silently show a stale name instead of the current (possibly since-edited,
+// or genuinely still-blank) profile value. This local fallback is only
+// meant for when the server genuinely couldn't be reached — see the catch
+// branch below.
+function applyAutofillFromLocalStorage(opts) {
+    opts = opts || {};
     if (!CLIENT_AUTOFILL_KEY) return;
     let saved;
     try { saved = JSON.parse(localStorage.getItem(CLIENT_AUTOFILL_KEY)); } catch (e) { saved = null; }
     if (!saved) return;
 
-    const nameInput = document.querySelector('input[name="respondent_name"]');
-    if (nameInput && !nameInput.disabled && !nameInput.value && saved.respondent_name) {
-        nameInput.value = saved.respondent_name;
+    if (!opts.skipName) {
+        const nameInput = document.querySelector('input[name="respondent_name"]');
+        if (nameInput && !nameInput.disabled && !nameInput.value && saved.respondent_name) {
+            nameInput.value = saved.respondent_name;
+        }
     }
 
     const clientTypeSelect = document.querySelector('select[name="client_type"]');
@@ -3637,14 +3650,18 @@ function toggleAutofillClientProfile(enabled) {
                 }
 
                 // Fall back to this account's own locally-remembered answers
-                // (from a past submission on this browser) for whatever the
-                // server profile didn't cover.
-                applyAutofillFromLocalStorage();
+                // for Client Type/Age/Region only where the server didn't
+                // already provide one — the request DID succeed, so Name
+                // specifically is not re-guessed from a possibly-stale local
+                // copy (see the skipName comment on the function itself).
+                applyAutofillFromLocalStorage({ skipName: true });
                 notifyIfNoAutofillName();
             })
             .catch(err => {
                 console.error('Error autofilling profile:', err);
-                // Server lookup failed — still offer this account's local fallback.
+                // Server genuinely unreachable — THIS is the one case where
+                // falling back to a locally-cached name from a past
+                // submission on this browser is an acceptable substitute.
                 applyAutofillFromLocalStorage();
                 notifyIfNoAutofillName();
             });

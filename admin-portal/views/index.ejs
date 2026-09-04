@@ -2477,20 +2477,17 @@
             });
         }
 
-        // Offline visitors landing on the root URL almost certainly want the
-        // survey app, not this live-stats dashboard (which needs a network
-        // connection to mean anything). If this browser already has a cached
-        // client session (see client-survey.ejs), send them straight there —
-        // same cached-session bypass client-login.ejs uses.
-        (function () {
-            if (navigator.onLine) return;
-            try {
-                const cached = JSON.parse(localStorage.getItem('cspc_client_session') || 'null');
-                if (cached && cached.email) {
-                    window.location.href = '/client-survey';
-                }
-            } catch (e) { /* no cached session — stay on the landing page */ }
-        })();
+        // REMOVED: this used to bounce offline visitors with a cached
+        // cspc_client_session straight to /client-survey. That's exactly
+        // what made the offline overlay's own "Back to Dashboard" button
+        // "blink and do nothing" (and what turned /survey-offline's own
+        // "Back to Dashboard" into a loop back to the same overlay):
+        // navigating here while offline immediately redirected right back
+        // to /client-survey's cached shell, which shows that same overlay
+        // again on its own regardless. A cached client-side flag was never
+        // proof the live authenticated portal is usable offline — this page
+        // (the one thing "Back to Dashboard" is supposed to reliably reach)
+        // now just stays put, precached and offline-safe on its own terms.
     </script>
 </body>
 </html>
