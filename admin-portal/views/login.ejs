@@ -674,6 +674,17 @@
             window.history.replaceState({}, document.title, window.location.pathname);
         }
 
+        // Same toast component/design used for the Client Profile "updated
+        // successfully" notification (see AppAlert.toast in alerts.js) — the
+        // client-survey page's own logout() navigates straight to /logout
+        // before any in-page alert could be seen, so the acknowledgement is
+        // shown here on arrival instead, per the existing flash-message
+        // convention (?error=... is already read the same way above).
+        if (loginQueryParams.get('loggedout') === '1') {
+            AppAlert.toastSuccess('You have been logged out successfully.', { title: 'Logged Out' });
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+
         // Native browser autofill remembers every value ever typed into a text
         // input (including plain admin usernames), so it's disabled above via
         // autocomplete="off". Instead we keep our own suggestion list that only

@@ -439,17 +439,37 @@ function finalizeVerifiedSurvey(googleEmail, fields, callback) {
             (profileErr) => { if (profileErr) console.error("❌ [Client Profile] Error inserting profile:", profileErr); }
         );
 
-        // Lock in this account's demographics the first time they're actually answered.
-        // COALESCE only writes region/age/gender when the existing column is still NULL.
+        // Strict one-way separation: a survey submission must NEVER create,
+        // seed, repair, or otherwise write client_accounts.respondent_name —
+        // regardless of whether the survey's Full Name was Autofilled,
+        // hand-typed, edited, left blank, or "Anonymous", and regardless of
+        // whether the account's current name is already set or still NULL.
+        // The Client Profile's name is owned exclusively by the explicit
+        // Profile-page save (POST /api/client-profile below); this INSERT
+        // never references respondentName at all, not even for a brand-new
+        // row — a name-less account simply stays NULL until the client
+        // saves one from Profile. (Every authenticated caller of this
+        // function already has a client_accounts row from registration
+        // anyway — see /complete-google-registration and the local
+        // email/password register flow — so `email` alone is enough to
+        // satisfy this INSERT's identity purpose for any row that doesn't.)
+        //
+        // region/age/gender are intentionally different: this table's own
+        // schema comment ("Holds the demographic details... locked-in from
+        // that account's FIRST survey submission") and the Profile page's
+        // UI (no edit control for these — shown as "Locked after your first
+        // survey") both establish that these three are, by design, owned by
+        // the survey's first answer, not by the Profile page. COALESCE
+        // (write-once-if-still-NULL) is the correct, already-existing
+        // behavior for them and is unchanged here.
         db.query(
-            `INSERT INTO client_accounts (email, respondent_name, region, age, gender)
-             VALUES (?, ?, ?, ?, ?)
+            `INSERT INTO client_accounts (email, region, age, gender)
+             VALUES (?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
-                respondent_name = VALUES(respondent_name),
                 region = COALESCE(region, VALUES(region)),
                 age = COALESCE(age, VALUES(age)),
                 gender = COALESCE(gender, VALUES(gender))`,
-            [googleEmail, respondentName, region, age, gender],
+            [googleEmail, region, age, gender],
             (acctErr) => { if (acctErr) console.error("❌ [Client Account] Error upserting locked profile:", acctErr); }
         );
 
@@ -536,15 +556,20 @@ async function insertVerifiedSurveyOnConnection(conn, googleEmail, fields) {
         [surveyResponseId, respondentName, clientType, age, gender, region, googleEmail, officeVisitedTime]
     );
 
+    // Same reasoning as finalizeVerifiedSurvey's identical upsert above:
+    // respondent_name is never referenced here at all — a survey submission
+    // (verified/approved through this transactional path too) must not
+    // create, seed, or repair the account's real Profile name. region/age/
+    // gender remain COALESCE'd (write-once-if-still-NULL) by the same
+    // demographic-lock design documented on client_accounts' table comment.
     await conn.query(
-        `INSERT INTO client_accounts (email, respondent_name, region, age, gender)
-         VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO client_accounts (email, region, age, gender)
+         VALUES (?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE
-            respondent_name = VALUES(respondent_name),
             region = COALESCE(region, VALUES(region)),
             age = COALESCE(age, VALUES(age)),
             gender = COALESCE(gender, VALUES(gender))`,
-        [googleEmail, respondentName, region, age, gender]
+        [googleEmail, region, age, gender]
     );
 
     return surveyResponseId;
@@ -3560,7 +3585,11 @@ app.get('/logout', noCache, (req, res) => {
 
     finishAdminLogout(() => {
         finishClientLogout(() => {
-            res.redirect(302, '/login');
+            // loggedout=1 only for a real client-session logout, so login.ejs
+            // can show the same AppAlert toast design used for the Client
+            // Profile "updated successfully" notification — never shown for
+            // an admin-scope logout or a /logout hit with no session at all.
+            res.redirect(302, isClientSession ? '/login?loggedout=1' : '/login');
         });
     });
 });
