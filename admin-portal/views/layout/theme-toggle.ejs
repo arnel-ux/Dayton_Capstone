@@ -12,8 +12,8 @@
 <style>
     .theme-toggle-btn {
         position: fixed;
-        bottom: 20px;
-        right: 20px;
+        bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+        right: calc(20px + env(safe-area-inset-right, 0px));
         width: 38px;
         height: 38px;
         border-radius: 50%;
@@ -60,7 +60,11 @@
     html[data-bs-theme="dark"] .theme-toggle-btn .theme-icon-sun  { opacity: 1; transform: rotate(0deg) scale(1); }
 
     @media (max-width: 576px) {
-        .theme-toggle-btn { bottom: 14px; right: 14px; width: 34px; height: 34px; }
+        .theme-toggle-btn {
+            bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+            right: calc(14px + env(safe-area-inset-right, 0px));
+            width: 34px; height: 34px;
+        }
     }
 </style>
 

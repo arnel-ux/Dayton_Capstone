@@ -143,6 +143,11 @@
             z-index: 1040;
             box-shadow: 4px 0 24px -8px rgba(0,0,0,0.25);
             transition: transform 0.3s ease;
+            /* Anchored via top+bottom (not a fixed height), so it already
+               tracks the real visual viewport as mobile browser chrome
+               shows/hides. overflow-y lets the nav list + footer scroll as a
+               unit instead of clipping on a short landscape phone. */
+            overflow-y: auto;
         }
         [data-bs-theme="dark"] .sidebar { background: linear-gradient(190deg, #0d1524 0%, #0a101c 55%, #070c16 100%); }
 
@@ -187,7 +192,7 @@
             background: rgba(148,163,184,0.15); color: #94a3b8; padding: 0.15rem 0.5rem; border-radius: 50px;
         }
 
-        .sidebar-footer { padding: 1.1rem 1.5rem 1.5rem; border-top: 1px solid rgba(255,255,255,0.08); }
+        .sidebar-footer { padding: 1.1rem 1.5rem calc(1.5rem + env(safe-area-inset-bottom, 0px)); border-top: 1px solid rgba(255,255,255,0.08); }
         .sidebar-footer .signed-in-email {
             font-size: 0.72rem; color: #8996ac; margin-bottom: 0.75rem; word-break: break-all;
             display: flex; align-items: center; gap: 0.4rem;
@@ -240,6 +245,7 @@
         .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 0.7rem; }
         .lang-toggle-group { display: flex; gap: 0.4rem; background: var(--page-bg); border: 1px solid var(--line-soft); padding: 0.25rem; border-radius: 50px; }
         .lang-toggle-group .btn { border-radius: 50px !important; padding: 0.35rem 0.9rem; }
+        .lang-toggle-group .lang-btn-short { display: none; }
 
         .btn-fullscreen {
             display: inline-flex; align-items: center; justify-content: center;
@@ -334,10 +340,28 @@
                 position: fixed; top: auto; bottom: 0; left: 0; right: 0;
                 width: 100%; max-width: 100%; max-height: 80vh;
                 border-radius: 16px 16px 0 0;
+                /* Clears the home-indicator bar on notched phones instead of
+                   letting the last notification's delete button sit right
+                   under it. */
+                padding-bottom: env(safe-area-inset-bottom, 0px);
             }
         }
 
         .content-body { padding: 2rem 1.75rem 3.5rem; flex-grow: 1; }
+
+        /* This outer wrapper's own padding was never reduced for Home/
+           Profile/History (only the survey view's :has() override below
+           touches it) — 32px top / 28px sides / 56px bottom of desktop
+           padding around EVERY view on a 375px phone, on top of whatever
+           padding each view's own card already has. That's real, visible
+           dead space contributing to the "everything is oversized" feel
+           independent of any single card's own sizing. */
+        @media (max-width: 767.98px) {
+            .content-body { padding: 1.5rem 1.1rem 2.25rem; }
+        }
+        @media (max-width: 575.98px) {
+            .content-body { padding: 1rem 0.85rem 1.75rem; }
+        }
 
         /* =========================================================
            SPA VIEW SWITCHING — Take Survey / Profile / History
@@ -464,6 +488,23 @@
             .home-card > .card-body { padding: 1.5rem 1.1rem !important; }
             .home-feature-row { gap: 0.4rem; }
             .home-feature-chip { font-size: 0.68rem; padding: 0.35rem 0.65rem; }
+        }
+
+        /* ---- Terms & Conditions box (stage 1) on phones ----
+           #terms-box's Bootstrap p-4 (24px) padding + the bullet list's ps-4
+           (24px) indent alone eat ~96px of width on a 320-360px screen
+           before any text even starts, and the summary/bullet text at the
+           default .small size read as oversized once the box's own padding
+           had already shrunk everything else. Bootstrap's utility classes
+           ship !important, so the padding/indent overrides need it too. */
+        @media (max-width: 575.98px) {
+            #terms-box { padding: 1.15rem 1rem !important; border-radius: 16px !important; }
+            #terms-box .fs-5 { font-size: 1.02rem; }
+            #terms-points-list { padding-left: 1.15rem !important; font-size: 0.82rem; line-height: 1.5; }
+            #terms-box .text-secondary.small { font-size: 0.8rem; line-height: 1.5; }
+            #termsModal .modal-header, #termsModal .modal-footer { padding: 0.85rem 1rem; }
+            #termsModal .modal-body { font-size: 0.82rem !important; padding: 1rem; }
+            #termsModal .modal-title { font-size: 1rem; }
         }
 
         /* ---- Touch targets + spacing across the survey flow (client info
@@ -613,6 +654,51 @@
             background: rgba(34,197,94,0.12); color: #16a34a; white-space: nowrap;
         }
         [data-bs-theme="dark"] .history-badge { background: rgba(34,197,94,0.18); color: #4ade80; }
+
+        /* ---- View Profile + Survey History on phones ----
+           A second visual pass found these two still reading as oversized
+           even with .content-body / card padding fixed elsewhere: the
+           shared .view-header (History's title block) had NO mobile
+           override at all — a 56px icon plus 1.5rem/2rem of
+           padding-bottom/margin-bottom below it, before a single history
+           row is even reached — and each .profile-info-card/.history-item
+           carried desktop padding, a 40px icon, and a full 1rem grid gap
+           for what's ultimately one line of text per field/row. Compacted
+           without touching the underlying markup, data, or click/edit
+           behavior — only sizing. */
+        @media (max-width: 575.98px) {
+            .view-header { padding-bottom: 0.9rem; margin-bottom: 1.1rem; }
+            .view-header .view-icon { width: 40px; height: 40px; font-size: 1.15rem; margin-bottom: 0.6rem; border-radius: 12px; }
+            .view-header h3 { font-size: 1.1rem; margin-bottom: 0.2rem !important; }
+            .view-header p { font-size: 0.82rem; }
+            #view-history > .card > .card-body { padding: 1rem 0.85rem !important; }
+
+            .profile-hero { padding: 1rem 0.9rem; gap: 0.75rem; }
+            .profile-hero-avatar { width: 44px; height: 44px; font-size: 1.15rem; }
+            .profile-hero-text h3 { font-size: 1.05rem; }
+            .profile-hero-text p { font-size: 0.78rem; }
+            .profile-body { padding: 0.9rem; }
+            .profile-section-label { font-size: 0.66rem; margin-bottom: 0.6rem; }
+            .profile-info-grid { gap: 0.6rem; }
+            .profile-info-card { padding: 0.7rem 0.85rem; gap: 0.6rem; border-radius: 12px; }
+            .profile-info-icon { width: 32px; height: 32px; font-size: 0.9rem; border-radius: 9px; }
+            .profile-info-label { font-size: 0.64rem; margin-bottom: 0.15rem; }
+            .profile-info-value { font-size: 0.88rem; }
+            .profile-info-card-name .profile-info-value { font-size: 0.94rem; }
+            .btn-edit-profile { padding: 0.5rem 0.9rem; font-size: 0.76rem; }
+            .profile-edit-card { padding: 1.1rem; }
+            .profile-divider { margin: 1.5rem 0; }
+
+            /* History: same information, one line per field, in about half
+               the vertical space — long office names still wrap naturally
+               (no truncation), they just no longer drag the whole card
+               taller than it needs to be for a single-line one. */
+            .history-item { padding: 0.75rem 0.9rem; gap: 0.5rem 0.75rem; border-radius: 12px; }
+            .history-item + .history-item { margin-top: 0.6rem; }
+            .history-office { font-size: 0.9rem; }
+            .history-meta { font-size: 0.74rem; }
+            .history-badge { font-size: 0.68rem; padding: 0.28rem 0.65rem; }
+        }
 
         /* ---- History detail modal ---- */
         .history-detail-head {
@@ -778,6 +864,13 @@
             .topbar-hamburger, .btn-fullscreen { width: 44px; height: 44px; font-size: 1.15rem; }
             .topbar { gap: 0.85rem; padding: 0 1.1rem; }
             .topbar-actions { gap: 0.5rem; }
+            /* Applies across the whole mobile-drawer range (not just the
+               narrowest phones below), so the title can never multi-line
+               wrap into 3-4 lines at any width where the drawer/hamburger
+               is active — it truncates with an ellipsis instead, which is a
+               graceful, single-line degradation rather than a tall header. */
+            .topbar-title { min-width: 0; flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .topbar-title small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             /* Tight topbar real estate on mobile — the label used to be
                hidden outright to avoid crowding the fullscreen button,
                leaving just a bare dot with no visible word. Dropping only
@@ -792,18 +885,48 @@
         }
 
         @media (max-width: 576px) {
-            /* Narrow phones: the title ("Satisfaction Survey" + the
-               "Republic of the Philippines" eyebrow beneath it) was losing
-               the fight for space against a full-size English/Tagalog
-               toggle, wrapping onto a 3rd line that the fixed-height topbar
-               then clipped. Shrink the toggle down and let the title area
-               shrink instead of getting shoved aside. */
-            .topbar { padding: 0.5rem 0.9rem; gap: 0.5rem; }
-            .topbar-title { min-width: 0; font-size: 0.92rem; }
-            .topbar-title small { font-size: 0.62rem; white-space: normal; }
-            .topbar-actions { gap: 0.35rem; }
-            .lang-toggle-group { padding: 0.15rem; gap: 0.2rem; }
-            .lang-toggle-group .btn { padding: 0.3rem 0.55rem; font-size: 0.7rem; min-height: 30px; }
+            /* Narrow phones: the title ("Client Satisfaction Survey" + the
+               "Republic of the Philippines" eyebrow beneath it) sat in a
+               flex item with min-width:0, so once the hamburger + bell +
+               fullscreen + full-text English/Tagalog toggle ate up most of
+               the row it had almost no width left — and with the browser's
+               default white-space:normal, that meant wrapping word-by-word
+               ("Client" / "Satisfaction" / "Survey") into 3+ lines instead
+               of just shrinking, which then blew out the topbar's height.
+               A first pass just shrank the language toggle to 2-letter
+               labels in place, but on a true 320-360px phone that still
+               wasn't enough room and the (now single-line) title still had
+               to truncate hard. Second pass: the toggle only ever appears
+               together with THIS one long title (switchView() hides it via
+               #lang-toggle-group.d-none on every other view — Home/Profile/
+               History never show it), so it's moved to its own second row
+               below the icon row instead, freeing the entire first row for
+               [hamburger][title][bell][fullscreen]. Achieved by promoting
+               .topbar-actions's children to be direct flex items of the
+               (now wrapping) .topbar via display:contents — no markup
+               change needed — and giving just the language toggle a
+               flex-basis of 100% so it's the one item forced onto its own
+               line, right-aligned under the icon row. */
+            :root { --topbar-h: 60px; }
+            .topbar { padding: 0.5rem 0.9rem; gap: 0.5rem; flex-wrap: wrap; }
+            .topbar-title {
+                min-width: 0; flex: 1 1 auto; font-size: 0.92rem;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            }
+            .topbar-title small {
+                font-size: 0.62rem;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            }
+            .topbar-actions { display: contents; }
+            .lang-toggle-group {
+                flex: 1 0 100%;
+                display: flex;
+                justify-content: flex-end;
+                padding: 0.15rem; gap: 0.2rem;
+            }
+            .lang-toggle-group .btn { padding: 0.3rem 0.5rem; font-size: 0.72rem; min-height: 30px; min-width: 30px; }
+            .lang-toggle-group .lang-btn-full { display: none; }
+            .lang-toggle-group .lang-btn-short { display: inline; }
 
             /* Client Profile header + Autofill switch: stay a single row
                (title left, switch right) at every width — the earlier
@@ -827,6 +950,16 @@
             }
             #clientProfileHeader h4 { font-size: 1rem; flex: 1 1 auto; min-width: 0; }
             #clientProfileHeader .form-switch { flex: 0 0 auto; margin-top: 0; white-space: nowrap; }
+            #clientProfileHeader.mb-4 { margin-bottom: 1rem !important; }
+
+            /* Client Profile (stage 2) form fields: each input/select is
+               already a comfortable touch height, but Bootstrap's g-4
+               row gap (1.5rem/24px) between ~10 stacked fields added up to
+               a lot of pure whitespace with nothing to do with touch size —
+               g-4 only sets these two custom properties, so overriding them
+               tightens the gap without touching the inputs themselves. */
+            #stage2 .row.g-4 { --bs-gutter-y: 0.85rem; --bs-gutter-x: 0.85rem; }
+            #stage2 .form-label { margin-bottom: 0.35rem; }
 
             /* Terms checkbox: show the label text first, checkbox centered
                below it — instead of a left-aligned row whose wrapped 2nd
@@ -1130,6 +1263,30 @@
             .step-dot { width: 28px; height: 28px; font-size: 0.75rem; }
         }
 
+        /* ---- Survey hero (institutional logo/title block above the form)
+           on phones ----
+           The 84px logo, uppercase h3 institution name, and the pill-shaped
+           badge underneath it were all sized for a desktop card and never
+           had a mobile override, unlike the near-identical Home hero above
+           (which already shrinks at 767.98px). */
+        @media (max-width: 767.98px) {
+            .survey-hero { padding-bottom: 1.25rem; }
+            .survey-hero-logo { width: 56px; height: 56px; }
+            .survey-hero-logo-wrap { margin-bottom: 0.5rem; }
+            .survey-hero-eyebrow { font-size: 0.66rem; letter-spacing: 1.5px; }
+            .survey-hero-title { font-size: 1.15rem; }
+            .survey-hero-badge { padding: 0.6rem 1.25rem; margin-top: 1rem; gap: 0.45rem; }
+            .survey-hero-badge h4 { font-size: 0.85rem; }
+            .survey-hero-badge i { font-size: 0.9rem; }
+            .survey-progress { padding: 0.85rem 0.9rem; border-radius: 12px; }
+            /* Bootstrap's mb-5/mt-5 (3rem/48px) between the hero, progress
+               tracker, and each step's Back/Next row were sized for a full
+               desktop card; scoped to the survey view only so Home/Profile/
+               History's own spacing is untouched. */
+            #view-survey .mb-5 { margin-bottom: 1.5rem !important; }
+            #view-survey .mt-5 { margin-top: 1.75rem !important; }
+        }
+
         .text-heading { color: var(--ink-900) !important; }
         .text-dark { color: var(--ink-800) !important; }
         .text-secondary, .text-muted { color: var(--ink-600) !important; }
@@ -1422,6 +1579,31 @@
             }
             #sqd-body .radio-custom { width: 20px; height: 20px; flex-shrink: 0; }
         }
+
+        /* ---- SweetAlert2 dialogs (logout confirmation, profile/history
+           error alerts, etc.) on phones ----
+           SweetAlert2's defaults (32em/512px popup, a large 5em icon, big
+           title/margins) were designed for desktop and read as a full-page
+           takeover on a 360-430px phone even for a two-line "Are you sure
+           you want to logout?" prompt. Compacted down to a normal mobile
+           confirmation-dialog size; the dimmed backdrop (.swal2-container's
+           own overlay) is untouched. */
+        @media (max-width: 480px) {
+            .swal2-popup {
+                width: calc(100vw - 2.5rem) !important;
+                max-width: 340px;
+                padding: 1.1rem 1.1rem 1.35rem !important;
+                border-radius: 18px !important;
+            }
+            .swal2-icon {
+                width: 3.2em !important; height: 3.2em !important;
+                margin: 0.5em auto 0.85em !important;
+            }
+            .swal2-title { font-size: 1.05rem !important; padding: 0 0.4rem; margin-bottom: 0.3rem !important; }
+            .swal2-html-container { font-size: 0.86rem !important; margin: 0.4rem 0.5rem 0 !important; }
+            .swal2-actions { margin-top: 1.1rem !important; gap: 0.6rem; }
+            .swal2-styled { padding: 0.6rem 1rem !important; font-size: 0.86rem !important; min-height: 40px; }
+        }
     </style>
 </head>
 
@@ -1514,8 +1696,12 @@
                     <i class="bi bi-arrows-fullscreen"></i>
                 </button>
                 <div class="lang-toggle-group d-none" id="lang-toggle-group">
-                    <button id="btn-en" type="button" onclick="setLanguage('en')" class="btn btn-primary btn-sm fw-semibold shadow-sm">English</button>
-                    <button id="btn-tl" type="button" onclick="setLanguage('tl')" class="btn bg-transparent border btn-sm fw-semibold shadow-sm text-body">Tagalog</button>
+                    <button id="btn-en" type="button" onclick="setLanguage('en')" class="btn btn-primary btn-sm fw-semibold shadow-sm" aria-label="English" title="English">
+                        <span class="lang-btn-full">English</span><span class="lang-btn-short">EN</span>
+                    </button>
+                    <button id="btn-tl" type="button" onclick="setLanguage('tl')" class="btn bg-transparent border btn-sm fw-semibold shadow-sm text-body" aria-label="Tagalog" title="Tagalog">
+                        <span class="lang-btn-full">Tagalog</span><span class="lang-btn-short">TL</span>
+                    </button>
                 </div>
             </div>
         </header>

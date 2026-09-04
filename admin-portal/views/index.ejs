@@ -59,6 +59,26 @@
         }
         @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
+        /* Genuine server-side failure (a response actually came back, just
+           not an ok one) vs. #offlineIndicator/the default amber tone above,
+           which both mean "this is a connectivity hiccup, not a real
+           outage". Red is reserved for when the server itself answered and
+           said something is wrong. */
+        .offline-pill.is-error { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+        .offline-pill .notice-retry-btn {
+            flex: 0 0 auto;
+            background: rgba(255,255,255,0.55);
+            border: 1px solid currentColor;
+            color: inherit;
+            border-radius: 50px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 0.2rem 0.6rem;
+            min-height: 26px;
+            margin-left: 0.15rem;
+        }
+        .offline-pill .notice-retry-btn:hover { background: rgba(255,255,255,0.85); }
+
         /* Same visibility rule as the pill above — navigator.onLine only,
            never auto-navigated to. Matches login.ejs's .btn-login look. */
         .offline-survey-btn {
@@ -867,8 +887,9 @@
              mechanism, not a mix of that and inline styles/Bootstrap's
              d-none, so there's exactly one way this element's visibility is
              ever controlled. -->
-        <div id="serverUnavailableNotice" class="offline-pill" role="status" style="background:#fee2e2;color:#991b1b;border-color:#fecaca;">
-            <i class="fas fa-triangle-exclamation"></i><span class="label">Server temporarily unavailable. Please try again.</span>
+        <div id="serverUnavailableNotice" class="offline-pill" role="status">
+            <i id="serverUnavailableNoticeIcon" class="fas fa-triangle-exclamation"></i><span id="serverUnavailableNoticeText" class="label">Server temporarily unavailable. Please try again.</span>
+            <button type="button" class="notice-retry-btn" onclick="checkServerHealth()">Retry</button>
         </div>
     </div>
 
@@ -2382,18 +2403,45 @@
         window.addEventListener('offline', updateOfflineIndicator);
         updateOfflineIndicator();
 
-        async function checkServerHealth() {
+        // Three distinct outcomes, not one — collapsing them into a single
+        // "server unavailable" message is what made testers on merely slow
+        // connections think the deployed server itself was down:
+        //   1. A response actually came back and it wasn't ok -> the server
+        //      itself is genuinely failing (red).
+        //   2. fetchWithTimeout rejected (our own 4s abort, or the request
+        //      failed outright) while navigator.onLine still says "online"
+        //      -> a flaky/slow client-side connection, not proof the server
+        //      is down (amber).
+        //   3. res.ok -> nothing to report.
+        function setServerNotice(kind, message) {
             const notice = document.getElementById('serverUnavailableNotice');
+            const icon = document.getElementById('serverUnavailableNoticeIcon');
+            const text = document.getElementById('serverUnavailableNoticeText');
             if (!notice) return;
-            if (!navigator.onLine) {
+            if (!kind) {
                 notice.classList.remove('is-visible');
+                return;
+            }
+            notice.classList.add('is-visible');
+            notice.classList.toggle('is-error', kind === 'error');
+            if (icon) icon.className = kind === 'error' ? 'fas fa-circle-exclamation' : 'fas fa-wifi';
+            if (text) text.textContent = message;
+        }
+
+        async function checkServerHealth() {
+            if (!navigator.onLine) {
+                setServerNotice(null);
                 return;
             }
             try {
                 const res = await fetchWithTimeout('/api/health', {}, 4000);
-                notice.classList.toggle('is-visible', !res.ok);
+                if (res.ok) {
+                    setServerNotice(null);
+                } else {
+                    setServerNotice('error', 'The service is temporarily unavailable. Please try again shortly.');
+                }
             } catch (err) {
-                notice.classList.add('is-visible');
+                setServerNotice('warning', 'Your internet connection is slow or unstable. Some features may take longer to load.');
             }
         }
         window.addEventListener('online', checkServerHealth);

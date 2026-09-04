@@ -505,6 +505,28 @@
             line-height: 1.4;
             margin-bottom: 0.85rem;
         }
+        /* Genuine server-side failure (a real response came back, just not an
+           ok one) is visually distinct from the amber "your connection is
+           slow" case above — red reads as "something is actually wrong",
+           amber reads as "hang tight". */
+        .offline-login-notice.is-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #fecaca;
+        }
+        .offline-login-notice span { flex: 1 1 auto; }
+        .offline-login-notice .notice-retry-btn {
+            flex: 0 0 auto;
+            background: rgba(255,255,255,0.55);
+            border: 1px solid currentColor;
+            color: inherit;
+            border-radius: 50px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 0.25rem 0.7rem;
+            min-height: 30px;
+        }
+        .offline-login-notice .notice-retry-btn:hover { background: rgba(255,255,255,0.85); }
 
     </style>
 </head>
@@ -539,8 +561,9 @@
             </div>
 
             <div id="serverUnavailableNotice" class="offline-login-notice d-none">
-                <i class="fas fa-triangle-exclamation"></i>
-                <span>Server temporarily unavailable. Please try again.</span>
+                <i id="serverUnavailableNoticeIcon" class="fas fa-triangle-exclamation"></i>
+                <span id="serverUnavailableNoticeText">Server temporarily unavailable. Please try again.</span>
+                <button type="button" class="notice-retry-btn" onclick="checkServerHealth()">Retry</button>
             </div>
 
             <!-- Offline: signing in for real always needs the server (there is
@@ -734,18 +757,45 @@
         // checked when navigator.onLine is true, since there's no point
         // asking the server whether it's reachable when the OS already says
         // there's no network at all — that case is already covered above.
-        async function checkServerHealth() {
+        // Three distinct outcomes here, not one — conflating them all into a
+        // single "server unavailable" message is exactly what made testers on
+        // merely slow connections think the deployed server itself was down:
+        //   1. A response actually came back and it wasn't ok -> the server
+        //      itself is genuinely failing.
+        //   2. fetchWithTimeout rejected (our own 4s abort, or the request
+        //      failed outright) while navigator.onLine still says "online" ->
+        //      a flaky/slow client-side connection, not proof the server is
+        //      down.
+        //   3. res.ok -> nothing to report.
+        function setServerNotice(kind, message) {
             const notice = document.getElementById('serverUnavailableNotice');
+            const icon = document.getElementById('serverUnavailableNoticeIcon');
+            const text = document.getElementById('serverUnavailableNoticeText');
             if (!notice) return;
-            if (!navigator.onLine) {
+            if (!kind) {
                 notice.classList.add('d-none');
+                return;
+            }
+            notice.classList.remove('d-none');
+            notice.classList.toggle('is-error', kind === 'error');
+            if (icon) icon.className = kind === 'error' ? 'fas fa-circle-exclamation' : 'fas fa-wifi';
+            if (text) text.textContent = message;
+        }
+
+        async function checkServerHealth() {
+            if (!navigator.onLine) {
+                setServerNotice(null);
                 return;
             }
             try {
                 const res = await fetchWithTimeout('/api/health', {}, 4000);
-                notice.classList.toggle('d-none', res.ok);
+                if (res.ok) {
+                    setServerNotice(null);
+                } else {
+                    setServerNotice('error', 'The service is temporarily unavailable. Please try again shortly.');
+                }
             } catch (err) {
-                notice.classList.remove('d-none');
+                setServerNotice('warning', 'Your internet connection is slow or unstable. Some features may take longer to load.');
             }
         }
         window.addEventListener('online', checkServerHealth);
