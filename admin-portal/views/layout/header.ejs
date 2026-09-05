@@ -50,7 +50,16 @@
             if (redirected) return;
             if (String(adminId) === String(myAdminId) && token && token !== myToken) {
                 redirected = true;
-                window.location.href = '/logout?scope=admin';
+                // reason=replaced is informational only (server logs/debugging) —
+                // this tab is being signed out because a sibling tab just
+                // completed a REAL login with a different token, not because
+                // anyone clicked Logout here. /logout does NOT trust this
+                // query param by itself for that reason: a client-supplied
+                // URL flag alone isn't proof of anything. It independently
+                // confirms the replacement server-side (the admins.login_token
+                // check / the session tombstone) before ever showing "signed
+                // in elsewhere" instead of a false "logged out successfully".
+                window.location.href = '/logout?scope=admin&reason=replaced';
             }
         }
 

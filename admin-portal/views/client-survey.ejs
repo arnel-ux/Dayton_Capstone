@@ -1633,6 +1633,48 @@
 
         .option-card:active { transform: scale(0.99); }
 
+        /* ---- Required-field validation marking ----
+           Leaf controls (text/select/date) reuse Bootstrap's own
+           .is-invalid/.invalid-feedback (already loaded — no parallel style
+           invented). Question GROUPS with no single control to mark
+           (gender/CC1-3/SQD0-8 are radio sets) get this custom pair instead:
+           the whole container gets a restrained red border/tint — never
+           individual radio options — plus one small warning line. Both
+           carry scroll-margin-top so scrollToInvalid()'s smooth-scroll never
+           leaves the target sitting underneath the sticky topbar, on mobile
+           (106px) or desktop (72px) alike, since --topbar-h already tracks
+           the right value for either. */
+        .invalid-feedback { scroll-margin-top: calc(var(--topbar-h) + 12px); }
+        .answer-group-invalid {
+            scroll-margin-top: calc(var(--topbar-h) + 12px);
+        }
+        .qa-block.answer-group-invalid {
+            border-color: #dc3545 !important;
+            border-left-color: #dc3545 !important;
+            background: rgba(220,53,69,0.045) !important;
+        }
+        .col-md-6.answer-group-invalid {
+            border: 1px solid #dc3545;
+            border-radius: 12px;
+            padding: 0.5rem 0.6rem;
+            background: rgba(220,53,69,0.04);
+        }
+        #sqd-body tr.answer-group-invalid {
+            outline: 2px solid #dc3545;
+            outline-offset: -1px;
+            background: rgba(220,53,69,0.045);
+        }
+        [data-bs-theme="dark"] .qa-block.answer-group-invalid,
+        [data-bs-theme="dark"] .col-md-6.answer-group-invalid,
+        [data-bs-theme="dark"] #sqd-body tr.answer-group-invalid { background: rgba(220,53,69,0.12); }
+        .answer-group-msg {
+            display: flex; align-items: center; gap: 0.35rem;
+            color: #dc3545; font-size: 0.82rem; font-weight: 600;
+            margin-top: 0.65rem;
+        }
+        .answer-group-msg::before { content: '\26A0'; font-size: 0.9rem; }
+        #sqd-body td.text-start .answer-group-msg { margin-top: 0.4rem; }
+
         /* ---- Citizen's Charter (CC1/CC2/CC3) on phones ----
            .qa-block (24px padding, unmodified since desktop) and .option-card
            (16-18px padding, Bootstrap default h4/p sizes above them) were
@@ -4321,9 +4363,12 @@ function saveProfile(event) {
     const nameInput = document.getElementById('pf-name-input');
     const name = nameInput.value.trim();
     if (!name) {
+        markLeafInvalid(nameInput, 'Please enter your name.');
         AppAlert.warning('Please enter your name.');
+        nameInput.focus();
         return false;
     }
+    clearLeafInvalid(nameInput);
 
     if (!navigator.onLine) {
         AppAlert.warning('You are offline. Profile name changes need a connection — please try again once you\'re back online.', 'Offline');
@@ -4599,77 +4644,266 @@ function updateProgressStepper(stage) {
     });
 }
 
-// Validation messages per language
+// Validation messages per language.
+// Previously `profile`/`cc`/`sqd` each spelled out every field/question by
+// name ("Client Type, Sex, Age, Date, Region, Office Visited, and Service
+// Availed" / "CC1, CC2, and CC3" / "SQD0 to SQD8") inside the popup itself —
+// exactly the "giant list of everything you forgot" behavior this was
+// changed to remove. There is now ONE shared generic alert
+// (requiredIncomplete) for every stage; which field/question was actually
+// missed is instead shown ON THE PAGE, at the field itself (see
+// markLeafInvalid/markGroupInvalid below) — the user finds out what they
+// missed from the form, not from the alert text.
 const validationMessages = {
     en: {
         terms: "Please check the box to agree to the Terms & Conditions and Privacy Policy before proceeding.",
-        profile: "Please complete all required fields: Client Type, Sex, Age, Date, Region, Office Visited, and Service Availed.",
-        cc: "Please answer all Citizen's Charter questions (CC1, CC2, and CC3) before proceeding.",
-        sqd: "Please rate all Service Quality Dimensions (SQD0 to SQD8) before submitting."
+        requiredIncomplete: "Please complete the required information before proceeding.",
+        fieldRequired: "This field is required.",
+        answerRequired: "Please select an answer."
     },
     tl: {
         terms: "Paki-check ang kahon para sumang-ayon sa Terms & Conditions at Privacy Policy bago magpatuloy.",
-        profile: "Paki-kumpleto ang lahat ng kinakailangang detalye: Uri ng Kliyente, Kasarian, Edad, Petsa, Rehiyon, Pinuntahang Tanggapan, at Serbisyong Ginamit.",
-        cc: "Paki-sagot ang lahat ng tanong sa Citizen's Charter (CC1, CC2, at CC3) bago magpatuloy.",
-        sqd: "Paki-rate ang lahat ng Service Quality Dimensions (SQD0 hanggang SQD8) bago mag-submit."
+        requiredIncomplete: "Pakikumpleto ang mga kinakailangang impormasyon bago magpatuloy.",
+        fieldRequired: "Kinakailangan ang impormasyong ito.",
+        answerRequired: "Pumili ng sagot."
     }
 };
 
-// Validates the fields belonging to a given stage. Returns true if the stage is complete.
-function validateStage(stageNum) {
+// ---- Inline required-field marking ----
+// Two shapes of "required thing" on this survey: a leaf control (text/select/
+// date input — Bootstrap's own .is-invalid/.invalid-feedback, already loaded,
+// reused as-is rather than inventing a parallel style), and a question GROUP
+// with no single control to mark (gender/CC1-3/SQD0-8 are radio sets — the
+// spec calls for marking the question's container, never individual radio
+// options). Both clear themselves live via the single delegated listener
+// below, so nothing has to be re-wired after SQD's renderSQD() rebuilds its
+// radios on every language switch.
+function markLeafInvalid(el, message) {
+    if (!el) return;
+    el.classList.add('is-invalid');
+    el.setAttribute('aria-invalid', 'true');
+    let feedback = el.nextElementSibling;
+    if (!feedback || !feedback.classList.contains('invalid-feedback')) {
+        feedback = document.createElement('div');
+        feedback.className = 'invalid-feedback';
+        feedback.id = 'err-' + (el.id || el.name || Math.random().toString(36).slice(2));
+        el.insertAdjacentElement('afterend', feedback);
+    }
+    feedback.textContent = message;
+    el.setAttribute('aria-describedby', feedback.id);
+}
+function clearLeafInvalid(el) {
+    if (!el) return;
+    el.classList.remove('is-invalid');
+    el.removeAttribute('aria-invalid');
+    el.removeAttribute('aria-describedby');
+}
+// `messageTarget` lets the visible warning line live somewhere valid inside
+// `container` even when `container` itself can't directly hold a <div> (an
+// SQD row is a <tr> — the message goes in its first <td> instead; see
+// validateStage's stage-4 branch).
+function markGroupInvalid(container, message, messageTarget) {
+    if (!container) return;
+    container.classList.add('answer-group-invalid');
+    container.setAttribute('aria-invalid', 'true');
+    const target = messageTarget || container;
+    let msgEl = target.querySelector(':scope > .answer-group-msg');
+    if (!msgEl) {
+        msgEl = document.createElement('div');
+        msgEl.className = 'answer-group-msg';
+        target.appendChild(msgEl);
+    }
+    msgEl.textContent = message;
+}
+function clearGroupInvalid(container, messageTarget) {
+    if (!container) return;
+    container.classList.remove('answer-group-invalid');
+    container.removeAttribute('aria-invalid');
+    const target = messageTarget || container;
+    const msgEl = target.querySelector(':scope > .answer-group-msg');
+    if (msgEl) msgEl.remove();
+}
+
+// Scrolls/focuses the FIRST invalid field found (visual order), landing it
+// clear of the sticky mobile header via scroll-margin-top on the invalid
+// classes themselves (see the CSS). Only actual form controls get focus()
+// — a question-group container (a <div>/<tr>) isn't a focusable control,
+// scrolling it into view is enough per spec.
+function scrollToInvalid(el) {
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') {
+        try { el.focus({ preventScroll: true }); } catch (e) { try { el.focus(); } catch (e2) {} }
+    }
+}
+
+const REQUIRED_STAGE2_SELECTORS = [
+    'select[name="client_type"]',
+    'select[name="age"]',
+    'input[name="survey_date"]',
+    'input[name="office_visited_time"]',
+    'select[name="region"]',
+    'select[name="office_id"]',
+    'select[name="service_availed"]'
+];
+
+// Delegated (not per-control) so it keeps working after SQD's renderSQD()
+// tears down and rebuilds every radio on a language switch, and after the
+// office/service selects get repopulated — nothing here needs re-attaching.
+(function initValidationClearing() {
+    const form = document.getElementById('surveyForm');
+    if (!form) return;
+    const clearLeafIfFilled = (el) => {
+        if (REQUIRED_STAGE2_SELECTORS.some(sel => el.matches(sel)) && el.value && el.value.trim()) {
+            clearLeafInvalid(el);
+        }
+    };
+    form.addEventListener('input', (e) => { if (e.target.matches) clearLeafIfFilled(e.target); });
+    form.addEventListener('change', (e) => {
+        const el = e.target;
+        if (!el.matches) return;
+        clearLeafIfFilled(el);
+        if (el.matches('input[name="gender"]')) {
+            clearGroupInvalid(document.getElementById('gender-field-group').closest('.col-md-6'));
+        }
+        if (el.matches('input[name="cc1"], input[name="cc2"], input[name="cc3"]')) {
+            clearGroupInvalid(el.closest('.qa-block'));
+        }
+        const sqdMatch = /^sqd(\d)$/.exec(el.name || '');
+        if (sqdMatch) {
+            const row = el.closest('tr');
+            clearGroupInvalid(row, row ? row.querySelector('td.text-start') : null);
+        }
+        if (el.id === 'agreeTermsStage1' && el.checked) {
+            clearLeafInvalid(el);
+        }
+    });
+
+    // Client Profile's own name input lives outside #surveyForm (a different
+    // app-view entirely), so it needs its own tiny listener rather than
+    // relying on the delegation above.
+    const pfNameInput = document.getElementById('pf-name-input');
+    if (pfNameInput) {
+        pfNameInput.addEventListener('input', () => {
+            if (pfNameInput.value.trim()) clearLeafInvalid(pfNameInput);
+        });
+    }
+})();
+
+// Validates the fields belonging to a given stage. Returns true if the stage
+// is complete. `scroll` (default true) is set to false by submitAll()'s
+// pre-submit sweep, which may be checking a stage that ISN'T the currently
+// visible one — scrolling into a hidden page does nothing, so that caller
+// navigates to the stage first, then re-validates (with scroll) once it's
+// actually on screen.
+function validateStage(stageNum, scroll) {
+    if (scroll === undefined) scroll = true;
     const t = validationMessages[currentLang] || validationMessages.en;
 
     if (stageNum === 1) {
         const terms = document.getElementById('agreeTermsStage1');
         if (!terms || !terms.checked) {
-            AppAlert.warning(t.terms);
-            terms && terms.focus();
+            markLeafInvalid(terms, t.terms);
+            // Gated on `scroll` for the same reason as stages 2-4: submitAll()'s
+            // silent detection pass (scroll=false) must not raise this before
+            // its own second, post-navigate call does — one failure, one alert.
+            if (scroll) {
+                AppAlert.warning(t.terms);
+                scrollToInvalid(terms);
+            }
             return false;
         }
+        clearLeafInvalid(terms);
         return true;
     }
 
     if (stageNum === 2) {
-        const requiredSelectors = [
-            'select[name="client_type"]',
-            'select[name="age"]',
-            'input[name="survey_date"]',
-            'input[name="office_visited_time"]',
-            'select[name="region"]',
-            'select[name="office_id"]',
-            'select[name="service_availed"]'
-        ];
-        for (const sel of requiredSelectors) {
+        let firstInvalid = null;
+        REQUIRED_STAGE2_SELECTORS.forEach((sel) => {
             const el = document.querySelector(sel);
             if (!el || !el.value || !el.value.trim()) {
-                AppAlert.warning(t.profile);
-                if (el) el.focus();
-                return false;
+                markLeafInvalid(el, t.fieldRequired);
+                if (!firstInvalid) firstInvalid = el;
+            } else {
+                clearLeafInvalid(el);
             }
-        }
+        });
+        const genderGroup = document.getElementById('gender-field-group').closest('.col-md-6');
         if (!document.querySelector('input[name="gender"]:checked')) {
-            AppAlert.warning(t.profile);
+            markGroupInvalid(genderGroup, t.answerRequired);
+            if (!firstInvalid) firstInvalid = genderGroup;
+        } else {
+            clearGroupInvalid(genderGroup);
+        }
+        if (firstInvalid) {
+            // Gated on `scroll` too (not just used to conditionally scroll):
+            // submitAll()'s silent detection pass over a stage that isn't
+            // currently visible would otherwise show this generic alert
+            // once, then show it AGAIN when it re-validates the same stage
+            // (with scroll) right after navigating to it — one real
+            // validation failure must produce exactly one alert.
+            if (scroll) {
+                AppAlert.warning(t.requiredIncomplete);
+                scrollToInvalid(firstInvalid);
+            }
             return false;
         }
         return true;
     }
 
     if (stageNum === 3) {
+        let firstInvalid = null;
         for (const name of ['cc1', 'cc2', 'cc3']) {
+            const anyOption = document.querySelector(`input[name="${name}"]`);
+            const block = anyOption ? anyOption.closest('.qa-block') : null;
             if (!document.querySelector(`input[name="${name}"]:checked`)) {
-                AppAlert.warning(t.cc);
-                return false;
+                markGroupInvalid(block, t.answerRequired);
+                if (!firstInvalid) firstInvalid = block;
+            } else {
+                clearGroupInvalid(block);
             }
+        }
+        if (firstInvalid) {
+            // Gated on `scroll` too (not just used to conditionally scroll):
+            // submitAll()'s silent detection pass over a stage that isn't
+            // currently visible would otherwise show this generic alert
+            // once, then show it AGAIN when it re-validates the same stage
+            // (with scroll) right after navigating to it — one real
+            // validation failure must produce exactly one alert.
+            if (scroll) {
+                AppAlert.warning(t.requiredIncomplete);
+                scrollToInvalid(firstInvalid);
+            }
+            return false;
         }
         return true;
     }
 
     if (stageNum === 4) {
+        let firstInvalid = null;
         for (let i = 0; i <= 8; i++) {
+            const anyOption = document.querySelector(`input[name="sqd${i}"]`);
+            const row = anyOption ? anyOption.closest('tr') : null;
+            const msgTarget = row ? row.querySelector('td.text-start') : null;
             if (!document.querySelector(`input[name="sqd${i}"]:checked`)) {
-                AppAlert.warning(t.sqd);
-                return false;
+                markGroupInvalid(row, t.answerRequired, msgTarget);
+                if (!firstInvalid) firstInvalid = row;
+            } else {
+                clearGroupInvalid(row, msgTarget);
             }
+        }
+        if (firstInvalid) {
+            // Gated on `scroll` too (not just used to conditionally scroll):
+            // submitAll()'s silent detection pass over a stage that isn't
+            // currently visible would otherwise show this generic alert
+            // once, then show it AGAIN when it re-validates the same stage
+            // (with scroll) right after navigating to it — one real
+            // validation failure must produce exactly one alert.
+            if (scroll) {
+                AppAlert.warning(t.requiredIncomplete);
+                scrollToInvalid(firstInvalid);
+            }
+            return false;
         }
         return true;
     }
@@ -5266,10 +5500,16 @@ function renderReviewSummary() {
 async function submitAll(event) {
     if (event) event.preventDefault();
 
-    // Re-validate every stage (Terms, Profile, CC, SQD) before allowing submission
+    // Re-validate every stage (Terms, Profile, CC, SQD) before allowing submission.
+    // First pass runs with scroll suppressed — the stage being checked may not
+    // be the one currently on screen (e.g. submitting from Review finds Stage 2
+    // incomplete), and scrollIntoView on a still-hidden `.page` does nothing.
+    // navigate() makes it visible, then the second call (scroll defaulted back
+    // on) can actually bring the first missed field into view for real.
     for (let stage = 1; stage <= 4; stage++) {
-        if (!validateStage(stage)) {
+        if (!validateStage(stage, false)) {
             navigate(stage);
+            validateStage(stage);
             return;
         }
     }

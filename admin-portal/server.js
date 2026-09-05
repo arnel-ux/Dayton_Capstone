@@ -126,6 +126,33 @@ function destroyAdminSessionById(id) {
     if (id) adminSessions.delete(id);
 }
 
+// Marks a session id as deliberately replaced by a REAL newer login (never
+// inferred merely from a session being gone) — this is what lets
+// ensureAdminAuth tell a genuine "signed in from another device/tab" event
+// apart from an ordinary session timeout / store-restart, which otherwise
+// look IDENTICAL from the store's point of view (in both cases the old
+// session id simply resolves to nothing).
+//
+// Implemented as a TOMBSTONE in the SAME adminSessions map the real session
+// lived in — replacing its data with `{ replaced: true }` rather than
+// deleting the entry outright — so the evidence survives for exactly as
+// long as that session could have plausibly still been presented (its own
+// original expiresAt), not an arbitrary short window. An earlier version
+// used a separate 60s-TTL side table: too short — an admin who steps away
+// from a genuinely-replaced session for more than a minute would have come
+// back to a false "session expired" instead of the true "signed in
+// elsewhere", since the evidence had already timed out while the session
+// itself (rolling 8h expiry) was still very much a plausible return target.
+// Consumed (deleted) the first time it's actually read, in the cookie-
+// parsing middleware below — so a dead session explains itself as
+// "replaced" exactly once.
+function markAdminSessionReplaced(id) {
+    if (!id) return;
+    const existing = adminSessions.get(id);
+    const expiresAt = (existing && existing.expiresAt) || (Date.now() + ADMIN_SESSION_MAX_AGE_MS);
+    adminSessions.set(id, { replaced: true, expiresAt });
+}
+
 // Destroys THIS request's admin session and clears its cookie (stale-token
 // kick-out in ensureAdminAuth, and /logout). Flags the request so the
 // onHeaders hook below doesn't resurrect the cookie it just cleared.
@@ -156,6 +183,25 @@ app.use((req, res, next) => {
         existingEntry = null;
     }
 
+    // Read BEFORE req.adminSessionID is possibly replaced below — see
+    // ensureAdminAuth's "session missing" branch for how this is used to
+    // choose an accurate alert (session_replaced vs session_expired vs
+    // login_required) instead of guessing "another device" from the mere
+    // absence of a session. A tombstone (see markAdminSessionReplaced) is
+    // real evidence of a newer login, valid for as long as the session
+    // itself would have been — never an arbitrary short window — and is
+    // consumed (deleted) the moment it's actually observed here, so this
+    // exact session id only ever explains itself as "replaced" once.
+    let missingReason = null;
+    if (existingEntry && existingEntry.replaced) {
+        adminSessions.delete(existingId);
+        missingReason = 'replaced';
+        existingEntry = null;
+    } else if (existingId && !existingEntry) {
+        missingReason = 'expired';
+    }
+    req._adminSessionMissingReason = missingReason;
+
     req.adminSessionID = existingEntry ? existingId : newAdminSessionId();
     req.adminSession = existingEntry ? existingEntry.data : {};
     req._adminSessionHadExisting = !!existingEntry;
@@ -177,7 +223,11 @@ app.use((req, res, next) => {
 function isSessionAlive(sessionId) {
     if (!sessionId) return false;
     const entry = adminSessions.get(sessionId);
-    return !!(entry && entry.expiresAt > Date.now());
+    // A tombstoned entry (see markAdminSessionReplaced) intentionally keeps
+    // its original expiresAt so the "replaced" evidence survives as long as
+    // the real session would have — but it is no longer a usable session,
+    // so it must not count as "Active Now" here.
+    return !!(entry && !entry.replaced && entry.expiresAt > Date.now());
 }
 
 app.use(passport.initialize());
@@ -593,7 +643,17 @@ function ensureClientAuth(req, res, next) {
     if (req.is('application/json') || req.xhr) {
         return res.status(401).json({ success: false, message: "Please sign in before submitting the survey." });
     }
-    return res.redirect(302, '/login');
+    // A 'client.sid' cookie only ever gets set once this browser actually
+    // authenticated (express-session's saveUninitialized:false — see the
+    // session() call above), so seeing one here despite no valid session
+    // behind it means this browser WAS logged in and that session has since
+    // expired/been cleared (8h maxAge, server restart, store eviction) — as
+    // opposed to a visitor who never logged in at all (no cookie sent). Same
+    // reasoning as ensureAdminAuth's hadSessionCookie check below; the server
+    // genuinely can't tell "expired" from "never logged in" any other way,
+    // so this is the one piece of real evidence available for that distinction.
+    const hadSessionCookie = !!(req.headers.cookie && req.headers.cookie.includes('client.sid='));
+    return res.redirect(302, hadSessionCookie ? '/login?status=session_expired' : '/login?status=login_required');
 }
 
 // Ensures only a logged-in admin (set at /auth-login) can view/use admin pages & CRUD routes.
@@ -615,8 +675,13 @@ function ensureAdminAuth(req, res, next) {
 
             const dbToken = rows && rows[0] ? rows[0].login_token : null;
             if (!dbToken || dbToken !== req.adminSession.login_token) {
+                // A structurally-intact admin session whose stored token no
+                // longer matches the account's current one. login_token is
+                // ONLY ever overwritten by a real, successful /auth-login —
+                // so unlike the "session missing entirely" branch below, this
+                // IS solid evidence of an actual newer login, not a guess.
                 destroyAdminSession(req, res);
-                return res.redirect(302, '/login?error=session_expired');
+                return res.redirect(302, '/login?status=session_replaced');
             }
 
             res.locals.loginToken = dbToken; // read by the cross-tab BroadcastChannel sync script (layout/header.ejs)
@@ -634,16 +699,26 @@ function ensureAdminAuth(req, res, next) {
         return res.status(401).json({ success: false, message: "Please log in as admin first." });
     }
 
-    // A session cookie was sent but no admin session was found behind it. Since
-    // /auth-login destroys every OTHER open session on an account the moment it
-    // logs in again (one active session per admin), this is exactly what that
-    // looks like from the kicked-out tab's side — surface it instead of silently
-    // bouncing to a blank login form.
+    // A session cookie was sent but no admin session was found behind it.
+    // ROOT CAUSE of the old false "logged in on another device/tab" alert:
+    // this exact state (cookie present, store entry gone) is ALSO exactly
+    // what an ordinary session timeout, a server restart (adminSessions is
+    // an in-memory Map — restarting the process empties it), or the store
+    // simply evicting an expired entry look like. None of those are evidence
+    // of another login. The ONLY reliable evidence is req._adminSessionMissingReason
+    // === 'replaced', set above by the cookie-parsing middleware, which is
+    // itself only ever true when /auth-login's real "kick out this admin's
+    // other sessions" step (see markAdminSessionReplaced) actually ran for
+    // this exact session id. Anything else is classified as plain expiration —
+    // never asserted as a concurrent login without real proof.
+    if (req._adminSessionMissingReason === 'replaced') {
+        return res.redirect(302, '/login?status=session_replaced');
+    }
     const hadSessionCookie = !!(req.headers.cookie && req.headers.cookie.includes('admin.sid='));
     if (hadSessionCookie) {
-        return res.redirect(302, '/login?error=' + encodeURIComponent('Your session has expired because this account was logged in from another device or tab.'));
+        return res.redirect(302, '/login?status=session_expired');
     }
-    return res.redirect(302, '/login');
+    return res.redirect(302, '/login?status=login_required');
 }
 
 // Ensures only a logged-in office account (set at /office-login) can view/use the
@@ -2797,7 +2872,21 @@ app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
                 (openRows || [])
                     .map(r => r.session_id)
                     .filter(sid => sid && sid !== req.adminSessionID)
-                    .forEach(sid => destroyAdminSessionById(sid));
+                    .forEach(sid => {
+                        // Tombstones sid (replaces its data with a "replaced"
+                        // marker instead of deleting it outright) — this is
+                        // the one real "another login happened" event
+                        // ensureAdminAuth's session-missing branch checks
+                        // for, so that tab/device gets an accurate "signed
+                        // in elsewhere" message instead of being lumped in
+                        // with ordinary expiration. This already fully
+                        // invalidates the old session for auth purposes
+                        // (see the cookie-parsing middleware) — no separate
+                        // destroyAdminSessionById call needed/wanted here,
+                        // since that would just delete the tombstone right
+                        // back out again.
+                        markAdminSessionReplaced(sid);
+                    });
 
                 db.query('UPDATE admin_logs SET logout_time = NOW() WHERE admin_id = ? AND logout_time IS NULL', [admin.id], (err) => {
                     if (err) console.error('❌ Error closing this admin\'s previous admin_logs rows:', err);
@@ -3567,6 +3656,14 @@ app.get('/logout', noCache, (req, res) => {
         });
     };
 
+    // Set to true only by real server-side evidence that a newer login had
+    // already replaced this session — NEVER by the bare `reason=replaced`
+    // query string the BroadcastChannel handler (layout/header.ejs) appends.
+    // That param is client-supplied and anyone could type it into the
+    // address bar; by itself it must never be enough to manufacture the
+    // "signed in elsewhere" message for what might just be a normal logout.
+    let confirmedReplaced = false;
+
     const finishAdminLogout = (next) => {
         if (!isAdminSession) return next();
         // Only clear login_token if THIS session is still the one that owns it —
@@ -3574,8 +3671,16 @@ app.get('/logout', noCache, (req, res) => {
         // ensureAdminAuth) must not null out a newer login made from elsewhere.
         const adminId = req.adminSession.user.id;
         const ownToken = req.adminSession.login_token;
-        db.query('UPDATE admins SET login_token = NULL WHERE id = ? AND login_token = ?', [adminId, ownToken], (err) => {
-            if (err) console.error('❌ Error clearing login_token on logout:', err);
+        db.query('UPDATE admins SET login_token = NULL WHERE id = ? AND login_token = ?', [adminId, ownToken], (err, result) => {
+            if (err) {
+                console.error('❌ Error clearing login_token on logout:', err);
+            } else if (!result || result.affectedRows === 0) {
+                // The WHERE clause didn't match: admins.login_token was
+                // ALREADY something other than this session's own token by
+                // the time this ran — i.e. a real newer login had already
+                // overwritten it. Genuine server-side evidence, not a guess.
+                confirmedReplaced = true;
+            }
             closeAdminLogRow(req, () => {
                 destroyAdminSession(req, res);
                 next();
@@ -3585,11 +3690,28 @@ app.get('/logout', noCache, (req, res) => {
 
     finishAdminLogout(() => {
         finishClientLogout(() => {
-            // loggedout=1 only for a real client-session logout, so login.ejs
-            // can show the same AppAlert toast design used for the Client
-            // Profile "updated successfully" notification — never shown for
-            // an admin-scope logout or a /logout hit with no session at all.
-            res.redirect(302, isClientSession ? '/login?loggedout=1' : '/login');
+            // status=logged_out only for a REAL manual logout (an actual
+            // session was here), so login.ejs can show the same AppAlert
+            // toast design used for the Client Profile "updated successfully"
+            // notification — never shown for a /logout hit with no session
+            // at all (e.g. a stale/already-expired tab's logout link).
+            //
+            // The one exception is a confirmed replacement: the cross-tab
+            // BroadcastChannel sync script also sends an admin here the
+            // instant it detects a REAL newer login happened in a sibling
+            // tab of the same browser — that tab never clicked Logout, so it
+            // must show the same "signed in elsewhere" message ensureAdminAuth
+            // gives the same event server-side. `confirmedReplaced` (the
+            // login_token check above) and req._adminSessionMissingReason
+            // (the tombstone check — see the cookie-parsing middleware) are
+            // the two pieces of ACTUAL server-side evidence for that; the
+            // request's own `reason` query param is deliberately never
+            // consulted here.
+            const replaced = confirmedReplaced || req._adminSessionMissingReason === 'replaced';
+            let status = null;
+            if (replaced) status = 'session_replaced';
+            else if (isAdminSession || isClientSession) status = 'logged_out';
+            res.redirect(302, status ? ('/login?status=' + status) : '/login');
         });
     });
 });

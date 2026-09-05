@@ -660,28 +660,45 @@
     </script>
     <script>
         const loginQueryParams = new URLSearchParams(window.location.search);
-        let loginErrorMsg = loginQueryParams.get('error');
+        const loginErrorMsg = loginQueryParams.get('error');
 
-        // session_expired is a plain status code (not a human-readable message) —
-        // set when login_token no longer matches admins.login_token, i.e. this
-        // account logged in from another tab/device and this session was displaced.
-        if (loginErrorMsg === 'session_expired') {
-            loginErrorMsg = 'You have been logged out because this account was signed in from another tab or device.';
-        }
-
+        // Freeform error text (invalid credentials, server errors, the
+        // new-tab auth guards in header.ejs/client-survey.ejs/office-approvals.ejs) —
+        // unrelated to the semantic session states below, untouched.
         if (loginErrorMsg) {
             AppAlert.error(loginErrorMsg, 'Login Failed');
             window.history.replaceState({}, document.title, window.location.pathname);
         }
 
-        // Same toast component/design used for the Client Profile "updated
-        // successfully" notification (see AppAlert.toast in alerts.js) — the
-        // client-survey page's own logout() navigates straight to /logout
-        // before any in-page alert could be seen, so the acknowledgement is
-        // shown here on arrival instead, per the existing flash-message
-        // convention (?error=... is already read the same way above).
-        if (loginQueryParams.get('loggedout') === '1') {
-            AppAlert.toastSuccess('You have been logged out successfully.', { title: 'Logged Out' });
+        // Explicit semantic session states — one flash param, one accurate
+        // message each, shared by both the Admin and Client login flows on
+        // this same page. Deliberately NOT collapsed into the freeform
+        // `error` message above: manual logout, session expiration, login-
+        // required, and a real cross-device/tab session replacement are four
+        // different events (see ensureAdminAuth/ensureClientAuth/`/logout`
+        // in server.js) and must never share one ambiguous flag or wording —
+        // in particular, an ordinary session timeout must never be reported
+        // as "logged in on another device," which requires actual evidence
+        // (a real newer login) to say, not just "the old session is gone."
+        const loginStatus = loginQueryParams.get('status');
+        const STATUS_MESSAGES = {
+            logged_out: { type: 'success', title: 'Logged Out', text: 'You have been logged out successfully.' },
+            session_expired: { type: 'warning', title: 'Session Expired', text: 'Your session has expired. Please log in again.' },
+            login_required: { type: 'info', title: 'Login Required', text: 'Please log in to continue.' },
+            session_replaced: { type: 'warning', title: 'Signed In Elsewhere', text: 'Your session ended because this account was signed in from another device or browser.' }
+        };
+        if (loginStatus && STATUS_MESSAGES[loginStatus]) {
+            const s = STATUS_MESSAGES[loginStatus];
+            // logged_out reuses the same AppAlert toast design as the Client
+            // Profile "updated successfully" notification; the other three
+            // are less routine/more worth reading, so they use the standard
+            // (non-auto-dismissing until acknowledged for warning/info)
+            // AppAlert modal instead of a corner toast.
+            if (s.type === 'success') {
+                AppAlert.toastSuccess(s.text, { title: s.title });
+            } else {
+                AppAlert[s.type](s.text, s.title);
+            }
             window.history.replaceState({}, document.title, window.location.pathname);
         }
 
