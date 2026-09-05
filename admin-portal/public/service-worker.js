@@ -20,8 +20,8 @@ importScripts('/js/offline-db.js');
 // clear the IndexedDB database itself (a separate, unversioned-by-this
 // mechanism origin store); onupgradeneeded only ever adds the new object
 // store alongside the existing ones.
-const STATIC_CACHE = 'cspc-static-v22';
-const RUNTIME_CACHE = 'cspc-runtime-v22';
+const STATIC_CACHE = 'cspc-static-v23';
+const RUNTIME_CACHE = 'cspc-runtime-v23';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
