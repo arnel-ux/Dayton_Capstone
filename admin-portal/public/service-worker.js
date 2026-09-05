@@ -20,8 +20,12 @@ importScripts('/js/offline-db.js');
 // clear the IndexedDB database itself (a separate, unversioned-by-this
 // mechanism origin store); onupgradeneeded only ever adds the new object
 // store alongside the existing ones.
-const STATIC_CACHE = 'cspc-static-v23';
-const RUNTIME_CACHE = 'cspc-runtime-v23';
+// v24: added the admin-path bypass below (isAdminProtectedPath) — bumped so
+// activate's cache-name purge (see below) discards any authenticated admin
+// page snapshot a v23-or-earlier install may have already cached into
+// RUNTIME_CACHE before this bypass existed.
+const STATIC_CACHE = 'cspc-static-v24';
+const RUNTIME_CACHE = 'cspc-runtime-v24';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
@@ -68,6 +72,34 @@ const CDN_PRECACHE_URLS = [
 ];
 
 const RUNTIME_CACHE_HOSTS = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com', 'cdnjs.cloudflare.com', 'spims.cspc.edu.ph'];
+
+// This worker registers with root scope ('/'), inherited from whichever
+// public/client page (client-login, index, login, client-survey) happened to
+// register it first — so it just as happily intercepts navigations to
+// authenticated admin pages in the same browser, even though no admin page
+// itself references this file. handleNavigation's cache.put() below does not
+// consult the server's own Cache-Control: no-store header (the Cache API
+// never does), so without this bypass a stale, still-"logged in"-looking
+// admin page could survive in RUNTIME_CACHE past logout/session invalidation
+// and get served back the next time a live fetch to that same URL fails
+// (offline/timeout) — a gap the server's no-store headers and the client-side
+// bfcache pageshow guard (public/js/main.js) don't cover, since neither one
+// runs for a response the Cache API hands back directly. Treated the same as
+// /api/ and /logout above: never read from or written to any SW cache.
+const ADMIN_PROTECTED_PATH_PREFIXES = [
+    '/dashboard', '/report', '/profile', '/password', '/print',
+    '/survey-records', '/offices', '/manage-admins', '/survey',
+    '/cluster', '/clusters', '/services', '/admins', '/settings',
+    '/period-covered', '/office-approvals', '/office-logout'
+];
+
+function isAdminProtectedPath(pathname) {
+    // Exact match or a real sub-path only — startsWith alone would also
+    // match unrelated public routes that share a prefix, e.g. '/survey'
+    // must not swallow '/survey-offline' (the unauthenticated offline entry
+    // point, precached above specifically so it works with zero prior login).
+    return ADMIN_PROTECTED_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'));
+}
 
 // Fetches and validates one CRITICAL_PRECACHE_URLS entry before storing it —
 // unlike plain cache.add(url), which stores whatever response it gets
@@ -168,6 +200,12 @@ self.addEventListener('fetch', (event) => {
     // — this removes the ambiguity outright instead of relying on that
     // guard continuing to hold.
     if (url.origin === self.location.origin && url.pathname === '/logout') {
+        return;
+    }
+
+    // Authenticated admin/office pages: never cache, never serve from cache.
+    // See ADMIN_PROTECTED_PATH_PREFIXES/isAdminProtectedPath above.
+    if (url.origin === self.location.origin && isAdminProtectedPath(url.pathname)) {
         return;
     }
 
