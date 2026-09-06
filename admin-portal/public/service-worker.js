@@ -24,8 +24,11 @@ importScripts('/js/offline-db.js');
 // activate's cache-name purge (see below) discards any authenticated admin
 // page snapshot a v23-or-earlier install may have already cached into
 // RUNTIME_CACHE before this bypass existed.
-const STATIC_CACHE = 'cspc-static-v24';
-const RUNTIME_CACHE = 'cspc-runtime-v24';
+// v25: client-survey.ejs mobile-responsiveness pass (SQD emoji hidden on
+// phones, Thank You page's Submit Again/Logout buttons resized) — bumped so
+// a v24-or-earlier install's precached copy of that file is discarded.
+const STATIC_CACHE = 'cspc-static-v25';
+const RUNTIME_CACHE = 'cspc-runtime-v25';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.

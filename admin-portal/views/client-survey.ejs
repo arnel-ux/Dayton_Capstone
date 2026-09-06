@@ -1027,25 +1027,31 @@
         .thank-you-actions { display: inline-flex; gap: 0.75rem; }
 
         @media (max-width: 576px) {
-            .thank-you-icon { width: 72px !important; height: 72px !important; margin-bottom: 1rem !important; }
-            .thank-you-icon .fs-1 { font-size: 1.75rem !important; }
-            #thank-you-page.py-5 { padding-top: 1.5rem !important; padding-bottom: 2rem !important; }
-            #thank-you-page h1 { font-size: 1.35rem; }
-            #thank-you-page p.text-secondary { font-size: 0.9rem; }
+            .thank-you-card { padding: 0 0.25rem; }
+            .thank-you-icon { width: 56px !important; height: 56px !important; margin-bottom: 0.75rem !important; }
+            .thank-you-icon .fs-1 { font-size: 1.4rem !important; }
+            #thank-you-page.py-5 { padding-top: 1.1rem !important; padding-bottom: 1.5rem !important; }
+            #thank-you-page h1 { font-size: 1.2rem; margin-bottom: 0.5rem !important; }
+            #thank-you-page p.text-secondary { font-size: 0.86rem; }
 
-            /* Full-width stacked buttons — the previous side-by-side px-5
-               (48px horizontal) padding on two inline buttons was already
-               tight on a narrow phone and is what let the (separately fixed,
-               see .btn-outline-primary above) invisible-border bug read as
-               floating, oddly-spaced text rather than a button row. Stacking
-               them full-width removes the width pressure entirely and makes
-               both read as unmistakably real, equally-weighted buttons. */
+            /* Stacked, but deliberately NOT full-viewport-width: the previous
+               pass fixed the invisible-border bug (see .btn-outline-primary
+               above) and made both buttons full-width, which over-corrected
+               into two ~48px-tall, edge-to-edge blocks that dominate the
+               card. Constraining to a centered max-width plus a real
+               (not desktop px-5/py-3) mobile padding/font-size override
+               keeps them clearly tappable without reading as giant. The
+               .thank-you-actions .btn selector (0,2,0 specificity) beats the
+               single-class px-5/py-3 Bootstrap utilities (0,1,0), both
+               !important, so it reliably wins here. */
             .thank-you-actions {
-                display: flex; flex-direction: column; width: 100%; gap: 0.7rem;
+                display: flex; flex-direction: column; align-items: center; width: 100%; gap: 0.6rem;
             }
             .thank-you-actions .btn {
-                width: 100%; margin: 0 !important; padding-top: 0.85rem !important; padding-bottom: 0.85rem !important;
-                min-height: 48px;
+                width: 100%; max-width: 260px; margin: 0 !important;
+                padding: 0.65rem 1rem !important;
+                font-size: 0.92rem !important;
+                min-height: 44px;
             }
         }
 
@@ -1977,6 +1983,15 @@
             #sqd-body .sqd-rating-option { padding: 0.7rem 0.85rem; min-height: 44px; gap: 0.6rem; }
             .sqd-rating-text { font-size: 0.84rem; }
             #sqd-body .radio-custom { width: 18px; height: 18px; }
+            /* Mobile rating rows rely on the text label ("Strongly Agree",
+               "N/A", ...) plus the checked/selected styling already applied
+               to the row — the decorative emoji face next to it is dropped
+               here so the option reads as clean text, not text+icon.
+               Desktop keeps its emoji (table header, untouched by this
+               breakpoint since the header is display:none below 700px
+               anyway). renderSQD() still emits the emoji in its own span
+               (see js) — this just hides it visually on phones. */
+            .sqd-emoji { display: none; }
         }
         @media (max-width: 400px) {
             #sqd-body td.text-start { font-size: 0.82rem; padding: 0.7rem 0.75rem; }
@@ -5328,16 +5343,19 @@ function renderSQD() {
     // already names the rating) but is what the mobile card layout below
     // shows next to the radio, since a stacked card has no header row to
     // read the label from.
+    // Emoji kept in its own <span> (not concatenated into the text) so
+    // mobile CSS can hide just the decorative face and keep the text label
+    // — see .sqd-emoji at <=576px below.
     const ratingLabels = {
-        5: `🤩 ${i18n[currentLang].th_sa}`, 4: `😊 ${i18n[currentLang].th_a}`,
-        3: `😐 ${i18n[currentLang].th_n}`, 2: `☹️ ${i18n[currentLang].th_d}`,
-        1: `😡 ${i18n[currentLang].th_sd}`, 0: 'N/A'
+        5: { emoji: '🤩', text: i18n[currentLang].th_sa }, 4: { emoji: '😊', text: i18n[currentLang].th_a },
+        3: { emoji: '😐', text: i18n[currentLang].th_n }, 2: { emoji: '☹️', text: i18n[currentLang].th_d },
+        1: { emoji: '😡', text: i18n[currentLang].th_sd }, 0: { emoji: '', text: 'N/A' }
     };
     const ratingCell = (index, value) => `
         <td class="text-center sqd-rating-cell">
             <label class="sqd-rating-option">
                 <input type="radio" name="sqd${index}" value="${value}" class="radio-custom">
-                <span class="sqd-rating-text">${ratingLabels[value]}</span>
+                <span class="sqd-rating-text">${ratingLabels[value].emoji ? `<span class="sqd-emoji">${ratingLabels[value].emoji}</span> ` : ''}${ratingLabels[value].text}</span>
             </label>
         </td>
     `;
