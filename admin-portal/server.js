@@ -18,6 +18,7 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const multer = require('multer');
+const { TOPIC_TAXONOMY, SENTIMENT_VALUES, splitTopic } = require('./shared/topicTaxonomy');
 const app = express();
 const port = 3000;
 
@@ -2347,6 +2348,16 @@ db.query(createClustersTableQuery, (err) => {
                         db.query("ALTER TABLE survey_responses ADD COLUMN client_submission_id VARCHAR(64) NULL", () => {
                             db.query("ALTER TABLE survey_responses ADD UNIQUE KEY unique_client_submission_id (client_submission_id)", () => {});
                         });
+
+                        // Admin manual-correction columns for the AI's sentiment/topic/subtopic
+                        // read on a comment (see /api/admin/survey-response/:id/analysis).
+                        // Deliberately separate from the existing `topic`/`sentiment` columns
+                        // (which stay the raw, untouched AI output) rather than overwriting them,
+                        // so an admin correction never destroys what the AI originally predicted.
+                        // NULL means "no admin override yet" — the AI value is used as-is.
+                        db.query("ALTER TABLE survey_responses ADD COLUMN topic_override VARCHAR(150) NULL", () => {});
+                        db.query("ALTER TABLE survey_responses ADD COLUMN subtopic_override VARCHAR(100) NULL", () => {});
+                        db.query("ALTER TABLE survey_responses ADD COLUMN sentiment_override VARCHAR(20) NULL", () => {});
 
                         // Pinakahuli ang Client Profiles
                         db.query(createClientProfilesTableQuery, (err) => {
@@ -5524,7 +5535,9 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
         }
         
         const recordsQuery = `
-            SELECT s.id, s.respondent_name, s.topic, s.sentiment, s.comments, s.created_at, DATE_FORMAT(s.created_at, '%M %d, %Y') as formatted_date, o.cluster_name, o.office_name,
+            SELECT s.id, s.respondent_name, s.topic, s.sentiment,
+                   s.topic_override, s.subtopic_override, s.sentiment_override,
+                   s.comments, s.created_at, DATE_FORMAT(s.created_at, '%M %d, %Y') as formatted_date, o.cluster_name, o.office_name,
                    DATE_FORMAT(p.office_visited_time, '%M %d, %Y %h:%i %p') as office_visited_time_formatted
             FROM survey_responses s
             JOIN offices o ON s.office_id = o.id
@@ -5546,9 +5559,17 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                     // bare `|| 'General Feedback'` fallback would show here.
                     const hasFeedback = row.topic !== null && row.topic !== undefined;
 
+                    // Effective = admin override when present, else the AI's
+                    // own value — an admin correction is reflected here
+                    // without ever touching the raw AI topic/sentiment
+                    // columns (see /api/admin/survey-response/:id/analysis).
+                    const effectiveTopic = hasFeedback ? (row.topic_override || row.topic) : null;
+                    const effectiveSentimentRaw = row.sentiment_override || (hasFeedback ? (row.sentiment || 'Neutral') : null);
+
                     let badgeClass = 'bg-general';
-                    const topicLower = (row.topic || '').toLowerCase();
+                    const topicLower = (effectiveTopic || '').toLowerCase();
                     if (!hasFeedback) badgeClass = 'bg-no-feedback';
+                    else if (topicLower.startsWith('unclassified')) badgeClass = 'bg-unclassified';
                     else if (topicLower.includes('restroom') || topicLower.includes('cleanliness')) badgeClass = 'bg-cr';
                     else if (topicLower.includes('aircon') || topicLower.includes('cooling')) badgeClass = 'bg-aircon';
                     else if (
@@ -5557,22 +5578,23 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                         topicLower.includes('power') || topicLower.includes('lighting')
                     ) badgeClass = 'bg-facility';
                     else if (topicLower.includes('staff') || topicLower.includes('fairness') || topicLower.includes('courtesy') || topicLower.includes('competence')) badgeClass = 'bg-staff';
+                    else if (topicLower.includes('transaction')) badgeClass = 'bg-transaction';
                     else if (topicLower.includes('payment') || topicLower.includes('fees')) badgeClass = 'bg-payment';
                     else if (topicLower.includes('document') || topicLower.includes('credential') || topicLower.includes('enrollment') || topicLower.includes('registration')) badgeClass = 'bg-docs';
                     else if (topicLower.includes('online') || topicLower.includes('portal') || topicLower.includes('internet')) badgeClass = 'bg-online';
                     else if (topicLower.includes('health') || topicLower.includes('medical') || topicLower.includes('guidance') || topicLower.includes('counseling') || topicLower.includes('scholarship')) badgeClass = 'bg-health';
 
-                    const sentimentValue = hasFeedback ? (row.sentiment || 'Neutral') : 'No feedback';
+                    const sentimentValue = hasFeedback ? effectiveSentimentRaw : 'No feedback';
                     const sentimentLower = sentimentValue.toLowerCase();
                     let sentimentClass = 'bg-sentiment-neutral';
                     if (!hasFeedback) sentimentClass = 'bg-sentiment-none';
                     else if (sentimentLower.includes('positive')) sentimentClass = 'bg-sentiment-positive';
                     else if (sentimentLower.includes('negative')) sentimentClass = 'bg-sentiment-negative';
 
-                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', officeName: row.office_name || 'N/A', topic: hasFeedback ? row.topic : 'No feedback', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: row.comments || 'No comments provided.', date: row.formatted_date, dateRaw: row.created_at ? new Date(row.created_at).toISOString() : '', officeVisitedTime: row.office_visited_time_formatted || 'N/A' });
+                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', officeName: row.office_name || 'N/A', topic: hasFeedback ? effectiveTopic : 'No feedback', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: row.comments || 'No comments provided.', date: row.formatted_date, dateRaw: row.created_at ? new Date(row.created_at).toISOString() : '', officeVisitedTime: row.office_visited_time_formatted || 'N/A' });
                 });
             }
-            res.render('survey-records', { recordsByCluster, clusterRatings });
+            res.render('survey-records', { recordsByCluster, clusterRatings, TOPIC_TAXONOMY, SENTIMENT_VALUES });
         });
     });
 });
@@ -5583,7 +5605,9 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
 // respondent's answers here.
 app.get('/api/admin/survey-response/:id', ensureAdminAuth, noCache, (req, res) => {
     const query = `
-        SELECT s.id, s.respondent_name, s.topic, s.sentiment, s.region, s.cc1, s.cc2, s.cc3,
+        SELECT s.id, s.respondent_name, s.topic, s.sentiment,
+               s.topic_override, s.subtopic_override, s.sentiment_override,
+               s.region, s.cc1, s.cc2, s.cc3,
                s.sqd0, s.sqd1, s.sqd2, s.sqd3, s.sqd4, s.sqd5, s.sqd6, s.sqd7, s.sqd8,
                s.comments, s.period_year_quarter, s.google_email,
                DATE_FORMAT(s.created_at, '%M %d, %Y %h:%i %p') AS formatted_date,
@@ -5602,8 +5626,60 @@ app.get('/api/admin/survey-response/:id', ensureAdminAuth, noCache, (req, res) =
             return res.status(500).json({ success: false, message: 'Server error loading this survey.' });
         }
         if (!rows || rows.length === 0) return res.status(404).json({ success: false, message: 'Survey not found.' });
-        res.json({ success: true, survey: rows[0] });
+        const survey = rows[0];
+        const hasFeedback = survey.topic !== null && survey.topic !== undefined;
+        const aiSplit = hasFeedback ? splitTopic(survey.topic) : { topic: null, subtopic: null };
+        survey.effectiveSentiment = survey.sentiment_override || (hasFeedback ? (survey.sentiment || 'Neutral') : null);
+        survey.effectiveTopic = survey.topic_override || aiSplit.topic;
+        survey.effectiveSubtopic = survey.subtopic_override || aiSplit.subtopic;
+        res.json({ success: true, survey });
     });
+});
+
+// Admin correction of the AI's sentiment/topic/subtopic read on one survey
+// response's comment (Survey Result modal "Edit Analysis"). The comment text
+// itself is never editable here or anywhere else in this route. Validated
+// against the same TOPIC_TAXONOMY the modal's dropdowns are built from, so an
+// impossible Topic/Subtopic combination can never reach the database — see
+// shared/topicTaxonomy.js. Stored in separate *_override columns (see the
+// add_survey_analysis_overrides migration) so the AI's original `topic`/
+// `sentiment` columns are never overwritten by a correction.
+app.patch('/api/admin/survey-response/:id/analysis', ensureAdminAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({ success: false, message: 'Invalid survey response id.' });
+    }
+
+    const { sentiment, topic, subtopic } = req.body || {};
+    if (!SENTIMENT_VALUES.includes(sentiment)) {
+        return res.status(400).json({ success: false, message: 'Invalid sentiment value.' });
+    }
+    const allowedSubtopics = TOPIC_TAXONOMY[topic];
+    if (!allowedSubtopics || !allowedSubtopics.includes(subtopic)) {
+        return res.status(400).json({ success: false, message: 'Invalid topic/subtopic combination.' });
+    }
+
+    try {
+        const result = await dbQuery(
+            'UPDATE survey_responses SET topic_override = ?, subtopic_override = ?, sentiment_override = ? WHERE id = ?',
+            [topic, subtopic, sentiment, id]
+        );
+        // affectedRows is 0 both when the id doesn't exist AND when the row
+        // exists but already holds these exact override values (MySQL only
+        // counts a row as "affected" if the UPDATE actually changes a
+        // value) — an existence check disambiguates the two instead of
+        // assuming the former.
+        if (!result || result.affectedRows === 0) {
+            const existing = await dbQuery('SELECT id FROM survey_responses WHERE id = ? LIMIT 1', [id]);
+            if (!existing || existing.length === 0) {
+                return res.status(404).json({ success: false, message: 'Survey response not found.' });
+            }
+        }
+        res.json({ success: true, effectiveSentiment: sentiment, effectiveTopic: topic, effectiveSubtopic: subtopic });
+    } catch (err) {
+        console.error('❌ [Survey Records] Failed to save admin analysis override:', err);
+        res.status(500).json({ success: false, message: 'Server error saving analysis.' });
+    }
 });
 
 // ==========================================

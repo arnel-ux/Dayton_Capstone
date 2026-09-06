@@ -94,7 +94,7 @@ def _matched_spans(lowered, keywords):
 # Split into topics specific enough that an admin reading a feedback report
 # can tell what a comment is about from its topic tag alone, without opening
 # the comment text. Grouped conceptually:
-#   - Speed/process:      Queueing and Waiting Time, Transaction Speed,
+#   - Speed/process:      Queueing and Waiting Time, Transaction,
 #                          Process Efficiency
 #   - Systems:             Ease of Use, Online System and Portal,
 #                          Internet Connection
@@ -156,7 +156,7 @@ def _matched_spans(lowered, keywords):
 # ---------------------------------------------------------------------------
 candidate_topics = [
     "Queueing and Waiting Time",
-    "Transaction Speed",
+    "Transaction",
     "Process Efficiency",
     "Ease of Use",
     "Online System and Portal",
@@ -398,6 +398,19 @@ TOPIC_KEYWORDS = {
         ("professor", 0.5), ("guro", 0.5), ("adviser", 0.5),
         ("ma'am", 0.5), ("sir", 0.5),
         "bastos", "hindi magalang", "suplado", "suplada", "masungit",
+        # Generic attitude/demeanor descriptors — added so a comment
+        # praising or criticizing "sila" (unspecified people) without naming
+        # a role or a specific complaint phrase still anchors this topic.
+        # Previously these words existed only in the SENTIMENT lexicon
+        # (FAST_POSITIVE_WORDS/FAST_NEGATIVE_WORDS), so e.g. "Mababait sila"
+        # scored zero topic signal at all and fell through to General
+        # Feedback despite being an unambiguous courtesy judgment. Bare
+        # "friendly" is safe to include here because the one collision risk
+        # ("user-friendly", an Ease of Use keyword) is handled by weighting
+        # that keyword up below instead of leaving this one out.
+        "mabait", "mababait", "magalang", "magagalang", "courteous",
+        "respectful", "approachable", "friendly",
+        "masungit", "masusungit", "rude", "disrespectful", "unfriendly",
         # Accommodation/assistance — previously entirely missing from this
         # topic (and from every other topic): "hindi maayos yung pag
         # accommodate ng staffs" had no topic anchor at all before this
@@ -501,11 +514,18 @@ TOPIC_KEYWORDS = {
         "contradicting information", "inconsistent information",
         "nagkontra-kontra",
     ],
-    # "transaction" is the unambiguous object-noun anchor for comments whose
-    # core driver is how fast the service itself moved (hal. "bilis ng
-    # transaction") — as opposed to "Queueing" (waiting for your turn) or
-    # "Process Efficiency" (how simple the steps were).
-    "Transaction Speed": [
+    # "transaction" is the unambiguous object-noun anchor for any comment
+    # about the transaction itself (as opposed to "Queueing" — waiting for
+    # your turn — or "Process Efficiency" — how simple the steps were).
+    # Renamed from "Transaction Speed" (2026-09): the old name baked in an
+    # assumption this topic was always about speed, which is exactly the bug
+    # that caused a plain "Hindi maayos yung transaction" (no speed/duration
+    # word anywhere) to get labeled a duration complaint. This topic anchor
+    # only ever decides that the comment is ABOUT the transaction — whether
+    # it's specifically about speed is now decided by _transaction_subtopic
+    # (see item_label_override) using explicit slow/fast evidence words, not
+    # by the mere presence of "transaction".
+    "Transaction": [
         "transaction", "pag-transact", "processing time", "release ng resulta",
         "ma-release", "na-release",
         # Bare "processing" (not just the "processing time" phrase) — e.g.
@@ -531,7 +551,15 @@ TOPIC_KEYWORDS = {
         ("proseso", 0.5), ("process", 0.5),
     ],
     "Ease of Use": [
-        "user-friendly", "user friendly", "madaling gamitin",
+        # Weighted above the default 1 (2026-09, alongside adding bare
+        # "friendly" as a Courtesy and Attitude anchor below) so a genuine
+        # "user-friendly" mention still wins outright — otherwise "friendly"
+        # matching inside "user-friendly" (there IS a word boundary at the
+        # hyphen) would tie Ease of Use against Courtesy and Attitude on a
+        # comment that says nothing else, and Courtesy would win the tie
+        # purely by being declared earlier in this dict.
+        ("user-friendly", 1.5), ("user friendly", 1.5),
+        "madaling gamitin",
         "mahirap gamitin", "nakakalito", "nalilito", "confusing na sundin",
     ],
     # Broad physical-facility fallback — only object nouns that don't already
@@ -634,12 +662,11 @@ TOPIC_ITEM_KEYWORDS = {
             "antay", "umaantay", "inaantay", "antayin",
         ]),
     ],
-    "Transaction Speed": [
-        ("Transaction Speed - Processing Time", [
-            "processing time", "release ng resulta", "ma-release", "na-release",
-        ]),
-        ("Transaction Speed - Transaction Duration", ["transaction", "pag-transact"]),
-    ],
+    # "Transaction" deliberately has NO entry here — its subtopic
+    # (General/Slow/Fast) is decided by the evidence-gated _transaction_subtopic
+    # function instead of generic keyword-count matching (see
+    # item_label_override's special case for this topic, and the module
+    # comment above _transaction_subtopic).
     "Process Efficiency": [
         ("Process Efficiency - Complexity/Red Tape", [
             "maraming hakbang", "madaming hakbang", "kumplikado",
@@ -944,6 +971,62 @@ TOPIC_ITEM_KEYWORDS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# TRANSACTION SUBTOPIC — evidence-gated, not keyword-count-based like every
+# other topic's item breakdown. The old "Transaction Speed" item logic fired
+# on the bare word "transaction" alone (its item list literally anchored
+# "Transaction Duration" on ["transaction", "pag-transact"] — the SAME words
+# that already decided the top-level topic), so any transaction comment with
+# no speed/duration language at all ("Hindi maayos yung transaction") still
+# got labeled a duration complaint. This function requires actual slow/fast
+# vocabulary — reusing the sentiment lexicon's own negation machinery
+# (_keyword_spans/_is_negated) so "Hindi mabilis ang transaction" doesn't
+# score Fast just because "mabilis" appears.
+# ---------------------------------------------------------------------------
+TRANSACTION_SLOW_WORDS = [
+    "slow", "mabagal", "matagal", "tagal", "bagal", "katagal", "antagal",
+    "too long", "took too long", "waiting too long", "delay", "delayed",
+    "naantala", "na-delay", "nadelay",
+]
+TRANSACTION_FAST_WORDS = [
+    "fast", "quick", "quickly", "mabilis", "efficient", "efficiently",
+    "agad", "instant", "agad natapos", "natapos agad",
+]
+
+
+def _transaction_subtopic(text):
+    """
+    "Transaction - General" (default — no speed/duration evidence either
+    way), "Transaction - Slow", or "Transaction - Fast". Scored per-clause
+    with the same negation lookback as lexicon_sentiment, so a negated slow
+    word counts as fast evidence and vice versa, instead of a negated
+    "mabilis" being ignored (and wrongly reading as neutral-toward-Fast) or
+    counted as Fast outright.
+    """
+    lowered = text.lower()
+    slow_count = 0
+    fast_count = 0
+    for clause in re.split(r'[.,;:!?]+', lowered):
+        clause = clause.strip()
+        if not clause:
+            continue
+        for s, _e in _keyword_spans(clause, TRANSACTION_SLOW_WORDS):
+            if _is_negated(clause, s):
+                fast_count += 1
+            else:
+                slow_count += 1
+        for s, _e in _keyword_spans(clause, TRANSACTION_FAST_WORDS):
+            if _is_negated(clause, s):
+                slow_count += 1
+            else:
+                fast_count += 1
+    if slow_count > fast_count:
+        return "Transaction - Slow"
+    if fast_count > slow_count:
+        return "Transaction - Fast"
+    return "Transaction - General"
+
+
 def item_label_override(topic, text):
     """
     Best-matching "{topic} - {item}" label for a topic that already resolved
@@ -951,7 +1034,13 @@ def item_label_override(topic, text):
     or the text doesn't name any specific item within it. Same
     count-then-order tie-break as keyword_topic_override, scoped to the
     winning topic's own item list.
+
+    "Transaction" is special-cased to always resolve via _transaction_subtopic
+    instead of the generic keyword-count path above — see that function's
+    docstring.
     """
+    if topic == "Transaction":
+        return _transaction_subtopic(text)
     groups = TOPIC_ITEM_KEYWORDS.get(topic)
     if not groups:
         return None
@@ -1011,7 +1100,7 @@ HYPOTHESIS_TEMPLATE = "This text is about {}."
 
 BROAD_TOPICS = [
     "Queueing and Waiting Time",
-    "Transaction Speed",
+    "Transaction",
     "Process Efficiency",
     "Ease of Use",
     "Online System and Portal",
@@ -1029,7 +1118,7 @@ BROAD_TOPICS = [
 
 BROAD_LABELS = {
     "Queueing and Waiting Time": "long queues or waiting in line",
-    "Transaction Speed": "the speed of the transaction itself",
+    "Transaction": "the speed of the transaction itself",
     "Process Efficiency": "the process being simple or complicated",
     "Ease of Use": "a system or form being easy or hard to use",
     "Online System and Portal": "an online portal, website, or system account",
@@ -1328,6 +1417,11 @@ FAST_NEGATIVE_WORDS = [
     "hindi inaasikaso", "di inaasikaso", "hindi pinapansin", "di pinapansin",
     "walang assistance", "walang tumutulong", "poor assistance", "poor service",
     "bad attitude",
+    # Courtesy/attitude morphological variants missing before this fix —
+    # "masungit"/"rude" were covered but not their reduplicated-plural form
+    # ("masusungit", used when describing a plural "sila") or these common
+    # English synonyms.
+    "masusungit", "disrespectful", "unfriendly",
 ]
 FAST_POSITIVE_WORDS = [
     "maganda", "magandang", "mabilis", "magaling", "mabait", "salamat",
@@ -1384,6 +1478,11 @@ FAST_POSITIVE_WORDS = [
     # negates via the existing negation mechanism, same reasoning as
     # inaasikaso/asikaso above. "kaaya-aya" (hyphenated) was already covered.
     "kaayang aya", "kaayang ayang", "kaaya ayang", "kaaya-ayang",
+    # Courtesy/attitude morphological variants missing before this fix —
+    # "mabait"/"magalang" were covered but not their reduplicated-plural form
+    # ("mababait"/"magagalang", used when describing a plural "sila") or
+    # these common English synonyms.
+    "mababait", "magagalang", "courteous", "respectful",
 ]
 
 # Filler phrases that read as flat/neutral on their own — matched only when
@@ -1508,54 +1607,161 @@ def lexicon_sentiment(text):
 
 
 def fast_sentiment(text):
+    if detect_junk_topic(text):
+        return "Neutral"
     return lexicon_sentiment(text) or "Neutral"
 
 
 # ---------------------------------------------------------------------------
-# JUNK-CONTENT DETECTION (pure numbers / symbols / emoji / keyboard-mash
-# gibberish) — a deterministic pre-check so these get a clear, honest
-# "Numbers"/"Random Letters" tag INSTANTLY, without ever spending a Gemini
-# call on content that has no real linguistic meaning to classify at all.
-# Added 2026-08-29 at the admin's request specifically to keep Gemini's
-# quota from being spent on junk, since these are unambiguous enough not to
-# need an LLM's judgment.
+# NO-MEANINGFUL-FEEDBACK DETECTION (pure numbers / symbols / emoji /
+# keyboard-mash gibberish / greeting-only text) — a deterministic pre-check
+# so these get a clear, honest "Unclassified - No Meaningful Feedback" tag
+# INSTANTLY, without ever spending a Gemini call on content that has no real
+# opinion to classify, and without it being counted as genuine (if generic)
+# "General Feedback" — that label means "meaningful feedback that doesn't fit
+# a more specific topic," not "the classifier didn't understand this."
 #
-# Deliberately conservative, scored over the WHOLE comment, not per-word —
-# admin explicitly flagged the risk of a real comment with a typo getting
-# misread as gibberish, so:
-#   - "Numbers" only fires when EVERY character is a digit or a common
-#     numeric separator (dash/space/parens/plus/dot) — a real sentence
-#     containing a phone number alongside actual words never matches this.
-#   - The gibberish check requires a long letter run (>=10) with a vowel
-#     ratio far below any real English/Tagalog/Taglish text (which almost
-#     always clears ~30%+ vowels). A whole real sentence's vowel ratio stays
-#     high even with one or two typos in it, since the ratio is computed
-#     over every letter in the comment — only content that is gibberish
-#     start-to-finish can pull the ratio this low. Short interjections
-#     ("hmp", "grr", "tsk") fall under the length-10 floor and are never
-#     touched.
-#   - Pure symbols/emoji/punctuation with literally zero letters or digits
-#     (e.g. "...", "-", "👍", "😑") also count as "Random Letters".
-# Anything with real letters that doesn't clear this bar (including a
-# comment that's mostly junk but has one real word, or short slang/typos)
-# returns None and falls through to the normal lexicon/Gemini path.
+# Originally added 2026-08-29 to catch pure numbers/symbols only (returning
+# separate "Numbers"/"Random Letters" labels). Extended 2026-09 after finding
+# it missed short gibberish ("XZ", "Hfrrg" — too few letters for the old
+# length>=10 floor) and longer keyboard-mash that still happens to contain a
+# few vowels ("hahhdahsdhas" — 12 letters, 3 vowels, a 25% ratio that clears
+# the old 15% floor despite having no plausible syllable structure), and
+# after finding greetings ("Hello po", "Hi") were sailing through entirely
+# (real words, real vowels — just not feedback about a service). All three
+# sub-cases are now unified under one label, since the admin-facing goal is
+# the same for all of them: "there is nothing here to classify."
+#
+# Order of checks:
+#   1. Known-vocabulary guard — if the comment already matches a topic or
+#      sentiment keyword, it is real content by definition and must never be
+#      flagged as junk on letter-shape alone (e.g. a bare "CR" comment is a
+#      genuine, if terse, Restroom-topic keyword — two letters, zero vowels).
+#   2. Numbers-only / symbols-only (unchanged from the original version).
+#   3. Greeting/courtesy-particle-only ("Hello po", "Hi", "Hi po", "po po").
+#   4. Whole-comment vowel-ratio check (original gibberish heuristic, kept as
+#      a secondary net for junk spread across multiple short tokens).
+#   5. Per-token check: every alphabetic token (len>=2) is "suspicious"
+#      (zero vowels, or len>=8 with a consonant run>=4 — no real
+#      English/Tagalog/Taglish word looks like that) and there's at least one
+#      such token.
+# Anything with a real recognizable word anywhere in it returns None and
+# falls through to the normal lexicon/Gemini path — this is deliberately
+# conservative in the direction of keeping real feedback classified normally
+# (see check #1 and the admin's original request that a real comment with a
+# typo must never be misread as gibberish).
 # ---------------------------------------------------------------------------
-JUNK_TOPIC_NUMBERS = "Numbers"
-JUNK_TOPIC_RANDOM = "Random Letters"
+UNCLASSIFIED_NO_FEEDBACK = "Unclassified - No Meaningful Feedback"
 
 _GIBBERISH_MIN_LETTERS = 10
 _GIBBERISH_MAX_VOWEL_RATIO = 0.15
 _VOWELS = set("aeiou")
 
+_SUSPICIOUS_TOKEN_MIN_LEN = 8
+_SUSPICIOUS_TOKEN_MIN_CONSONANT_RUN = 4
+
+GREETING_WORDS = {"hello", "hi", "hey", "yo", "kumusta", "kamusta"}
+GREETING_PHRASES = [
+    "good morning", "good afternoon", "good evening", "good day",
+    "magandang umaga", "magandang tanghali", "magandang hapon",
+    "magandang gabi", "magandang araw",
+]
+COURTESY_PARTICLES = {"po", "opo", "naman", "na", "ba", "lang", "sana", "nga"}
+
+
+def _collect_known_vocab_tokens():
+    """
+    Every single-word (no-space) token already used anywhere in the topic or
+    sentiment lexicons, lowercased. Used as a safety net so a short, real
+    keyword (e.g. "cr", "id") is never treated as gibberish purely because it
+    happens to have an unusual letter shape.
+    """
+    tokens = set()
+
+    def add_from(keyword_list):
+        for entry in keyword_list:
+            kw = entry[0] if isinstance(entry, tuple) else entry
+            for word in re.findall(r"[a-z]+", kw.lower()):
+                tokens.add(word)
+
+    for keywords in TOPIC_KEYWORDS.values():
+        add_from(keywords)
+    for groups in TOPIC_ITEM_KEYWORDS.values():
+        for _label, keywords in groups:
+            add_from(keywords)
+    add_from(FAST_POSITIVE_WORDS)
+    add_from(FAST_NEGATIVE_WORDS)
+    return tokens
+
+
+_KNOWN_VOCAB_TOKENS = _collect_known_vocab_tokens()
+
+
+def _is_greeting_or_particle_only(stripped_text):
+    """
+    True only if the text contains at least one real greeting (word or
+    phrase) AND nothing besides that greeting and courtesy particles
+    ("po", "naman", ...) — e.g. "Hello po", "Hi", "Good morning po". A
+    comment with no greeting at all (even if every word happens to be a bare
+    particle, or a real greeting followed by real feedback) returns False.
+    """
+    lowered = stripped_text.lower()
+    found_greeting = False
+    for phrase in GREETING_PHRASES:
+        replaced = re.sub(_kw_pattern(phrase), ' ', lowered)
+        if replaced != lowered:
+            found_greeting = True
+        lowered = replaced
+
+    remaining_words = []
+    for word in re.findall(r"[a-z']+", lowered):
+        if word in GREETING_WORDS:
+            found_greeting = True
+        elif word not in COURTESY_PARTICLES:
+            remaining_words.append(word)
+
+    return found_greeting and not remaining_words
+
+
+def _max_consonant_run(lowered_letters):
+    best = current = 0
+    for ch in lowered_letters:
+        if ch in _VOWELS:
+            current = 0
+        else:
+            current += 1
+            best = max(best, current)
+    return best
+
+
+def _is_suspicious_token(token):
+    if token.lower() in _KNOWN_VOCAB_TOKENS:
+        return False
+    letters = [c for c in token if c.isalpha() and c.isascii()]
+    if len(letters) < 2:
+        return False
+    lowered = "".join(letters).lower()
+    vowel_count = sum(1 for c in lowered if c in _VOWELS)
+    if vowel_count == 0:
+        return True
+    if len(lowered) >= _SUSPICIOUS_TOKEN_MIN_LEN and _max_consonant_run(lowered) >= _SUSPICIOUS_TOKEN_MIN_CONSONANT_RUN:
+        return True
+    return False
+
 
 def detect_junk_topic(text):
     """
-    Returns "Numbers", "Random Letters", or None (not junk — classify
-    normally). Called before the keyword lexicon and before Gemini.
+    Returns UNCLASSIFIED_NO_FEEDBACK, or None (not junk — classify normally).
+    Called before the keyword lexicon and before Gemini.
     """
     stripped = text.strip()
     if not stripped:
         return None  # blank comments are handled separately upstream
+
+    # Real, recognized content always wins outright — never flagged as junk
+    # on letter-shape alone (see module comment, check #1).
+    if keyword_topic_override(stripped) or lexicon_sentiment(stripped):
+        return None
 
     letters = [c for c in stripped if c.isalpha() and c.isascii()]
     digits = [c for c in stripped if c.isdigit()]
@@ -1563,20 +1769,30 @@ def detect_junk_topic(text):
     if digits and not letters:
         residual = re.sub(r'[\d\s\-\(\)\+\.]', '', stripped)
         if not residual:
-            return JUNK_TOPIC_NUMBERS
+            return UNCLASSIFIED_NO_FEEDBACK
 
     if not letters and not digits:
         # Something is there (checked non-empty above) but it's not a
         # letter or a digit — pure emoji/symbols/punctuation.
-        return JUNK_TOPIC_RANDOM
+        return UNCLASSIFIED_NO_FEEDBACK
+
+    if letters and _is_greeting_or_particle_only(stripped):
+        return UNCLASSIFIED_NO_FEEDBACK
 
     if len(letters) >= _GIBBERISH_MIN_LETTERS:
         vowel_count = sum(1 for c in letters if c.lower() in _VOWELS)
         if vowel_count / len(letters) < _GIBBERISH_MAX_VOWEL_RATIO:
-            return JUNK_TOPIC_RANDOM
+            return UNCLASSIFIED_NO_FEEDBACK
+
+    alpha_tokens = [t for t in re.findall(r"[A-Za-z]+", stripped) if len(t) >= 2]
+    if alpha_tokens and all(_is_suspicious_token(t) for t in alpha_tokens):
+        return UNCLASSIFIED_NO_FEEDBACK
 
     return None
 
 
 def fast_topic(text):
+    junk = detect_junk_topic(text)
+    if junk:
+        return junk
     return keyword_topic_override(text) or GENERAL_FEEDBACK

@@ -7,7 +7,7 @@ from topic_common import fast_topic, fast_sentiment, is_no_feedback
 
 CASES = [
     # (comment, expected_topic_substring or None, expected_sentiment or None)
-    ("antagal ng transaction", "Transaction Speed", "Negative"),
+    ("antagal ng transaction", "Transaction", "Negative"),
     ("hindi maayos yung pag accommodate ng staffs", "Courtesy and Attitude - Accommodation/Assistance", "Negative"),
     ("Mainit sa office", "Aircon and Cooling", "Negative"),
     # 2026-09 semantic-audit change: appearance ("kaaya-aya" family) no
@@ -18,7 +18,7 @@ CASES = [
     ("Napaka baho ng cr sa office", "Cleanliness - Restroom/CR", "Negative"),
     ("Madumi ang laboratory", "Cleanliness - Laboratory", "Negative"),
     ("Malinis ang CR", "Cleanliness - Restroom/CR", "Positive"),
-    ("Mabilis ang transaction", "Transaction Speed", "Positive"),
+    ("Mabilis ang transaction", "Transaction", "Positive"),
     ("Mabait at accommodating yung staff", "Courtesy and Attitude", "Positive"),
     ("hindi malinis ang office", "Cleanliness - Office", "Negative"),
     ("sobrang init sa laboratory", "Aircon and Cooling", "Negative"),
@@ -27,11 +27,11 @@ CASES = [
     ("Ambaho naman ng restroom.", "Cleanliness", "Negative"),
     ("Marumi yung CR.", "Cleanliness - Restroom/CR", "Negative"),
     ("Ang init sa registrar office.", "Aircon and Cooling", "Negative"),
-    ("Sobrang bagal ng processing.", "Transaction Speed", "Negative"),
+    ("Sobrang bagal ng processing.", "Transaction", "Negative"),
     ("Hindi inaasikaso ng staff.", "Courtesy and Attitude - Accommodation/Assistance", "Negative"),
     ("Hindi helpful yung employee.", "Courtesy and Attitude", "Negative"),
     ("Napakalinis ng laboratory.", "Cleanliness - Laboratory", "Positive"),
-    ("Mabilis yung transaction.", "Transaction Speed", "Positive"),
+    ("Mabilis yung transaction.", "Transaction", "Positive"),
     ("maayos", None, "Positive"),
     ("hindi maayos", None, "Negative"),
     ("malinis", "Cleanliness", "Positive"),

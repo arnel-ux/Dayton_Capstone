@@ -60,9 +60,9 @@ SENTIMENTS = ["Positive", "Negative", "Neutral"]
 # is meant to cover. Deliberately short — Gemini doesn't need the Taglish
 # keyword examples the zero-shot model needed, it can read the sentence.
 TOPIC_DESCRIPTIONS = {
-    "Queueing and Waiting Time": "Waiting in line or for a turn to be served, BEFORE being attended to. Not about how fast things went once it was your turn (that's Transaction Speed).",
-    "Transaction Speed": "How fast a transaction moved once it started/was your turn — e.g. how quickly a result, receipt, or approval came out. Not about waiting in line beforehand (Queueing) and not about the number of steps involved (Process Efficiency).",
-    "Process Efficiency": "Whether the STEPS of a process were simple or needlessly complicated — too many steps, redundant requirements, being sent back and forth between offices/windows for the SAME transaction. Not about how clearly things were explained (Communication and Information) and not about raw speed (Transaction Speed).",
+    "Queueing and Waiting Time": "Waiting in line or for a turn to be served, BEFORE being attended to. Not about how fast things went once it was your turn (that's Transaction).",
+    "Transaction": "The transaction itself, once it started/was your turn. Pick the plain \"Transaction\" label unless the comment gives explicit speed/duration evidence (slow/fast, took long/quick, delayed/efficient, etc.) — in that case pick the matching \"Transaction - Slow\" or \"Transaction - Fast\" sub-item instead. Do NOT pick a speed sub-item just because the word \"transaction\" appears with no speed language (e.g. \"the transaction wasn't handled properly\" names no speed evidence at all — use plain \"Transaction\"). Not about waiting in line beforehand (Queueing) and not about the number of steps involved (Process Efficiency).",
+    "Process Efficiency": "Whether the STEPS of a process were simple or needlessly complicated — too many steps, redundant requirements, being sent back and forth between offices/windows for the SAME transaction. Not about how clearly things were explained (Communication and Information) and not about raw speed (Transaction).",
     "Ease of Use": "Whether a system, form, or portal's INTERFACE/DESIGN itself was easy or confusing to navigate. Not about the overall process having too many steps (Process Efficiency) and not about staff giving confusing verbal information (Communication and Information).",
     "Online System and Portal": "An online portal, website, account, or login system not working, glitching, or losing data.",
     "Internet Connection": "Internet or wifi connectivity/signal problems.",
@@ -100,7 +100,13 @@ def _item_hint(keywords):
     return ", ".join(examples)
 
 
-ALL_TOPICS = candidate_topics + [GENERAL_FEEDBACK] + [
+# "Transaction" is deliberately NOT in TOPIC_ITEM_KEYWORDS (see topic_common's
+# _transaction_subtopic docstring — its subtopic is evidence-gated, not
+# keyword-count-based), so its three sub-items are listed here by hand
+# instead of being picked up from that dict like every other topic's items.
+TRANSACTION_SUBTOPICS = ["Transaction - General", "Transaction - Slow", "Transaction - Fast"]
+
+ALL_TOPICS = candidate_topics + [GENERAL_FEEDBACK] + TRANSACTION_SUBTOPICS + [
     label for items in TOPIC_ITEM_KEYWORDS.values() for label, _ in items
 ]
 
@@ -118,6 +124,11 @@ def _build_topic_guide():
     lines = []
     for t in candidate_topics + [GENERAL_FEEDBACK]:
         lines.append(f"- {t}: {TOPIC_DESCRIPTIONS[t]}")
+        if t == "Transaction":
+            lines.append("    - Transaction - General (transaction feedback with no explicit slow/fast evidence)")
+            lines.append("    - Transaction - Slow (explicit slow, delay, long-duration evidence)")
+            lines.append("    - Transaction - Fast (explicit fast, quick, efficient evidence)")
+            continue
         items = TOPIC_ITEM_KEYWORDS.get(t)
         if items:
             for label, keywords in items:

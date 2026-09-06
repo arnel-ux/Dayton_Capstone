@@ -254,6 +254,8 @@
         .bg-docs { background-color: #dbeafe; color: #2563eb; }
         .bg-online { background-color: #cffafe; color: #0891b2; }
         .bg-health { background-color: #fce7f3; color: #db2777; }
+        .bg-transaction { background-color: #ffedd5; color: #c2410c; }
+        .bg-unclassified { background-color: #f3f4f6; color: #6b7280; border: 1px dashed #d1d5db; }
         /* Blank/"N/A"-style comment — genuinely nothing to classify, distinct
            from a real "General Feedback" comment (see isNoFeedbackComment
            in server.js). Dashed border marks it visually as "not a real
@@ -452,6 +454,8 @@
             .search-bar { max-width: 100%; }
             .result-badge { margin-left: 0; }
             .result-detail-head { flex-wrap: wrap; }
+            #analysisEditActions { flex-direction: column-reverse; }
+            #analysisEditActions button { width: 100%; }
         }
 
         @media print {
@@ -547,7 +551,7 @@
                                     </thead>
                                     <tbody>
                                         <% recordsByCluster[cluster].forEach(record => { %>
-                                            <tr class="record-row" data-name="<%= record.name %>" data-date="<%= record.dateRaw %>" data-sentiment="<%= record.sentimentClass.replace('bg-sentiment-', '') %>">
+                                            <tr class="record-row" data-id="<%= record.id %>" data-name="<%= record.name %>" data-date="<%= record.dateRaw %>" data-sentiment="<%= record.sentimentClass.replace('bg-sentiment-', '') %>">
                                                 <td class="office-name-cell text-muted small" data-full="<%= record.officeName %>" title="<%= record.officeName %>" data-bs-toggle="tooltip" data-bs-placement="top"><span class="cell-truncate"><%= record.officeName %></span></td>
                                                 <td class="name-cell" title="<%= record.name %>" data-bs-toggle="tooltip" data-bs-placement="top"><span class="respondent-name cell-truncate"><%= record.name %></span></td>
                                                 <td class="text-center text-muted small text-nowrap" title="<%= record.officeVisitedTime %>" data-bs-toggle="tooltip" data-bs-placement="top"><%= record.officeVisitedTime %></td>
@@ -741,11 +745,165 @@
         "SQD8. I got what I needed from the government office."
     ];
     const SQD_RATING_LABELS = { '5': 'Strongly Agree', '4': 'Agree', '3': 'Neutral', '2': 'Disagree', '1': 'Strongly Disagree' };
+    const TOPIC_TAXONOMY = <%- JSON.stringify(TOPIC_TAXONOMY) %>;
+    const SENTIMENT_VALUES = <%- JSON.stringify(SENTIMENT_VALUES) %>;
 
     function escapeHtml(str) {
         const div = document.createElement('div');
         div.textContent = str == null ? '' : String(str);
         return div.innerHTML;
+    }
+
+    // --- AI Analysis view/edit (Survey Result modal) --------------------------
+    // Authoritative "currently saved/effective" analysis for whichever survey
+    // response the modal has open — Cancel and every re-open of "Edit Analysis"
+    // reads from this, never from whatever happens to still be sitting in the
+    // <select> elements, so an unsaved edit can never leak into the next edit
+    // session.
+    let currentAnalysis = null;
+
+    function analysisViewItem(label, valueHtml) {
+        return `
+            <div class="result-item">
+                <div class="label">${label}</div>
+                <div class="value">${valueHtml}</div>
+            </div>
+        `;
+    }
+
+    function sentimentBadgeClass(sentiment) {
+        const lower = (sentiment || '').toLowerCase();
+        if (lower.includes('positive')) return 'bg-sentiment-positive';
+        if (lower.includes('negative')) return 'bg-sentiment-negative';
+        return 'bg-sentiment-neutral';
+    }
+
+    function renderSentimentBadge(sentiment) {
+        if (!sentiment) return '<span class="sentiment-badge bg-sentiment-none">N/A</span>';
+        return `<span class="sentiment-badge ${sentimentBadgeClass(sentiment)}">${escapeHtml(sentiment)}</span>`;
+    }
+
+    // Best-effort mirror of server.js's /survey-records badge-color rules, for
+    // instant visual feedback on the row right after a save — the next full
+    // page load/refresh always re-derives the authoritative class from the
+    // server, this is cosmetic only.
+    function topicBadgeClass(topic) {
+        const lower = (topic || '').toLowerCase();
+        if (lower.startsWith('unclassified')) return 'bg-unclassified';
+        if (lower.includes('restroom') || lower.includes('cleanliness')) return 'bg-cr';
+        if (lower.includes('aircon') || lower.includes('cooling')) return 'bg-aircon';
+        if (lower.includes('facility') || lower.includes('equipment') || lower.includes('furniture') || lower.includes('seating') || lower.includes('power') || lower.includes('lighting')) return 'bg-facility';
+        if (lower.includes('staff') || lower.includes('fairness') || lower.includes('courtesy') || lower.includes('competence')) return 'bg-staff';
+        if (lower.includes('transaction')) return 'bg-transaction';
+        if (lower.includes('payment') || lower.includes('fees')) return 'bg-payment';
+        if (lower.includes('document') || lower.includes('credential') || lower.includes('enrollment') || lower.includes('registration')) return 'bg-docs';
+        if (lower.includes('online') || lower.includes('portal') || lower.includes('internet')) return 'bg-online';
+        if (lower.includes('health') || lower.includes('medical') || lower.includes('guidance') || lower.includes('counseling') || lower.includes('scholarship')) return 'bg-health';
+        return 'bg-general';
+    }
+
+    function populateSelect(selectEl, options, selectedValue) {
+        selectEl.innerHTML = options.map(opt => `<option value="${escapeHtml(opt)}">${escapeHtml(opt)}</option>`).join('');
+        if (selectedValue && options.includes(selectedValue)) selectEl.value = selectedValue;
+    }
+
+    // Resets the three <select> elements to exactly currentAnalysis — called
+    // every time "Edit Analysis" is opened, so a previously-cancelled,
+    // never-saved edit can never resurface.
+    function resetAnalysisEditor() {
+        const sentimentSelect = document.getElementById('analysisSentimentSelect');
+        const topicSelect = document.getElementById('analysisTopicSelect');
+        const subtopicSelect = document.getElementById('analysisSubtopicSelect');
+        if (!sentimentSelect || !topicSelect || !subtopicSelect || !currentAnalysis) return;
+
+        populateSelect(sentimentSelect, SENTIMENT_VALUES, currentAnalysis.sentiment);
+        populateSelect(topicSelect, Object.keys(TOPIC_TAXONOMY), currentAnalysis.topic);
+        populateSelect(subtopicSelect, TOPIC_TAXONOMY[topicSelect.value] || [], currentAnalysis.subtopic);
+
+        topicSelect.onchange = () => {
+            populateSelect(subtopicSelect, TOPIC_TAXONOMY[topicSelect.value] || [], null);
+        };
+    }
+
+    function initAnalysisEditor(s) {
+        currentAnalysis = {
+            sentiment: s.effectiveSentiment,
+            topic: s.effectiveTopic,
+            subtopic: s.effectiveSubtopic,
+        };
+        toggleAnalysisEdit(false);
+    }
+
+    function toggleAnalysisEdit(show) {
+        const viewMode = document.getElementById('analysisViewMode');
+        const editMode = document.getElementById('analysisEditMode');
+        const editActions = document.getElementById('analysisEditActions');
+        const editBtn = document.getElementById('analysisEditBtn');
+        if (!viewMode || !editMode) return;
+        if (show) resetAnalysisEditor();
+        viewMode.style.display = show ? 'none' : '';
+        editMode.style.display = show ? '' : 'none';
+        editActions.style.display = show ? 'flex' : 'none';
+        editBtn.style.display = show ? 'none' : '';
+    }
+
+    function saveAnalysis(id) {
+        const sentimentSelect = document.getElementById('analysisSentimentSelect');
+        const topicSelect = document.getElementById('analysisTopicSelect');
+        const subtopicSelect = document.getElementById('analysisSubtopicSelect');
+        const saveBtn = document.getElementById('analysisSaveBtn');
+        const payload = {
+            sentiment: sentimentSelect.value,
+            topic: topicSelect.value,
+            subtopic: subtopicSelect.value,
+        };
+
+        saveBtn.disabled = true;
+        fetch('/api/admin/survey-response/' + encodeURIComponent(id) + '/analysis', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        })
+            .then(res => res.json().then(data => ({ ok: res.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok || !data.success) throw new Error(data.message || 'Failed to save analysis.');
+
+                currentAnalysis = { ...payload };
+
+                document.getElementById('analysisViewMode').innerHTML =
+                    analysisViewItem('Sentiment', renderSentimentBadge(payload.sentiment)) +
+                    analysisViewItem('Topic', escapeHtml(payload.topic)) +
+                    analysisViewItem('Subtopic', escapeHtml(payload.subtopic));
+
+                toggleAnalysisEdit(false);
+                AppAlert.toast('success', 'Analysis updated successfully.');
+
+                // Reflect the correction in the underlying table row immediately,
+                // without a full page reload — the next real refresh re-derives
+                // this from the server the same way.
+                const row = document.querySelector(`.record-row[data-id="${id}"]`);
+                if (row) {
+                    const topicBadge = row.querySelector('.topic-badge');
+                    const sentimentBadge = row.querySelector('.sentiment-badge');
+                    if (topicBadge) {
+                        topicBadge.textContent = payload.topic;
+                        topicBadge.title = payload.topic;
+                        topicBadge.className = 'topic-badge ' + topicBadgeClass(payload.topic);
+                    }
+                    if (sentimentBadge) {
+                        sentimentBadge.textContent = payload.sentiment;
+                        sentimentBadge.className = 'sentiment-badge ' + sentimentBadgeClass(payload.sentiment);
+                    }
+                    row.dataset.sentiment = payload.sentiment.toLowerCase();
+                }
+            })
+            .catch(err => {
+                console.error('Error saving analysis:', err);
+                AppAlert.toast('error', err.message || 'Could not save this analysis. Please try again.');
+            })
+            .finally(() => {
+                saveBtn.disabled = false;
+            });
     }
 
     function openViewResult(id) {
@@ -828,14 +986,49 @@
                         ${sqdRows}
                     </div>
 
-                    <div class="result-section mb-0">
+                    <div class="result-section">
                         <div class="result-section-header"><i class="fas fa-comment-dots"></i> Suggestions / Comments</div>
                         <div class="result-item">
                             <div class="value">${escapeHtml(s.comments && s.comments !== 'N/A' ? s.comments : 'No comments provided.')}</div>
                         </div>
                     </div>
+
+                    <div class="result-section mb-0" id="analysisSection">
+                        <div class="result-section-header d-flex align-items-center justify-content-between">
+                            <span><i class="fas fa-robot"></i> AI Analysis</span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="analysisEditBtn" onclick="toggleAnalysisEdit(true)">
+                                <i class="fas fa-pen me-1"></i> Edit Analysis
+                            </button>
+                        </div>
+
+                        <div id="analysisViewMode" class="result-grid">
+                            ${analysisViewItem('Sentiment', renderSentimentBadge(s.effectiveSentiment))}
+                            ${ccItem('Topic', s.effectiveTopic || 'N/A')}
+                            ${ccItem('Subtopic', s.effectiveSubtopic || 'N/A')}
+                        </div>
+
+                        <div id="analysisEditMode" class="result-grid" style="display:none;">
+                            <div class="result-item">
+                                <div class="label">Sentiment</div>
+                                <select class="form-select form-select-sm" id="analysisSentimentSelect"></select>
+                            </div>
+                            <div class="result-item">
+                                <div class="label">Topic</div>
+                                <select class="form-select form-select-sm" id="analysisTopicSelect"></select>
+                            </div>
+                            <div class="result-item">
+                                <div class="label">Subtopic</div>
+                                <select class="form-select form-select-sm" id="analysisSubtopicSelect"></select>
+                            </div>
+                        </div>
+                        <div id="analysisEditActions" class="d-flex gap-2 justify-content-end mt-3" style="display:none;">
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="toggleAnalysisEdit(false)">Cancel</button>
+                            <button type="button" class="btn btn-sm btn-primary" id="analysisSaveBtn" onclick="saveAnalysis(${s.id})">Save Changes</button>
+                        </div>
+                    </div>
                 `;
                 footerEl.style.display = 'flex';
+                initAnalysisEditor(s);
             })
             .catch(err => {
                 console.error('Error loading survey result:', err);

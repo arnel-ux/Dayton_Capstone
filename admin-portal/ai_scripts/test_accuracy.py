@@ -63,7 +63,7 @@ CASES = [
     ("Hindi marunong sumagot yung clerk sa tanong ko.", "Negative", "Staff Competence and Knowledge - Knowledge/Answer Accuracy", None),
     ("Walang palakasan dito, pantay-pantay lahat ng estudyante.", "Positive", "Fairness and Equal Treatment - Favoritism", None),
     ("Sobrang mahal ng bayad para sa TOR.", "Negative", "Payment and Fees - Fees", None),
-    ("Mabilis ang pag-release ng resulta, hassle-free.", "Positive", "Transaction Speed - Processing Time", None),
+    ("Mabilis ang pag-release ng resulta, hassle-free.", "Positive", "Transaction - Fast", None),
     ("Maraming hakbang bago matapos ang proseso, kumplikado.", "Negative", "Process Efficiency - Complexity/Red Tape", None),
     ("Isang beses lang pumunta, tapos na agad, one-stop shop talaga.", "Positive", "Process Efficiency - Simplicity", None),
     ("Walang paalam sa akin tungkol sa schedule ng enrollment.", "Negative", "Enrollment and Registration - Enrollment/Registration Process", None),
@@ -76,7 +76,7 @@ CASES = [
     ("The staff was very rude and unprofessional at the counter.", "Negative", "Courtesy and Attitude - Staff/Employee", None),
     ("Great and friendly service, the receptionist was very helpful.", "Positive", "Courtesy and Attitude - Front Desk/Clerk", None),
     ("The website is confusing and hard to use.", "Negative", "Online System and Portal - Website", None),
-    ("Fast transaction, excellent process overall.", "Positive", "Transaction Speed - Transaction Duration", None),
+    ("Fast transaction, excellent process overall.", "Positive", "Transaction - Fast", None),
     ("The aircon was broken, it was too hot inside.", "Negative", "Aircon and Cooling - Air Conditioning Unit", None),
     ("No wifi in the building, very frustrating.", "Negative", "Internet Connection - Wifi", None),
     ("Good moral certificate ko medyo natagalan pero nakuha rin.", "Neutral", "Document and Credential Processing - Good Moral Certificate", None),
@@ -157,7 +157,7 @@ CASES = [
     # Courtesy and Attitude comment above).
     ("Kahit medyo maraming tao, hindi naman ako natagalan, bigla na lang may lumapit sa akin.", "Negative", "General Feedback", None),
     ("Yung kausap ko parang gustong-gusto na akong umalis, halatang ayaw makipag-usap.", "Negative", "Courtesy and Attitude", None),
-    ("Nagulat ako sa bilis, akala ko matatagalan pa ako pero bago pa man ako maupo tapos na agad.", "Positive", "Transaction Speed - Transaction Duration", None),
+    ("Nagulat ako sa bilis, akala ko matatagalan pa ako pero bago pa man ako maupo tapos na agad.", "Positive", "Transaction - Fast", None),
     ("Sa dami ng beses kong pumunta, wala pa rin akong maayos na sagot kung ano talaga ang kailangan ko.", "Positive", "Communication and Information", None),
     ("Kung tutuusin, di ko naramdaman kahit anong pagbabago mula noong huli akong pumunta rito.", "Neutral", "General Feedback", None),
     ("Sobrang lambing at pasensya ng nurse habang tinuturuan niya ako kung paano gagawin yung sunod na hakbang.", "Positive", "Health and Medical Services - Consultation/Check-up", None),
@@ -189,7 +189,7 @@ CASES = [
     ("Sobrang thankful ako kasi even though marami akong tanong, hindi sila nagsawa magpaliwanag paulit-ulit.", "Negative", "Communication and Information", None),
     ("Feeling ko parang naglalaro lang sila ng passing the buck, walang gustong mag-take responsibility.", "Negative", "Process Efficiency", None),
     ("Di ko rin masabi kung dapat ba akong ma-frustrate, medyo mixed pa rin yung take ko sa buong bagay.", "Neutral", "General Feedback", None),
-    ("Grabe sobrang bilis, akala ko matatagalan pa ako pero deretso lang pala, super efficient talaga sila.", "Positive", "Transaction Speed", None),
+    ("Grabe sobrang bilis, akala ko matatagalan pa ako pero deretso lang pala, super efficient talaga sila.", "Positive", "Transaction - Fast", None),
     ("Parang wala silang plano, sunud-sunod na miscommunication ang nangyari sa akin buong araw.", "Negative", "Communication and Information", None),
     ("Yung nag-assist samin sobrang the sweetest, kahit pagod na siya pinilit pa rin niyang tapusin lahat.", "Positive", "Courtesy and Attitude", None),
     ("Kind of a letdown honestly, expecting ako ng mas maayos given lahat ng sinabi nila before.", "Positive", "General Feedback", None),
@@ -232,6 +232,42 @@ OFFICE_HINT_CASE = (
     "Positive", "General Feedback", "Health Services",
 )
 CASES.append(OFFICE_HINT_CASE)
+
+# =============================================================================
+# REQUIRED REGRESSION CASES (2026-09 no-meaningful-feedback / Transaction /
+# Courtesy classification fixes). All 15 are lexicon/junk-hit — zero Gemini
+# calls needed to resolve any of them, so this block never depends on network
+# access or a configured GEMINI_API_KEY.
+# =============================================================================
+CASES += [
+    # Gibberish / non-feedback — must NOT become "General Feedback".
+    ("XZ", "Neutral", "Unclassified - No Meaningful Feedback", None),
+    ("hahhdahsdhas", "Neutral", "Unclassified - No Meaningful Feedback", None),
+    ("Hfrrg", "Neutral", "Unclassified - No Meaningful Feedback", None),
+    # Greetings — valid text, but not service feedback.
+    ("Hello po", "Neutral", "Unclassified - No Meaningful Feedback", None),
+    ("Hi", "Neutral", "Unclassified - No Meaningful Feedback", None),
+    ("Hi po", "Neutral", "Unclassified - No Meaningful Feedback", None),
+    # Transaction — General only when no speed/duration evidence is present.
+    ("Hindi maayos yung transaction", "Negative", "Transaction - General", None),
+    ("Maayos yung transaction", "Positive", "Transaction - General", None),
+    ("Mabagal yung transaction", "Negative", "Transaction - Slow", None),
+    ("Matagal yung transaction", "Negative", "Transaction - Slow", None),
+    ("Mabilis yung transaction", "Positive", "Transaction - Fast", None),
+    # Courtesy and Attitude — generic attitude judgment about unspecified
+    # people ("sila") with no role noun or specific complaint phrase.
+    ("Mababait sila", "Positive", "Courtesy and Attitude", None),
+    ("Masungit sila", "Negative", "Courtesy and Attitude", None),
+    ("Magalang sila", "Positive", "Courtesy and Attitude", None),
+    ("Hindi mabait sila", "Negative", "Courtesy and Attitude", None),
+]
+
+# Short, plainly meaningful comments that must NOT be swept up by the
+# strengthened gibberish/no-meaningful-feedback detector above (B3 in the
+# task: don't overfit the detector to reject short real feedback).
+NOT_GIBBERISH_CASES = [
+    "Good", "Slow", "Okay", "Helpful", "Mabait", "Magalang", "Matagal", "Mabilis",
+]
 
 
 def classify_bucket(text):
@@ -291,6 +327,16 @@ def run():
         print(f"\n--- FAILURES ({len(failures)}) ---")
         for kind, bucket, text, expected, got in failures:
             print(f"  [{kind}/{bucket}] expected={expected!r} got={got!r}\n    text={text!r}")
+
+    print("\n--- NOT-GIBBERISH SANITY CHECK ---")
+    gibberish_failures = []
+    for text in NOT_GIBBERISH_CASES:
+        junk = tc.detect_junk_topic(text)
+        status = "PASS" if not junk else "FAIL"
+        if junk:
+            gibberish_failures.append(text)
+        print(f"  [{status}] {text!r} -> detect_junk_topic={junk!r}")
+    failures.extend(("NOT-GIBBERISH", "n/a", text, None, "flagged as junk") for text in gibberish_failures)
 
     return sent_results, topic_results, failures
 
