@@ -348,59 +348,13 @@ function nextEligibleDateText(lastEventAt, availability) {
     return new Date(ts).toLocaleDateString('en-PH', { dateStyle: 'long' });
 }
 
-// Server-side gate for /submit-survey and syncOneSurvey: decides whether
-// `googleEmail` may submit a new survey for `serviceAvailed` at `officeId`
-// right now. A submission still awaiting office review always blocks a
-// duplicate; a DECLINED one never blocks a retry (declined means "not
-// verified," not "too soon").
-function checkResubmissionEligibility(officeId, googleEmail, serviceAvailed, callback) {
-    db.query(
-        'SELECT availability FROM services WHERE office_id = ? AND service_name <=> ? LIMIT 1',
-        [officeId, serviceAvailed],
-        (svcErr, svcRows) => {
-            const availability = (!svcErr && svcRows && svcRows[0]) ? svcRows[0].availability : null;
-
-            db.query(
-                "SELECT id FROM pending_survey_submissions WHERE office_id = ? AND google_email = ? AND service_availed <=> ? AND status = 'pending' LIMIT 1",
-                [officeId, googleEmail, serviceAvailed],
-                (pendErr, pendRows) => {
-                    if (!pendErr && pendRows && pendRows.length > 0) {
-                        return callback({ eligible: false, message: "You already have a submission for this service awaiting the office's review." });
-                    }
-
-                    db.query(
-                        'SELECT created_at FROM survey_responses WHERE office_id = ? AND google_email = ? AND service_availed <=> ? ORDER BY created_at DESC LIMIT 1',
-                        [officeId, googleEmail, serviceAvailed],
-                        (lastErr, lastRows) => {
-                            const lastEventAt = (!lastErr && lastRows && lastRows[0]) ? lastRows[0].created_at : null;
-                            if (isEligibleForResubmission(lastEventAt, availability)) {
-                                return callback({ eligible: true });
-                            }
-                            const nextDate = nextEligibleDateText(lastEventAt, availability);
-                            const message = nextDate
-                                ? `You can retake this survey for this service starting ${nextDate}.`
-                                : "You have already evaluated this service. You cannot submit again.";
-                            // Absolute timestamp alongside the human-readable message — lets a
-                            // caller (POST /api/offline-surveys/verify-and-sync) hand the client
-                            // a real ISO instant to display/count down to, computed server-side
-                            // from real server time + database history, never the offline
-                            // device's own clock. null for a permanently one-time-only service,
-                            // same case where nextDate is also null above.
-                            const nextTs = nextEligibleTimestamp(lastEventAt, availability);
-                            return callback({ eligible: false, message, nextEligibleAt: nextTs ? new Date(nextTs).toISOString() : null });
-                        }
-                    );
-                }
-            );
-        }
-    );
-}
-
-// Promise wrapper around checkResubmissionEligibility — used by the async
-// offline-sync path (syncOneSurvey) instead of the callback form above.
-function checkResubmissionEligibilityAsync(officeId, googleEmail, serviceAvailed) {
-    return new Promise((resolve) => checkResubmissionEligibility(officeId, googleEmail, serviceAvailed, resolve));
-}
+// The non-atomic SELECT-then-INSERT eligibility gate that used to live here
+// (checkResubmissionEligibility/checkResubmissionEligibilityAsync) has been
+// replaced by resolveSubmissionPrecedence, which runs the identical pending/
+// cadence logic but INSIDE the per-logical-key GET_LOCK (see
+// withLogicalSurveyLock below) and additionally makes the Online-vs-Offline
+// precedence decision — removed here so there is no second, lock-free
+// eligibility path a future change could accidentally call instead.
 
 // Looks up a survey_responses row by its client-generated submission id
 // (see finalizeVerifiedSurvey's clientSubmissionId param and the
@@ -418,157 +372,19 @@ function findSurveyByClientSubmissionId(clientSubmissionId) {
         });
 }
 
-// Inserts a fully-verified survey (either a direct @cspc.edu.ph submission, or
-// a personal-email submission the visited office just approved) through the
-// exact same path — survey_responses + client_profiles + client_accounts
-// upsert, then (unless told to skip) a receipt email and AI sentiment/topic
-// analysis. `fields.sqdValues` is an array of the 9 SQD answers (sqd0..sqd8).
-//
-// `fields.clientSubmissionId` (optional, but always sent by the current
-// client — see submitAll() in client-survey.ejs) is this survey attempt's
-// stable id (the same one used as the offline outbox record's localId).
-// Callers should call findSurveyByClientSubmissionId() themselves BEFORE
-// the resubmission-eligibility check (a genuine retry of an already-
-// recorded id must never be rejected by that check just because the row it
-// itself created now makes the office/service look "already answered").
-// This function additionally catches the id's UNIQUE-constraint violation
-// on the insert itself — the actual atomicity guarantee, since the
-// pre-check above is a plain SELECT-then-INSERT with its own TOCTOU gap
-// under true concurrency (two near-simultaneous sync attempts). Either way
-// a duplicate resolves to the EXISTING row's id via the normal success
-// callback, never an error — replaying the same submission id is
-// idempotent by design, not a rejection.
-function finalizeVerifiedSurvey(googleEmail, fields, callback) {
-    const {
-        officeId, respondentName, topic, sentiment, region, cc1, cc2, cc3,
-        sqdValues, comments, serviceAvailed, clientType, age, gender,
-        officeVisitedTime, period, skipReceiptEmail, skipAiAnalysis,
-        clientSubmissionId
-    } = fields;
+// Inserted survey rows previously went through a standalone
+// finalizeVerifiedSurvey()/finalizeVerifiedSurveyAsync() pair (plain pooled
+// db.query, no precedence awareness) — removed. Every canonical insert now
+// goes through submitCanonicalSurvey() below, which wraps this same core
+// insert logic (survey_responses + client_profiles + client_accounts
+// upsert) with the Online-vs-Offline precedence lock, so there is no
+// second, unguarded path back into survey_responses that could bypass it.
 
-    const insertQuery = `
-        INSERT INTO survey_responses
-        (office_id, respondent_name, topic, sentiment, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email, service_availed, client_submission_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    // A no-feedback comment ("N/A", "none", blank, ...) gets NULL for both
-    // columns, never the "General Feedback"/"Neutral" placeholder — that
-    // placeholder only makes sense while genuinely awaiting the async AI
-    // re-analysis below (line ~skipAiAnalysis check), which is itself
-    // skipped for a no-feedback comment, so nothing would ever correct a
-    // wrongly-defaulted value afterward. See isNoFeedbackComment.
-    const noFeedback = isNoFeedbackComment(comments);
-    const finalTopic = noFeedback ? null : (topic || 'General Feedback');
-    const finalSentiment = noFeedback ? null : (sentiment || 'Neutral');
-    const values = [
-        officeId, respondentName, finalTopic, finalSentiment, region,
-        cc1, cc2, cc3,
-        sqdValues[0], sqdValues[1], sqdValues[2], sqdValues[3], sqdValues[4], sqdValues[5], sqdValues[6], sqdValues[7], sqdValues[8],
-        comments || 'N/A', period, googleEmail, serviceAvailed, clientSubmissionId || null
-    ];
-
-    db.query(insertQuery, values, (err, result) => {
-        if (err) {
-            // unique_client_submission_id is the only constraint that can
-            // throw ER_DUP_ENTRY on this insert now (unique_office_google_email
-            // was deliberately dropped — see the migration comment). Resolve
-            // it as the existing row's success instead of an error.
-            if (err.code === 'ER_DUP_ENTRY' && clientSubmissionId) {
-                return findSurveyByClientSubmissionId(clientSubmissionId).then(existing => {
-                    if (existing) return callback(null, existing.id);
-                    callback(err); // constraint fired but the row is somehow gone — surface the real error
-                });
-            }
-            return callback(err);
-        }
-        const surveyResponseId = result.insertId;
-
-        db.query(
-            `INSERT INTO client_profiles (survey_response_id, respondent_name, client_type, age, gender, region, email, office_visited_time)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [surveyResponseId, respondentName, clientType, age, gender, region, googleEmail, officeVisitedTime],
-            (profileErr) => { if (profileErr) console.error("❌ [Client Profile] Error inserting profile:", profileErr); }
-        );
-
-        // Strict one-way separation: a survey submission must NEVER create,
-        // seed, repair, or otherwise write client_accounts.respondent_name —
-        // regardless of whether the survey's Full Name was Autofilled,
-        // hand-typed, edited, left blank, or "Anonymous", and regardless of
-        // whether the account's current name is already set or still NULL.
-        // The Client Profile's name is owned exclusively by the explicit
-        // Profile-page save (POST /api/client-profile below); this INSERT
-        // never references respondentName at all, not even for a brand-new
-        // row — a name-less account simply stays NULL until the client
-        // saves one from Profile. (Every authenticated caller of this
-        // function already has a client_accounts row from registration
-        // anyway — see /complete-google-registration and the local
-        // email/password register flow — so `email` alone is enough to
-        // satisfy this INSERT's identity purpose for any row that doesn't.)
-        //
-        // region/age/gender are intentionally different: this table's own
-        // schema comment ("Holds the demographic details... locked-in from
-        // that account's FIRST survey submission") and the Profile page's
-        // UI (no edit control for these — shown as "Locked after your first
-        // survey") both establish that these three are, by design, owned by
-        // the survey's first answer, not by the Profile page. COALESCE
-        // (write-once-if-still-NULL) is the correct, already-existing
-        // behavior for them and is unchanged here.
-        db.query(
-            `INSERT INTO client_accounts (email, region, age, gender)
-             VALUES (?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE
-                region = COALESCE(region, VALUES(region)),
-                age = COALESCE(age, VALUES(age)),
-                gender = COALESCE(gender, VALUES(gender))`,
-            [googleEmail, region, age, gender],
-            (acctErr) => { if (acctErr) console.error("❌ [Client Account] Error upserting locked profile:", acctErr); }
-        );
-
-        callback(null, surveyResponseId);
-
-        if (!skipReceiptEmail) {
-            db.query('SELECT office_name, cluster_name FROM offices WHERE id = ? LIMIT 1', [officeId], (officeErr, officeRows) => {
-                const office = (!officeErr && officeRows && officeRows[0]) ? officeRows[0] : null;
-                sendSurveyReceiptEmail(googleEmail, {
-                    name: respondentName,
-                    officeName: office ? office.office_name : 'Selected Office',
-                    clusterName: office ? office.cluster_name : '',
-                    clientType,
-                    serviceAvailed: serviceAvailed || 'Not specified',
-                    submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
-                    surveyResponseId,
-                    cc1, cc2, cc3,
-                    sqd: sqdValues.map((v, i) => ({ label: 'SQD' + i, value: v })),
-                    comments: comments || 'N/A'
-                });
-            });
-        }
-
-        if (!skipAiAnalysis && !noFeedback) {
-            analyzeComment(comments, false, officeId).then(({ sentiment: aiSentiment, topic: aiTopic }) => {
-                if (aiSentiment && aiTopic) {
-                    db.query('UPDATE survey_responses SET sentiment = ?, topic = ? WHERE id = ?', [aiSentiment, aiTopic, surveyResponseId]);
-                    console.log(`✅ [AI Success] ID: ${surveyResponseId} | Sentiment: ${aiSentiment} | Topic: ${aiTopic}`);
-                }
-            });
-        }
-    });
-}
-
-// Promise wrapper around finalizeVerifiedSurvey — used by the async
-// offline-sync path (syncOneSurvey) instead of the callback form above.
-function finalizeVerifiedSurveyAsync(googleEmail, fields) {
-    return new Promise((resolve, reject) => {
-        finalizeVerifiedSurvey(googleEmail, fields, (err, surveyResponseId) => {
-            if (err) return reject(err);
-            resolve(surveyResponseId);
-        });
-    });
-}
-
-// Transaction-scoped counterpart to finalizeVerifiedSurvey's core inserts
-// (survey_responses, client_profiles, client_accounts upsert) — the writes
-// that must commit/rollback atomically together with a caller's other
+// Core survey_responses + client_profiles + client_accounts insert, shared
+// by every canonical-insert path (online, offline sync, office approval) —
+// the writes that must commit/rollback atomically together with a caller's
+// other transactional writes (offline_survey_submissions tracking rows, the
+// pending_survey_submissions status flip on office approval). Runs every
 // transactional writes (offline_survey_submissions tracking rows, the
 // pending_survey_submissions status flip on office approval). Runs every
 // query on the SAME dedicated pooled connection the caller passes in
@@ -576,10 +392,24 @@ function finalizeVerifiedSurveyAsync(googleEmail, fields) {
 // connection's transaction. Deliberately does NOT send a receipt email or
 // run AI analysis — both are slow/non-DB operations that must happen after
 // commit, outside the transaction; callers handle them themselves.
-async function insertVerifiedSurveyOnConnection(conn, googleEmail, fields) {
+//
+// `submissionSource` ('online' | 'offline_sync') is ALWAYS supplied by the
+// caller from the route/workflow itself (see submitCanonicalSurvey below),
+// never read from client JSON — this is what lets
+// resolveSubmissionPrecedence trust it later. The `|| 'legacy_unknown'`
+// fallback below should never actually fire (every real caller passes one
+// explicitly) — it exists only so a future caller that forgets the
+// parameter fails toward "unknown, dominable by Online" rather than
+// silently toward "online" (the same reasoning as submission_source's
+// ALTER TABLE default — see there). Every row this function writes starts
+// life as canonical_status='canonical' (the column default); a caller that
+// just superseded an older canonical row does that as a separate UPDATE in
+// the same transaction (see submitCanonicalSurvey).
+async function insertVerifiedSurveyOnConnection(conn, googleEmail, fields, submissionSource) {
     const {
         officeId, respondentName, topic, sentiment, region, cc1, cc2, cc3,
-        sqdValues, comments, serviceAvailed, clientType, age, gender, officeVisitedTime, period
+        sqdValues, comments, serviceAvailed, clientType, age, gender, officeVisitedTime, period,
+        clientSubmissionId
     } = fields;
 
     // Same reasoning as finalizeVerifiedSurvey above — a no-feedback comment
@@ -590,13 +420,13 @@ async function insertVerifiedSurveyOnConnection(conn, googleEmail, fields) {
     const finalSentiment = noFeedback ? null : (sentiment || 'Neutral');
     const [insertResult] = await conn.query(
         `INSERT INTO survey_responses
-         (office_id, respondent_name, topic, sentiment, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email, service_availed)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (office_id, respondent_name, topic, sentiment, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email, service_availed, client_submission_id, submission_source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             officeId, respondentName, finalTopic, finalSentiment, region,
             cc1, cc2, cc3,
             sqdValues[0], sqdValues[1], sqdValues[2], sqdValues[3], sqdValues[4], sqdValues[5], sqdValues[6], sqdValues[7], sqdValues[8],
-            comments || 'N/A', period, googleEmail, serviceAvailed
+            comments || 'N/A', period, googleEmail, serviceAvailed, clientSubmissionId || null, submissionSource || 'legacy_unknown'
         ]
     );
     const surveyResponseId = insertResult.insertId;
@@ -624,6 +454,281 @@ async function insertVerifiedSurveyOnConnection(conn, googleEmail, fields) {
     );
 
     return surveyResponseId;
+}
+
+// =========================================================================
+// ONLINE-VS-OFFLINE CANONICAL PRECEDENCE
+// =========================================================================
+// Business rule: for the same logical survey opportunity (one authenticated
+// Client account, one office, one service — the exact identity
+// checkResubmissionEligibility already used to decide "is this too soon"),
+// a successfully-committed ONLINE submission is ALWAYS the authoritative
+// one. An Offline submission can create a canonical row when nothing else
+// exists yet, but it can never defeat, duplicate, or outlive a canonical
+// Online row — and if Offline happens to reach the server FIRST, a later
+// Online submission for the same key must supersede it, not merely
+// coexist. Arrival order never decides Online-vs-Offline; only the source
+// does.
+//
+// This is enforced with a MySQL named lock (GET_LOCK), not a permanent
+// UNIQUE constraint — resubmission eligibility is a moving time window
+// (services.availability: daily/weekly/monthly/yearly), so "office +
+// account + service" is NOT a permanently-unique identity the way
+// client_submission_id is; a client legitimately submits again once the
+// cooldown elapses. GET_LOCK serializes the "read current canonical state,
+// decide, write" critical section for one logical key across ALL THREE
+// insert entry points (/submit-survey, /sync-surveys, verify-and-sync,
+// and office-approval), closing the TOCTOU race that let an Online and an
+// Offline submission both pass their own independent eligibility check
+// before either had committed.
+const LOGICAL_SURVEY_LOCK_TIMEOUT_SECONDS = 8;
+
+function logicalSurveyLockName(officeId, googleEmail, serviceAvailed) {
+    const raw = `${officeId}|${String(googleEmail || '').toLowerCase()}|${serviceAvailed || ''}`;
+    // MySQL named-lock names are capped at 64 chars; a fixed-length hash
+    // keeps this well under that regardless of email/service length.
+    return 'cspc_survey_' + crypto.createHash('sha1').update(raw).digest('hex');
+}
+
+// Runs `work(conn)` while holding a session-scoped named lock for one
+// logical survey key, on a SINGLE dedicated pooled connection (the same
+// connection both holds the lock and does the work) — deliberately not two
+// separate connections, since under a 500-submission burst this pool is
+// small (see DB_CONNECTION_LIMIT) and a design needing 2 connections per
+// request would halve effective throughput and risk pool exhaustion/
+// deadlock (every request holding its 1st connection while waiting for a
+// 2nd that never frees). If the lock can't be acquired within
+// LOGICAL_SURVEY_LOCK_TIMEOUT_SECONDS, throws an Error with
+// `.code === 'LOCK_TIMEOUT'` — callers should treat this as transient/
+// retryable (503), never as a data error.
+async function withLogicalSurveyLock(officeId, googleEmail, serviceAvailed, work) {
+    const lockName = logicalSurveyLockName(officeId, googleEmail, serviceAvailed);
+    const conn = await db.promise().getConnection();
+    try {
+        const [lockRows] = await conn.query('SELECT GET_LOCK(?, ?) AS acquired', [lockName, LOGICAL_SURVEY_LOCK_TIMEOUT_SECONDS]);
+        // GET_LOCK returns exactly 1 (acquired), 0 (timed out — someone else
+        // holds it), or NULL (a real error, e.g. the session was killed or
+        // MySQL ran out of memory for the lock structure) — never anything
+        // else. Only 1 may proceed into the critical section; both 0 and
+        // NULL are treated as the SAME safe, retriable outcome (never a
+        // silent "proceed anyway"), but logged distinctly so a NULL
+        // (genuine DB-side problem) doesn't get mistaken for ordinary lock
+        // contention if it starts happening often.
+        const rawLockResult = (lockRows && lockRows[0]) ? lockRows[0].acquired : undefined;
+        const acquired = rawLockResult === 1 || rawLockResult === '1';
+        if (!acquired) {
+            if (rawLockResult === null) {
+                console.error(`❌ [Survey Lock] GET_LOCK('${lockName}') returned NULL (DB-side error, not ordinary contention).`);
+            }
+            const timeoutErr = new Error('Timed out waiting to process this submission — please try again.');
+            timeoutErr.code = 'LOCK_TIMEOUT';
+            timeoutErr.lockResult = rawLockResult;
+            throw timeoutErr;
+        }
+        try {
+            return await work(conn);
+        } finally {
+            // Best-effort release — if this fails, the lock still dies with
+            // the connection (RELEASE_LOCK/GET_LOCK are session-scoped), so
+            // a stuck lock can't outlive conn.release() below regardless.
+            await conn.query('SELECT RELEASE_LOCK(?)', [lockName]).catch((releaseErr) => {
+                console.error('❌ [Survey Lock] RELEASE_LOCK failed (harmless — dies with the connection):', releaseErr);
+            });
+        }
+    } finally {
+        conn.release();
+    }
+}
+
+// Must run on the connection currently holding the logical-survey lock
+// (see withLogicalSurveyLock), BEFORE any insert. Mirrors
+// checkResubmissionEligibility's identity/cadence logic exactly (same
+// service-availability lookup, same pending-submission check, same
+// last-response cadence window) but adds source-awareness on top:
+//   - A PENDING row for the SAME key blocks the incoming submission unless
+//     the incoming is 'online' and the pending row's source is NOT 'online'
+//     (i.e. 'offline_sync', or the historical-migration 'legacy_unknown' —
+//     see submission_source's ALTER TABLE comment) — an Online submission
+//     may proceed past a merely-pending (not yet approved) non-Online one;
+//     that pending row is left untouched here and resolved at approval
+//     time instead (see /office-approvals/:id/approve), so it can never
+//     become a second canonical row once an Online one exists.
+//   - A CANONICAL survey_responses row for the SAME key:
+//       * cooldown ALREADY elapsed (per the service's cadence) → the old
+//         row belongs to a completed, separate survey opportunity — this
+//         is a legitimately NEW one, unconditionally, regardless of
+//         source. Inserted as its own new canonical row; the old row is
+//         left exactly as it is (still canonical, still counted — it was
+//         never in conflict with this submission to begin with). Online
+//         dominance is scoped to "the SAME logical survey opportunity /
+//         active cadence window" — it must never reach back and supersede
+//         an old, already-settled Offline row from a prior, expired cycle
+//         (e.g. a monthly service's August Offline response must not be
+//         superseded by a September Online one; September is a new
+//         opportunity, not a conflict with August).
+//       * cooldown STILL ACTIVE (same opportunity as `last`):
+//           - incoming='online' and existing.source is NOT 'online' → the
+//             non-Online row is superseded (Online dominance within the
+//             SAME opportunity is not first-arrival-based; treating
+//             'legacy_unknown' the same as 'offline_sync' here is the safe
+//             direction either way a historical row's real origin turns
+//             out to be — see submission_source's ALTER TABLE comment).
+//           - any other combination → normal cadence rejection (matches
+//             the pre-existing single-channel behavior exactly; a
+//             non-Online incoming submission never preempts a canonical
+//             Online row, and same-source duplicates within the cooldown
+//             are still rejected as before).
+async function resolveSubmissionPrecedence(conn, officeId, googleEmail, serviceAvailed, incomingSource) {
+    const [svcRows] = await conn.query(
+        'SELECT availability FROM services WHERE office_id = ? AND service_name <=> ? LIMIT 1',
+        [officeId, serviceAvailed]
+    );
+    const availability = (svcRows && svcRows[0]) ? svcRows[0].availability : null;
+
+    const [pendRows] = await conn.query(
+        "SELECT id, submission_source FROM pending_survey_submissions WHERE office_id = ? AND google_email = ? AND service_availed <=> ? AND status = 'pending' LIMIT 1",
+        [officeId, googleEmail, serviceAvailed]
+    );
+    if (pendRows && pendRows.length > 0) {
+        // Treat anything that isn't KNOWN to be 'online' (i.e. 'offline_sync'
+        // or the historical-migration 'legacy_unknown' — see the
+        // submission_source ALTER TABLE comment) as dominable by an
+        // incoming Online submission. Falling back to 'online' here would
+        // be the unsafe direction (it would make an unknown-origin row
+        // immune to Online dominance); falling back to 'offline_sync'/
+        // treating unknown as non-online is the safe direction in both
+        // possible-truths cases (see that same comment).
+        const pendingSource = pendRows[0].submission_source || 'legacy_unknown';
+        const onlineOverridesPendingNonOnline = (incomingSource === 'online' && pendingSource !== 'online');
+        if (!onlineOverridesPendingNonOnline) {
+            return { decision: 'reject_pending', message: "You already have a submission for this service awaiting the office's review." };
+        }
+        // Fall through — incoming Online is allowed to proceed past a
+        // merely-pending non-Online submission.
+    }
+
+    const [lastRows] = await conn.query(
+        `SELECT id, created_at, submission_source FROM survey_responses
+         WHERE office_id = ? AND google_email = ? AND service_availed <=> ? AND canonical_status = 'canonical'
+         ORDER BY created_at DESC LIMIT 1`,
+        [officeId, googleEmail, serviceAvailed]
+    );
+    const last = (lastRows && lastRows[0]) || null;
+    if (!last) return { decision: 'insert_canonical' };
+
+    // Cooldown check FIRST, before any source comparison — an incoming
+    // submission only conflicts with `last` at all if they belong to the
+    // SAME active cadence opportunity. Once the cooldown has elapsed, `last`
+    // is a settled, separate opportunity: this is a fresh submission, full
+    // stop, regardless of either row's source. Online dominance (below)
+    // must never fire against an already-expired Offline row — that would
+    // incorrectly reach back and erase a completed prior period's response.
+    if (isEligibleForResubmission(last.created_at, availability)) {
+        return { decision: 'insert_canonical' };
+    }
+
+    // Same "anything not KNOWN online is dominable" rule as the pending
+    // check above — covers both 'offline_sync' and a historical
+    // 'legacy_unknown' row equally.
+    if (incomingSource === 'online' && last.submission_source !== 'online') {
+        return { decision: 'insert_canonical', supersede: last.id };
+    }
+
+    const nextDate = nextEligibleDateText(last.created_at, availability);
+    const message = nextDate
+        ? `You can retake this survey for this service starting ${nextDate}.`
+        : "You have already evaluated this service. You cannot submit again.";
+    const nextTs = nextEligibleTimestamp(last.created_at, availability);
+    return { decision: 'reject', message, nextEligibleAt: nextTs ? new Date(nextTs).toISOString() : null };
+}
+
+// Shared by both precedence-aware funnels below — throws the right typed
+// Error for a 'reject'/'reject_pending' decision, no-ops for anything else.
+function throwIfSubmissionRejected(precedence) {
+    if (precedence.decision === 'reject_pending') {
+        const err = new Error(precedence.message);
+        err.code = 'PENDING_REJECTED';
+        err.rejectMessage = precedence.message;
+        throw err;
+    }
+    if (precedence.decision === 'reject') {
+        const err = new Error(precedence.message);
+        err.code = 'ELIGIBILITY_REJECTED';
+        err.rejectMessage = precedence.message;
+        err.nextEligibleAt = precedence.nextEligibleAt;
+        throw err;
+    }
+}
+
+// Single funnel for every CSPC-trusted (auto-approved) survey insert —
+// /submit-survey, /sync-surveys, and both the offline-verify and
+// office-approval paths that previously called insertVerifiedSurveyOnConnection
+// directly. Runs the whole "acquire lock -> resolve precedence -> insert
+// (+ supersede the losing row if applicable) -> release lock" sequence
+// atomically. Does NOT send email or run AI analysis — callers do that
+// themselves, after this resolves, outside the lock (see the module
+// comment on withLogicalSurveyLock for why: keep locked/transactional
+// sections short, never call slow external services while holding one).
+//
+// `submissionSource` must be supplied by the CALLER based on the route it
+// came from (never trusted from client JSON — see module rule #13).
+// Resolves to { surveyResponseId, supersededId } on success. Rejects with
+// an Error whose `.code` is one of 'ELIGIBILITY_REJECTED' (cadence cooldown
+// active, `.rejectMessage`/`.nextEligibleAt`), 'PENDING_REJECTED'
+// (`.rejectMessage`), or 'LOCK_TIMEOUT'.
+async function submitCanonicalSurvey(googleEmail, fields, submissionSource) {
+    return withLogicalSurveyLock(fields.officeId, googleEmail, fields.serviceAvailed, async (conn) => {
+        const precedence = await resolveSubmissionPrecedence(conn, fields.officeId, googleEmail, fields.serviceAvailed, submissionSource);
+        throwIfSubmissionRejected(precedence);
+
+        await conn.beginTransaction();
+        try {
+            const surveyResponseId = await insertVerifiedSurveyOnConnection(conn, googleEmail, fields, submissionSource);
+
+            if (precedence.supersede) {
+                await conn.query(
+                    "UPDATE survey_responses SET canonical_status = 'superseded', superseded_by_id = ? WHERE id = ? AND canonical_status = 'canonical'",
+                    [surveyResponseId, precedence.supersede]
+                );
+            }
+
+            await conn.commit();
+            return { surveyResponseId, supersededId: precedence.supersede || null };
+        } catch (err) {
+            await conn.rollback().catch(() => {});
+            // Last-resort idempotency net: unique_client_submission_id firing
+            // here means a retry of the SAME attempt raced in on a different
+            // key (extremely unlikely now that same-key attempts are fully
+            // serialized by the lock above) — resolve it to the existing row
+            // exactly like the pre-existing behavior, never as an error.
+            if (err.code === 'ER_DUP_ENTRY' && fields.clientSubmissionId) {
+                const existing = await findSurveyByClientSubmissionId(fields.clientSubmissionId);
+                if (existing) return { surveyResponseId: existing.id, supersededId: null, alreadyRecorded: true };
+            }
+            throw err;
+        }
+    });
+}
+
+// Same precedence gate as submitCanonicalSurvey, for the personal/external-
+// email branch that queues a pending_survey_submissions row for office
+// review instead of inserting straight into survey_responses. Recording
+// `submissionSource` on the pending row itself is what lets a LATER Online
+// submission for the same key preempt a merely-pending Offline one (see
+// resolveSubmissionPrecedence), and lets the office-approval route re-check
+// precedence at approval time (an Online canonical row may have appeared
+// while this was still awaiting review).
+async function queuePendingSurveyWithPrecedence(officeId, googleEmail, serviceAvailed, payloadObj, submissionSource) {
+    return withLogicalSurveyLock(officeId, googleEmail, serviceAvailed, async (conn) => {
+        const precedence = await resolveSubmissionPrecedence(conn, officeId, googleEmail, serviceAvailed, submissionSource);
+        throwIfSubmissionRejected(precedence);
+
+        const [result] = await conn.query(
+            'INSERT INTO pending_survey_submissions (office_id, google_email, service_availed, payload, submission_source) VALUES (?, ?, ?, ?, ?)',
+            [officeId, googleEmail, serviceAvailed, JSON.stringify(payloadObj), submissionSource]
+        );
+        return { pendingSubmissionId: result.insertId };
+    });
 }
 
 function getClientEmail(req) {
@@ -2295,6 +2400,16 @@ db.query(createClustersTableQuery, (err) => {
                 db.query(createPendingSurveySubmissionsTableQuery, (err) => {
                     if (err) console.error("❌ Error creating pending_survey_submissions table:", err);
                     else console.log('✅ pending_survey_submissions table verified/created successfully!');
+                    // Which channel queued this pending (office-review) submission —
+                    // read by resolveSubmissionPrecedence so a merely-PENDING Offline
+                    // row can be preempted by an incoming Online submission for the
+                    // same office+account+service, without needing a canonical
+                    // survey_responses row to exist yet. Server-derived, same as
+                    // survey_responses.submission_source. Historical (pre-fix) rows
+                    // default to 'legacy_unknown', NOT 'online' — see the identical
+                    // reasoning on survey_responses.submission_source above; never
+                    // retroactively reclassified.
+                    db.query("ALTER TABLE pending_survey_submissions ADD COLUMN submission_source ENUM('online','offline_sync','legacy_unknown') NOT NULL DEFAULT 'legacy_unknown'", () => {});
                 });
 
                 db.query(createOfflineSurveySubmissionsTableQuery, (err) => {
@@ -2358,6 +2473,55 @@ db.query(createClustersTableQuery, (err) => {
                         db.query("ALTER TABLE survey_responses ADD COLUMN topic_override VARCHAR(150) NULL", () => {});
                         db.query("ALTER TABLE survey_responses ADD COLUMN subtopic_override VARCHAR(100) NULL", () => {});
                         db.query("ALTER TABLE survey_responses ADD COLUMN sentiment_override VARCHAR(20) NULL", () => {});
+
+                        // ---- Online-vs-Offline canonical precedence (data-consistency fix) ----
+                        // Which channel actually created this row, server-derived at insert
+                        // time (see insertVerifiedSurveyOnConnection's submissionSource
+                        // param) — never trusted from client JSON. Every INSERT this app
+                        // performs now always passes an explicit 'online' or 'offline_sync'
+                        // (see submitCanonicalSurvey / queuePendingSurveyWithPrecedence), so
+                        // the column DEFAULT below is only ever actually used for rows that
+                        // existed BEFORE this ALTER TABLE ran — i.e. genuinely unknown-origin
+                        // historical rows. Defaulting those to 'legacy_unknown' (NOT 'online')
+                        // is deliberate: an earlier version of this fix defaulted them to
+                        // 'online', which silently made resolveSubmissionPrecedence treat
+                        // every pre-fix row as definitively online — so a real historical
+                        // Offline row, mislabeled 'online', could never be superseded by a
+                        // genuinely later Online submission for the same still-in-cooldown
+                        // opportunity (the new Online submission would be wrongly REJECTED as
+                        // "already evaluated" instead of correctly winning). 'legacy_unknown'
+                        // is treated the same as 'offline_sync' by resolveSubmissionPrecedence
+                        // (i.e. "not known to be online" — Online may still supersede it) —
+                        // safe in both directions: if the old row really was online, the new
+                        // one still ends up canonical and the old one is merely marked
+                        // superseded (preserved, not deleted); if it really was offline, this
+                        // is exactly the correct outcome. This ALTER is a no-op if the column
+                        // already exists (e.g. from an earlier deployment of this fix, already
+                        // defaulted to 'online') — existing values are NEVER rewritten here;
+                        // see the migration file's note for how to audit/backfill manually.
+                        db.query("ALTER TABLE survey_responses ADD COLUMN submission_source ENUM('online','offline_sync','legacy_unknown') NOT NULL DEFAULT 'legacy_unknown'", () => {});
+                        // 'canonical' = counts everywhere (dashboards/reports/records/history).
+                        // 'superseded' = a losing row that lost to a later-arriving canonical
+                        // Online row for the same office+account+service — kept for audit,
+                        // excluded from every analytics/report/history query. DEFAULT
+                        // 'canonical' is intentional and safe for historical rows too: nothing
+                        // has determined any pre-existing row to be superseded, so every one
+                        // of them keeps counting exactly as before until/unless a NEW
+                        // submission going forward legitimately supersedes it through the
+                        // normal precedence flow — this migration itself never marks any
+                        // existing row superseded.
+                        db.query("ALTER TABLE survey_responses ADD COLUMN canonical_status ENUM('canonical','superseded') NOT NULL DEFAULT 'canonical'", () => {});
+                        // Points at the canonical row that superseded this one (NULL for
+                        // every canonical row, and for any row with no known supersession).
+                        db.query("ALTER TABLE survey_responses ADD COLUMN superseded_by_id INT NULL", () => {});
+                        // Backs resolveSubmissionPrecedence's canonical-row lookup (WHERE
+                        // office_id = ? AND google_email = ? AND service_availed <=> ? AND
+                        // canonical_status = 'canonical' ORDER BY created_at DESC LIMIT 1) —
+                        // without this, that query (run once per submission, inside the
+                        // logical-survey lock) would fall back to the existing plain
+                        // idx_survey_responses_office_id index and scan every row for that
+                        // office, which does not scale to a 500-submission burst.
+                        db.query("CREATE INDEX idx_survey_responses_logical_key ON survey_responses(office_id, google_email, service_availed, canonical_status)", () => {});
 
                         // Pinakahuli ang Client Profiles
                         db.query(createClientProfilesTableQuery, (err) => {
@@ -3192,6 +3356,9 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
     let googleEmail = null;
     let surveyResponseId = null;
     let claimFailed = false;
+    let supersededByOnline = false;
+    let lockName = null;
+    let lockHeld = false;
 
     try {
         await conn.beginTransaction();
@@ -3218,13 +3385,88 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
         googleEmail = row.google_email;
         payload = JSON.parse(row.payload); // throws on corrupt JSON — caught below, same as before
 
+        // Online-vs-Offline precedence, re-checked HERE (not just when this
+        // was originally queued) — time has passed since then, and an
+        // Online submission for the same office+account+service may have
+        // arrived and become canonical in the meantime. The claim above
+        // already prevents double-approving THIS row; the lock below
+        // additionally serializes against a concurrent Online submission
+        // for the same logical key deciding precedence at the same moment.
+        lockName = logicalSurveyLockName(payload.officeId, googleEmail, payload.serviceAvailed);
+        const [lockRows] = await conn.query('SELECT GET_LOCK(?, ?) AS acquired', [lockName, LOGICAL_SURVEY_LOCK_TIMEOUT_SECONDS]);
+        // See withLogicalSurveyLock's identical comment: 1 = acquired, 0 =
+        // timed out, NULL = a real DB-side error. Only 1 may proceed;
+        // logged distinctly so a NULL isn't mistaken for ordinary
+        // contention.
+        const rawLockResult = (lockRows && lockRows[0]) ? lockRows[0].acquired : undefined;
+        lockHeld = rawLockResult === 1 || rawLockResult === '1';
+        if (!lockHeld) {
+            if (rawLockResult === null) {
+                console.error(`❌ [Office Approval] GET_LOCK('${lockName}') returned NULL (DB-side error, not ordinary contention).`);
+            }
+            const timeoutErr = new Error('Timed out waiting to process this approval — please try again.');
+            timeoutErr.code = 'LOCK_TIMEOUT';
+            timeoutErr.lockResult = rawLockResult;
+            throw timeoutErr;
+        }
+        const precedence = await resolveSubmissionPrecedence(
+            conn, payload.officeId, googleEmail, payload.serviceAvailed, row.submission_source || 'offline_sync'
+        );
+
+        if (precedence.decision === 'reject' || precedence.decision === 'reject_pending') {
+            // An Online submission already owns this logical survey. This
+            // pending Offline submission must NOT become a second canonical
+            // row — decline it instead of approving, with an accurate
+            // reason, and keep the office's approval-history audit trail
+            // intact (declined, not silently deleted).
+            supersededByOnline = true;
+            await conn.query(
+                "UPDATE pending_survey_submissions SET status = 'declined', reviewed_at = NOW(), decline_reason = ? WHERE id = ?",
+                ['Superseded by a later online submission for this service.', row.id]
+            );
+            await conn.query(
+                "UPDATE offline_survey_submissions SET approval_status = 'rejected' WHERE pending_submission_id = ?",
+                [row.id]
+            );
+            // RELEASE_LOCK must happen AFTER commit, never before — GET_LOCK
+            // is session-scoped and independent of transaction state, so a
+            // concurrent request waiting on this SAME lock would be free to
+            // acquire it and read canonical state the instant it's
+            // released. Releasing before commit would let that request read
+            // PRE-commit (not-yet-durable, not-yet-visible) state and make
+            // its own precedence decision against stale data — exactly the
+            // TOCTOU race this lock exists to close.
+            await conn.commit();
+            await conn.query('SELECT RELEASE_LOCK(?)', [lockName]).catch(() => {});
+            conn.release();
+
+            res.redirect('/office-approvals?error=' + encodeURIComponent('Not approved — the client already has an online submission on record for this service.'));
+
+            createClientNotification({
+                clientEmail: googleEmail,
+                type: 'pending_declined',
+                title: 'Offline Submission Not Needed',
+                message: 'Your online submission for this service was already received, so this pending offline copy was not added as a separate response.',
+                pendingSubmissionId: submissionId,
+                dedupeKey: 'pending-superseded:' + submissionId
+            });
+            return;
+        }
+
         surveyResponseId = await insertVerifiedSurveyOnConnection(conn, googleEmail, {
             officeId: payload.officeId, respondentName: payload.respondentName, topic: payload.topic,
             sentiment: payload.sentiment, region: payload.region, cc1: payload.cc1, cc2: payload.cc2, cc3: payload.cc3,
             sqdValues: payload.sqdValues, comments: payload.comments, serviceAvailed: payload.serviceAvailed,
             clientType: payload.clientType, age: payload.age, gender: payload.gender,
             officeVisitedTime: payload.officeVisitedTime, period: payload.period
-        });
+        }, row.submission_source || 'offline_sync');
+
+        if (precedence.supersede) {
+            await conn.query(
+                "UPDATE survey_responses SET canonical_status = 'superseded', superseded_by_id = ? WHERE id = ? AND canonical_status = 'canonical'",
+                [surveyResponseId, precedence.supersede]
+            );
+        }
 
         await conn.query("UPDATE pending_survey_submissions SET status = 'approved', reviewed_at = NOW() WHERE id = ?", [row.id]);
 
@@ -3236,19 +3478,31 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
             [surveyResponseId, row.id]
         );
 
+        // Same ordering rule as the reject branch above: commit FIRST, then
+        // release the lock, so nothing waiting on it can observe pre-commit
+        // state.
         await conn.commit();
+        await conn.query('SELECT RELEASE_LOCK(?)', [lockName]).catch(() => {});
     } catch (err) {
+        if (lockHeld) await conn.query('SELECT RELEASE_LOCK(?)', [lockName]).catch(() => {});
         try { await conn.rollback(); } catch (rollbackErr) { /* connection may already be unusable */ }
         conn.release();
 
         if (claimFailed) {
             return res.redirect('/office-approvals?error=' + encodeURIComponent('This submission was already processed or is unavailable.'));
         }
+        if (err.code === 'LOCK_TIMEOUT') {
+            return res.redirect('/office-approvals?error=' + encodeURIComponent('The server is busy processing another submission for this survey. Please try again shortly.'));
+        }
         console.error("❌ [Office Approval] Error finalizing approved survey:", err);
         return res.redirect('/office-approvals?error=' + encodeURIComponent('Unable to process the submission. Please try again.'));
     }
     conn.release();
 
+    // Reaching here means the supersededByOnline branch above did NOT run
+    // (it returns from the handler entirely, before this point, once its
+    // own response/notification are sent) — this is always the normal
+    // "approved" outcome.
     res.redirect('/office-approvals?success=' + encodeURIComponent('Survey submission approved successfully.'));
 
     createClientNotification({
@@ -3751,7 +4005,7 @@ app.get('/client-survey', ensureClientAuth, noCache, (req, res) => {
             // combined with still-pending requests below to build the set of combos
             // currently blocked from resubmission (see isEligibleForResubmission).
             db.query(
-                'SELECT office_id, service_availed, MAX(created_at) AS last_at FROM survey_responses WHERE google_email = ? GROUP BY office_id, service_availed',
+                "SELECT office_id, service_availed, MAX(created_at) AS last_at FROM survey_responses WHERE google_email = ? AND canonical_status = 'canonical' GROUP BY office_id, service_availed",
                 [clientEmail],
                 (err2, approvedRows) => {
                     db.query(
@@ -3849,7 +4103,7 @@ async function buildClientOfflineContext(clientEmail) {
     const [officeRows, serviceRows, approvedRows, pendingRows, profileRows] = await Promise.all([
         dbQuery('SELECT id, office_name FROM offices WHERE is_archived = 0 ORDER BY office_name ASC'),
         dbQuery('SELECT office_id, service_name, availability FROM services ORDER BY office_id, id'),
-        dbQuery('SELECT office_id, service_availed, MAX(created_at) AS last_at FROM survey_responses WHERE google_email = ? GROUP BY office_id, service_availed', [clientEmail]),
+        dbQuery("SELECT office_id, service_availed, MAX(created_at) AS last_at FROM survey_responses WHERE google_email = ? AND canonical_status = 'canonical' GROUP BY office_id, service_availed", [clientEmail]),
         dbQuery("SELECT office_id, service_availed FROM pending_survey_submissions WHERE google_email = ? AND status = 'pending'", [clientEmail]),
         dbQuery('SELECT region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [clientEmail])
     ]);
@@ -4043,7 +4297,7 @@ app.get('/api/client-history', ensureClientAuth, noCache, (req, res) => {
                s.created_at, DATE_FORMAT(s.created_at, '%M %d, %Y') AS formatted_date
         FROM survey_responses s
         JOIN offices o ON s.office_id = o.id
-        WHERE s.google_email = ?
+        WHERE s.google_email = ? AND s.canonical_status = 'canonical'
     `;
     db.query(approvedQuery, [req.clientEmail], (err, approvedRows) => {
         if (err) return res.status(500).json({ success: false, message: 'Server error loading your survey history.', history: [] });
@@ -4096,7 +4350,7 @@ app.get('/api/client-history/:id', ensureClientAuth, noCache, (req, res) => {
     });
 });
 
-app.post('/submit-survey', ensureClientAuth, (req, res) => {
+app.post('/submit-survey', ensureClientAuth, async (req, res) => {
     // Raw incoming request body — on a repeat visit, disabled HTML fields
     // (age/gender/region, locked after first submission) don't get sent by
     // the browser at all, so this will legitimately show them missing/
@@ -4110,99 +4364,138 @@ app.post('/submit-survey', ensureClientAuth, (req, res) => {
     // HTML forms don't submit values for disabled fields, so req.body may simply be
     // missing region/age/gender on repeat visits — fetch the saved profile first and
     // let it win over (or fill in for) whatever the client actually posted.
-    db.query('SELECT region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [googleEmail], (profileLookupErr, profileLookupRows) => {
-        const savedProfile = (!profileLookupErr && profileLookupRows && profileLookupRows.length > 0) ? profileLookupRows[0] : null;
+    let savedProfile = null;
+    try {
+        const profileLookupRows = await dbQuery('SELECT region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [googleEmail]);
+        savedProfile = (profileLookupRows && profileLookupRows.length > 0) ? profileLookupRows[0] : null;
+    } catch (profileLookupErr) {
+        console.error("❌ [Survey] Profile lookup error:", profileLookupErr);
+    }
 
-        const {
-            office_id, topic, cc1, cc2, cc3,
-            sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, service_availed,
-            office_visited_time
-        } = req.body;
+    const {
+        office_id, topic, cc1, cc2, cc3,
+        sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, service_availed,
+        office_visited_time
+    } = req.body;
 
-        const respondent_name = req.body.respondent_name || req.body.respondentName || req.body.client_name || req.body.name;
-        const client_type = req.body.client_type || req.body.clientType || req.body.client_role;
+    const respondent_name = req.body.respondent_name || req.body.respondentName || req.body.client_name || req.body.name;
+    const client_type = req.body.client_type || req.body.clientType || req.body.client_role;
 
-        // Saved DB value always wins once it exists — this is what makes the fields
-        // truly locked server-side, not just visually disabled in the browser.
-        const region = (savedProfile && savedProfile.region) || req.body.region;
-        const age = (savedProfile && savedProfile.age) || req.body.age || req.body.clientAge || req.body.client_age;
-        const gender = (savedProfile && savedProfile.gender) || req.body.gender || req.body.clientGender || req.body.client_gender;
+    // Saved DB value always wins once it exists — this is what makes the fields
+    // truly locked server-side, not just visually disabled in the browser.
+    const region = (savedProfile && savedProfile.region) || req.body.region;
+    const age = (savedProfile && savedProfile.age) || req.body.age || req.body.clientAge || req.body.client_age;
+    const gender = (savedProfile && savedProfile.gender) || req.body.gender || req.body.clientGender || req.body.client_gender;
 
-        if (!office_id) {
-            return res.status(400).json({ success: false, message: "Missing selected office ID." });
-        }
+    if (!office_id) {
+        return res.status(400).json({ success: false, message: "Missing selected office ID." });
+    }
 
-        const cleanInt = (val) => (val !== undefined && val !== "" && val !== null && !isNaN(val)) ? parseInt(val, 10) : null;
-        const cleanStr = (val) => (val !== undefined && val !== null && String(val).trim() !== "") ? String(val).trim() : null;
+    const cleanInt = (val) => (val !== undefined && val !== "" && val !== null && !isNaN(val)) ? parseInt(val, 10) : null;
+    const cleanStr = (val) => (val !== undefined && val !== null && String(val).trim() !== "") ? String(val).trim() : null;
 
-        const finalName = cleanStr(respondent_name) || 'Anonymous';
-        const finalClientType = cleanStr(client_type) || 'Citizen';
-        const finalAge = allowlisted(age, VALID_AGE_BRACKETS) || 'Not Specified';
-        const finalGender = allowlisted(gender, VALID_GENDERS) || 'Not Specified';
-        const finalRegion = allowlisted(region, VALID_REGIONS) || 'Not Specified';
-        const finalOfficeId = cleanInt(office_id);
-        const finalOfficeVisitedTime = cleanTime(office_visited_time);
-        const finalServiceAvailed = cleanStr(service_availed);
-        // This attempt's stable client-generated id (see activeSurveyDraftId
-        // in client-survey.ejs) — checked BEFORE the eligibility check below
-        // so a retried submit (e.g. a lost response, or the pending-logout
-        // race handled client-side by re-submitting after a 401) resolves
-        // to the same existing row instead of being rejected by the very
-        // eligibility state that row itself created.
-        const finalClientSubmissionId = cleanStr(req.body.client_submission_id || req.body.clientSubmissionId);
+    const finalName = cleanStr(respondent_name) || 'Anonymous';
+    const finalClientType = cleanStr(client_type) || 'Citizen';
+    const finalAge = allowlisted(age, VALID_AGE_BRACKETS) || 'Not Specified';
+    const finalGender = allowlisted(gender, VALID_GENDERS) || 'Not Specified';
+    const finalRegion = allowlisted(region, VALID_REGIONS) || 'Not Specified';
+    const finalOfficeId = cleanInt(office_id);
+    const finalOfficeVisitedTime = cleanTime(office_visited_time);
+    const finalServiceAvailed = cleanStr(service_availed);
+    // This attempt's stable client-generated id (see activeSurveyDraftId
+    // in client-survey.ejs) — checked BEFORE the precedence lock below so a
+    // retried submit (e.g. a lost response, or the pending-logout race
+    // handled client-side by re-submitting after a 401) resolves to the
+    // same existing row instead of contending for the lock at all.
+    const finalClientSubmissionId = cleanStr(req.body.client_submission_id || req.body.clientSubmissionId);
 
-        (finalClientSubmissionId ? findSurveyByClientSubmissionId(finalClientSubmissionId) : Promise.resolve(null)).then((existing) => {
+    if (finalClientSubmissionId) {
+        const existing = await findSurveyByClientSubmissionId(finalClientSubmissionId);
         if (existing) {
             return res.json({ success: true, alreadyRecorded: true, message: "Survey recorded successfully!" });
         }
+    }
 
-        checkResubmissionEligibility(finalOfficeId, googleEmail, finalServiceAvailed, (eligibility) => {
-            if (!eligibility.eligible) {
-                return res.status(409).json({ success: false, message: eligibility.message });
+    const sqdValues = [sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8].map(cleanInt);
+    const fields = {
+        officeId: finalOfficeId, respondentName: finalName, topic: cleanStr(topic),
+        region: finalRegion, cc1: cleanStr(cc1), cc2: cleanStr(cc2), cc3: cleanStr(cc3),
+        sqdValues, comments: cleanStr(comments), serviceAvailed: finalServiceAvailed,
+        clientType: finalClientType, age: finalAge, gender: finalGender,
+        officeVisitedTime: finalOfficeVisitedTime, period: getPeriodCovered(),
+        clientSubmissionId: finalClientSubmissionId
+    };
+    console.log("📤 [Survey Final Fields] (after profile merge, what actually gets stored):", fields);
+
+    // This is a genuinely live, connected request from an authenticated
+    // session — always 'online', regardless of anything the client might
+    // claim (see module rule #13: source is derived from the route, never
+    // from request JSON).
+    const SUBMISSION_SOURCE = 'online';
+
+    try {
+        // @cspc.edu.ph accounts are trusted automatically and land straight in
+        // survey_responses, exactly as before. Any other email must first be
+        // verified by the office the client says they visited — see /office-approvals.
+        if (isCspcEmail(googleEmail)) {
+            const { surveyResponseId, supersededId, alreadyRecorded } = await submitCanonicalSurvey(googleEmail, fields, SUBMISSION_SOURCE);
+
+            res.json({ success: true, message: "Survey recorded successfully!" });
+
+            if (alreadyRecorded) return;
+
+            if (supersededId) {
+                console.log(`✅ [Online Precedence] Survey ID ${surveyResponseId} superseded earlier Offline canonical row ID ${supersededId} (same office/account/service).`);
             }
 
-            const sqdValues = [sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8].map(cleanInt);
-            const fields = {
-                officeId: finalOfficeId, respondentName: finalName, topic: cleanStr(topic),
-                region: finalRegion, cc1: cleanStr(cc1), cc2: cleanStr(cc2), cc3: cleanStr(cc3),
-                sqdValues, comments: cleanStr(comments), serviceAvailed: finalServiceAvailed,
-                clientType: finalClientType, age: finalAge, gender: finalGender,
-                officeVisitedTime: finalOfficeVisitedTime, period: getPeriodCovered(),
-                clientSubmissionId: finalClientSubmissionId
-            };
-            console.log("📤 [Survey Final Fields] (after profile merge, what actually gets stored):", fields);
-
-            // @cspc.edu.ph accounts are trusted automatically and land straight in
-            // survey_responses, exactly as before. Any other email must first be
-            // verified by the office the client says they visited — see /office-approvals.
-            if (isCspcEmail(googleEmail)) {
-                finalizeVerifiedSurvey(googleEmail, fields, (err) => {
-                    if (err) {
-                        if (err.code === 'ER_DUP_ENTRY') {
-                            return res.status(409).json({ success: false, message: "You have already evaluated this office. You cannot submit again." });
-                        }
-                        console.error("❌ [Survey] Database insertion error:", err);
-                        return res.status(500).json({ success: false, message: "Database insertion error: " + err.message });
-                    }
-                    res.json({ success: true, message: "Survey recorded successfully!" });
+            // Receipt email + AI analysis — same timing/behavior as the old
+            // finalizeVerifiedSurvey tail: fire-and-forget, after the
+            // response, never inside the lock/transaction above.
+            db.query('SELECT office_name, cluster_name FROM offices WHERE id = ? LIMIT 1', [finalOfficeId], (officeErr, officeRows) => {
+                const office = (!officeErr && officeRows && officeRows[0]) ? officeRows[0] : null;
+                sendSurveyReceiptEmail(googleEmail, {
+                    name: finalName,
+                    officeName: office ? office.office_name : 'Selected Office',
+                    clusterName: office ? office.cluster_name : '',
+                    clientType: finalClientType,
+                    serviceAvailed: finalServiceAvailed || 'Not specified',
+                    submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
+                    surveyResponseId,
+                    cc1: fields.cc1, cc2: fields.cc2, cc3: fields.cc3,
+                    sqd: sqdValues.map((v, i) => ({ label: 'SQD' + i, value: v })),
+                    comments: fields.comments || 'N/A'
                 });
-                return;
-            }
+            });
 
-            db.query(
-                'INSERT INTO pending_survey_submissions (office_id, google_email, service_availed, payload) VALUES (?, ?, ?, ?)',
-                [finalOfficeId, googleEmail, finalServiceAvailed, JSON.stringify(fields)],
-                (pendingErr) => {
-                    if (pendingErr) {
-                        console.error("❌ [Survey] Error queuing submission for office review:", pendingErr);
-                        return res.status(500).json({ success: false, message: "Database error while submitting your survey." });
+            if (!isNoFeedbackComment(fields.comments)) {
+                analyzeComment(fields.comments, false, finalOfficeId).then(({ sentiment: aiSentiment, topic: aiTopic }) => {
+                    if (aiSentiment && aiTopic) {
+                        db.query('UPDATE survey_responses SET sentiment = ?, topic = ? WHERE id = ?', [aiSentiment, aiTopic, surveyResponseId]);
+                        console.log(`✅ [AI Success] ID: ${surveyResponseId} | Sentiment: ${aiSentiment} | Topic: ${aiTopic}`);
                     }
-                    res.json({ success: true, pending: true, message: "Submitted! The office you visited will verify your visit before this is recorded." });
-                }
-            );
-        });
-        }); // end findSurveyByClientSubmissionId(...).then(...)
-    });
+                });
+            }
+            return;
+        }
+
+        await queuePendingSurveyWithPrecedence(finalOfficeId, googleEmail, finalServiceAvailed, fields, SUBMISSION_SOURCE);
+        res.json({ success: true, pending: true, message: "Submitted! The office you visited will verify your visit before this is recorded." });
+    } catch (err) {
+        if (err.code === 'ELIGIBILITY_REJECTED') {
+            return res.status(409).json({ success: false, message: err.rejectMessage });
+        }
+        if (err.code === 'PENDING_REJECTED') {
+            return res.status(409).json({ success: false, message: err.rejectMessage });
+        }
+        if (err.code === 'LOCK_TIMEOUT') {
+            return res.status(503).json({ success: false, status: 'retry_later', message: 'The server is busy processing another submission for this survey. Please try again in a moment.' });
+        }
+        if (err.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ success: false, message: "You have already evaluated this office. You cannot submit again." });
+        }
+        console.error("❌ [Survey] Database insertion error:", err);
+        return res.status(500).json({ success: false, message: "Database insertion error: " + err.message });
+    }
 });
 
 // ==========================================
@@ -4295,33 +4588,64 @@ async function syncOneSurvey(googleEmail, body, clientSubmissionId) {
     const finalOfficeVisitedTime = cleanTime(office_visited_time);
     const finalServiceAvailed = cleanStr(service_availed);
 
-    const eligibility = await checkResubmissionEligibilityAsync(finalOfficeId, googleEmail, finalServiceAvailed);
-    if (!eligibility.eligible) {
-        return { success: false, message: eligibility.message };
-    }
-
     const sqdValues = [sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8].map(cleanInt);
     const currentPeriod = getPeriodCovered();
+
+    // This survey was ANSWERED offline and is only now reaching the server
+    // through the authenticated queue-sync route — 'offline_sync' regardless
+    // of how fast the connection came back, never 'online' (see module
+    // rule #13: source reflects the submission's own channel, not whether
+    // the request that finally delivered it happens to be online right
+    // now).
+    const SUBMISSION_SOURCE = 'offline_sync';
 
     // @cspc.edu.ph accounts are trusted automatically; anything else waits for
     // the visited office to approve it — see /submit-survey for the same logic.
     if (!isCspcEmail(googleEmail)) {
         try {
-            await dbQuery(
-                'INSERT INTO pending_survey_submissions (office_id, google_email, service_availed, payload) VALUES (?, ?, ?, ?)',
-                [finalOfficeId, googleEmail, finalServiceAvailed, JSON.stringify({
-                    officeId: finalOfficeId, respondentName: finalName, topic: null, region: finalRegion,
-                    cc1: cleanStr(cc1), cc2: cleanStr(cc2), cc3: cleanStr(cc3), sqdValues,
-                    comments: cleanStr(comments), serviceAvailed: finalServiceAvailed,
-                    clientType: finalClientType, age: finalAge, gender: finalGender,
-                    officeVisitedTime: finalOfficeVisitedTime, period: currentPeriod
-                })]
-            );
+            await queuePendingSurveyWithPrecedence(finalOfficeId, googleEmail, finalServiceAvailed, {
+                officeId: finalOfficeId, respondentName: finalName, topic: null, region: finalRegion,
+                cc1: cleanStr(cc1), cc2: cleanStr(cc2), cc3: cleanStr(cc3), sqdValues,
+                comments: cleanStr(comments), serviceAvailed: finalServiceAvailed,
+                clientType: finalClientType, age: finalAge, gender: finalGender,
+                officeVisitedTime: finalOfficeVisitedTime, period: currentPeriod
+            }, SUBMISSION_SOURCE);
         } catch (err) {
+            if (err.code === 'ELIGIBILITY_REJECTED' || err.code === 'PENDING_REJECTED') {
+                return { success: false, status: 'rejected', message: err.rejectMessage };
+            }
+            if (err.code === 'LOCK_TIMEOUT') {
+                return { success: false, status: 'retry_later', message: 'The server is busy processing another submission for this survey. Please try again shortly.' };
+            }
             console.error("❌ [Sync] Error queuing submission for office review:", err);
             return { success: false, message: "Database error while submitting your survey." };
         }
         return { success: true, pending: true, message: "Submitted! The office you visited will verify your visit before this is recorded." };
+    }
+
+    // Precedence check happens BEFORE the (slower) AI call — no point
+    // running sentiment/topic analysis for a survey that's about to be
+    // rejected/superseded because an Online canonical response already
+    // exists for this exact office+account+service.
+    let precedenceResult;
+    try {
+        precedenceResult = await withLogicalSurveyLock(finalOfficeId, googleEmail, finalServiceAvailed, (conn) =>
+            resolveSubmissionPrecedence(conn, finalOfficeId, googleEmail, finalServiceAvailed, SUBMISSION_SOURCE)
+        );
+    } catch (err) {
+        if (err.code === 'LOCK_TIMEOUT') {
+            return { success: false, status: 'retry_later', message: 'The server is busy processing another submission for this survey. Please try again shortly.' };
+        }
+        console.error("❌ [Sync] Precedence check failed:", err);
+        return { success: false, message: "Database error while submitting your survey." };
+    }
+    if (precedenceResult.decision === 'reject' || precedenceResult.decision === 'reject_pending') {
+        // An Online submission already owns this logical survey — this
+        // Offline copy is not, and never becomes, canonical. Accurate
+        // status so pwa-client.js/offline-db.js resolve the queue item
+        // instead of retrying it forever, and never show "submitted
+        // successfully" for something that was actually rejected.
+        return { success: true, status: 'superseded_by_online', alreadyOnline: true, message: 'Your online submission for this service was already received — this offline copy was not needed.' };
     }
 
     // Await the AI analysis BEFORE inserting — analyzeComment() never throws,
@@ -4341,20 +4665,32 @@ async function syncOneSurvey(googleEmail, body, clientSubmissionId) {
         topic = 'General Feedback';
     }
 
-    let surveyResponseId;
+    let surveyResponseId, supersededId;
     try {
-        surveyResponseId = await finalizeVerifiedSurveyAsync(googleEmail, {
+        // The lock/precedence check above was necessarily a separate,
+        // now-closed acquisition (the AI call above must never run while a
+        // lock is held) — re-resolve inside submitCanonicalSurvey's own
+        // lock, which is safe: this survey's identity/eligibility can only
+        // have improved in its favor is impossible (Online never loses
+        // ground), so a second precedence check here is authoritative and
+        // simply repeats the same read if nothing changed.
+        const result = await submitCanonicalSurvey(googleEmail, {
             officeId: finalOfficeId, respondentName: finalName, topic, sentiment, region: finalRegion,
             cc1: cleanStr(cc1), cc2: cleanStr(cc2), cc3: cleanStr(cc3), sqdValues,
             comments: cleanStr(comments), serviceAvailed: finalServiceAvailed,
             clientType: finalClientType, age: finalAge, gender: finalGender,
             officeVisitedTime: finalOfficeVisitedTime, period: currentPeriod,
-            clientSubmissionId: finalClientSubmissionId,
-            // The offline sync path has never sent a receipt email, and AI analysis
-            // was already awaited above — don't repeat either.
-            skipReceiptEmail: true, skipAiAnalysis: true
-        });
+            clientSubmissionId: finalClientSubmissionId
+        }, SUBMISSION_SOURCE);
+        surveyResponseId = result.surveyResponseId;
+        supersededId = result.supersededId;
     } catch (err) {
+        if (err.code === 'ELIGIBILITY_REJECTED' || err.code === 'PENDING_REJECTED') {
+            return { success: true, status: 'superseded_by_online', alreadyOnline: true, message: 'Your online submission for this service was already received — this offline copy was not needed.' };
+        }
+        if (err.code === 'LOCK_TIMEOUT') {
+            return { success: false, status: 'retry_later', message: 'The server is busy processing another submission for this survey. Please try again shortly.' };
+        }
         if (err.code === 'ER_DUP_ENTRY') {
             return { success: false, message: "You have already evaluated this office. You cannot submit again." };
         }
@@ -4363,9 +4699,13 @@ async function syncOneSurvey(googleEmail, body, clientSubmissionId) {
     }
 
     console.log(`✅ [Sync Success] ID: ${surveyResponseId} | Sentiment: ${sentiment || 'Neutral'} | Topic: ${topic || 'General Feedback'}`);
+    if (supersededId) {
+        console.log(`⚠️ [Sync Precedence] Offline sync ID ${surveyResponseId} unexpectedly superseded canonical row ${supersededId} — should never happen for an offline_sync-sourced insert.`);
+    }
 
     return {
         success: true,
+        status: 'synced',
         message: "Survey synced and analyzed successfully!",
         surveyResponseId,
         sentiment: sentiment || 'Neutral',
@@ -4767,36 +5107,51 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
     const finalCc3 = cc3Check.value;
     const finalOfficeVisitedTime = cleanTime(office_visited_time);
 
-    // 6. Resubmission-eligibility check — read-only, fine on the shared
-    // pool, no need for it to be inside the transaction below.
-    const eligibility = await checkResubmissionEligibilityAsync(finalOfficeId, verifiedEmail, finalServiceAvailed);
-    if (!eligibility.eligible) {
+    // 6. Precedence pre-check — this survey was ANSWERED offline, so its
+    // source is always 'offline_sync', never 'online' (see module rule
+    // #13). Cheap, brief lock acquire/release (its own connection,
+    // released immediately) purely to fail fast and skip AI below when
+    // this is already a lost cause — the AUTHORITATIVE check happens again
+    // inside the transaction's own lock further down, since Online can
+    // still arrive in the gap between this check and the insert.
+    const SUBMISSION_SOURCE = 'offline_sync';
+    let precheck;
+    try {
+        precheck = await withLogicalSurveyLock(finalOfficeId, verifiedEmail, finalServiceAvailed, (lockConn) =>
+            resolveSubmissionPrecedence(lockConn, finalOfficeId, verifiedEmail, finalServiceAvailed, SUBMISSION_SOURCE)
+        );
+    } catch (err) {
+        if (err.code === 'LOCK_TIMEOUT') {
+            return res.status(503).json({ success: false, status: 'retry_later', message: 'The server is busy processing another submission for this survey. Please try again shortly.' });
+        }
+        console.error('❌ [Offline Verify] Precedence pre-check failed:', err);
+        return res.status(500).json({ success: false, message: 'Server error. Please try again.' });
+    }
+    if (precheck.decision === 'reject' || precheck.decision === 'reject_pending') {
         // Distinct from a wrong-password 401 (verification_failed) and from
         // the idempotency-duplicate 409 below (ER_DUP_ENTRY) — the account
         // and submitted data are both valid here; only the office/service is
-        // currently on cooldown (recalculated server-side, just now, using
-        // real server time + database history — never the offline cache the
-        // client may have shown before this request). pwa-client.js must
+        // currently on cooldown, OR (new) an Online submission already owns
+        // this logical survey and always dominates a canonical/pending
+        // Offline one, regardless of arrival order. pwa-client.js must
         // treat this status as `eligibility_conflict`: no password retry, no
-        // automatic 12s re-attempt, record kept for the user to review/edit.
-        // The password already verified successfully above (this is reached
-        // only after that), so the account IS notification-worthy even
-        // though no survey_responses/pending_survey_submissions row was
-        // ever written — reference only the offline submission id, no
-        // survey/pending row id exists to attach.
+        // automatic 12s re-attempt, record kept for the user to review. The
+        // password already verified successfully above (reached only after
+        // that), so the account IS notification-worthy even though no
+        // survey_responses/pending_survey_submissions row was ever written.
         createClientNotification({
             clientEmail: verifiedEmail,
             type: 'eligibility_conflict',
             title: 'Offline Response Not Submitted',
-            message: eligibility.nextEligibleAt
-                ? `Your offline response could not be submitted because the selected service is currently unavailable for another response. You may submit another response for this service after ${new Date(eligibility.nextEligibleAt).toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' })}.`
-                : 'Your offline response could not be submitted because the selected service is currently unavailable for another response.',
+            message: precheck.nextEligibleAt
+                ? `Your offline response could not be submitted because the selected service is currently unavailable for another response. You may submit another response for this service after ${new Date(precheck.nextEligibleAt).toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' })}.`
+                : (precheck.message || 'Your offline response could not be submitted because the selected service is currently unavailable for another response.'),
             offlineSubmissionId: submissionId,
             dedupeKey: 'offline-conflict:' + submissionId
         });
         return res.status(409).json({
-            success: false, status: 'eligibility_conflict', message: eligibility.message,
-            nextEligibleAt: eligibility.nextEligibleAt || null
+            success: false, status: 'eligibility_conflict', message: precheck.message,
+            nextEligibleAt: precheck.nextEligibleAt || null
         });
     }
 
@@ -4804,8 +5159,8 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
     const isCspc = isCspcEmail(verifiedEmail);
 
     // 7. AI sentiment/topic analysis — a slow, non-database call — runs
-    // BEFORE opening any DB connection/transaction, never while one is held
-    // open. Mirrors syncOneSurvey's offline=true fast-heuristic path.
+    // BEFORE opening any DB connection/transaction/lock, never while one is
+    // held open. Mirrors syncOneSurvey's offline=true fast-heuristic path.
     let sentiment = 'Neutral';
     let topic = 'General Feedback';
     if (isCspc) {
@@ -4818,14 +5173,58 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
         }
     }
 
-    // 8. CSPC vs external, both inside one SHORT transaction (writes only)
-    // with the offline_survey_submissions tracking insert — on a DEDICATED
-    // pooled connection (never the shared `db`/`dbQuery`, since the pool is
-    // capped at DB_CONNECTION_LIMIT and a bare `db.query('START
+    // 8. Re-acquire the logical-survey lock on the SAME dedicated connection
+    // that will hold the transaction below (never the shared `db`/`dbQuery`
+    // — the pool is capped at DB_CONNECTION_LIMIT and a bare `db.query('START
     // TRANSACTION')` could interleave with a different pooled connection).
+    // Re-checking precedence here (not just trusting the step-6 pre-check)
+    // is what makes this authoritative: an Online submission could have
+    // committed in the gap while AI was running above.
     const conn = await db.promise().getConnection();
     let result;
+    const lockName = logicalSurveyLockName(finalOfficeId, verifiedEmail, finalServiceAvailed);
+    let lockHeld = false;
     try {
+        const [lockRows] = await conn.query('SELECT GET_LOCK(?, ?) AS acquired', [lockName, LOGICAL_SURVEY_LOCK_TIMEOUT_SECONDS]);
+        // See withLogicalSurveyLock's identical comment: 1 = acquired, 0 =
+        // timed out, NULL = a real DB-side error. Only 1 may proceed;
+        // logged distinctly so a NULL isn't mistaken for ordinary
+        // contention. Both 0 and NULL still resolve to the same safe,
+        // retriable client response (503/retry_later) — never a silent
+        // "proceed anyway" — since a plain 500 here would make the
+        // offline-sync client treat this survey as a hard failure instead
+        // of leaving it safely queued for retry (see runOfflineSurveySync
+        // in offline-db.js).
+        const rawLockResult = (lockRows && lockRows[0]) ? lockRows[0].acquired : undefined;
+        lockHeld = rawLockResult === 1 || rawLockResult === '1';
+        if (!lockHeld) {
+            if (rawLockResult === null) {
+                console.error(`❌ [Offline Verify] GET_LOCK('${lockName}') returned NULL (DB-side error, not ordinary contention).`);
+            }
+            conn.release();
+            return res.status(503).json({ success: false, status: 'retry_later', message: 'The server is busy processing another submission for this survey. Please try again shortly.' });
+        }
+
+        const precedence = await resolveSubmissionPrecedence(conn, finalOfficeId, verifiedEmail, finalServiceAvailed, SUBMISSION_SOURCE);
+        if (precedence.decision === 'reject' || precedence.decision === 'reject_pending') {
+            await conn.query('SELECT RELEASE_LOCK(?)', [lockName]).catch(() => {});
+            conn.release();
+            createClientNotification({
+                clientEmail: verifiedEmail,
+                type: 'eligibility_conflict',
+                title: 'Offline Response Not Submitted',
+                message: precedence.nextEligibleAt
+                    ? `Your offline response could not be submitted because the selected service is currently unavailable for another response. You may submit another response for this service after ${new Date(precedence.nextEligibleAt).toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' })}.`
+                    : (precedence.message || 'Your offline response could not be submitted because the selected service is currently unavailable for another response.'),
+                offlineSubmissionId: submissionId,
+                dedupeKey: 'offline-conflict:' + submissionId
+            });
+            return res.status(409).json({
+                success: false, status: 'eligibility_conflict', message: precedence.message,
+                nextEligibleAt: precedence.nextEligibleAt || null
+            });
+        }
+
         await conn.beginTransaction();
 
         if (isCspc) {
@@ -4836,7 +5235,14 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
                 comments: rawComments, serviceAvailed: finalServiceAvailed,
                 clientType: finalClientType, age: finalAge, gender: finalGender,
                 officeVisitedTime: finalOfficeVisitedTime, period: currentPeriod
-            });
+            }, SUBMISSION_SOURCE);
+
+            if (precedence.supersede) {
+                await conn.query(
+                    "UPDATE survey_responses SET canonical_status = 'superseded', superseded_by_id = ? WHERE id = ? AND canonical_status = 'canonical'",
+                    [surveyResponseId, precedence.supersede]
+                );
+            }
 
             await conn.query(
                 `INSERT INTO offline_survey_submissions
@@ -4863,8 +5269,8 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
             };
 
             const [pendingResult] = await conn.query(
-                'INSERT INTO pending_survey_submissions (office_id, google_email, service_availed, payload) VALUES (?, ?, ?, ?)',
-                [finalOfficeId, verifiedEmail, finalServiceAvailed, JSON.stringify(pendingPayload)]
+                'INSERT INTO pending_survey_submissions (office_id, google_email, service_availed, payload, submission_source) VALUES (?, ?, ?, ?, ?)',
+                [finalOfficeId, verifiedEmail, finalServiceAvailed, JSON.stringify(pendingPayload), SUBMISSION_SOURCE]
             );
 
             await conn.query(
@@ -4878,7 +5284,10 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
             console.log('[Offline Verify] Transaction committed');
             result = { status: 'pending_approval', pendingSubmissionId: pendingResult.insertId };
         }
+
+        await conn.query('SELECT RELEASE_LOCK(?)', [lockName]).catch(() => {});
     } catch (err) {
+        if (lockHeld) await conn.query('SELECT RELEASE_LOCK(?)', [lockName]).catch(() => {});
         try { await conn.rollback(); } catch (rollbackErr) { /* connection may already be unusable */ }
         conn.release();
 
@@ -4959,8 +5368,15 @@ function loadDashboardData(req, callback) {
     const hasPeriodFilter = !!selectedPeriod;
 
     const periodCol = periodNormExpr('s.period_year_quarter');
-    const dateWhere = hasPeriodFilter ? ` WHERE ${periodCol} = ? ` : '';
-    const dateWhereAnd = hasPeriodFilter ? ` AND ${periodCol} = ? ` : '';
+    // Always includes the canonical-only filter (Online-vs-Offline
+    // precedence — see resolveSubmissionPrecedence) regardless of whether a
+    // period filter is also active, so dashboard totals/analytics never
+    // count a superseded row. Every query below appends dateWhere/
+    // dateWhereAnd directly after `survey_responses s`/the JOIN condition,
+    // so this is the single place that guarantees that exclusion for all
+    // of them — see Part 40 of the online/offline consistency fix.
+    const dateWhere = hasPeriodFilter ? ` WHERE ${periodCol} = ? AND s.canonical_status = 'canonical' ` : ` WHERE s.canonical_status = 'canonical' `;
+    const dateWhereAnd = hasPeriodFilter ? ` AND ${periodCol} = ? AND s.canonical_status = 'canonical' ` : ` AND s.canonical_status = 'canonical' `;
     const dateParams = hasPeriodFilter ? [normalizePeriodStr(selectedPeriod)] : [];
 
     const logErr = (label) => (err) => { if (err) console.error(`[Dashboard] ${label} query failed:`, err.message); };
@@ -5258,8 +5674,10 @@ app.get('/print', ensureAdminAuth, noCache, (req, res) => {
     const hasPeriodFilter = !!selectedPeriod;
 
     const periodCol = periodNormExpr('s.period_year_quarter');
-    const dateWhere = hasPeriodFilter ? ` WHERE ${periodCol} = ? ` : '';
-    const dateWhereAnd = hasPeriodFilter ? ` AND ${periodCol} = ? ` : '';
+    // Always excludes superseded rows — see the identical comment on
+    // loadDashboardData's dateWhere/dateWhereAnd above.
+    const dateWhere = hasPeriodFilter ? ` WHERE ${periodCol} = ? AND s.canonical_status = 'canonical' ` : ` WHERE s.canonical_status = 'canonical' `;
+    const dateWhereAnd = hasPeriodFilter ? ` AND ${periodCol} = ? AND s.canonical_status = 'canonical' ` : ` AND s.canonical_status = 'canonical' `;
     const dateParams = hasPeriodFilter ? [normalizePeriodStr(selectedPeriod)] : [];
 
     // Matches the "INTERPRETATION OF RESULTS" legend printed on this same page
@@ -5376,9 +5794,18 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
     const queryParams = [];
 
     if (respondentId) {
+        // Exact single-row lookup by primary key (e.g. "Generate Report" on
+        // one Survey Records row) — deliberately NOT filtered by
+        // canonical_status, so an admin can still pull up a superseded
+        // row's own report for audit/verification purposes.
         conditions.push('s.id = ?');
         queryParams.push(respondentId);
     } else {
+        // Aggregate report (institution/cluster/office totals) — a
+        // superseded row (an Offline submission an Online one later
+        // dominated for the same office/account/service) must never
+        // inflate these figures.
+        conditions.push("s.canonical_status = 'canonical'");
         if (cluster) {
             conditions.push('o.cluster_name = ?');
             queryParams.push(cluster);
@@ -5525,7 +5952,7 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
         SELECT o.cluster_name,
                ${sqdScoreExpr(ALL_SQD_COLS)} as rating
         FROM offices o
-        LEFT JOIN survey_responses s ON o.id = s.office_id
+        LEFT JOIN survey_responses s ON o.id = s.office_id AND s.canonical_status = 'canonical'
         GROUP BY o.cluster_name
     `;
     db.query(ratingQuery, (err, ratingResults) => {
@@ -5542,6 +5969,7 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
             FROM survey_responses s
             JOIN offices o ON s.office_id = o.id
             LEFT JOIN client_profiles p ON p.survey_response_id = s.id
+            WHERE s.canonical_status = 'canonical'
             ORDER BY o.cluster_name, s.created_at DESC
         `;
         db.query(recordsQuery, (err, results) => {
@@ -6192,7 +6620,7 @@ app.get('/api/public-dashboard', (req, res) => {
                 s.cc1, s.period_year_quarter, s.sentiment
             FROM survey_responses s
             JOIN offices o ON s.office_id = o.id
-            WHERE o.is_archived = 0
+            WHERE o.is_archived = 0 AND s.canonical_status = 'canonical'
         `;
 
         db.query(query, (err, results) => {

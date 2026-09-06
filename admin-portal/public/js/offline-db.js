@@ -487,7 +487,7 @@ function removeSurveyFromOutbox(localId) {
 // has.
 function runOfflineSurveySync() {
     return getAuthenticatedOutboxSurveys().then(function (surveys) {
-        if (!surveys.length) return { syncedCount: 0, failedResults: [] };
+        if (!surveys.length) return { syncedCount: 0, supersededCount: 0, failedResults: [] };
 
         // Generous timeout — the server awaits AI sentiment/topic analysis for
         // every queued survey before replying, which can legitimately take a
@@ -501,20 +501,40 @@ function runOfflineSurveySync() {
                 surveys: surveys.map(function (s) { return { localId: s.localId, payload: s.payload }; })
             })
         }, 30000).then(function (response) {
-            if (!response.ok) return { syncedCount: 0, failedResults: [] };
+            if (!response.ok) return { syncedCount: 0, supersededCount: 0, failedResults: [] };
             return response.json();
         }).then(function (data) {
             var results = (data && Array.isArray(data.results)) ? data.results : [];
             var syncedCount = 0;
+            var supersededCount = 0;
             var failedResults = [];
 
-            // Every item here got an explicit success/fail verdict from the server
-            // (synced, or a permanent rejection like "already evaluated this
-            // office") — either way it's removed from the outbox so it doesn't
-            // retry forever; failures are surfaced to the user instead.
+            // Each item's `status` (see /sync-surveys -> syncOneSurvey server-side)
+            // decides whether it's resolved (removed from the outbox — synced,
+            // pending office review, or superseded by an Online submission that
+            // already covers this exact office/account/service) or left queued
+            // for a later retry. 'retry_later' (the server was momentarily busy
+            // serializing a conflicting submission for this same logical survey)
+            // is the ONLY status that must NOT be treated as resolved — removing
+            // it here would silently drop a real, still-unsynced survey after a
+            // single transient lock contention.
             var removals = results.map(function (result) {
+                if (result.status === 'retry_later') {
+                    // Leave queued — next sync attempt (auto or manual) will
+                    // retry it. Not surfaced as a failure to the user; this is
+                    // expected to resolve itself within seconds.
+                    return Promise.resolve();
+                }
                 return removeSurveyFromOutbox(result.localId).then(function () {
-                    if (result.success) {
+                    if (result.status === 'superseded_by_online') {
+                        // Resolved, but NOT a new sync — an Online submission
+                        // for this exact survey was already received, so this
+                        // offline copy was correctly never counted as a second
+                        // response. Tracked separately so the UI never claims
+                        // "N offline surveys synced" for something that wasn't
+                        // actually inserted.
+                        supersededCount++;
+                    } else if (result.success) {
                         syncedCount++;
                     } else {
                         failedResults.push(result);
@@ -525,7 +545,7 @@ function runOfflineSurveySync() {
             });
 
             return Promise.all(removals).then(function () {
-                return { syncedCount: syncedCount, failedResults: failedResults };
+                return { syncedCount: syncedCount, supersededCount: supersededCount, failedResults: failedResults };
             });
         });
     });

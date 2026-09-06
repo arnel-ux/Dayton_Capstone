@@ -13,6 +13,7 @@
             if (event.data && event.data.type === 'SURVEYS_SYNCED') {
                 notifySyncResult({
                     syncedCount: event.data.count || 0,
+                    supersededCount: event.data.supersededCount || 0,
                     failedResults: event.data.failed || []
                 });
             }
@@ -28,6 +29,17 @@
             AppAlert.success(
                 `${result.syncedCount} offline survey${result.syncedCount > 1 ? 's' : ''} synced and analyzed successfully.`,
                 'Sync Complete'
+            );
+        }
+        // Accurate, distinct message — these were NOT submitted as a second
+        // response. An online submission for the exact same office/service
+        // already existed, so the offline copy was correctly discarded
+        // rather than double-counted (see the server's Online-vs-Offline
+        // precedence rule). Never phrased as "submitted successfully."
+        if (result.supersededCount > 0) {
+            AppAlert.info(
+                `${result.supersededCount} offline response${result.supersededCount > 1 ? 's were' : ' was'} not needed — your online submission for that service was already received.`,
+                'Already Submitted Online'
             );
         }
         if (result.failedResults && result.failedResults.length > 0) {

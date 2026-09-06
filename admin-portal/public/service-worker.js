@@ -38,8 +38,17 @@ importScripts('/js/offline-db.js');
 // mobile header's English/Tagalog toggle moved from the right to the left
 // (row 2, under the title) — bumped so a v26-or-earlier install's
 // precached copy of that file is discarded.
-const STATIC_CACHE = 'cspc-static-v27';
-const RUNTIME_CACHE = 'cspc-runtime-v27';
+// v28: Online-vs-Offline canonical-precedence fix — offline-db.js's
+// runOfflineSurveySync() and pwa-client.js's notifySyncResult() now handle
+// the new 'retry_later' (keep queued, don't drop) and 'superseded_by_online'
+// (resolved, but not a real sync — accurate message, never "submitted
+// successfully") statuses from /sync-surveys; this file's own background
+// sync handler passes supersededCount through to the page. Bumped so a
+// v27-or-earlier install's precached copies of offline-db.js/pwa-client.js
+// (both in CRITICAL_PRECACHE_URLS) are discarded — those old copies would
+// otherwise silently drop a 'retry_later' item from the outbox forever.
+const STATIC_CACHE = 'cspc-static-v28';
+const RUNTIME_CACHE = 'cspc-runtime-v28';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
@@ -374,11 +383,12 @@ async function handleBackgroundSync() {
         return;
     }
 
-    if (result.syncedCount > 0 || result.failedResults.length > 0) {
+    if (result.syncedCount > 0 || result.supersededCount > 0 || result.failedResults.length > 0) {
         const clientsList = await self.clients.matchAll({ type: 'window' });
         clientsList.forEach((client) => client.postMessage({
             type: 'SURVEYS_SYNCED',
             count: result.syncedCount,
+            supersededCount: result.supersededCount || 0,
             failed: result.failedResults
         }));
     }
