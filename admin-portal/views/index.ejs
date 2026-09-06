@@ -150,7 +150,17 @@
         h1, h2, h3, h4, h5, h6 { line-height: 1.2; }
 
         .bg-image {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            /* 100%/100% instead of 100vw/100vh: for a `position:fixed`
+               element, percentages resolve against the actual visual
+               viewport, while `vw`/`vh` are defined off the *layout*
+               viewport — the two can diverge by a scrollbar's width, or
+               (on some mobile engines) by whatever the page's widest piece
+               of content made the layout viewport expand to, so 100vw can
+               render wider than what's actually visible. That mismatch is
+               one contributor to the "content looks shifted on some phones"
+               symptom this page has had — see the overflow-x:hidden note
+               below for the other, larger one. */
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background:url('<%- landingContent.hero.imageUrl %>');
             /* The CSPC monument sits in the upper half of this photo — on a
                tall mobile viewport, centering it vertically cropped the
@@ -160,7 +170,7 @@
         }
 
         .bg-overlay {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: linear-gradient(180deg, rgba(37, 29, 58,0.92) 0%, rgba(37, 29, 58,0.85) 100%); z-index: -1;
         }
 
@@ -498,7 +508,19 @@
         }
         .dashboard-section::before {
             content: ''; position: absolute; top: -15%; left: 50%; transform: translateX(-50%);
-            width: 70rem; height: 40rem; pointer-events: none; z-index: 0;
+            /* Purely decorative glow, centered under the section via
+               left:50%/translateX(-50%) — symmetric by construction, so it
+               was never the cause of any LEFT/RIGHT imbalance. But at a
+               fixed 70rem/40rem (1120px/640px) it's 3x wider than a phone
+               screen, and .dashboard-section explicitly opts out of
+               clipping it (overflow:visible, so the glow isn't cut off
+               mid-fade at the section edge on desktop). With nothing
+               between it and <body> that clips horizontally, that left it
+               depending entirely on the page-wide `overflow-x: hidden`
+               band-aid below to stay off the horizontal scroll axis — capped
+               here instead so it never exceeds the viewport regardless of
+               that global rule. */
+            width: min(70rem, 100vw); height: min(40rem, 56vw); pointer-events: none; z-index: 0;
             background: radial-gradient(ellipse at center, rgba(255, 204, 0,0.1) 0%, transparent 70%);
         }
 
@@ -549,16 +571,29 @@
             max-width: none !important;
         }
 
-        /* KPI summary strip — glass tiles floating on the hero backdrop */
+        /* KPI summary strip — glass tiles floating on the hero backdrop.
+           Root cause of the "off-center on some phones only" bug: bare `1fr`
+           grid tracks don't clamp to the space actually available — a grid
+           item's default min-width is `auto` (its content's own min-content
+           size, not 0), so if a tile's icon+text needs more room than an
+           `1fr` track has, ALL tracks in that row grow to fit it instead of
+           wrapping/shrinking, silently widening .kpi-strip (and therefore
+           <body>) past the viewport. That only shows up once a phone is
+           narrow enough for a tile's intrinsic content to exceed its track
+           width — e.g. it reproduced at 320px but not 360px+ in testing —
+           which is exactly the "some phones, not others" pattern reported.
+           minmax(0, 1fr) caps each track at the space really available;
+           min-width:0 on the tile itself (a flex container) does the same
+           for its own icon+text row. */
         .kpi-strip {
-            display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-4);
+            display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-4);
             max-width: 87.5rem; margin: 0 auto var(--sp-5); padding: 0 var(--sp-4); position: relative; z-index: 1;
         }
         .kpi-tile {
             background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); border-radius: var(--sp-2);
             padding: var(--sp-2) var(--sp-3); box-shadow: 0 10px 30px rgba(0,0,0,0.25);
             backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%);
-            display: flex; align-items: center; gap: var(--sp-2);
+            display: flex; align-items: center; gap: var(--sp-2); min-width: 0;
             border-top: 3px solid var(--kpi-accent, var(--gold-400));
             transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
         }
@@ -568,14 +603,18 @@
             display: flex; align-items: center; justify-content: center; font-size: 1rem;
             background: var(--kpi-accent-soft, rgba(255, 204, 0,0.12)); color: var(--kpi-accent, var(--gold-500));
         }
+        /* min-width:0 lets this text column actually shrink/wrap inside the
+           flex row above instead of forcing .kpi-tile (and its grid track)
+           wider — a flex child's default min-width is also `auto`. */
+        .kpi-tile > div:last-child { min-width: 0; }
         .kpi-value { font-size: 1.25rem; font-weight: 800; color: #fff; line-height: 1.15; letter-spacing: -0.02em; }
         .kpi-label { font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: rgba(255,255,255,0.6); margin-top: 2px; }
-        @media (max-width: 62rem) { .kpi-strip { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 62rem) { .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         @media (max-width: 36rem) {
             /* Stayed 2-column here too instead of collapsing to a single
                stacked column — 2x2 fits comfortably even on narrow phones
                once the tile itself is sized down a bit. */
-            .kpi-strip { grid-template-columns: repeat(2, 1fr); gap: 0.6rem; padding: 0 var(--sp-2); }
+            .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; padding: 0 var(--sp-2); }
             .kpi-tile { padding: 0.6rem 0.6rem; gap: 0.5rem; }
             .kpi-icon { width: 30px; height: 30px; font-size: 0.85rem; }
             .kpi-value { font-size: 1.05rem; }
@@ -712,7 +751,7 @@
         .footer-bottom strong { color: var(--gold-400); }
 
         @media (max-width: 62rem) {
-            .footer-main { grid-template-columns: 1fr 1fr; gap: var(--sp-5) var(--sp-4); }
+            .footer-main { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-5) var(--sp-4); }
         }
         @media (max-width: 36rem) {
             .footer-main { grid-template-columns: 1fr; padding: var(--sp-3) var(--sp-3) var(--sp-2); gap: var(--sp-4); text-align: center; }

@@ -27,8 +27,19 @@ importScripts('/js/offline-db.js');
 // v25: client-survey.ejs mobile-responsiveness pass (SQD emoji hidden on
 // phones, Thank You page's Submit Again/Logout buttons resized) — bumped so
 // a v24-or-earlier install's precached copy of that file is discarded.
-const STATIC_CACHE = 'cspc-static-v25';
-const RUNTIME_CACHE = 'cspc-runtime-v25';
+// v26: index.ejs mobile-centering fix (.kpi-strip grid tracks were pushing
+// the page wider than the viewport on narrow phones; .bg-image/.bg-overlay
+// and the dashboard decorative glow no longer depend on 100vw/a global
+// overflow-x:hidden band-aid to stay on-screen) — bumped so a v25-or-earlier
+// install's precached copy of '/' (see PRECACHE_URLS) is discarded.
+// v27: client-survey.ejs logged-in user panel pass — Survey History's
+// .history-item/.history-detail-head no longer let the "Completed"/status
+// badge float mid-line or get squeezed by a long office name, and the
+// mobile header's English/Tagalog toggle moved from the right to the left
+// (row 2, under the title) — bumped so a v26-or-earlier install's
+// precached copy of that file is discarded.
+const STATIC_CACHE = 'cspc-static-v27';
+const RUNTIME_CACHE = 'cspc-runtime-v27';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
