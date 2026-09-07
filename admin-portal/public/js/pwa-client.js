@@ -179,8 +179,9 @@
     // Retry/backoff state — separate from the credential store. Distinguishes
     // TEMPORARY failures (network drop, 429, 5xx — timed backoff, retried
     // automatically) from a CONFIRMED-WRONG-PASSWORD 401 (automaticBlocked —
-    // never retried automatically again; only a deliberate manual retry, via
-    // manualRetryOfflineVerification below, can clear it).
+    // never retried automatically again; only clears if a fresh credential
+    // for this identifier is remembered again, e.g. a brand-new offline
+    // submission for the same account).
     // ------------------------------------------------------------------
     const identifierRetryState = new Map(); // normalized identifier -> { failureCount, nextRetryAt, automaticBlocked }
     const RETRY_BACKOFF_MS = [5000, 15000, 30000];
@@ -237,9 +238,12 @@
     }
 
     // Renders/refreshes the "Verification failed" banner listing every
-    // identifier currently blocked on a 401, each with a "Verify Account"
-    // button that starts the manual retry flow. No-op if the banner
-    // container isn't present on this page.
+    // identifier confirmed to have failed verification (wrong password on
+    // reconnect). Informational only — no retry button, no password prompt
+    // of any kind. The client is notified of the actual outcome through the
+    // existing Notification Bell (server-created on the 401 response); this
+    // banner just surfaces the same fact on the page itself. No-op if the
+    // banner container isn't present on this page.
     async function updateVerificationFailedBanner() {
         const container = document.getElementById('offlineVerifyFailedBanner');
         if (!container) return;
@@ -269,32 +273,11 @@
         failedIdentifiers.forEach((identifier) => {
             const row = document.createElement('div');
             row.className = 'offline-verify-failed-row';
-            row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;padding:0.15rem 0;';
+            row.style.cssText = 'display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;padding:0.15rem 0;';
 
             const label = document.createElement('span');
-            label.textContent = 'Verification failed for ' + maskIdentifierForDisplay(identifier);
+            label.textContent = 'Your offline survey for ' + maskIdentifierForDisplay(identifier) + ' was not synced because the password entered was incorrect. See your notifications for details.';
             row.appendChild(label);
-
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'btn btn-sm btn-outline-primary offline-verify-retry-btn';
-            button.textContent = 'Verify Account';
-            button.dataset.identifier = identifier;
-            button.addEventListener('click', async () => {
-                if (button.disabled) return;
-
-                button.disabled = true;
-                try {
-                    await manualRetryOfflineVerification(
-                        button.dataset.identifier
-                    );
-                } finally {
-                    if (button.isConnected) {
-                        button.disabled = false;
-                    }
-                }
-            });
-            row.appendChild(button);
 
             rows.push(row);
         });
@@ -430,91 +413,6 @@
         container.hidden = false;
     }
 
-    // Deliberate user action to retry a blocked (401) identifier without
-    // requiring a brand-new offline submission. Opens the same masked
-    // SweetAlert2 modal used elsewhere, remembers the corrected password
-    // (which also clears the automaticBlocked state), then immediately
-    // re-attempts verification for that identifier's still-queued records —
-    // bypassing canAttemptNow on purpose, since this IS the manual override.
-    async function manualRetryOfflineVerification(identifier) {
-        const password = await promptForOfflineVerificationPassword(identifier);
-        if (!password) {
-            // Cancelled, or the verification UI wasn't available — leave
-            // everything exactly as it was.
-            return;
-        }
-
-        if (typeof window.rememberOfflineCredential === 'function') {
-            window.rememberOfflineCredential(identifier, password);
-        }
-
-        try {
-            const unverified = await getUnverifiedOutboxSurveys();
-            const groups = groupUnverifiedByIdentifier(unverified);
-            const records = groups[normalizeIdentifier(identifier)] || [];
-            if (records.length) {
-                await verifyAndSyncGroup(identifier, records);
-            }
-        } catch (err) {
-            console.error('[Offline Sync] Manual retry failed:', err);
-        }
-
-        await updateVerificationFailedBanner();
-    }
-
-    // Password entry ONLY ever happens through SweetAlert2's own masked
-    // `input: 'password'` field — never window.prompt(), which is a plain
-    // text prompt with no masking and no guarantee about how the browser
-    // displays/logs it. If SweetAlert2 hasn't loaded (itself possible while
-    // offline — this could be the very first page ever opened in this
-    // browser), verification is simply NOT attempted this run — returns
-    // `undefined` (distinct from `null`, "the user cancelled") so the
-    // caller leaves every record untouched rather than guessing a password
-    // through a downgraded, insecure input.
-    // Returns: a password string, `null` (cancelled), or `undefined`
-    // (verification UI unavailable — nothing was ever shown).
-    function promptForOfflineVerificationPassword(identifier) {
-        if (!window.Swal) {
-            try {
-                window.alert('Account verification is available once the verification interface has loaded. Please reload the page and try again.');
-            } catch (e) { /* even window.alert can theoretically be blocked — nothing more to do */ }
-            return Promise.resolve(undefined);
-        }
-        return Swal.fire({
-            title: 'Account Verification Required',
-            html: '<p style="margin:0 0 0.75rem;color:#475569;font-size:0.9rem;">Enter the password for <strong>' + escapeHtmlForSwal(identifier) + '</strong> to sync your offline survey.</p>',
-            input: 'password',
-            inputPlaceholder: 'Password',
-            inputAttributes: { autocapitalize: 'off', autocomplete: 'current-password' },
-            showCancelButton: true,
-            confirmButtonText: 'Verify & Sync',
-            confirmButtonColor: '#2554c7',
-            allowOutsideClick: false,
-            inputValidator: (value) => (value ? undefined : 'Please enter your password.'),
-            // Same show/hide toggle as every other client-facing password
-            // field — see initPasswordToggles in alerts.js. This modal's
-            // input is created fresh by SweetAlert2 on each open, so it
-            // can't be caught by that file's one-time DOMContentLoaded scan
-            // and needs this explicit call once the popup actually exists.
-            didOpen: (popupEl) => {
-                if (typeof window.initPasswordToggles === 'function') window.initPasswordToggles(popupEl);
-            },
-            // Belt-and-suspenders on top of SweetAlert2's own DOM teardown —
-            // explicitly blank the input before the popup unmounts, so
-            // nothing password-shaped lingers in the DOM even momentarily.
-            didClose: (popupEl) => {
-                const input = popupEl && popupEl.querySelector('input');
-                if (input) input.value = '';
-            }
-        }).then((result) => (result.isConfirmed ? result.value : null));
-    }
-
-    function escapeHtmlForSwal(str) {
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
-    }
-
     function notifyOfflineVerifyOutcome(status, message) {
         if (!window.AppAlert) return;
         if (status === 'synced') {
@@ -536,34 +434,28 @@
         }
     }
 
-    // Verifies+syncs every survey queued under ONE identifier, using ONE
-    // password entered once for the whole group. Stops the group (without
-    // touching any other group) the instant that password is proven wrong —
-    // trying it again against the remaining surveys in the same group would
-    // just fail identically, since they share the same account.
+    // Verifies+syncs every survey queued under ONE identifier, using the
+    // password captured (in RAM only) at the moment the survey was
+    // originally submitted offline. Never prompts for a password here —
+    // automatic reconnect verification is silent by design: if the RAM
+    // credential is gone (its TTL expired, or the page/tab was closed and
+    // reopened, wiping page memory), this group is simply left untouched
+    // for now rather than resurrecting any password popup. Stops the group
+    // (without touching any other group) the instant the password is
+    // proven wrong — trying it again against the remaining surveys in the
+    // same group would just fail identically, since they share the same
+    // account.
     async function verifyAndSyncGroup(identifier, records) {
-        let password = getOfflineCredential(identifier);
-        let usedRamCredential = !!password;
-        console.log('[Offline Sync] Temporary credential available:', usedRamCredential ? 'yes' : 'no');
+        const password = getOfflineCredential(identifier);
+        console.log('[Offline Sync] Temporary credential available:', password ? 'yes' : 'no');
 
         if (!password) {
-            password = await promptForOfflineVerificationPassword(identifier);
-        }
-
-        if (password === undefined) {
-            // Verification UI wasn't available — nothing was shown, nothing
-            // attempted. Leave every record exactly as it was; this simply
-            // retries on the next 'online'/load event once things have
-            // loaded.
-            return;
-        }
-        if (password === null) {
-            // Explicitly cancelled — mark "a prompt was shown but not
-            // completed," distinct from a record that's never been
-            // attempted at all.
-            for (const record of records) {
-                await setOutboxSyncStatus(record.localId, 'verification_required');
-            }
+            // No password popup, no automatic guess — leave every record
+            // exactly as it was (still 'pending_sync'/whatever it already
+            // was). It will be picked up automatically the moment this
+            // identifier's credential is remembered again (i.e. the user
+            // submits a fresh offline survey for the same account within
+            // this page session).
             return;
         }
 
@@ -746,12 +638,12 @@
             const groups = groupUnverifiedByIdentifier(unverified);
             for (const identifier of Object.keys(groups)) {
                 if (!navigator.onLine) break; // connection dropped mid-flow — stop, retry later
-                // Automatic paths only: an identifier currently
-                // automaticBlocked (401) or still inside its temporary
-                // backoff window is skipped here. It remains reachable
-                // through the manual "Verify Account" banner action
-                // (manualRetryOfflineVerification), which calls
-                // verifyAndSyncGroup directly and bypasses this guard.
+                // An identifier currently automaticBlocked (a confirmed
+                // wrong password) or still inside its temporary backoff
+                // window is skipped here — no popup, no automatic retry of
+                // a known-wrong password. Bell notification for the
+                // failure was already created server-side on the original
+                // 401 response.
                 if (!canAttemptNow(identifier)) continue;
                 await verifyAndSyncGroup(identifier, groups[identifier]);
             }
@@ -846,6 +738,5 @@
     window.attemptReconnectSync = attemptReconnectSync;
     window.rememberOfflineCredential = rememberOfflineCredential;
     window.forgetOfflineCredential = forgetOfflineCredential;
-    window.manualRetryOfflineVerification = manualRetryOfflineVerification;
     window.updateEligibilityConflictBanner = updateEligibilityConflictBanner;
 })();

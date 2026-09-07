@@ -183,11 +183,11 @@ const AppAlert = {
 // Accessible show/hide toggle for every password input on client/office
 // pages that load this shared file (admin pages don't load it, so this
 // never touches admin forms). Auto-runs on DOMContentLoaded below; also
-// exposed on window so dynamically-created password inputs (e.g. the
-// SweetAlert2 "Verify Account" modal in pwa-client.js) can call it against
-// just their own root element once rendered. Never reads, logs, copies, or
-// persists the value anywhere — the click handler only ever flips the
-// input's own `type` attribute back and forth.
+// exposed on window so dynamically-created password inputs (e.g. any
+// SweetAlert2 modal) can call it against just their own root element once
+// rendered. Never reads, logs, copies, or persists the value anywhere — the
+// click handler only ever flips the input's own `type` attribute back and
+// forth.
 function initPasswordToggles(root) {
     root = root || document;
     root.querySelectorAll('input[type="password"]').forEach((input) => {

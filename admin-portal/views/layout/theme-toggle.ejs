@@ -61,10 +61,16 @@
 
     @media (max-width: 576px) {
         .theme-toggle-btn {
-            bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-            right: calc(14px + env(safe-area-inset-right, 0px));
-            width: 34px; height: 34px;
+            /* Was 34px — under the 40-44px target. Bumped to 42px and given
+               a touch more inset so it clears the safe area and never sits
+               flush against the corner over History badges/CC/SQD options/
+               Next-Back-Submit buttons/the notification panel, none of
+               which are ever positioned in this same bottom-right corner. */
+            bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+            right: calc(16px + env(safe-area-inset-right, 0px));
+            width: 42px; height: 42px;
         }
+        .theme-toggle-btn .theme-icon { width: 18px; height: 18px; }
     }
 </style>
 

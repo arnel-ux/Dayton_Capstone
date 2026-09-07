@@ -4973,6 +4973,22 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
 
     if (!account || !account.password || !passwordMatches) {
         recordOfflineVerifyFailure(identifier);
+        // Only notify when the email actually resolves to a real account —
+        // an unknown email must never get any account-specific side effect
+        // (would be an account-enumeration signal). dedupeKey is keyed off
+        // the submission's own UUID, so INSERT IGNORE naturally collapses
+        // any retried/duplicate call for the same offline survey into a
+        // single Bell entry.
+        if (account) {
+            createClientNotification({
+                clientEmail: account.email,
+                type: 'offline_verification_failed',
+                title: "Offline Survey Not Synced",
+                message: 'Your offline survey was not synced because the password entered was incorrect.',
+                offlineSubmissionId: submissionId,
+                dedupeKey: 'offline-verify-failed:' + submissionId
+            });
+        }
         return res.status(401).json({ success: false, status: 'verification_failed', message: OFFLINE_VERIFY_GENERIC_MESSAGE });
     }
     clearOfflineVerifyFailures(identifier);

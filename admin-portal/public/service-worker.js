@@ -47,8 +47,20 @@ importScripts('/js/offline-db.js');
 // v27-or-earlier install's precached copies of offline-db.js/pwa-client.js
 // (both in CRITICAL_PRECACHE_URLS) are discarded — those old copies would
 // otherwise silently drop a 'retry_later' item from the outbox forever.
-const STATIC_CACHE = 'cspc-static-v28';
-const RUNTIME_CACHE = 'cspc-runtime-v28';
+// v29: (1) pwa-client.js's automatic offline-verification flow no longer
+// ever pops the "Account Verification Required" password prompt on
+// reconnect (only ever used the RAM-cached password silently; a missing
+// cache now just leaves the record untouched instead of re-prompting) —
+// the manual "Verify Account" retry button/prompt was removed too. (2)
+// client-survey.ejs/theme-toggle.ejs mobile-first compaction pass (header,
+// Home, Terms, survey banner, progress stepper, Citizen's Charter, SQD,
+// History badge, nav buttons, floating theme button all resized to target
+// mobile scale; the View-Profile min-height/centering rule that was
+// reintroducing a blank-gap-under-header effect was removed). Bumped so a
+// v28-or-earlier install's precached copies of pwa-client.js,
+// client-survey.ejs, and theme-toggle.ejs are discarded.
+const STATIC_CACHE = 'cspc-static-v29';
+const RUNTIME_CACHE = 'cspc-runtime-v29';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.

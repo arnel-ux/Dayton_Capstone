@@ -601,15 +601,22 @@
                notch instead of just the outer card shell. */
             .home-hero { padding-bottom: 1rem; }
             .home-hero .survey-hero-logo { width: 48px; height: 48px; }
-            .home-hero h2 { font-size: 1.25rem; }
+            /* Hero heading/subtitle and the About-card heading/body text had
+               all been pushed UNDER their target ranges by the earlier
+               compaction passes (20px/13.4px/15.7px/13.1px against
+               22-26/14-16/17-19/14-16px targets) — nudged back up into range
+               here; the icon (36px, under the 38-44px target) too. Layout
+               spacing (padding/margins/gaps) stays as this pass already
+               tuned it — only these five undersized text/icon rules move. */
+            .home-hero h2 { font-size: 1.4rem; }
             .home-hero .survey-hero-eyebrow { font-size: 0.62rem; margin-bottom: 0.2rem; }
-            .home-hero p.home-subtitle-anim { font-size: 0.84rem; line-height: 1.45; margin-top: 0.6rem !important; }
+            .home-hero p.home-subtitle-anim { font-size: 0.9rem; line-height: 1.45; margin-top: 0.6rem !important; }
             #view-home .mb-5 { margin-bottom: 1.1rem !important; }
             #view-home .row.g-4 { --bs-gutter-y: 0.85rem; --bs-gutter-x: 0.85rem; }
             .home-info-card { padding: 1rem; }
-            .home-info-icon { width: 36px; height: 36px; font-size: 1rem; margin-bottom: 0.6rem; border-radius: 10px; }
-            .home-info-card h5 { font-size: 0.98rem; margin-bottom: 0.4rem; }
-            .home-info-card p { font-size: 0.82rem; line-height: 1.45; }
+            .home-info-icon { width: 40px; height: 40px; font-size: 1.05rem; margin-bottom: 0.6rem; border-radius: 10px; }
+            .home-info-card h5 { font-size: 1.1rem; margin-bottom: 0.4rem; }
+            .home-info-card p { font-size: 0.9rem; line-height: 1.45; }
             .home-feature-row { margin-top: 0.7rem; }
         }
 
@@ -632,7 +639,20 @@
            their own sizes on purpose — only the ordinary description-text
            role is unified. */
         @media (max-width: 575.98px) {
-            .mobile-section-desc { font-size: 0.84rem; line-height: 1.48; }
+            /* Root-cause bug found via real-browser measurement: the
+               "Help us serve you better!" paragraph (s1_desc) carries both
+               `fs-6` and `mobile-section-desc` in its markup — Bootstrap's
+               `.fs-6` utility ships `font-size: 1rem !important`, which
+               silently wins over this plain (non-important) rule regardless
+               of source order, so that paragraph was STILL rendering at
+               16px on a real device — the exact "Help Us Serve You Better
+               reads larger than Terms" bug this shared class was written to
+               fix, just reintroduced by a utility class neither author
+               realized was `!important`. The Terms paragraph never had this
+               problem (it uses `.small`, not `.fs-6`, which is why manual
+               testing of Terms alone wouldn't have caught it). Needs
+               !important itself to actually win. */
+            .mobile-section-desc { font-size: 0.84rem !important; line-height: 1.48; }
         }
 
         /* ---- Terms & Conditions box (stage 1) on phones ----
@@ -667,10 +687,23 @@
             #terms-points-list { padding-left: 1rem !important; font-size: 0.78rem; line-height: 1.42; margin-bottom: 0.65rem !important; }
             #terms-box .btn-sm { padding: 0.5rem 1rem; font-size: 0.8rem; }
             #terms-box .form-check { padding: 0.25rem 0 !important; gap: 0.5rem !important; }
-            #termsAgreeRow .fs-6 { font-size: 0.82rem; }
+            /* Same `.fs-6 { font-size: 1rem !important }` Bootstrap-utility
+               conflict as .mobile-section-desc/#stage2 .form-label above —
+               the agreement checkbox's own label markup carries `fs-6`
+               alongside this rule, so it was silently staying at 16px
+               instead of the intended smaller size. */
+            #termsAgreeRow .fs-6 { font-size: 0.88rem !important; }
             #termsModal .modal-header, #termsModal .modal-footer { padding: 0.7rem 0.9rem; }
             #termsModal .modal-body { font-size: 0.78rem !important; line-height: 1.42 !important; padding: 0.9rem; }
             #termsModal .modal-title { font-size: 0.94rem; }
+
+            /* START SURVEY: Bootstrap's py-3 (1rem/16px top+bottom) on top
+               of this fw-semibold text's own line-height measured out to
+               ~58px real height — over the 44-48px target. py-3 is a
+               spacing utility, which Bootstrap 5.3 also ships !important
+               (same family of bug as the .fs-6/.py-3 conflicts found
+               elsewhere in this pass), so the override needs it too. */
+            #btnStartSurvey.py-3 { padding-top: 0.6rem !important; padding-bottom: 0.6rem !important; font-size: 0.95rem; min-height: 44px; }
         }
 
         /* ---- Touch targets + spacing across the survey flow (client info
@@ -711,8 +744,13 @@
             #stage3 .d-flex.justify-content-between.border-top > .btn,
             #stage4 .d-flex.justify-content-between.border-top > .btn,
             #stage5 .d-flex.justify-content-between.border-top > .btn {
-                padding-top: 0.85rem;
-                padding-bottom: 0.85rem;
+                /* 0.85rem padding-top+bottom on top of this fw-semibold
+                   text's own line-height measured out to ~53px real height
+                   — over the 44-48px nav-button target. Trimmed so
+                   min-height:44px is doing the real work (a comfortable
+                   floor) instead of the padding pushing well past it. */
+                padding-top: 0.65rem;
+                padding-bottom: 0.65rem;
                 min-height: 44px;
             }
         }
@@ -727,30 +765,20 @@
         /* ---- Profile view ---- */
         .profile-view-card { overflow: hidden; }
 
-        /* View Profile reads as compact but visually top-heavy on a phone —
-           it's centered horizontally (view-card's own auto margins) but
-           just flows from the very top of .content-body, leaving a large
-           dead zone below whenever the card is shorter than the viewport.
-           Turning #view-profile into a flex column that centers its single
-           child fixes that WITHOUT a rigid height:100vh: min-height (not
-           height) means flexbox only centers when the card is shorter than
-           the available space — if profile-body content is ever taller
-           (long name, many fields), the container simply grows to fit and
-           the page scrolls exactly as before. 100dvh (not 100vh) tracks the
-           real visual viewport as mobile browser chrome shows/hides, and
-           var(--topbar-h) already tracks its own per-breakpoint value; the
-           flat 3rem approximates .content-body's own top+bottom padding at
-           this breakpoint (visual balance, not pixel-exact). Scoped to
-           ≤767.98 only — desktop already has ample room and this must not
-           touch it. */
-        @media (max-width: 767.98px) {
-            #view-profile.app-view.active {
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                min-height: calc(100dvh - var(--topbar-h) - 3rem);
-            }
-        }
+        /* View Profile used to get a min-height/flex "justify-content:
+           center" treatment here, on the theory that a short card left a
+           dead zone below it worth visually centering into. Root-cause
+           mobile audit found that's backwards: centering a shorter-than-
+           viewport card pushes EQUAL empty space above it too, i.e. it
+           re-creates the exact "big blank gap under the header" complaint
+           this pass is fixing on Home/History (which never had this rule
+           and don't have that gap) — Profile just had it hidden by
+           happening to be a taller card historically. Removed so Profile
+           matches Home/History/every other view: content starts immediately
+           below the header and simply ends where it ends, no artificial
+           vertical centering anywhere. No fixed height added — a taller
+           profile (long name, many fields) still just flows/scrolls
+           normally, exactly as it already does elsewhere. */
         .profile-hero {
             display: flex; align-items: center; gap: 1.1rem;
             padding: 1.75rem clamp(1.25rem, 4vw, 3rem);
@@ -914,7 +942,11 @@
             .history-office { font-size: 0.86rem; margin-bottom: 0.1rem; }
             .history-office i { font-size: 0.82rem; }
             .history-meta { font-size: 0.72rem; line-height: 1.3; }
-            .history-badge { font-size: 0.66rem; padding: 0.22rem 0.55rem; }
+            /* Badge had shrunk to ~18px tall (0.66rem text + 0.22rem
+               padding) — under the 28-32px comfortable-badge-height target.
+               Bumped both back up; still nowrap/flex-shrink:0 (base rule
+               above), so the badge-overlap-on-wrap fix is untouched. */
+            .history-badge { font-size: 0.72rem; padding: 0.42rem 0.8rem; }
         }
 
         /* ---- History detail modal ----
@@ -1187,12 +1219,24 @@
             /* Measured via real browser render (headless Chromium), not
                hand-calculated — the language toggle's full-word buttons on
                row 2 make this taller than a first-pass estimate suggested. */
-            :root { --topbar-h: 106px; }
+            /* --topbar-h recomputed empirically (Playwright, 375px, real
+               rendered .topbar rect) after the title/subtitle type scale
+               below was brought UP into the 18-20px/12-14px target range
+               (was 0.9rem/0.6rem — under the target, not over it): measured
+               ~113-114px even after the padding/row-gap trims below, since
+               the bigger two-line title (18px + 12.8px subtitle, each with
+               their own line-height) costs more than the trimmed padding
+               saves. Down slightly from the previous 106px's actual (was
+               under-measured before this pass) — kept at a real measured
+               value rather than guessed, since var(--topbar-h) drives sticky
+               offsets (.review-doc-header, notif panel, scroll-margin-top)
+               that break if it doesn't match the true rendered height. */
+            :root { --topbar-h: 114px; }
             .topbar {
                 flex-wrap: wrap;
                 align-content: flex-start;
-                padding: 0.5rem 0.75rem 0.55rem;
-                row-gap: 0.35rem;
+                padding: 0.45rem 0.7rem 0.5rem;
+                row-gap: 0.3rem;
                 column-gap: 0.5rem;
             }
 
@@ -1201,11 +1245,11 @@
                as smaller than desktop's 44px. */
             .topbar-hamburger { width: 40px; height: 40px; font-size: 1.1rem; }
             .topbar-title {
-                min-width: 0; flex: 1 1 auto; font-size: 0.9rem;
+                min-width: 0; flex: 1 1 auto; font-size: 1.125rem;
                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             }
             .topbar-title small {
-                font-size: 0.6rem;
+                font-size: 0.8rem;
                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             }
             .topbar-icon-group { gap: 0.5rem; flex-shrink: 0; }
@@ -1243,8 +1287,17 @@
                 margin-left: 0;
                 justify-content: flex-start;
                 padding: 0.2rem; gap: 0.3rem;
+                box-shadow: none;
             }
-            .lang-toggle-group .btn { padding: 0.4rem 0.85rem; font-size: 0.78rem; min-height: 34px; }
+            /* Font bumped from 0.78rem (12.5px, under the 14-16px target) to
+               0.9rem, horizontal padding trimmed a touch to compensate, and
+               the markup's own Bootstrap shadow-sm class neutralized here
+               (both buttons carry it) so this reads as a normal compact
+               toggle, not a "giant pill" with a floating drop shadow. */
+            .lang-toggle-group .btn {
+                padding: 0.38rem 0.7rem; font-size: 0.9rem; min-height: 36px;
+                box-shadow: none !important;
+            }
 
             /* Client Profile header + Autofill switch: stay a single row
                (title left, switch right) at every width — the earlier
@@ -1281,7 +1334,14 @@
                a field caption on a phone next to a same-height input.
                Reduced the label only; the input/select itself (and its
                touch height) is untouched. */
-            #stage2 .form-label { font-size: 0.86rem; margin-bottom: 0.3rem; }
+            /* Root cause found via real-browser measurement: every stage2
+               label markup also carries Bootstrap's `.fs-6` utility class,
+               which ships `!important` — it was silently defeating this
+               rule entirely (labels measured at 16px on a real render, not
+               the intended 13.76px), so the "reduce the label only" mobile
+               pass documented above never actually took effect. Needs
+               !important itself to win. */
+            #stage2 .form-label { font-size: 0.9rem !important; margin-bottom: 0.3rem; }
             #stage2 .form-text { font-size: 0.76rem; margin-top: 0.2rem; }
             #stage2 .service-progress-badge { font-size: 0.7rem; }
             #stage2 .availability-notice { padding: 0.3rem 0.6rem; font-size: 0.78rem; margin: 0.25rem 0; }
@@ -1592,7 +1652,11 @@
 
         @media (max-width: 480px) {
             .step-label { display: none; }
-            .step-dot { width: 28px; height: 28px; font-size: 0.75rem; }
+            /* 28px undershot the 32-36px comfortable-circle target — bumped
+               back up; connector track thinned to 3px (was 4px) to keep the
+               row's overall visual weight light despite the bigger dots. */
+            .step-dot { width: 32px; height: 32px; font-size: 0.78rem; }
+            .progress-track { top: 17px; height: 3px; }
         }
 
         /* ---- Survey hero (institutional logo/title block above the form)
@@ -1607,9 +1671,17 @@
             .survey-hero-logo-wrap { margin-bottom: 0.5rem; }
             .survey-hero-eyebrow { font-size: 0.66rem; letter-spacing: 1.5px; }
             .survey-hero-title { font-size: 1.15rem; }
-            .survey-hero-badge { padding: 0.6rem 1.25rem; margin-top: 1rem; gap: 0.45rem; }
-            .survey-hero-badge h4 { font-size: 0.85rem; }
-            .survey-hero-badge i { font-size: 0.9rem; }
+            /* Banner: reduced padding/border-radius/shadow so the pill reads
+               as a compact label instead of a heavy full-size CTA-style
+               badge; title text bumped from 0.85rem (13.6px, under the
+               16-18px target) up to 1.05rem. */
+            .survey-hero-badge {
+                padding: 0.55rem 1.1rem; margin-top: 1rem; gap: 0.45rem;
+                border-radius: 14px;
+                box-shadow: 0 6px 16px -8px rgba(37,84,199,0.45);
+            }
+            .survey-hero-badge h4 { font-size: 1.05rem; }
+            .survey-hero-badge i { font-size: 1rem; }
             .survey-progress { padding: 0.85rem 0.9rem; border-radius: 12px; }
             /* Bootstrap's mb-5/mt-5 (3rem/48px) between the hero, progress
                tracker, and each step's Back/Next row were sized for a full
@@ -1741,13 +1813,21 @@
             .qa-block + .qa-block { margin-top: 0.85rem; }
             .qa-block > p:first-child { font-size: 0.95rem; margin-bottom: 0.75rem !important; }
 
-            .option-card { padding: 12px 14px 12px 12px; border-radius: 10px; }
+            .option-card { padding: 11px 12px 11px 12px; border-radius: 10px; }
             .option-card span { font-size: 0.9rem; }
             .option-card:has(input:checked)::after { top: 8px; right: 10px; font-size: 0.9rem; }
+            /* CC1 uses a `.d-grid.gap-3` stack, CC2/CC3 use `.row.g-3` —
+               both resolve to 1rem (16px) between options, wider than the
+               8-10px target and one more source of "everything is a little
+               too spaced out" on a phone. Bootstrap's gap/gutter utilities
+               are plain custom-property assignments (not !important here),
+               so a scoped override is enough without touching desktop. */
+            #stage3 .d-grid.gap-3 { gap: 0.55rem !important; }
+            #stage3 .row.g-3 { --bs-gutter-y: 0.55rem; --bs-gutter-x: 0.55rem; }
         }
         @media (max-width: 400px) {
             .qa-block { padding: 0.85rem 0.75rem !important; }
-            .option-card { padding: 11px 12px 11px 11px; }
+            .option-card { padding: 10px 11px 10px 11px; }
         }
 
         .form-check-input {
@@ -2019,11 +2099,16 @@
            here can apply unevenly across questions. Touch targets stay
            ≥42-44px; only spacing/type shrinks further. */
         @media (max-width: 576px) {
-            #sqd-body tr { border-radius: 12px; margin-bottom: 0.75rem; }
-            #sqd-body td.text-start { font-size: 0.86rem; padding: 0.8rem 0.85rem; }
-            #sqd-body .sqd-rating-option { padding: 0.7rem 0.85rem; min-height: 44px; gap: 0.6rem; }
-            .sqd-rating-text { font-size: 0.84rem; }
-            #sqd-body .radio-custom { width: 18px; height: 18px; }
+            #sqd-body tr { border-radius: 12px; margin-bottom: 0.65rem; }
+            /* Statement/option text were both landing UNDER the 15-16px /
+               14-15px targets (0.86rem≈13.8px, 0.84rem≈13.4px) — bumped up a
+               notch while horizontal row padding comes down slightly (10-12px
+               target) so the row reads denser without the text itself
+               shrinking further. */
+            #sqd-body td.text-start { font-size: 0.95rem; line-height: 1.35; padding: 0.7rem 0.75rem; }
+            #sqd-body .sqd-rating-option { padding: 0.6rem 0.75rem; min-height: 42px; gap: 0.55rem; }
+            .sqd-rating-text { font-size: 0.9rem; }
+            #sqd-body .radio-custom { width: 20px; height: 20px; }
             /* Mobile rating rows rely on the text label ("Strongly Agree",
                "N/A", ...) plus the checked/selected styling already applied
                to the row — the decorative emoji face next to it is dropped
@@ -2035,9 +2120,12 @@
             .sqd-emoji { display: none; }
         }
         @media (max-width: 400px) {
-            #sqd-body td.text-start { font-size: 0.82rem; padding: 0.7rem 0.75rem; }
-            #sqd-body .sqd-rating-option { padding: 0.6rem 0.7rem; min-height: 42px; gap: 0.5rem; }
-            .sqd-rating-text { font-size: 0.8rem; }
+            /* 375px (an explicitly required test width) falls inside this
+               breakpoint too — text sizes are intentionally left matching
+               the ≤576px rule above (15-16px / 14-15px targets) here; only
+               padding/min-height trims further for the very tightest phones. */
+            #sqd-body td.text-start { padding: 0.6rem 0.65rem; }
+            #sqd-body .sqd-rating-option { padding: 0.5rem 0.65rem; min-height: 40px; gap: 0.5rem; }
         }
 
         /* ---- SweetAlert2 dialogs (logout confirmation, profile/history
