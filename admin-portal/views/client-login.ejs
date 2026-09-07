@@ -176,6 +176,9 @@
            (414px) — on those the card was clipped by html/body's
            overflow:hidden. Raised to 480px so every common phone is covered. */
         @media (max-width: 480px) {
+            /* Round-2: hero-to-card gap trimmed (no mobile override existed
+               before — desktop's 2.25rem/36px carried straight through). */
+            .header-container { margin-bottom: 0.9rem; }
             /* Density pass: was a fixed-square 92vw/92vw card with 24/28px
                padding on an untouched 28px desktop border-radius — resized
                to the calc(100% - 24px) / 18-20px-padding / 22-26px-radius
@@ -183,13 +186,13 @@
                a card this dense no longer needs to force extra vertical
                space to stay square. Logo (62px, over the 48-56px target) and
                the "Client Login" heading (18.4px, under the 21-23px target)
-               tuned alongside it. */
+               tuned alongside it. Round-2: padding trimmed a further notch. */
             .card-custom {
                 width: calc(100% - 24px);
                 margin-inline: 12px;
                 height: auto;
-                padding: 1.2rem 1.15rem;
-                border-radius: 24px;
+                padding: 1rem 1rem;
+                border-radius: 22px;
             }
             .card-custom .cqa-logo { width: 52px; }
             .card-custom h4 { font-size: 1.35rem; }
@@ -209,9 +212,9 @@
                height target. py-3 needs !important to move; font trimmed a
                touch too. Kept a bit of breathing room above so it doesn't
                sit right under the paragraph. */
-            .card-custom > a { margin-top: 0.25rem; display: block; }
-            .btn-google.py-3 { padding-top: 0.7rem !important; padding-bottom: 0.7rem !important; }
-            .btn-google { font-size: 0.92rem; }
+            .card-custom > a { margin-top: 0.2rem; display: block; }
+            .btn-google.py-3 { padding-top: 0.55rem !important; padding-bottom: 0.55rem !important; }
+            .btn-google { font-size: 0.92rem; min-height: 40px; }
         }
 
         .card-custom .cqa-logo {

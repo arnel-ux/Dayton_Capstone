@@ -66,8 +66,11 @@ importScripts('/js/offline-db.js');
 // card/input/button rules, and theme-toggle.ejs's floating button offsets —
 // bumped again so a v29-or-earlier install's precached copies of these three
 // views are discarded in favor of the new CSS.
-const STATIC_CACHE = 'cspc-static-v30';
-const RUNTIME_CACHE = 'cspc-runtime-v30';
+// v31: round-2 mobile-density pass (client-survey.ejs Home/History/CC/SQD/
+// stage2/progress-stepper, login.ejs + client-login.ejs card/field/button
+// spacing) — bumped so v30-or-earlier installs pick up the tighter CSS.
+const STATIC_CACHE = 'cspc-static-v31';
+const RUNTIME_CACHE = 'cspc-runtime-v31';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.

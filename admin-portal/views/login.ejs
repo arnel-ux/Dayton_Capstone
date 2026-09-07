@@ -190,6 +190,8 @@
            covers every phone width, including the larger Pro Max/Android
            sizes the old 400px cutoff missed. */
         @media (max-width: 480px) {
+            /* Round-2: hero-to-card gap trimmed further. */
+            .header-container { margin-bottom: 0.7rem; }
             /* Density pass: card was 92vw with 21.6/24px padding on a 28px
                desktop border-radius — resized to the calc(100% - 24px) /
                18-20px-padding / 22-26px-radius login-card targets, logo
@@ -200,8 +202,8 @@
                 width: calc(100% - 24px);
                 margin-inline: 12px;
                 height: auto;
-                padding: 1.2rem 1.15rem;
-                border-radius: 24px;
+                padding: 1rem 1rem;
+                border-radius: 22px;
             }
             .card-custom .cqa-logo { width: 50px; }
             .card-custom h4 { font-size: 1.35rem; }
@@ -232,17 +234,19 @@
                ~48px), inside the 42-46px target. */
             .input-modern .form-control {
                 font-size: 16px;
-                padding: 0.65rem 0.85rem 0.65rem 0;
+                padding: 0.5rem 0.85rem 0.5rem 0;
+                min-height: 41px;
             }
             .input-modern .input-icon { width: 2.6rem; font-size: 1.1rem; }
-            .field-group { margin-bottom: 0.8rem; }
-            .field-label { font-size: 0.8rem; margin-bottom: 0.35rem; }
-            .field-hint { font-size: 0.74rem; margin-top: 0.4rem; }
+            .field-group { margin-bottom: 0.6rem; }
+            .field-label { font-size: 0.8rem; margin-bottom: 0.3rem; }
+            .field-hint { font-size: 0.74rem; margin-top: 0.35rem; }
 
-            /* Buttons: 44-46px tap height, unchanged legible font. */
+            /* Buttons: kept >=40px tap height, unchanged legible font. */
             .btn-login, .btn-google {
-                padding: 0.75rem 1rem;
+                padding: 0.6rem 1rem;
                 font-size: 0.95rem;
+                min-height: 40px;
             }
 
             /* "Forgot Password?" sits inline next to the Password label —
@@ -257,7 +261,7 @@
             }
             .field-group .d-flex.justify-content-between { gap: 0.75rem; }
 
-            .divider-or { margin: 0.8rem 0; }
+            .divider-or { margin: 0.6rem 0; }
 
             /* Subtitle/eyebrow text was down at 12.48px/10.4px — bump both
                into comfortably-readable territory on a phone screen. */

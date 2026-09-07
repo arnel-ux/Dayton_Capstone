@@ -614,12 +614,12 @@
             .home-hero h2 { font-size: 1.4rem; }
             .home-hero .survey-hero-eyebrow { font-size: 0.62rem; margin-bottom: 0.2rem; }
             .home-hero p.home-subtitle-anim { font-size: 0.9rem; line-height: 1.45; margin-top: 0.6rem !important; }
-            #view-home .mb-5 { margin-bottom: 1.1rem !important; }
-            #view-home .row.g-4 { --bs-gutter-y: 0.85rem; --bs-gutter-x: 0.85rem; }
-            .home-info-card { padding: 0.75rem; }
-            .home-info-icon { width: 40px; height: 40px; font-size: 1.05rem; margin-bottom: 0.6rem; border-radius: 10px; }
-            .home-info-card h5 { font-size: 1.1rem; margin-bottom: 0.4rem; }
-            .home-info-card p { font-size: 0.9rem; line-height: 1.45; }
+            #view-home .mb-5 { margin-bottom: 0.9rem !important; }
+            #view-home .row.g-4 { --bs-gutter-y: 0.6rem; --bs-gutter-x: 0.6rem; }
+            .home-info-card { padding: 0.625rem; }
+            .home-info-icon { width: 33px; height: 33px; font-size: 0.9rem; margin-bottom: 0.4rem; border-radius: 9px; }
+            .home-info-card h5 { font-size: 0.975rem; margin-bottom: 0.3rem; }
+            .home-info-card p { font-size: 0.83rem; line-height: 1.4; }
             .home-feature-row { margin-top: 0.7rem; }
         }
 
@@ -940,16 +940,14 @@
                taller than it needs to be for a single-line one. Feedback
                after this pass was "better, but still a little too large" —
                one more conservative notch below, not a redesign. */
-            .history-item { padding: 0.6rem 0.8rem; gap: 0.4rem 0.6rem; border-radius: 11px; }
-            .history-item + .history-item { margin-top: 0.5rem; }
-            .history-office { font-size: 0.86rem; margin-bottom: 0.1rem; }
+            .history-item { padding: 0.625rem 0.7rem; gap: 0.35rem 0.55rem; border-radius: 11px; }
+            .history-item + .history-item { margin-top: 0.45rem; }
+            .history-office { font-size: 0.91rem; margin-bottom: 0.08rem; }
             .history-office i { font-size: 0.82rem; }
-            .history-meta { font-size: 0.72rem; line-height: 1.3; }
-            /* Badge had shrunk to ~18px tall (0.66rem text + 0.22rem
-               padding) — under the 28-32px comfortable-badge-height target.
-               Bumped both back up; still nowrap/flex-shrink:0 (base rule
-               above), so the badge-overlap-on-wrap fix is untouched. */
-            .history-badge { font-size: 0.72rem; padding: 0.42rem 0.8rem; }
+            .history-meta { font-size: 0.73rem; line-height: 1.28; }
+            /* Round-2 density pass: badge trimmed a further notch while
+               staying above the ~28px comfortable-badge-height floor. */
+            .history-badge { font-size: 0.68rem; padding: 0.32rem 0.65rem; }
         }
 
         /* ---- History detail modal ----
@@ -1341,7 +1339,7 @@
                a lot of pure whitespace with nothing to do with touch size —
                g-4 only sets these two custom properties, so overriding them
                tightens the gap without touching the inputs themselves. */
-            #stage2 .row.g-4 { --bs-gutter-y: 0.7rem; --bs-gutter-x: 0.85rem; }
+            #stage2 .row.g-4 { --bs-gutter-y: 0.6rem; --bs-gutter-x: 0.75rem; }
             /* Labels were fs-6 (1rem) — reasonable on desktop, oversized as
                a field caption on a phone next to a same-height input.
                Reduced the label only; the input/select itself (and its
@@ -1353,8 +1351,8 @@
                the intended 13.76px), so the "reduce the label only" mobile
                pass documented above never actually took effect. Needs
                !important itself to win. */
-            #stage2 .form-label { font-size: 0.9rem !important; margin-bottom: 0.3rem; }
-            #stage2 .form-text { font-size: 0.8rem; line-height: 1.4; margin-top: 0.2rem; }
+            #stage2 .form-label { font-size: 0.88rem !important; margin-bottom: 0.2rem; }
+            #stage2 .form-text { font-size: 0.74rem; line-height: 1.3; margin-top: 0.15rem; }
             #stage2 .service-progress-badge { font-size: 0.7rem; }
             #stage2 .availability-notice { padding: 0.3rem 0.6rem; font-size: 0.78rem; margin: 0.25rem 0; }
 
@@ -1367,16 +1365,16 @@
                `!important` here. Right padding widened to 2.1rem so the
                native select arrow never sits on top of long office names. */
             #stage2 .form-control, #stage2 .form-select {
-                min-height: 42px;
-                padding: 0.55rem 2.1rem 0.55rem 0.75rem;
+                min-height: 39px;
+                padding: 0.42rem 2.1rem 0.42rem 0.65rem;
                 font-size: 0.92rem;
             }
             #stage2 input.form-control, #stage2 input[type="date"], #stage2 input[type="datetime-local"] {
-                padding-right: 0.75rem;
+                padding-right: 0.65rem;
             }
             #officeSelect.fs-6, #serviceSelect.fs-6 {
                 font-size: 0.92rem !important;
-                min-height: 42px;
+                min-height: 39px;
                 width: 100%;
                 min-width: 0;
             }
@@ -1694,13 +1692,13 @@
                17.6px/22.4px) and dot size (34px, 36px active-ring included)
                were both desktop-scaled — tightened to the 10-12px outer
                padding / 28-32px (34px active max) circle targets. */
-            .survey-progress { padding: 0.6rem 0.7rem; }
+            .survey-progress { padding: 0.5rem 0.6rem; }
             .progress-steps { margin: 0; }
             .step-label { display: none; }
-            .step-dot { width: 30px; height: 30px; font-size: 0.76rem; }
-            .step-dot i { font-size: 0.85rem; }
-            .progress-step.active .step-dot { width: 32px; height: 32px; box-shadow: 0 0 0 4px var(--ring); }
-            .progress-track { top: 15px; height: 2.5px; }
+            .step-dot { width: 27px; height: 27px; font-size: 0.7rem; }
+            .step-dot i { font-size: 0.78rem; }
+            .progress-step.active .step-dot { width: 29px; height: 29px; box-shadow: 0 0 0 3px var(--ring); }
+            .progress-track { top: 13.5px; height: 2.5px; }
         }
 
         /* ---- Survey hero (institutional logo/title block above the form)
@@ -1749,7 +1747,7 @@
             }
             .survey-hero-badge h4 { font-size: 1rem; }
             .survey-hero-badge i { font-size: 1.15rem; }
-            #view-survey .survey-progress.mb-5 { margin-bottom: 0.75rem !important; }
+            #view-survey .survey-progress.mb-5 { margin-bottom: 0.6rem !important; }
         }
 
         .text-heading { color: var(--ink-900) !important; }
@@ -1875,16 +1873,18 @@
                / 8-10px-vertical,10-12px-horizontal option-padding targets;
                question text bumped to a real 600 weight + 1.35 line-height
                (was inheriting the block's normal-weight body text). */
-            .qa-block { padding: 0.7rem 0.7rem !important; }
-            .qa-block + .qa-block { margin-top: 0.85rem; }
+            /* Round-2 density pass: pushed further past round-1's numbers
+               per direct phone-screenshot feedback ("still a bit big"). */
+            .qa-block { padding: 0.55rem 0.55rem !important; }
+            .qa-block + .qa-block { margin-top: 0.7rem; }
             .qa-block > p:first-child {
-                font-size: 0.95rem; font-weight: 600; line-height: 1.35;
-                margin-bottom: 0.6rem !important;
+                font-size: 0.89rem; font-weight: 600; line-height: 1.3;
+                margin-bottom: 0.5rem !important;
             }
 
-            .option-card { padding: 9px 11px; border-radius: 10px; min-height: 40px; }
-            .option-card span { font-size: 0.9rem; }
-            .option-card:has(input:checked)::after { top: 8px; right: 10px; font-size: 0.9rem; }
+            .option-card { padding: 7px 9px; border-radius: 9px; min-height: 36px; }
+            .option-card span { font-size: 0.85rem; }
+            .option-card:has(input:checked)::after { top: 7px; right: 9px; font-size: 0.85rem; }
             /* Selected state: border/shadow both dialed back — the desktop
                values (1px border relying on color alone, a 3px solid ring)
                read as a heavy "giant rounded card" highlight once cards are
@@ -1896,16 +1896,17 @@
             }
             /* CC1 uses a `.d-grid.gap-3` stack, CC2/CC3 use `.row.g-3` —
                both resolve to 1rem (16px) between options, wider than the
-               6-8px target and one more source of "everything is a little
-               too spaced out" on a phone. Bootstrap's gap/gutter utilities
-               are plain custom-property assignments (not !important here),
-               so a scoped override is enough without touching desktop. */
-            #stage3 .d-grid.gap-3 { gap: 0.45rem !important; }
-            #stage3 .row.g-3 { --bs-gutter-y: 0.45rem; --bs-gutter-x: 0.45rem; }
+               5-6px round-2 target and one more source of "everything is a
+               little too spaced out" on a phone. Bootstrap's gap/gutter
+               utilities are plain custom-property assignments (not
+               !important here), so a scoped override is enough without
+               touching desktop. */
+            #stage3 .d-grid.gap-3 { gap: 0.35rem !important; }
+            #stage3 .row.g-3 { --bs-gutter-y: 0.35rem; --bs-gutter-x: 0.35rem; }
         }
         @media (max-width: 400px) {
-            .qa-block { padding: 0.65rem 0.6rem !important; }
-            .option-card { padding: 8px 10px; }
+            .qa-block { padding: 0.5rem 0.5rem !important; }
+            .option-card { padding: 6px 8px; min-height: 34px; }
         }
 
         .form-check-input {
@@ -2177,16 +2178,13 @@
            here can apply unevenly across questions. Touch targets stay
            ≥42-44px; only spacing/type shrinks further. */
         @media (max-width: 576px) {
-            #sqd-body tr { border-radius: 12px; margin-bottom: 0.65rem; }
-            /* Statement/option text were both landing UNDER the 15-16px /
-               14-15px targets (0.86rem≈13.8px, 0.84rem≈13.4px) — bumped up a
-               notch while horizontal row padding comes down slightly (10-12px
-               target) so the row reads denser without the text itself
-               shrinking further. */
-            #sqd-body td.text-start { font-size: 0.93rem; line-height: 1.35; padding: 0.65rem 0.7rem; }
-            #sqd-body .sqd-rating-option { padding: 0.42rem 0.7rem; min-height: 40px; gap: 0.5rem; }
-            .sqd-rating-text { font-size: 0.9rem; }
-            #sqd-body .radio-custom { width: 20px; height: 20px; }
+            #sqd-body tr { border-radius: 12px; margin-bottom: 0.55rem; }
+            /* Round-2 density pass: pushed past round-1's numbers per
+               direct phone-screenshot feedback. */
+            #sqd-body td.text-start { font-size: 0.88rem; line-height: 1.3; padding: 0.5rem 0.6rem; }
+            #sqd-body .sqd-rating-option { padding: 0.3rem 0.6rem; min-height: 36px; gap: 0.4rem; }
+            .sqd-rating-text { font-size: 0.83rem; }
+            #sqd-body .radio-custom { width: 19px; height: 19px; }
             /* Mobile rating rows rely on the text label ("Strongly Agree",
                "N/A", ...) plus the checked/selected styling already applied
                to the row — the decorative emoji face next to it is dropped
@@ -2202,8 +2200,8 @@
                breakpoint too — text sizes are intentionally left matching
                the ≤576px rule above (15-16px / 14-15px targets) here; only
                padding/min-height trims further for the very tightest phones. */
-            #sqd-body td.text-start { padding: 0.55rem 0.6rem; }
-            #sqd-body .sqd-rating-option { padding: 0.38rem 0.6rem; min-height: 38px; gap: 0.45rem; }
+            #sqd-body td.text-start { padding: 0.45rem 0.5rem; }
+            #sqd-body .sqd-rating-option { padding: 0.26rem 0.5rem; min-height: 34px; gap: 0.35rem; }
         }
 
         /* ---- SweetAlert2 dialogs (logout confirmation, profile/history
