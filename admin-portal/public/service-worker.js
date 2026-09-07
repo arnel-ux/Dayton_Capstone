@@ -59,8 +59,15 @@ importScripts('/js/offline-db.js');
 // reintroducing a blank-gap-under-header effect was removed). Bumped so a
 // v28-or-earlier install's precached copies of pwa-client.js,
 // client-survey.ejs, and theme-toggle.ejs are discarded.
-const STATIC_CACHE = 'cspc-static-v29';
-const RUNTIME_CACHE = 'cspc-runtime-v29';
+//
+// v30: second mobile-density pass tightening client-survey.ejs's <=576px
+// header/language-selector/stepper/CSM-banner/Client-Profile/Citizen's
+// Charter/SQD rules, login.ejs + client-login.ejs's <=480/600px hero/badge/
+// card/input/button rules, and theme-toggle.ejs's floating button offsets —
+// bumped again so a v29-or-earlier install's precached copies of these three
+// views are discarded in favor of the new CSS.
+const STATIC_CACHE = 'cspc-static-v30';
+const RUNTIME_CACHE = 'cspc-runtime-v30';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.

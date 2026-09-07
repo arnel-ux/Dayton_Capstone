@@ -585,7 +585,10 @@
             .home-info-card { padding: 1.35rem; }
         }
         @media (max-width: 575.98px) {
-            .home-card > .card-body { padding: 1.5rem 1.1rem !important; }
+            /* Density pass: 24px/17.6px outer card padding was still in the
+               "24-40px oversized mobile card" range this pass targets —
+               brought down to the 10-14px ordinary-card norm. */
+            .home-card > .card-body { padding: 0.85rem 0.75rem !important; }
             .home-feature-row { gap: 0.4rem; }
             .home-feature-chip { font-size: 0.68rem; padding: 0.35rem 0.65rem; }
 
@@ -613,7 +616,7 @@
             .home-hero p.home-subtitle-anim { font-size: 0.9rem; line-height: 1.45; margin-top: 0.6rem !important; }
             #view-home .mb-5 { margin-bottom: 1.1rem !important; }
             #view-home .row.g-4 { --bs-gutter-y: 0.85rem; --bs-gutter-x: 0.85rem; }
-            .home-info-card { padding: 1rem; }
+            .home-info-card { padding: 0.75rem; }
             .home-info-icon { width: 40px; height: 40px; font-size: 1.05rem; margin-bottom: 0.6rem; border-radius: 10px; }
             .home-info-card h5 { font-size: 1.1rem; margin-bottom: 0.4rem; }
             .home-info-card p { font-size: 0.9rem; line-height: 1.45; }
@@ -1231,29 +1234,35 @@
                value rather than guessed, since var(--topbar-h) drives sticky
                offsets (.review-doc-header, notif panel, scroll-margin-top)
                that break if it doesn't match the true rendered height. */
-            :root { --topbar-h: 114px; }
+            /* Density pass: was 114px (two-line title block at 18px/12.8px
+               with default 1.5 line-height taller than the 40px row-1
+               buttons, plus a full 36px-button language row) — well past
+               the 56-64px (row 1) + ~42-46px (row 2) targets. Tightened
+               line-heights so the title block no longer out-grows the
+               buttons, shrunk row-1 buttons to 38px, and tightened the
+               language row below — recomputed total. */
+            :root { --topbar-h: 98px; }
             .topbar {
                 flex-wrap: wrap;
                 align-content: flex-start;
-                padding: 0.45rem 0.7rem 0.5rem;
-                row-gap: 0.3rem;
-                column-gap: 0.5rem;
+                padding: 0.4rem 0.65rem 0.4rem;
+                row-gap: 0.25rem;
+                column-gap: 0.4rem;
             }
 
-            /* Row 1 items — 40px keeps row-1 icon buttons at the suggested
-               ~40-44px minimum comfortable touch target while still reading
-               as smaller than desktop's 44px. */
-            .topbar-hamburger { width: 40px; height: 40px; font-size: 1.1rem; }
+            /* Row 1 items — 38px keeps row-1 icon buttons within the 36-40px
+               target while still comfortably tappable. */
+            .topbar-hamburger { width: 38px; height: 38px; font-size: 1.15rem; }
             .topbar-title {
-                min-width: 0; flex: 1 1 auto; font-size: 1.125rem;
+                min-width: 0; flex: 1 1 auto; font-size: 1.1rem; line-height: 1.2;
                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             }
             .topbar-title small {
-                font-size: 0.8rem;
+                font-size: 0.75rem; line-height: 1.2; margin-top: 0.05rem;
                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             }
-            .topbar-icon-group { gap: 0.5rem; flex-shrink: 0; }
-            .topbar-icon-group .btn-fullscreen { width: 40px; height: 40px; font-size: 1.1rem; }
+            .topbar-icon-group { gap: 0.4rem; flex-shrink: 0; }
+            .topbar-icon-group .btn-fullscreen { width: 38px; height: 38px; font-size: 1.15rem; }
 
             /* Row 2: .topbar-row2 stops being display:contents and becomes
                the full-width second row itself, splitting its two (each
@@ -1270,9 +1279,9 @@
             .topbar-row2 {
                 display: flex; flex-basis: 100%; width: 100%;
                 align-items: center; justify-content: flex-start;
-                gap: 0.5rem;
+                gap: 0.4rem;
             }
-            .offline-pill.is-visible { flex: 0 0 auto; padding: 0.3rem 0.6rem; font-size: 0.7rem; margin-left: auto; }
+            .offline-pill.is-visible { flex: 0 0 auto; padding: 0.25rem 0.55rem; font-size: 0.68rem; margin-left: auto; }
 
             /* Full "English"/"Tagalog" words now shown at every width (the
                .lang-btn-short/.lang-btn-full swap below is removed) — row 2
@@ -1286,16 +1295,19 @@
                 flex: 0 0 auto;
                 margin-left: 0;
                 justify-content: flex-start;
-                padding: 0.2rem; gap: 0.3rem;
+                padding: 0.15rem; gap: 0.25rem;
+                border-radius: 18px;
                 box-shadow: none;
             }
-            /* Font bumped from 0.78rem (12.5px, under the 14-16px target) to
-               0.9rem, horizontal padding trimmed a touch to compensate, and
-               the markup's own Bootstrap shadow-sm class neutralized here
-               (both buttons carry it) so this reads as a normal compact
-               toggle, not a "giant pill" with a floating drop shadow. */
+            /* Container height target 34-38px, button 32-36px: base desktop
+               rule (border-radius:50px, padding:0.35rem 0.9rem) reads as an
+               oversized "pill" once wrapped in this compact row-2 — capped
+               the radius and re-tuned padding/min-height to land in range.
+               Bootstrap's own shadow-sm on these buttons is neutralized too
+               (much lighter shadow requirement — none reads cleanest here). */
             .lang-toggle-group .btn {
-                padding: 0.38rem 0.7rem; font-size: 0.9rem; min-height: 36px;
+                padding: 0.32rem 0.9rem; font-size: 0.88rem; min-height: 34px;
+                border-radius: 18px !important;
                 box-shadow: none !important;
             }
 
@@ -1319,7 +1331,7 @@
                 justify-content: space-between !important;
                 gap: 0.6rem !important;
             }
-            #clientProfileHeader h4 { font-size: 1rem; flex: 1 1 auto; min-width: 0; }
+            #clientProfileHeader h4 { font-size: 1.1rem; flex: 1 1 auto; min-width: 0; }
             #clientProfileHeader .form-switch { flex: 0 0 auto; margin-top: 0; white-space: nowrap; }
             #clientProfileHeader.mb-4 { margin-bottom: 1rem !important; }
 
@@ -1342,9 +1354,36 @@
                pass documented above never actually took effect. Needs
                !important itself to win. */
             #stage2 .form-label { font-size: 0.9rem !important; margin-bottom: 0.3rem; }
-            #stage2 .form-text { font-size: 0.76rem; margin-top: 0.2rem; }
+            #stage2 .form-text { font-size: 0.8rem; line-height: 1.4; margin-top: 0.2rem; }
             #stage2 .service-progress-badge { font-size: 0.7rem; }
             #stage2 .availability-notice { padding: 0.3rem 0.6rem; font-size: 0.78rem; margin: 0.25rem 0; }
+
+            /* Inputs/selects were the plain desktop .form-control/.form-select
+               rule (.7rem/.95rem padding, no explicit height, 16px font from
+               the browser default) — comfortably over the 40-44px height /
+               14-15px font targets. #officeSelect and #serviceSelect also
+               carry Bootstrap's `.fs-6` utility (font-size:1rem !important),
+               which silently wins over a plain override, so those two need
+               `!important` here. Right padding widened to 2.1rem so the
+               native select arrow never sits on top of long office names. */
+            #stage2 .form-control, #stage2 .form-select {
+                min-height: 42px;
+                padding: 0.55rem 2.1rem 0.55rem 0.75rem;
+                font-size: 0.92rem;
+            }
+            #stage2 input.form-control, #stage2 input[type="date"], #stage2 input[type="datetime-local"] {
+                padding-right: 0.75rem;
+            }
+            #officeSelect.fs-6, #serviceSelect.fs-6 {
+                font-size: 0.92rem !important;
+                min-height: 42px;
+                width: 100%;
+                min-width: 0;
+            }
+            #stage2 .form-check-input { width: 19px; height: 19px; }
+            #stage2 .form-check-label, #gender-field-group label { font-size: 0.92rem; }
+            #stage2 .lock-icon { font-size: 0.78rem; }
+            #stage2 .row.g-4 > * { padding-top: 0.1rem; }
 
             /* Terms checkbox: show the label text first, checkbox centered
                below it — instead of a left-aligned row whose wrapped 2nd
@@ -1650,13 +1689,18 @@
             50% { box-shadow: 0 0 0 9px transparent; }
         }
 
-        @media (max-width: 480px) {
+        @media (max-width: 576px) {
+            /* Density pass: outer .survey-progress padding (1.1rem/1.4rem =
+               17.6px/22.4px) and dot size (34px, 36px active-ring included)
+               were both desktop-scaled — tightened to the 10-12px outer
+               padding / 28-32px (34px active max) circle targets. */
+            .survey-progress { padding: 0.6rem 0.7rem; }
+            .progress-steps { margin: 0; }
             .step-label { display: none; }
-            /* 28px undershot the 32-36px comfortable-circle target — bumped
-               back up; connector track thinned to 3px (was 4px) to keep the
-               row's overall visual weight light despite the bigger dots. */
-            .step-dot { width: 32px; height: 32px; font-size: 0.78rem; }
-            .progress-track { top: 17px; height: 3px; }
+            .step-dot { width: 30px; height: 30px; font-size: 0.76rem; }
+            .step-dot i { font-size: 0.85rem; }
+            .progress-step.active .step-dot { width: 32px; height: 32px; box-shadow: 0 0 0 4px var(--ring); }
+            .progress-track { top: 15px; height: 2.5px; }
         }
 
         /* ---- Survey hero (institutional logo/title block above the form)
@@ -1689,6 +1733,23 @@
                History's own spacing is untouched. */
             #view-survey .mb-5 { margin-bottom: 1.5rem !important; }
             #view-survey .mt-5 { margin-top: 1.75rem !important; }
+        }
+
+        /* CSM banner ("CLIENT SATISFACTION MEASUREMENT (CSM) SURVEY" pill)
+           density pass — the 767.98px block above (padding 8.8px/17.6px,
+           border-radius 14px, icon 16px) undershot the border-radius/icon
+           targets and overshot the horizontal padding target. Scoped to its
+           own 576px block (rather than editing the 767.98 rule in place) so
+           the 577-767px tablet range is untouched. Progress tracker's own
+           bottom margin (mb-5 = 48px base, already cut to 24px at 768px)
+           trimmed again here to the 10-14px vertical-margin target. */
+        @media (max-width: 576px) {
+            .survey-hero-badge {
+                padding: 0.6rem 0.9rem; border-radius: 22px;
+            }
+            .survey-hero-badge h4 { font-size: 1rem; }
+            .survey-hero-badge i { font-size: 1.15rem; }
+            #view-survey .survey-progress.mb-5 { margin-bottom: 0.75rem !important; }
         }
 
         .text-heading { color: var(--ink-900) !important; }
@@ -1806,28 +1867,45 @@
            shrinks. */
         @media (max-width: 576px) {
             .section-title { padding-left: 12px; }
-            .section-title h4 { font-size: 1.15rem; }
-            .section-title p { font-size: 0.88rem; }
+            .section-title h4 { font-size: 1.1rem; }
+            .section-title p { font-size: 0.88rem; line-height: 1.4; }
 
-            .qa-block { padding: 1rem 0.9rem !important; }
+            /* Second density pass: 16px/14.4px card padding and 11-12px
+               option padding both still ran over the 10-12px card-padding
+               / 8-10px-vertical,10-12px-horizontal option-padding targets;
+               question text bumped to a real 600 weight + 1.35 line-height
+               (was inheriting the block's normal-weight body text). */
+            .qa-block { padding: 0.7rem 0.7rem !important; }
             .qa-block + .qa-block { margin-top: 0.85rem; }
-            .qa-block > p:first-child { font-size: 0.95rem; margin-bottom: 0.75rem !important; }
+            .qa-block > p:first-child {
+                font-size: 0.95rem; font-weight: 600; line-height: 1.35;
+                margin-bottom: 0.6rem !important;
+            }
 
-            .option-card { padding: 11px 12px 11px 12px; border-radius: 10px; }
+            .option-card { padding: 9px 11px; border-radius: 10px; min-height: 40px; }
             .option-card span { font-size: 0.9rem; }
             .option-card:has(input:checked)::after { top: 8px; right: 10px; font-size: 0.9rem; }
+            /* Selected state: border/shadow both dialed back — the desktop
+               values (1px border relying on color alone, a 3px solid ring)
+               read as a heavy "giant rounded card" highlight once cards are
+               this compact. Border-width now explicit (1.5px) and the ring
+               shadow narrowed + softened. */
+            .option-card:has(input:checked) {
+                border-width: 1.5px;
+                box-shadow: 0 0 0 2px rgba(37,84,199,0.18), 0 2px 8px -6px rgba(37,84,199,0.3);
+            }
             /* CC1 uses a `.d-grid.gap-3` stack, CC2/CC3 use `.row.g-3` —
                both resolve to 1rem (16px) between options, wider than the
-               8-10px target and one more source of "everything is a little
+               6-8px target and one more source of "everything is a little
                too spaced out" on a phone. Bootstrap's gap/gutter utilities
                are plain custom-property assignments (not !important here),
                so a scoped override is enough without touching desktop. */
-            #stage3 .d-grid.gap-3 { gap: 0.55rem !important; }
-            #stage3 .row.g-3 { --bs-gutter-y: 0.55rem; --bs-gutter-x: 0.55rem; }
+            #stage3 .d-grid.gap-3 { gap: 0.45rem !important; }
+            #stage3 .row.g-3 { --bs-gutter-y: 0.45rem; --bs-gutter-x: 0.45rem; }
         }
         @media (max-width: 400px) {
-            .qa-block { padding: 0.85rem 0.75rem !important; }
-            .option-card { padding: 10px 11px 10px 11px; }
+            .qa-block { padding: 0.65rem 0.6rem !important; }
+            .option-card { padding: 8px 10px; }
         }
 
         .form-check-input {
@@ -2105,8 +2183,8 @@
                notch while horizontal row padding comes down slightly (10-12px
                target) so the row reads denser without the text itself
                shrinking further. */
-            #sqd-body td.text-start { font-size: 0.95rem; line-height: 1.35; padding: 0.7rem 0.75rem; }
-            #sqd-body .sqd-rating-option { padding: 0.6rem 0.75rem; min-height: 42px; gap: 0.55rem; }
+            #sqd-body td.text-start { font-size: 0.93rem; line-height: 1.35; padding: 0.65rem 0.7rem; }
+            #sqd-body .sqd-rating-option { padding: 0.42rem 0.7rem; min-height: 40px; gap: 0.5rem; }
             .sqd-rating-text { font-size: 0.9rem; }
             #sqd-body .radio-custom { width: 20px; height: 20px; }
             /* Mobile rating rows rely on the text label ("Strongly Agree",
@@ -2124,8 +2202,8 @@
                breakpoint too — text sizes are intentionally left matching
                the ≤576px rule above (15-16px / 14-15px targets) here; only
                padding/min-height trims further for the very tightest phones. */
-            #sqd-body td.text-start { padding: 0.6rem 0.65rem; }
-            #sqd-body .sqd-rating-option { padding: 0.5rem 0.65rem; min-height: 40px; gap: 0.5rem; }
+            #sqd-body td.text-start { padding: 0.55rem 0.6rem; }
+            #sqd-body .sqd-rating-option { padding: 0.38rem 0.6rem; min-height: 38px; gap: 0.45rem; }
         }
 
         /* ---- SweetAlert2 dialogs (logout confirmation, profile/history

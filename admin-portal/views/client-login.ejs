@@ -136,8 +136,15 @@
                 font-size: 0.9rem;
                 margin-bottom: 1rem;
             }
+            /* Was font-size: 1.1rem (17.6px) — nearly 1.5x the DESKTOP badge
+               text size on a small uppercase letter-spaced pill, the same
+               "oversized badge" pattern flagged on real-device screenshots.
+               Reset to a compact label size and hit the 34-38px badge-height
+               target via an explicit min-height instead of oversized text. */
             .portal-text {
-                font-size: 1.1rem;
+                font-size: 0.75rem;
+                min-height: 36px;
+                padding: 0.4rem 0.9rem;
             }
         }
         /* -------------------------------------- */
@@ -169,11 +176,23 @@
            (414px) — on those the card was clipped by html/body's
            overflow:hidden. Raised to 480px so every common phone is covered. */
         @media (max-width: 480px) {
+            /* Density pass: was a fixed-square 92vw/92vw card with 24/28px
+               padding on an untouched 28px desktop border-radius — resized
+               to the calc(100% - 24px) / 18-20px-padding / 22-26px-radius
+               login-card targets. Square aspect dropped (height:auto) since
+               a card this dense no longer needs to force extra vertical
+               space to stay square. Logo (62px, over the 48-56px target) and
+               the "Client Login" heading (18.4px, under the 21-23px target)
+               tuned alongside it. */
             .card-custom {
-                width: 92vw;
-                height: 92vw; /* Keep it square on mobile */
-                padding: 1.5rem 1.75rem;
+                width: calc(100% - 24px);
+                margin-inline: 12px;
+                height: auto;
+                padding: 1.2rem 1.15rem;
+                border-radius: 24px;
             }
+            .card-custom .cqa-logo { width: 52px; }
+            .card-custom h4 { font-size: 1.35rem; }
 
             /* Readability: the "Sign in to your CQA Dashboard" caption and the
                Gmail-account explainer paragraph were both under the ~14px
@@ -181,13 +200,18 @@
                and inline 0.85rem / 13.6px). The explainer uses an inline
                style="font-size:0.85rem" attribute, so it needs !important
                here to actually win over it. */
-            .card-custom .text-xsmall { font-size: 0.82rem; }
+            .card-custom .text-xsmall { font-size: 0.92rem; }
             .card-custom .text-center.mb-4 p { font-size: 0.9rem !important; }
 
-            /* The single "Sign in with Google" button is already a large
-               (~54px) tap target — just give it a bit more breathing room
-               above so it doesn't sit right under the paragraph. */
+            /* The single "Sign in with Google" button used Bootstrap's py-3
+               (1rem/16px top+bottom, !important) on top of its own 0.98rem
+               font — measured out to ~55px, well past the 44-46px button-
+               height target. py-3 needs !important to move; font trimmed a
+               touch too. Kept a bit of breathing room above so it doesn't
+               sit right under the paragraph. */
             .card-custom > a { margin-top: 0.25rem; display: block; }
+            .btn-google.py-3 { padding-top: 0.7rem !important; padding-bottom: 0.7rem !important; }
+            .btn-google { font-size: 0.92rem; }
         }
 
         .card-custom .cqa-logo {

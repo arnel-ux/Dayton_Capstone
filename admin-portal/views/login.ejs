@@ -139,15 +139,20 @@
 
         /* Responsive para sa Titles */
         @media (max-width: 600px) {
+            /* Density pass: hero title (18.4px) and subtitle (12.48px) both
+               ran under the 22-26px / 14-16px targets — bumped into range.
+               Badge text/padding tuned via .portal-text's min-height below. */
             .main-title {
-                font-size: 1.15rem;
+                font-size: 1.4rem;
             }
             .sub-title {
-                font-size: 0.78rem;
+                font-size: 0.9rem;
                 margin-bottom: 0.5rem;
             }
             .portal-text {
-                font-size: 0.65rem;
+                font-size: 0.68rem;
+                min-height: 36px;
+                padding: 0.4rem 0.9rem;
             }
         }
         /* -------------------------------------- */
@@ -185,14 +190,25 @@
            covers every phone width, including the larger Pro Max/Android
            sizes the old 400px cutoff missed. */
         @media (max-width: 480px) {
+            /* Density pass: card was 92vw with 21.6/24px padding on a 28px
+               desktop border-radius — resized to the calc(100% - 24px) /
+               18-20px-padding / 22-26px-radius login-card targets, logo
+               bumped from an under-target 46px, and the "CQA Portal Login"
+               heading (16.8px, unchanged since desktop) brought up into the
+               21-23px target. */
             .card-custom {
-                width: 92vw;
+                width: calc(100% - 24px);
+                margin-inline: 12px;
                 height: auto;
-                padding: 1.35rem 1.5rem;
+                padding: 1.2rem 1.15rem;
+                border-radius: 24px;
             }
+            .card-custom .cqa-logo { width: 50px; }
+            .card-custom h4 { font-size: 1.35rem; }
+            .card-custom p.text-xsmall { font-size: 0.92rem; }
             /* Google's reCAPTCHA checkbox widget is a fixed 304x78px iframe —
-               wider than the card's content area on every phone (92vw card
-               minus its own side padding leaves ~280-300px). Scaling it down
+               wider than the card's content area on every phone (the card's
+               own side padding leaves well under 304px). Scaling it down
                and shrinking its layout box by the same factor keeps it fully
                inside the card instead of poking out past the edge. */
             .g-recaptcha {
@@ -208,21 +224,24 @@
                input with a font-size below 16px makes iOS Safari auto-zoom
                the whole page on focus (jarring layout jump, easy to trigger
                here since these are the very first fields a phone user taps).
-               16px input text avoids that zoom outright. */
+               16px input text avoids that zoom outright — kept at 16px even
+               though it sits slightly above the general 14-15px mobile input
+               target, since regressing to 14-15px would reintroduce the
+               auto-zoom bug this fix was written for. Vertical padding
+               trimmed instead so overall input height lands at ~44px (was
+               ~48px), inside the 42-46px target. */
             .input-modern .form-control {
                 font-size: 16px;
-                padding: 0.8rem 0.85rem 0.8rem 0;
+                padding: 0.65rem 0.85rem 0.65rem 0;
             }
-            .input-modern .input-icon { width: 2.8rem; font-size: 1rem; }
-            .field-group { margin-bottom: 1rem; }
-            .field-label { font-size: 0.74rem; margin-bottom: 0.4rem; }
+            .input-modern .input-icon { width: 2.6rem; font-size: 1.1rem; }
+            .field-group { margin-bottom: 0.8rem; }
+            .field-label { font-size: 0.8rem; margin-bottom: 0.35rem; }
             .field-hint { font-size: 0.74rem; margin-top: 0.4rem; }
 
-            /* Buttons: taller padding brings both to a comfortable >=44px tap
-               height; unchanged font stayed readable but the old padding made
-               them feel like a thin bar to tap on a phone. */
+            /* Buttons: 44-46px tap height, unchanged legible font. */
             .btn-login, .btn-google {
-                padding: 0.9rem 1rem;
+                padding: 0.75rem 1rem;
                 font-size: 0.95rem;
             }
 
@@ -234,17 +253,32 @@
             .forgot-link {
                 padding: 0.35rem 0;
                 margin: -0.35rem 0;
-                font-size: 0.8rem;
+                font-size: 0.85rem;
             }
             .field-group .d-flex.justify-content-between { gap: 0.75rem; }
 
-            .divider-or { margin: 1.1rem 0; }
+            .divider-or { margin: 0.8rem 0; }
 
             /* Subtitle/eyebrow text was down at 12.48px/10.4px — bump both
                into comfortably-readable territory on a phone screen. */
-            .sub-title { font-size: 0.85rem; }
-            .portal-text { font-size: 0.7rem; padding: 0.35rem 1rem; }
+            .sub-title { font-size: 0.9rem; }
+            .portal-text { font-size: 0.7rem; padding: 0.4rem 0.9rem; min-height: 36px; }
 
+        }
+
+        /* Narrowest phones (320-375px): the reCAPTCHA's 0.85 scale above
+           (258px effective width) can still run past the card's content
+           width once the card itself has shrunk to calc(100% - 24px) with
+           its own side padding subtracted — measured as low as ~226px on a
+           320px-wide viewport. Scaled down further here, without hiding any
+           of Google's own widget text/warnings (same iframe, smaller box). */
+        @media (max-width: 375px) {
+            .g-recaptcha {
+                transform: scale(0.74);
+                transform-origin: 0 0;
+                width: 225px;
+                height: 58px;
+            }
         }
 
         .card-custom .cqa-logo {
