@@ -615,17 +615,23 @@
                stacked column — 2x2 fits comfortably even on narrow phones
                once the tile itself is sized down a bit. */
             .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; padding: 0 var(--sp-2); }
-            .kpi-tile { padding: 0.6rem 0.6rem; gap: 0.5rem; }
+            .kpi-tile { padding: 0.7rem 0.7rem; gap: 0.5rem; }
             .kpi-icon { width: 30px; height: 30px; font-size: 0.85rem; }
-            .kpi-value { font-size: 1.05rem; }
-            .kpi-label { font-size: 0.62rem; }
+            /* Was 1.05rem (16.8px) — a previous pass had shrunk this well
+               past legibility for a "big number" stat; brought up to the
+               22-24px target range so it still reads as the headline figure
+               on the card. Label brought down + line-height tightened so
+               the 2-3 word wrapped label doesn't add loose vertical space. */
+            .kpi-value { font-size: 1.45rem; }
+            .kpi-label { font-size: 0.72rem; line-height: 1.25; margin-top: 2px; }
             .dashboard-live-badge { display: none; }
 
             /* Cluster pills: each has a flex-basis of 11rem (176px), so on a
                375-414px phone only one fit per row before wrapping — forced
                into a real 2-column grid instead, sized down to fit. */
             .cluster-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
-            .cluster-tab-btn { flex: none; padding: 0.6rem 0.5rem; font-size: 0.72rem; border-radius: var(--sp-2); gap: 0.4rem; }
+            .cluster-tab-btn { flex: none; padding: 0.65rem 0.5rem; font-size: 0.82rem; border-radius: var(--sp-2); gap: 0.4rem; }
+            .cluster-tab-btn i { font-size: 0.95rem; }
         }
 
         /* No boxed "tray" anymore — just a plain flex viewport so the marquee
@@ -755,11 +761,11 @@
         }
         @media (max-width: 36rem) {
             .footer-main { grid-template-columns: 1fr; padding: var(--sp-3) var(--sp-3) var(--sp-2); gap: var(--sp-4); text-align: center; }
-            .footer-heading { margin-bottom: 0.6rem; font-size: 0.78rem; }
+            .footer-heading { margin-bottom: 0.6rem; font-size: 0.82rem; }
             .footer-heading::after { left: 50%; transform: translateX(-50%); }
             .footer-brand-logo { justify-content: center; margin-bottom: 0.4rem; }
             .footer-brand-logo img { width: 34px; height: 34px; }
-            .footer-desc { line-height: 1.45; font-size: 0.78rem; }
+            .footer-desc { line-height: 1.5; font-size: 0.85rem; }
             /* Single centered column, not a 2-up grid — "Transparency
                Dashboard" wraps to two lines at this width, and a grid row
                pins its neighbor ("Our Services") to that same tall row
@@ -776,7 +782,7 @@
                one (phone number) sitting side-by-side in a row layout wrapped
                unevenly and looked lopsided; stacked-and-centered reads as
                deliberate regardless of each item's text length. */
-            .footer-contact li { flex-direction: column; align-items: center; text-align: center; gap: 0.3rem; font-size: 0.78rem; }
+            .footer-contact li { flex-direction: column; align-items: center; text-align: center; gap: 0.3rem; font-size: 0.85rem; }
             /* Extra right clearance so the centered copyright line never
                runs under the fixed dark-mode toggle FAB parked in that
                corner (layout/theme-toggle.ejs). */
@@ -827,6 +833,53 @@
         @media (max-width: 36rem) {
             .chart-card { min-width: 90vw; height: 38vh; }
             .about-section, .org-section { padding-left: var(--sp-2); padding-right: var(--sp-2); }
+            /* Hamburger button was 44px (desktop/tablet base rule) on every
+               screen it appears on — sized down to a denser 36px square to
+               match the tightened header row on phones. */
+            .nav-hamburger { width: 36px; height: 36px; min-width: 36px; font-size: 1rem; border-radius: 8px; }
+
+            /* Hero profile card (Juvy Bustamante photo/name/title/contact) —
+               the 140px avatar plus 32px/24px card padding was the single
+               biggest "too big" element in the About section on a phone.
+               Shrunk to an 84-96px range with proportionally tighter
+               spacing between photo/name/divider/contact rows. */
+            .profile-card { padding: 1.1rem 0.9rem 0.9rem; }
+            .profile-avatar { width: 88px; height: 88px; font-size: 2.2rem; border-width: 3px; margin-bottom: 0.6rem; }
+            .profile-role { margin: 0.4rem 0 0.6rem; }
+            .profile-divider { margin-bottom: 0.6rem; }
+            .profile-contact { gap: 0.5rem; }
+
+            /* Section headings (Who We Are / Organizational Structure / Our
+               Services all share .section-title) — was clamping to ~28.8px+
+               min on phones; brought down to a flatter 26.4px so it reads as
+               a marketing heading, not a desktop-scale hero headline. The
+               Transparency Dashboard heading uses its own more specific
+               .dashboard-header-block .section-title rule (already smaller)
+               so it wins over this and is unaffected. */
+            .section-title { font-size: 1.65rem; line-height: 1.18; margin: 0 0 0.6rem; }
+            .about-text p { font-size: 0.9rem; line-height: 1.55; }
+            .about-badges { gap: 0.5rem; margin-top: 0.75rem; }
+            .about-badge { padding: 0.45rem 0.85rem; font-size: 0.85rem; }
+
+            /* Footer social icon circles: an earlier touch-target pass had
+               bumped these to 44px; per this density pass they come back
+               down to 36px (still a comfortably tappable circular icon,
+               just not sized like a primary button). */
+            .footer-socials a { width: 36px; height: 36px; font-size: 0.85rem; }
+            .footer-main { gap: 1rem; }
+
+            /* Office accordion rows (Our Services) — header padding/row gap
+               were still desktop-scale (16px/24px vertical rhythm); tightened
+               to the 8-12px density scale. .accordion-icon (36px) already
+               matched the 36-40px target so it's left as-is. */
+            .accordion-header { padding: 0.65rem 0.75rem; }
+            .accordion-name { font-size: 0.92rem; }
+            .services-accordion { gap: 0.55rem; }
+            .accordion-list { gap: 0.5rem; padding: 0 0.75rem 0.75rem; }
+
+            /* Transparency Dashboard chart card header + hint text. */
+            .card-header-custom { padding: 0.75rem 0.9rem 0.6rem; }
+            .hint-text { font-size: 0.75rem; }
             /* .about-section, .org-section, .services-section all carry a
                desktop-scale 80px top/bottom padding (--sp-10) with no mobile
                override — tightened to --sp-4 (32px) here, the same amount of
@@ -855,8 +908,11 @@
             .period-dropbar { padding: 12px 40px 12px 16px; }
             .office-cluster-select { padding: 8px 10px; font-size: 0.8rem; }
             .btn-back-custom { padding: 0.6rem var(--sp-2); min-height: 40px; }
-            .kpi-label { font-size: 0.8rem; }
-            .footer-socials a { width: 44px; height: 44px; }
+            /* .kpi-label and .footer-socials sizing consolidated into the
+               density-pass rules earlier in this same media block (search
+               "22-24px target range" / "36px (still a comfortably tappable"
+               above) — this touch-target pass's older 0.8rem/44px values
+               would otherwise win the cascade by appearing later here. */
             /* Footer link padding/gap consolidated into the earlier footer
                block above (search "line-height: 1.45" nearby) — keeping tap
                targets comfortable while fitting the whole footer into a much

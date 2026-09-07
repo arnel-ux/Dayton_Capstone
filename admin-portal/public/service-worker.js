@@ -69,8 +69,14 @@ importScripts('/js/offline-db.js');
 // v31: round-2 mobile-density pass (client-survey.ejs Home/History/CC/SQD/
 // stage2/progress-stepper, login.ejs + client-login.ejs card/field/button
 // spacing) — bumped so v30-or-earlier installs pick up the tighter CSS.
-const STATIC_CACHE = 'cspc-static-v31';
-const RUNTIME_CACHE = 'cspc-runtime-v31';
+// v32: index.ejs (public landing page, precached via '/' in PRECACHE_URLS)
+// mobile-density pass — header hamburger, hero profile card/avatar, Who We
+// Are heading/paragraph/badges, footer socials/headings/contact text, Our
+// Services cluster tabs/office accordion rows, and Transparency Dashboard
+// KPI value/label + chart card header all tightened for phone widths.
+// Bumped so a v31-or-earlier install's precached copy of '/' is discarded.
+const STATIC_CACHE = 'cspc-static-v32';
+const RUNTIME_CACHE = 'cspc-runtime-v32';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
