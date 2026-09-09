@@ -423,9 +423,28 @@
         .notif-item.is-unread .notif-item-dot { visibility: visible; }
         .notif-item:not(.is-unread) .notif-item-dot { visibility: hidden; }
         .notif-item-body { flex: 1 1 auto; min-width: 0; }
+        /* Each notification's message is a long standardized sentence — with
+           several stacked in the panel that made every open of the bell a
+           wall of text to scroll through before you could even see how many
+           there were. Collapsed to title + time by default, click/tap the
+           title row to expand just that one's message (an accordion, not a
+           single toggle-all) so scanning the list stays quick and the detail
+           is still one tap away. */
+        .notif-item-title-row {
+            display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem;
+            cursor: pointer; background: none; border: none; padding: 0; width: 100%; text-align: left;
+            font: inherit; color: inherit;
+        }
         .notif-item-title { font-weight: 600; font-size: 0.88rem; word-break: break-word; }
-        .notif-item-message { font-size: 0.82rem; color: #6b7280; margin: 0.15rem 0; word-break: break-word; }
-        .notif-item-time { font-size: 0.72rem; color: #9ca3af; }
+        .notif-item-chevron { flex: none; font-size: 0.8rem; color: #9ca3af; margin-top: 0.15rem; transition: transform 0.2s ease; }
+        .notif-item.expanded .notif-item-chevron { transform: rotate(180deg); }
+        .notif-item-message {
+            font-size: 0.82rem; color: #6b7280; margin: 0; word-break: break-word;
+            display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 0.2s ease, opacity 0.2s ease, margin 0.2s ease;
+        }
+        .notif-item-message > div { overflow: hidden; }
+        .notif-item.expanded .notif-item-message { grid-template-rows: 1fr; opacity: 1; margin: 0.3rem 0; }
+        .notif-item-time { font-size: 0.72rem; color: #9ca3af; margin-top: 0.2rem; }
         .notif-item-delete { background: none; border: none; color: #9ca3af; padding: 0.25rem; flex: none; min-width: 32px; min-height: 32px; }
         .notif-item-delete:hover { color: #dc3545; }
         .notif-empty { padding: 2rem 1rem; text-align: center; color: #9ca3af; font-size: 0.85rem; }
@@ -571,6 +590,19 @@
             background: var(--brand); color: #fff; transform: translateY(-2px);
         }
         [data-bs-theme="dark"] .home-feature-chip { background: rgba(96,141,255,0.15); }
+
+        /* Bottom-of-page "Take Survey" shortcut — most visitors on this portal
+           are parents/guardians rather than staff, and many never notice the
+           sidebar's own Take Survey link, so this mirrors it right where the
+           home content ends for one-tap access without hunting for the menu. */
+        .home-cta { margin-top: 2.25rem; padding-top: 2rem; border-top: 1px solid var(--line-soft); }
+        .home-cta-btn {
+            display: inline-flex; align-items: center; gap: 0.6rem;
+            padding: 0.85rem 2.25rem; border-radius: 50px; font-weight: 700;
+            box-shadow: 0 10px 26px -10px rgba(37,84,199,0.55);
+            transition: box-shadow .25s ease, transform .25s ease;
+        }
+        .home-cta-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 32px -10px rgba(37,84,199,0.65); }
 
         /* ---- Entrance animation — staggered fade + rise for hero and cards ---- */
         .home-anim { opacity: 0; animation: homeFadeUp .25s ease-out forwards; }
@@ -883,10 +915,22 @@
            shrinks/wraps (never the badge); .history-badge gets an explicit
            flex-shrink:0 so it can never be squeezed or wrap internally. No
            fixed card height anywhere here — the card still grows with
-           however many lines the title needs. */
+           however many lines the title needs.
+           That flex-start fix wasn't quite complete though: .history-item
+           itself still had flex-wrap:wrap on the ROW, so once a long office
+           name pushed .history-item-text onto 2 lines and consumed the full
+           row width, the badge (which needs its own space on that same row)
+           had nowhere left to sit and wrapped down onto a second row of its
+           own — landing bottom-left instead of top-right, exactly the
+           "GRADUATE SCHOOL fits inline, Center for International Relations
+           and Linkages doesn't" inconsistency. Since .history-item-text
+           already wraps its OWN text internally (min-width:0), the outer
+           row never needs to wrap at all — removing flex-wrap here keeps
+           the badge pinned top-right on every card regardless of title
+           length. */
         .history-item {
             border: 1px solid var(--line); border-radius: 14px; padding: 1.1rem 1.3rem;
-            display: flex; justify-content: space-between; align-items: flex-start; gap: 0.6rem 1rem; flex-wrap: wrap;
+            display: flex; justify-content: space-between; align-items: flex-start; gap: 0.6rem 1rem;
             transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
             background: var(--surface);
         }
@@ -956,9 +1000,12 @@
            Same flex-child shape (and same floating-badge risk) as
            .history-item above — icon, an unnamed office-name/meta div, and
            a .history-badge.ms-auto — so it gets the same fix: flex-start
-           alignment plus min-width:0/flex:1 on the text column. */
+           alignment plus min-width:0/flex:1 on the text column, and no
+           flex-wrap on the row itself (see the .history-item comment above)
+           so the badge can never drop below the office name onto its own
+           line. */
         .history-detail-head {
-            display: flex; align-items: flex-start; gap: 0.9rem; flex-wrap: wrap;
+            display: flex; align-items: flex-start; gap: 0.9rem;
             padding-bottom: 1.25rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--line-soft);
         }
         .history-detail-head > .history-item-text { padding-top: 0.1rem; }
@@ -2403,6 +2450,12 @@
                 </div>
             </div>
 
+            <div class="home-cta text-center home-anim" style="animation-delay:0.85s">
+                <button type="button" class="btn btn-primary btn-lg home-cta-btn" onclick="return switchView('survey');">
+                    <i class="bi bi-clipboard2-check-fill"></i> <span data-i18n="home_cta_btn">Take Survey</span>
+                </button>
+            </div>
+
         </div>
         </div>
         </div>
@@ -3812,16 +3865,33 @@ function renderNotifications(notifications) {
 
         const body = document.createElement('div');
         body.className = 'notif-item-body';
-        body.addEventListener('click', () => { if (!n.is_read) markNotificationRead(n.id); });
 
-        const title = document.createElement('div');
+        const titleRow = document.createElement('button');
+        titleRow.type = 'button';
+        titleRow.className = 'notif-item-title-row';
+        titleRow.setAttribute('aria-expanded', 'false');
+        titleRow.addEventListener('click', () => {
+            item.classList.toggle('expanded');
+            titleRow.setAttribute('aria-expanded', item.classList.contains('expanded') ? 'true' : 'false');
+            if (!n.is_read) markNotificationRead(n.id);
+        });
+
+        const title = document.createElement('span');
         title.className = 'notif-item-title';
         title.textContent = n.title;
-        body.appendChild(title);
+        titleRow.appendChild(title);
+
+        const chevron = document.createElement('i');
+        chevron.className = 'bi bi-chevron-down notif-item-chevron';
+        titleRow.appendChild(chevron);
+
+        body.appendChild(titleRow);
 
         const message = document.createElement('div');
         message.className = 'notif-item-message';
-        message.textContent = n.message;
+        const messageInner = document.createElement('div');
+        messageInner.textContent = n.message;
+        message.appendChild(messageInner);
         body.appendChild(message);
 
         const time = document.createElement('div');
@@ -5273,6 +5343,7 @@ const i18n = {
         home_chip_confidential: "Confidential",
         home_chip_arta: "RA 11032 / ARTA-mandated",
         home_chip_quick: "Takes only a few minutes",
+        home_cta_btn: "Take Survey",
         form_title: "Client Satisfaction Measurement (CSM) Survey",
         s1_head: "Help us serve you better!",
         s1_desc: "This Client Satisfaction Measurement (CSM) tracks the customer experience of government offices. Your feedback on your recently concluded transaction will help this office provide a better service. Personal information shared will be kept confidential and you always have the option to not answer this form.",
@@ -5418,6 +5489,7 @@ const i18n = {
         home_chip_confidential: "Kompidensyal",
         home_chip_arta: "RA 11032 / Utos ng ARTA",
         home_chip_quick: "Ilang minuto lamang",
+        home_cta_btn: "Sumagot ng Sarbey",
         form_title: "Sarbey ng Pagsusukat ng Kasiyahan ng Kliyente",
         s1_head: "Tulungan kaming mas mapaglingkuran kayo!",
         s1_desc: "Sinusubaybayan ng Client Satisfaction Measurement (CSM) na ito ang karanasan ng mga kliyente sa mga tanggapan ng pamahalaan. Ang iyong puna sa transaksyong kagagawa lamang mo ay makakatulong sa opisinang ito upang mas mapaganda pa ang paglilingkod nito. Ang personal na impormasyong ibabahagi ay mananatiling kompidensyal at maaari mo pa ring piliing hindi sagutin ang porma na ito.",

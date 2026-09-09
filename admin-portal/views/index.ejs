@@ -822,13 +822,38 @@
             .tap-only-text { display: inline; }
 
             /* Nav links no longer just vanish on mobile — .nav-hamburger toggles
-               .site-nav between hidden (default) and an open vertical list
-               that drops down below the single header row (not inline with it). */
+               .site-nav between hidden (default) and an open full-screen panel.
+               Previously this pushed page content down (header grew taller, a
+               spacer div resized to match) which looked fine right at the top
+               of the page but read as "doesn't cover the page" once scrolled —
+               the spacer/content reflow only accounted for the header's own
+               box, not whatever was already scrolled past it. Making the open
+               header stretch to the full viewport height (via .nav-open-header
+               below, toggled in JS alongside .nav-open) sidesteps all of that:
+               it's a real fixed-position overlay that covers the entire screen
+               the same way regardless of scroll position, and never reflows
+               the page underneath. */
             .nav-hamburger { display: inline-flex; }
             .site-nav { display: none; width: 100%; order: 3; }
-            .site-nav.nav-open { display: flex; flex-direction: column; align-items: stretch; margin: var(--sp-2) 0 0; gap: 0; border-top: 1px solid rgba(255,255,255,0.15); }
-            .site-nav.nav-open a { padding: 0.9rem var(--sp-1); border-bottom: 1px solid rgba(255,255,255,0.12); text-align: left; }
+            .site-nav.nav-open {
+                display: flex; flex-direction: column; align-items: stretch; justify-content: center;
+                flex: 1; margin: var(--sp-2) 0 0; gap: 0; border-top: 1px solid rgba(255,255,255,0.15);
+                overflow-y: auto;
+            }
+            .site-nav.nav-open a { padding: 1.1rem var(--sp-1); border-bottom: 1px solid rgba(255,255,255,0.12); text-align: left; font-size: var(--fs-lg); }
             .site-nav.nav-open a::after { display: none; }
+
+            /* Toggled on #siteHeader (alongside .nav-open on the nav itself) for
+               as long as the mobile menu is open — expands the fixed header from
+               its normal content-height box into a full-viewport panel so the
+               whole page sits behind it, not just the header's own row. */
+            .sticky-top-section.nav-open-header {
+                bottom: 0; height: 100vh; height: 100dvh;
+                background: rgba(37, 29, 58, 0.98);
+                overflow-y: auto;
+            }
+            body.dark-mode .sticky-top-section.nav-open-header { background: rgba(4, 8, 18, 0.98); }
+            .sticky-top-section.nav-open-header .nav-inner { height: 100%; align-content: flex-start; }
         }
         @media (max-width: 36rem) {
             .chart-card { min-width: 90vw; height: 38vh; }
@@ -2416,21 +2441,29 @@
         function initMobileNav() {
             const btn = document.getElementById('navHamburgerBtn');
             const nav = document.getElementById('siteNavList');
-            if (!btn || !nav) return;
+            const header = document.getElementById('siteHeader');
+            if (!btn || !nav || !header) return;
 
+            // The open menu is a full-viewport overlay (.nav-open-header expands
+            // the fixed header to 100vh) rather than content the page reflows
+            // around, so there's no spacer height to resync here — that's what
+            // made this behave differently depending on scroll position before.
+            // Body scroll is locked instead, so the page underneath can't move
+            // while the overlay is open, and unlocked again on close.
             function closeNav() {
                 nav.classList.remove('nav-open');
+                header.classList.remove('nav-open-header');
+                document.body.style.overflow = '';
                 btn.setAttribute('aria-expanded', 'false');
                 btn.innerHTML = '<i class="fas fa-bars"></i>';
-                spacer && syncHeaderSpacer();
             }
             function openNav() {
                 nav.classList.add('nav-open');
+                header.classList.add('nav-open-header');
+                document.body.style.overflow = 'hidden';
                 btn.setAttribute('aria-expanded', 'true');
                 btn.innerHTML = '<i class="fas fa-times"></i>';
-                syncHeaderSpacer();
             }
-            const spacer = document.getElementById('header-spacer');
 
             // stopPropagation here means this click can never reach the
             // document-level "close on outside click" listener below at
