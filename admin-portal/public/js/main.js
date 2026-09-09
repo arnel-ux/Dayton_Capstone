@@ -14,6 +14,17 @@ window.addEventListener('pageshow', function (event) {
     }
 });
 
+// Belt-and-suspenders for the guard above: under rapid repeated Back/Forward
+// clicks, a reload() triggered by pageshow can itself get cancelled by the
+// NEXT click before it finishes, so the browser can end up silently settling
+// on a frozen bfcache snapshot that never re-ran the reload (and therefore
+// never re-hit the server's session check). A no-op 'unload' listener is the
+// standard cross-browser signal that opts THIS page out of bfcache entirely,
+// so every Back/Forward to it is forced to be a real network request from
+// the start — no reload-after-the-fact race to lose no matter how fast the
+// buttons are clicked.
+window.addEventListener('unload', function () {});
+
 document.addEventListener("DOMContentLoaded", function() {
     const currentPath = window.location.pathname;
     const sidebar = document.getElementById('sidebar');
