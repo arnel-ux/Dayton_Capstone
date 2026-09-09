@@ -396,6 +396,17 @@
         </div>
     </div>
 
+    <script>
+        // Marks a real landing on the login page in THIS browser tab (sessionStorage
+        // is tab-scoped, so this can never bleed into a different tab or a different
+        // client's browser) so that if the user later presses Forward, the matching
+        // bfcache guard in client-survey.ejs redirects back here instead of letting
+        // the browser silently restore a previously-cached authenticated survey page.
+        // Deliberately NOT done by destroying the server-side session here — see the
+        // "must NOT destroy any session" comment on the /login route in server.js:
+        // a shared session cookie means that would log out every OTHER open tab too.
+        try { sessionStorage.setItem('__loginBoundary', window.location.pathname); } catch (e) {}
+    </script>
     <!-- Needed for attemptPendingClientLogout() below (a previously-offline
          session's server-side logout may still be pending) — this page
          didn't load it before since it had no other use for offline-db.js. -->

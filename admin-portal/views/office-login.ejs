@@ -396,6 +396,18 @@
         </div>
     </div>
 
+    <script>
+        // Marks a real landing on the login page in THIS browser tab (sessionStorage
+        // is tab-scoped, so this can never bleed into a different tab or a different
+        // office's browser) so that if the user later presses Forward, the shared
+        // bfcache guard (public/js/main.js) redirects back here instead of letting
+        // the browser silently restore a previously-cached authenticated office page.
+        // Deliberately NOT done by destroying the server-side session here — see the
+        // "must NOT destroy any session" comment on the /login route in server.js:
+        // admin.sid is shared by every tab in the browser, so that would log out
+        // every OTHER open office/admin tab too.
+        try { sessionStorage.setItem('__loginBoundary', window.location.pathname); } catch (e) {}
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="/js/alerts.js"></script>
     <script>

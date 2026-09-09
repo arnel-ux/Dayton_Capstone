@@ -6,11 +6,35 @@
 // both indicate the page came from that cache rather than the network, so we
 // force a hard reload — that reload IS a real request, so /login redirects and
 // no-cache headers apply normally again.
+//
+// '__loginBoundary' (set by login.ejs/office-login.ejs the moment either is
+// actually rendered) marks that THIS TAB has, at some point, navigated back
+// to the login page. Once set, a Back/Forward-triggered pageshow on a
+// protected page sends the user straight back to that login page instead of
+// merely reloading — a plain reload would legitimately re-show the real
+// dashboard if the still-alive server session allows it (visiting /login
+// deliberately never destroys the session — it's shared by every tab in the
+// browser, see server.js), which is technically correct but lets Forward
+// "resurrect" the authenticated view after the user already stepped back
+// through the login page in this tab. Cleared the moment a protected page
+// actually loads for real (persisted:false) — that only happens after
+// ensureAdminAuth/ensureOfficeAuth already approved a fresh request, i.e. the
+// user genuinely (re)entered the authenticated area, so the boundary no
+// longer applies.
 window.addEventListener('pageshow', function (event) {
     var navEntries = (window.performance && performance.getEntriesByType) ? performance.getEntriesByType('navigation') : [];
     var isBackForwardNav = navEntries.length > 0 && navEntries[0].type === 'back_forward';
+    var loginBoundary = null;
+    try { loginBoundary = sessionStorage.getItem('__loginBoundary'); } catch (e) {}
+
     if (event.persisted || isBackForwardNav) {
-        window.location.reload();
+        if (loginBoundary) {
+            window.location.replace(loginBoundary);
+        } else {
+            window.location.reload();
+        }
+    } else if (loginBoundary) {
+        try { sessionStorage.removeItem('__loginBoundary'); } catch (e) {}
     }
 });
 

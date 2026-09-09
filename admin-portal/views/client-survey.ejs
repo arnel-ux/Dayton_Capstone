@@ -3137,11 +3137,32 @@
 // no server-side session check for this to re-run, and forcing a reload there
 // would destroy the RAM-only credential store and any in-progress offline
 // answers for no benefit (see rememberOfflineCredential in pwa-client.js).
+// '__loginBoundary' (set by client-login.ejs the moment it's actually
+// rendered) marks that THIS TAB has, at some point, navigated back to the
+// login page. Once set, a Back/Forward-triggered pageshow here sends the
+// user straight back to that login page instead of merely reloading — a
+// plain reload would legitimately re-show the real survey page if the
+// still-alive server session allows it (visiting /login/client-login
+// deliberately never destroys the session — it's shared by every tab in the
+// browser, see server.js), which is technically correct but lets Forward
+// "resurrect" the authenticated view after the user already stepped back
+// through the login page in this tab. Cleared the moment this page actually
+// loads for real (persisted:false) — that only happens after the server-side
+// session check already approved a fresh request.
 window.addEventListener('pageshow', function (event) {
     var navEntries = (window.performance && performance.getEntriesByType) ? performance.getEntriesByType('navigation') : [];
     var isBackForwardNav = navEntries.length > 0 && navEntries[0].type === 'back_forward';
+    var loginBoundary = null;
+    try { loginBoundary = sessionStorage.getItem('__loginBoundary'); } catch (e) {}
+
     if (event.persisted || isBackForwardNav) {
-        window.location.reload();
+        if (loginBoundary) {
+            window.location.replace(loginBoundary);
+        } else {
+            window.location.reload();
+        }
+    } else if (loginBoundary) {
+        try { sessionStorage.removeItem('__loginBoundary'); } catch (e) {}
     }
 });
 
