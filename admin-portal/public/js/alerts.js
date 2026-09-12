@@ -188,23 +188,59 @@ const AppAlert = {
 // rendered. Never reads, logs, copies, or persists the value anywhere — the
 // click handler only ever flips the input's own `type` attribute back and
 // forth.
+// Which icon font this page actually loaded. The toggle used to hard-code
+// Bootstrap Icons ("bi bi-eye"), but only client-survey.ejs loads that font —
+// every other page here loads Font Awesome, so the <i> rendered as nothing and
+// the toggle showed up as an empty bordered box that read as a stray divider
+// line inside the password field. Detected once, per page.
+function pwIconSet() {
+    const hasBootstrapIcons = !!document.querySelector('link[href*="bootstrap-icons"]');
+    return hasBootstrapIcons
+        ? { shown: 'bi bi-eye', hidden: 'bi bi-eye-slash' }
+        : { shown: 'fas fa-eye', hidden: 'fas fa-eye-slash' };
+}
+
+// Accessible show/hide toggle for every password input on client/office
+// pages that load this shared file (admin pages don't load it, so this
+// never touches admin forms). Auto-runs on DOMContentLoaded below; also
+// exposed on window so dynamically-created password inputs (e.g. any
+// SweetAlert2 modal) can call it against just their own root element once
+// rendered. Never reads, logs, copies, or persists the value anywhere — the
+// click handler only ever flips the input's own `type` attribute back and
+// forth.
 function initPasswordToggles(root) {
     root = root || document;
+    const icons = pwIconSet();
     root.querySelectorAll('input[type="password"]').forEach((input) => {
         if (input.dataset.pwToggleInit) return;
         input.dataset.pwToggleInit = '1';
 
         const btn = document.createElement('button');
         btn.type = 'button'; // never a submit trigger
-        btn.className = 'pw-toggle-btn';
+        // Both classes: `password-toggle` is what page CSS styles, and
+        // `pw-toggle-btn` is kept so any existing selector still matches.
+        btn.className = 'password-toggle pw-toggle-btn';
         btn.setAttribute('aria-label', 'Show password');
-        btn.innerHTML = '<i class="bi bi-eye"></i>';
+        btn.setAttribute('title', 'Show password');
+        btn.setAttribute('aria-pressed', 'false');
+        // The icon shows the CURRENT STATE, not the action it would perform:
+        // a slashed eye means "hidden right now", an open eye means "visible
+        // right now". The field starts hidden, so it starts slashed.
+        btn.innerHTML = '<i class="' + icons.hidden + '"></i>';
         btn.addEventListener('click', () => {
             const showing = input.type === 'text';
             input.type = showing ? 'password' : 'text';
             const icon = btn.querySelector('i');
-            if (icon) icon.className = showing ? 'bi bi-eye' : 'bi bi-eye-slash';
-            btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+            if (icon) icon.className = showing ? icons.hidden : icons.shown;
+            const label = showing ? 'Show password' : 'Hide password';
+            btn.setAttribute('aria-label', label);
+            btn.setAttribute('title', label);
+            btn.setAttribute('aria-pressed', showing ? 'false' : 'true');
+            // Flipping `type` sends the caret to the end in some browsers,
+            // which is jarring mid-word — put it back where it was.
+            const pos = input.value.length;
+            input.focus();
+            try { input.setSelectionRange(pos, pos); } catch (e) { /* not supported on every input type */ }
         });
 
         // .input-modern (this app's own custom field wrapper) and Bootstrap's
@@ -214,10 +250,12 @@ function initPasswordToggles(root) {
         // direct-child flex-sizing selectors) stays intact.
         const group = input.closest('.input-modern') || input.closest('.input-group');
         if (group) {
+            // Deliberately NOT Bootstrap's .btn-outline-secondary here: its
+            // own left/right borders are what made the field look chopped in
+            // two. `.password-toggle` in style.css renders it as a plain icon
+            // that blends into the field instead.
             if (group.classList.contains('input-group')) {
-                btn.className += ' btn btn-outline-secondary';
-            } else {
-                btn.style.cssText = 'background:none;border:none;padding:0 0.75rem;color:#6b7280;display:flex;align-items:center;';
+                btn.classList.add('password-toggle-grouped');
             }
             group.appendChild(btn);
             return;
@@ -232,13 +270,88 @@ function initPasswordToggles(root) {
         input.parentNode.insertBefore(wrap, input);
         wrap.appendChild(input);
         input.style.paddingRight = '3rem';
-        // min 44px tap target (mobile accessibility guideline) without the
-        // icon itself looking oversized — padding provides the extra hit area.
-        btn.style.cssText = 'position:absolute;right:0.2rem;top:50%;transform:translateY(-50%);border:none;background:none;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;line-height:1;color:#6b7280;cursor:pointer;';
+        btn.classList.add('password-toggle-floating');
         wrap.appendChild(btn);
     });
 }
-document.addEventListener('DOMContentLoaded', () => initPasswordToggles());
+
+// Opt-in password strength meter. Only attaches to inputs that explicitly ask
+// for it with `data-pw-strength`, so it never shows up on a plain sign-in
+// field that didn't request it. Feedback only — it never blocks submission,
+// because an existing account may legitimately have a weak password and
+// refusing to submit would lock that user out of their own account.
+function initPasswordStrength(root) {
+    root = root || document;
+    root.querySelectorAll('input[data-pw-strength]').forEach((input) => {
+        if (input.dataset.pwStrengthInit) return;
+        input.dataset.pwStrengthInit = '1';
+
+        const meter = document.createElement('div');
+        meter.className = 'pw-strength is-empty';
+        meter.setAttribute('data-level', '0');
+        meter.innerHTML =
+            '<div class="pw-strength-bars" aria-hidden="true"><span></span><span></span><span></span><span></span></div>' +
+            '<p class="pw-strength-label" aria-live="polite">' +
+            '<span class="pw-strength-text"></span><span class="pw-strength-hint"></span></p>';
+
+        // Sits directly under the whole field (the wrapper, when there is
+        // one), never inside it — dropping it inside an .input-group would
+        // make Bootstrap treat it as another addon and lay it out on the
+        // same row as the input.
+        const field = input.closest('.input-modern') || input.closest('.input-group') || input;
+        field.parentNode.insertBefore(meter, field.nextSibling);
+
+        const textEl = meter.querySelector('.pw-strength-text');
+        const hintEl = meter.querySelector('.pw-strength-hint');
+
+        // Score 0-4. Length carries the most weight (it's what actually costs
+        // an attacker time), with character variety on top.
+        function score(v) {
+            if (!v) return { level: 0, text: '', hint: '' };
+            const variety = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/]
+                .reduce((n, re) => n + (re.test(v) ? 1 : 0), 0);
+            let n = 0;
+            if (v.length >= 8) n++;
+            if (v.length >= 12) n++;
+            if (variety >= 2) n++;
+            if (variety >= 3 && v.length >= 8) n++;
+            if (v.length < 8) n = Math.min(n, 1);   // short is weak regardless of variety
+            if (variety === 1) n = Math.min(n, 2);  // one character class only
+            const level = Math.max(1, Math.min(4, n));
+
+            let hint = '';
+            if (level < 4) {
+                if (v.length < 8) hint = 'Use at least 8 characters';
+                else if (v.length < 12) hint = 'Longer is stronger';
+                else if (variety < 3) hint = 'Mix letters, numbers & symbols';
+            }
+            return { level: level, text: ['', 'Weak', 'Fair', 'Good', 'Strong'][level], hint: hint };
+        }
+
+        function render() {
+            const r = score(input.value);
+            meter.classList.toggle('is-empty', !input.value);
+            meter.setAttribute('data-level', String(r.level));
+            textEl.textContent = r.text;
+            hintEl.textContent = r.hint;
+        }
+
+        input.addEventListener('input', render);
+        render(); // autofilled/restored values never fire `input`
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initPasswordToggles();
+    initPasswordStrength();
+});
+
+// Exposed so dynamically-rendered password inputs (e.g. inside a SweetAlert2
+// modal, which doesn't exist yet at DOMContentLoaded) can be wired up against
+// just their own root once they're in the DOM. Both are idempotent — the
+// data-* guards mean re-running over an already-initialised field is a no-op.
+window.initPasswordToggles = initPasswordToggles;
+window.initPasswordStrength = initPasswordStrength;
 
 // Requested global convenience API: showAlert({ type, title, message }).
 // Thin wrapper around AppAlert so both call styles are available everywhere

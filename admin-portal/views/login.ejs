@@ -277,10 +277,6 @@
                 min-height: 41px;
             }
             .input-modern .input-icon { width: 2.6rem; font-size: 1.1rem; }
-            /* Matches the 41px input min-height so the toggle spans the full
-               field height — the whole right edge of the box is tappable. */
-            .password-toggle { width: 2.9rem; min-height: 41px; font-size: 1.05rem; }
-            .pw-strength-label { font-size: 0.74rem; }
             .field-group { margin-bottom: 0.5rem; }
             .field-label { font-size: 0.8rem; margin-bottom: 0.25rem; }
             .field-hint { font-size: 0.74rem; margin-top: 0.3rem; line-height: 1.3; }
@@ -428,92 +424,6 @@
             outline: none;
             box-shadow: none;
         }
-
-        /* Show/hide password toggle — lives inside .input-modern on the right,
-           mirroring the .input-icon on the left so the field stays visually
-           balanced. 44px square keeps it a comfortable thumb target, and
-           `background: none` means it reads as an icon, not a second button
-           competing with Login. */
-        .password-toggle {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 2.9rem;
-            min-height: 2.6rem;
-            flex-shrink: 0;
-            border: none;
-            background: none;
-            padding: 0;
-            color: #94a3b8;
-            font-size: 0.95rem;
-            cursor: pointer;
-            border-radius: 0.75rem;
-            transition: color 0.2s ease, background-color 0.2s ease;
-        }
-        .password-toggle:hover { color: #251d3a; background: rgba(37, 29, 58, 0.06); }
-        .password-toggle:focus-visible { outline: 2px solid #251d3a; outline-offset: -2px; }
-
-        /* Password strength meter — a 4-segment bar plus a short label.
-           Collapsed to zero height while the field is empty (.is-empty) so it
-           costs no vertical space on first paint; only the typing user pays
-           for it, which matters on a page that must fit the fold. */
-        .pw-strength {
-            margin-top: 0.4rem;
-            overflow: hidden;
-            /* Only a collapse mechanism, never a real size limit — set well
-               above the ~24px the meter actually needs so a hint that wraps
-               to a second line on a narrow phone can't get clipped. */
-            max-height: 5rem;
-            opacity: 1;
-            transition: max-height 0.25s ease, opacity 0.25s ease, margin-top 0.25s ease;
-        }
-        .pw-strength.is-empty {
-            max-height: 0;
-            opacity: 0;
-            margin-top: 0;
-        }
-        .pw-strength-bars {
-            display: flex;
-            gap: 4px;
-        }
-        .pw-strength-bars span {
-            flex: 1 1 0;
-            height: 4px;
-            border-radius: 50px;
-            background: #e2e8f0;
-            transition: background-color 0.25s ease;
-        }
-        .pw-strength-label {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.5rem;
-            margin: 0.3rem 0 0;
-            font-size: 0.7rem;
-            font-weight: 600;
-            line-height: 1.3;
-            color: #94a3b8;
-        }
-        .pw-strength-label .pw-strength-text { flex: 0 0 auto; }
-        .pw-strength-label .pw-strength-hint {
-            flex: 1 1 auto;
-            text-align: right;
-            font-weight: 500;
-            color: #94a3b8;
-            /* Long hints wrap instead of widening the card on small phones. */
-            min-width: 0;
-            overflow-wrap: anywhere;
-        }
-        /* Filled-segment + label colors per level. Each level fills its own
-           segment count via the [data-level] attribute set in JS. */
-        .pw-strength[data-level="1"] .pw-strength-bars span:nth-child(-n+1) { background: #ef4444; }
-        .pw-strength[data-level="2"] .pw-strength-bars span:nth-child(-n+2) { background: #f59e0b; }
-        .pw-strength[data-level="3"] .pw-strength-bars span:nth-child(-n+3) { background: #eab308; }
-        .pw-strength[data-level="4"] .pw-strength-bars span:nth-child(-n+4) { background: #16a34a; }
-        .pw-strength[data-level="1"] .pw-strength-text { color: #ef4444; }
-        .pw-strength[data-level="2"] .pw-strength-text { color: #d97706; }
-        .pw-strength[data-level="3"] .pw-strength-text { color: #ca8a04; }
-        .pw-strength[data-level="4"] .pw-strength-text { color: #16a34a; }
 
         .field-hint {
             font-size: 0.68rem;
@@ -796,22 +706,12 @@
                     </div>
                     <div class="input-modern">
                         <span class="input-icon"><i class="fas fa-lock"></i></span>
-                        <input type="password" name="password" id="passwordInput" class="form-control" placeholder="Enter your password" required title="Password" autocomplete="current-password">
-                        <button type="button" class="password-toggle" id="passwordToggleBtn" title="Show password" aria-label="Show password" aria-pressed="false" aria-controls="passwordInput">
-                            <i class="fas fa-eye-slash" id="passwordToggleIcon"></i>
-                        </button>
-                    </div>
-                    <!-- Strength meter. aria-live="polite" so a screen reader
-                         announces the level as it changes, but only between
-                         keystrokes rather than interrupting on every letter. -->
-                    <div class="pw-strength is-empty" id="pwStrength" data-level="0">
-                        <div class="pw-strength-bars" aria-hidden="true">
-                            <span></span><span></span><span></span><span></span>
-                        </div>
-                        <p class="pw-strength-label" aria-live="polite">
-                            <span class="pw-strength-text" id="pwStrengthText"></span>
-                            <span class="pw-strength-hint" id="pwStrengthHint"></span>
-                        </p>
+                        <!-- The show/hide toggle and the strength meter are both
+                             injected by public/js/alerts.js — the toggle for any
+                             password input, the meter because of data-pw-strength.
+                             Adding them by hand here too is what produced a second,
+                             empty toggle button next to the real one. -->
+                        <input type="password" name="password" id="passwordInput" class="form-control" placeholder="Enter your password" required title="Password" autocomplete="current-password" data-pw-strength>
                     </div>
                 </div>
 
@@ -859,85 +759,6 @@
         try { sessionStorage.setItem('__loginBoundary', window.location.pathname); } catch (e) {}
     </script>
 
-    <script>
-        // Password field UX: the show/hide toggle and the strength meter.
-        // Both are purely client-side display helpers — neither changes what
-        // gets submitted, and the meter never blocks or validates the login
-        // (an existing account may well have a weak password; refusing to
-        // submit it would lock that user out of their own account). It's
-        // feedback only.
-        (function initPasswordField() {
-            const input = document.getElementById('passwordInput');
-            const toggleBtn = document.getElementById('passwordToggleBtn');
-            const toggleIcon = document.getElementById('passwordToggleIcon');
-            const meter = document.getElementById('pwStrength');
-            const meterText = document.getElementById('pwStrengthText');
-            const meterHint = document.getElementById('pwStrengthHint');
-            if (!input) return;
-
-            if (toggleBtn && toggleIcon) {
-                toggleBtn.addEventListener('click', () => {
-                    const show = input.type === 'password';
-                    input.type = show ? 'text' : 'password';
-                    // The icon reflects the CURRENT STATE, not the action:
-                    // open eye = the password is visible right now, slashed
-                    // eye = it's hidden. (The other common convention shows
-                    // the action instead — open eye meaning "tap to reveal"
-                    // — which reads backwards to most users here.)
-                    toggleIcon.className = show ? 'fas fa-eye' : 'fas fa-eye-slash';
-                    const label = show ? 'Hide password' : 'Show password';
-                    toggleBtn.setAttribute('aria-label', label);
-                    toggleBtn.setAttribute('title', label);
-                    toggleBtn.setAttribute('aria-pressed', show ? 'true' : 'false');
-                    // Keep the caret where the user left it — flipping .type
-                    // moves it to the end in some browsers, which is jarring
-                    // mid-word.
-                    const pos = input.value.length;
-                    input.focus();
-                    try { input.setSelectionRange(pos, pos); } catch (e) { /* type=text only in some browsers */ }
-                });
-            }
-
-            // Score 0-4. Length carries the most weight (it's what actually
-            // costs an attacker time), with character variety on top.
-            function scorePassword(v) {
-                if (!v) return { level: 0, text: '', hint: '' };
-                const variety = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/]
-                    .reduce((n, re) => n + (re.test(v) ? 1 : 0), 0);
-                let score = 0;
-                if (v.length >= 8) score++;
-                if (v.length >= 12) score++;
-                if (variety >= 2) score++;
-                if (variety >= 3 && v.length >= 8) score++;
-                // A short password is weak no matter how varied it is.
-                if (v.length < 8) score = Math.min(score, 1);
-                // All one character class, whatever the length.
-                if (variety === 1) score = Math.min(score, 2);
-                const level = Math.max(1, Math.min(4, score));
-
-                let hint = '';
-                if (level < 4) {
-                    if (v.length < 8) hint = 'Use at least 8 characters';
-                    else if (v.length < 12) hint = 'Longer is stronger';
-                    else if (variety < 3) hint = 'Mix letters, numbers & symbols';
-                }
-                return { level: level, text: ['', 'Weak', 'Fair', 'Good', 'Strong'][level], hint: hint };
-            }
-
-            function renderStrength() {
-                if (!meter) return;
-                const r = scorePassword(input.value);
-                meter.classList.toggle('is-empty', !input.value);
-                meter.setAttribute('data-level', String(r.level));
-                if (meterText) meterText.textContent = r.text;
-                if (meterHint) meterHint.textContent = r.hint;
-            }
-
-            input.addEventListener('input', renderStrength);
-            // Autofilled/restored values don't fire `input` — sync on load too.
-            renderStrength();
-        })();
-    </script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="/js/alerts.js"></script>
     <script src="/js/offline-db.js"></script>

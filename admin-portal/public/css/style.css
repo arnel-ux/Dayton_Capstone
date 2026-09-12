@@ -430,3 +430,128 @@ html[data-bs-theme="dark"] .form-control {
         scroll-behavior: auto !important;
     }
 }
+
+
+/* ==================================================================
+   Password field helpers — the show/hide toggle and the strength meter
+   that public/js/alerts.js injects. Styled here (not inline in the JS)
+   so every page that loads the shared stylesheet gets the same field,
+   and so a page can override one rule without touching the script.
+   ================================================================== */
+
+/* The toggle renders as a plain icon sitting inside the field. It used to
+   get Bootstrap's .btn-outline-secondary, whose own left/right borders drew
+   a vertical rule through the input and made it look like the field had been
+   split into two boxes. */
+.password-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.9rem;
+    min-height: 2.6rem;
+    flex-shrink: 0;
+    border: none;
+    background: none;
+    padding: 0;
+    color: #94a3b8;
+    font-size: 0.95rem;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 0.75rem;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+.password-toggle:hover { color: #251d3a; background: rgba(37, 29, 58, 0.06); }
+.password-toggle:focus-visible { outline: 2px solid #251d3a; outline-offset: -2px; }
+
+/* Inside a Bootstrap .input-group the button is a grid/flex child sitting
+   next to a bordered .form-control, so it has to carry the field's own
+   border on the three outer edges (never on the side facing the input,
+   which is what would redraw that split line) and round off the right end
+   to match the group. */
+.input-group > .password-toggle-grouped {
+    border: 1px solid #dee2e6;
+    border-left: 0;
+    background-color: var(--bs-secondary-bg, #f8f9fa);
+    border-top-right-radius: var(--bs-border-radius, 0.375rem);
+    border-bottom-right-radius: var(--bs-border-radius, 0.375rem);
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+.input-group > .password-toggle-grouped:hover { background-color: #eef0f2; }
+
+/* Fallback placement when the input has no field wrapper to sit in — the
+   script wraps the input alone and this floats over its right edge. 44px
+   square is the comfortable-tap-target guideline. */
+.password-toggle-floating {
+    position: absolute;
+    right: 0.2rem;
+    top: 50%;
+    transform: translateY(-50%);
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 50%;
+}
+
+/* Strength meter — a 4-segment bar plus a short label. Collapsed to zero
+   height while the field is empty so it costs no vertical space on first
+   paint; only the typing user pays for it, which matters on the auth pages
+   that have to fit the fold without scrolling. */
+.pw-strength {
+    margin-top: 0.4rem;
+    overflow: hidden;
+    /* Only a collapse mechanism, never a real size limit — set well above the
+       ~24px the meter needs so a hint that wraps on a narrow phone can't get
+       clipped. */
+    max-height: 5rem;
+    opacity: 1;
+    transition: max-height 0.25s ease, opacity 0.25s ease, margin-top 0.25s ease;
+}
+.pw-strength.is-empty {
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+}
+.pw-strength-bars { display: flex; gap: 4px; }
+.pw-strength-bars span {
+    flex: 1 1 0;
+    height: 4px;
+    border-radius: 50px;
+    background: #e2e8f0;
+    transition: background-color 0.25s ease;
+}
+.pw-strength-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin: 0.3rem 0 0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #94a3b8;
+}
+.pw-strength-label .pw-strength-text { flex: 0 0 auto; }
+.pw-strength-label .pw-strength-hint {
+    flex: 1 1 auto;
+    text-align: right;
+    font-weight: 500;
+    color: #94a3b8;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+/* Each level fills its own segment count via the [data-level] the script sets. */
+.pw-strength[data-level="1"] .pw-strength-bars span:nth-child(-n+1) { background: #ef4444; }
+.pw-strength[data-level="2"] .pw-strength-bars span:nth-child(-n+2) { background: #f59e0b; }
+.pw-strength[data-level="3"] .pw-strength-bars span:nth-child(-n+3) { background: #eab308; }
+.pw-strength[data-level="4"] .pw-strength-bars span:nth-child(-n+4) { background: #16a34a; }
+.pw-strength[data-level="1"] .pw-strength-text { color: #ef4444; }
+.pw-strength[data-level="2"] .pw-strength-text { color: #d97706; }
+.pw-strength[data-level="3"] .pw-strength-text { color: #ca8a04; }
+.pw-strength[data-level="4"] .pw-strength-text { color: #16a34a; }
+
+@media (max-width: 480px) {
+    /* Match the ~41px input height these auth pages use on phones, so the
+       whole right edge of the field is tappable. */
+    .password-toggle { width: 2.9rem; min-height: 41px; font-size: 1.05rem; }
+    .pw-strength-label { font-size: 0.74rem; }
+}
