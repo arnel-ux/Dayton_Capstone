@@ -12,10 +12,12 @@
             -webkit-font-smoothing: antialiased;
         }
 
+        /* Same photo + treatment as the public landing page (index.ejs
+           .bg-image): full-bleed, no blur, pinned to the viewport. */
         .bg-blurred {
             position: fixed;
-            top: -5%; left: -5%; right: -5%; bottom: -5%;
-            background-image: url('/images/campus-monument.jpg');
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background-image: url('<%- heroImageUrl %>');
             background-size: cover;
             /* The CSPC monument sits in the upper half of this photo — on a
                tall mobile viewport, centering it vertically cropped the
@@ -23,14 +25,14 @@
                keeps it in view. */
             background-position: top center;
             background-repeat: no-repeat;
-            filter: blur(1px);
-            z-index: -1;
+            z-index: -2;
         }
 
+        /* Same navy gradient as the landing page's .bg-overlay. */
         .bg-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(15, 23, 42, 0.6);
+            background: linear-gradient(180deg, rgba(37, 29, 58,0.92) 0%, rgba(37, 29, 58,0.85) 100%);
             z-index: -1;
         }
 

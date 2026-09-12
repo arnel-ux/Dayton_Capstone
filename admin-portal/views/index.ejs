@@ -4,18 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CQA - Public Transparency Portal</title>
-    <script>
-        (function () {
-            try {
-                if (localStorage.getItem('theme') === 'dark') {
-                    document.documentElement.setAttribute('data-bs-theme', 'dark');
-                    document.addEventListener('DOMContentLoaded', function () {
-                        document.body.classList.add('dark-mode');
-                    });
-                }
-            } catch (e) {}
-        })();
-    </script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
 
@@ -191,7 +179,12 @@
         .mobile-only-text { display: none; }
 
         /* --- SITE NAV LINKS --- */
-        .site-nav { display: flex; align-items: center; justify-content: center; gap: var(--sp-2); margin: 0 var(--sp-3); }
+        /* 3rem = 48px ≈ half an inch between DASHBOARD / SERVICES / ABOUT / STRUCTURE.
+           .nav-inner already wraps (flex-wrap: wrap), so on a narrow desktop
+           window the nav row drops below the brand instead of overflowing the
+           header. Only applies here — below 62rem .site-nav becomes the stacked
+           hamburger menu, which sets its own gap. */
+        .site-nav { display: flex; align-items: center; justify-content: center; gap: var(--sp-6); margin: 0 var(--sp-3); }
         .site-nav a { color: rgba(255,255,255,0.85); text-decoration: none; font-weight: 600; font-size: var(--fs-sm); letter-spacing: 0.4px; text-transform: uppercase; position: relative; padding-bottom: 4px; transition: color 0.25s ease; }
         .site-nav a::after { content: ''; position: absolute; left: 0; bottom: 0; width: 0; height: 2px; background: var(--gold-400); transition: width 0.25s ease; }
         .site-nav a:hover { color: #fff; }
@@ -783,10 +776,11 @@
                unevenly and looked lopsided; stacked-and-centered reads as
                deliberate regardless of each item's text length. */
             .footer-contact li { flex-direction: column; align-items: center; text-align: center; gap: 0.3rem; font-size: 0.85rem; }
-            /* Extra right clearance so the centered copyright line never
-               runs under the fixed dark-mode toggle FAB parked in that
-               corner (layout/theme-toggle.ejs). */
-            .footer-bottom { padding: var(--sp-2) 3rem; font-size: 0.72rem; }
+            /* The extra 3rem right padding here used to keep the centered
+               copyright line clear of the fixed theme-toggle FAB; that button
+               is no longer included on this page, so it goes back to even
+               side padding. */
+            .footer-bottom { padding: var(--sp-2); font-size: 0.72rem; }
         }
 
         @media (max-width: 62rem) {
@@ -835,12 +829,25 @@
                the page underneath. */
             .nav-hamburger { display: inline-flex; }
             .site-nav { display: none; width: 100%; order: 3; }
+            /* flex-basis MUST stay 100% here. The old rule used the shorthand
+               `flex: 1`, which resolves to `flex-basis: 0` and silently beats
+               the `width: 100%` above it — so instead of wrapping onto its own
+               row the open menu stayed on the header row, squeezed into
+               whatever space was left beside the brand/Login and clipping its
+               own labels off the right edge. `flex: 1 1 100%` + min-width keeps
+               it a genuine full-width row on every phone width. */
             .site-nav.nav-open {
-                display: flex; flex-direction: column; align-items: stretch; justify-content: center;
-                flex: 1; margin: var(--sp-2) 0 0; gap: 0; border-top: 1px solid rgba(255,255,255,0.15);
-                overflow-y: auto;
+                display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
+                flex: 1 1 100%; width: 100%; min-width: 100%; max-width: 100%;
+                margin: var(--sp-2) 0 0; gap: 0; border-top: 1px solid rgba(255,255,255,0.15);
+                overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
             }
-            .site-nav.nav-open a { padding: 1.1rem var(--sp-1); border-bottom: 1px solid rgba(255,255,255,0.12); text-align: left; font-size: var(--fs-lg); }
+            .site-nav.nav-open a {
+                padding: 1.1rem var(--sp-1); border-bottom: 1px solid rgba(255,255,255,0.12);
+                text-align: left; font-size: var(--fs-lg);
+                /* Long labels wrap instead of running past the panel edge. */
+                display: block; width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere;
+            }
             .site-nav.nav-open a::after { display: none; }
 
             /* Toggled on #siteHeader (alongside .nav-open on the nav itself) for
@@ -848,12 +855,29 @@
                its normal content-height box into a full-viewport panel so the
                whole page sits behind it, not just the header's own row. */
             .sticky-top-section.nav-open-header {
-                bottom: 0; height: 100vh; height: 100dvh;
+                bottom: 0; height: 100vh;
+                /* dvh tracks the collapsing/expanding mobile browser UI bars, so
+                   the overlay ends exactly at the visible viewport on Chrome/
+                   Safari Android + iOS; the 100vh above stays as the fallback
+                   for browsers without dvh. */
+                height: 100dvh;
                 background: rgba(37, 29, 58, 0.98);
-                overflow-y: auto;
+                overflow-y: auto; overscroll-behavior: contain;
+                /* Notch / gesture-bar clearance on iPhone X-class and Android
+                   gesture-nav devices. */
+                padding-top: max(0.5rem, env(safe-area-inset-top));
+                padding-bottom: max(var(--sp-2), env(safe-area-inset-bottom));
+                padding-left: max(var(--sp-2), env(safe-area-inset-left));
+                padding-right: max(var(--sp-2), env(safe-area-inset-right));
             }
             body.dark-mode .sticky-top-section.nav-open-header { background: rgba(4, 8, 18, 0.98); }
             .sticky-top-section.nav-open-header .nav-inner { height: 100%; align-content: flex-start; }
+            /* The brand block is `flex: 1` on mobile; without min-width:0 its
+               text sets the floor for how narrow it can get, which on 320px
+               phones pushed the row wider than the screen. */
+            .nav-inner > * { min-width: 0; }
+            .nav-left { min-width: 0; }
+            .header-text-container { min-width: 0; }
         }
         @media (max-width: 36rem) {
             .chart-card { min-width: 90vw; height: 38vh; }
@@ -1241,8 +1265,6 @@
         </footer>
 
     </div>
-
-    <%- include('layout/theme-toggle') %>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 

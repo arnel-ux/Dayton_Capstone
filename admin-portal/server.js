@@ -36,6 +36,22 @@ app.use((req, res, next) => {
     next();
 });
 
+// Exposes the landing page's hero background photo to EVERY view, so every
+// page that paints a photo backdrop (login, office-login, client-login,
+// forgot/reset-password, complete-google-registration, client-survey) shows
+// the same image as index.ejs instead of each one hardcoding
+// '/images/campus-monument.jpg'. Admins can change the hero image from the
+// landing-content editor, and before this the landing page was the only page
+// that followed the change — the rest kept rendering the old default photo.
+app.use((req, res, next) => {
+    try {
+        res.locals.heroImageUrl = loadLandingContent().hero.imageUrl;
+    } catch (err) {
+        res.locals.heroImageUrl = DEFAULT_LANDING_CONTENT.hero.imageUrl;
+    }
+    next();
+});
+
 // ==========================================
 // SESSION & PASSPORT (Google OAuth for clients)
 // ==========================================
