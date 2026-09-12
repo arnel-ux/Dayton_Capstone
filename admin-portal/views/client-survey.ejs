@@ -375,101 +375,274 @@
 
         /* =========================================================
            NOTIFICATION BELL + PANEL — authenticated client pages only
+
+           Rebuilt as a proper "inbox" surface rather than a bare dropdown:
+           its own themed container (light/dark tokens below), a header with
+           All/Unread tabs, and read-state that is actually visible at a
+           glance — unread rows get a blue rail + tinted background + filled
+           bell icon + "New" pill, read rows get a muted check icon and
+           de-emphasised text. On phones it opens as an anchored sheet over a
+           dimming backdrop so it never reads as floating text on top of the
+           page content behind it.
         ========================================================= */
         .notif-bell-wrap { position: relative; }
         .notif-unread-badge {
-            position: absolute; top: -2px; right: -2px;
+            position: absolute; top: -3px; right: -3px;
             background: #dc3545; color: #fff; border-radius: 999px;
             font-size: 0.65rem; font-weight: 700; line-height: 1;
-            min-width: 16px; height: 16px; padding: 0 3px;
+            min-width: 17px; height: 17px; padding: 0 4px;
             display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 0 0 2px var(--page-bg, #eef1f6);
         }
+        [data-bs-theme="dark"] .notif-unread-badge { box-shadow: 0 0 0 2px #0d1524; }
+        /* Bell stays visibly "on" while its panel is open. */
+        #btn-notif-bell.is-active { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+        /* Dims the page behind the panel. Portaled to <body> alongside the
+           panel itself (see positionNotifPanel) — on phones this is what
+           makes the panel read as a contained layer instead of text
+           floating over the page; on desktop it is a faint click-catcher. */
+        .notif-backdrop {
+            position: fixed; inset: 0; z-index: 1055;
+            background: rgba(8, 13, 25, 0.05);
+            opacity: 0; transition: opacity 0.18s ease;
+        }
+        .notif-backdrop.is-open { opacity: 1; }
+
         /* Root cause of "the panel gets cut off": .topbar is `position:
            sticky` + `z-index:1020`, which makes it a stacking-context
            boundary — every descendant's z-index (including this panel's,
            however high) is only ever compared to OTHER children of
-           .topbar. From outside .topbar, the whole subtree behaves as a
-           single unit stacked at z-index:1020, so any sibling of .topbar
-           elsewhere in the page that happens to paint after it, or any
-           ancestor between .notif-bell-wrap and the page that constrains
-           overflow, can still cover or clip it regardless of this panel's
-           own z-index number. toggleNotificationPanel() (below, in the
-           script section) now portals this element to a direct child of
-           <body> the first time it opens and positions it with `position:
-           fixed` + inline top/right computed from the bell's real
-           on-screen rect — that removes it from .topbar's stacking context
-           entirely and from any ancestor's layout/overflow, rather than
-           just raising a number and hoping. Base position/right/top here
-           are only the pre-JS/no-JS fallback. */
+           .topbar. toggleNotificationPanel() portals this element to a
+           direct child of <body> the first time it opens and positions it
+           with `position: fixed` + inline top/right computed from the
+           bell's real on-screen rect. Base position/right/top here are only
+           the pre-JS/no-JS fallback. */
         .notif-panel {
-            /* Static fallback only (JS always overrides top/right inline
-               the instant it opens — see positionNotifPanel()). Percentage
-               offsets don't make sense once this is `position: fixed`
-               (they'd resolve against the viewport, not the bell), so this
-               is just a reasonable "somewhere under the topbar" default. */
+            /* Theme tokens — every color below resolves through these so the
+               dark override is a single block, not a per-rule duplicate. */
+            --notif-surface: #ffffff;
+            --notif-header-bg: #f8fafc;
+            --notif-line: rgba(15, 23, 42, 0.09);
+            --notif-title: #0f172a;
+            --notif-text: #475569;
+            --notif-muted: #94a3b8;
+            --notif-unread-bg: rgba(37, 84, 199, 0.06);
+            --notif-accent: #2554c7;
+            --notif-accent-soft: rgba(37, 84, 199, 0.12);
+            --notif-hover: rgba(15, 23, 42, 0.04);
+
             position: fixed; top: 70px; right: 16px;
-            width: 360px; max-width: calc(100vw - 2rem);
-            max-height: 70vh; max-height: 70dvh; overflow-y: auto;
-            background: var(--bs-body-bg, #fff); color: var(--bs-body-color, #1f2937);
-            border: 1px solid rgba(0,0,0,0.1); border-radius: 14px;
-            box-shadow: 0 24px 48px -16px rgba(10,20,40,0.35);
+            width: 384px; max-width: calc(100vw - 2rem);
+            display: flex; flex-direction: column;
+            max-height: min(70vh, 560px);
+            max-height: min(70dvh, 560px);
+            background: var(--notif-surface); color: var(--notif-text);
+            border: 1px solid var(--notif-line); border-radius: 18px;
+            box-shadow: 0 28px 60px -20px rgba(10, 20, 40, 0.45), 0 2px 8px rgba(10, 20, 40, 0.08);
+            overflow: hidden;
             z-index: 1060;
+            transform-origin: top right;
+            animation: notifPanelIn 0.16s ease-out;
         }
+        /* `display: flex` above would otherwise beat the UA's
+           `[hidden] { display: none }`, leaving the panel permanently
+           visible — these keep the `hidden` attribute authoritative. */
+        .notif-panel[hidden], .notif-backdrop[hidden] { display: none !important; }
+        [data-bs-theme="dark"] .notif-panel {
+            --notif-surface: #101827;
+            --notif-header-bg: #0c1422;
+            --notif-line: rgba(148, 163, 184, 0.16);
+            --notif-title: #e6edf7;
+            --notif-text: #9aa8bd;
+            --notif-muted: #6b7b93;
+            --notif-unread-bg: rgba(96, 141, 255, 0.10);
+            --notif-accent: #6d96ff;
+            --notif-accent-soft: rgba(96, 141, 255, 0.18);
+            --notif-hover: rgba(255, 255, 255, 0.045);
+            box-shadow: 0 28px 60px -20px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(148, 163, 184, 0.06);
+        }
+        @keyframes notifPanelIn {
+            from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+            to   { opacity: 1; transform: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .notif-panel { animation: none; }
+        }
+
+        /* ---- Header: title + live count, then tabs + bulk actions ---- */
         .notif-panel-header {
-            display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.4rem;
-            padding: 0.85rem 1rem; border-bottom: 1px solid rgba(0,0,0,0.08);
+            flex: none;
+            padding: 0.85rem 0.9rem 0.6rem;
+            background: var(--notif-header-bg);
+            border-bottom: 1px solid var(--notif-line);
         }
-        .notif-panel-header-actions { display: flex; gap: 0.75rem; font-size: 0.8rem; }
-        .notif-list { padding: 0.25rem 0; }
-        .notif-item { display: flex; gap: 0.6rem; padding: 0.7rem 1rem; border-bottom: 1px solid rgba(0,0,0,0.05); align-items: flex-start; }
-        .notif-item.is-unread { background: rgba(37,84,199,0.06); }
-        .notif-item-dot { width: 8px; height: 8px; border-radius: 50%; background: #2554c7; margin-top: 0.4rem; flex: none; }
-        .notif-item.is-unread .notif-item-dot { visibility: visible; }
-        .notif-item:not(.is-unread) .notif-item-dot { visibility: hidden; }
+        .notif-panel-header-top { display: flex; align-items: center; gap: 0.5rem; }
+        .notif-panel-title {
+            font-size: 0.98rem; font-weight: 700; color: var(--notif-title);
+            letter-spacing: -0.01em;
+        }
+        .notif-panel-count {
+            font-size: 0.66rem; font-weight: 700; line-height: 1;
+            padding: 0.24rem 0.45rem; border-radius: 999px;
+            background: var(--notif-accent); color: #fff;
+        }
+        .notif-panel-close {
+            margin-left: auto; flex: none;
+            width: 32px; height: 32px; border-radius: 9px;
+            display: flex; align-items: center; justify-content: center;
+            background: none; border: none; color: var(--notif-muted);
+            font-size: 1rem; line-height: 1;
+        }
+        .notif-panel-close:hover, .notif-panel-close:focus-visible { background: var(--notif-hover); color: var(--notif-title); }
+        .notif-panel-toolbar {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem;
+        }
+        /* All / Unread segmented filter — the direct answer to "which ones
+           haven't I read yet": one tap narrows the list to exactly those, and
+           each tab carries its own live count. */
+        .notif-tabs {
+            display: flex; gap: 0.15rem; padding: 0.15rem;
+            background: var(--notif-hover); border-radius: 10px;
+        }
+        .notif-tab {
+            display: inline-flex; align-items: center; gap: 0.3rem;
+            padding: 0.32rem 0.6rem; border: none; border-radius: 8px;
+            background: none; color: var(--notif-text);
+            font-size: 0.76rem; font-weight: 600; line-height: 1.1;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+        .notif-tab .notif-tab-count {
+            font-size: 0.66rem; font-weight: 700;
+            padding: 0.08rem 0.32rem; border-radius: 999px;
+            background: var(--notif-accent-soft); color: var(--notif-accent);
+        }
+        .notif-tab.is-active { background: var(--notif-surface); color: var(--notif-title); box-shadow: 0 1px 3px rgba(10,20,40,0.14); }
+        .notif-tab.is-active .notif-tab-count { background: var(--notif-accent); color: #fff; }
+        .notif-panel-header-actions { display: flex; align-items: center; gap: 0.25rem; margin-left: auto; }
+        .notif-action {
+            display: inline-flex; align-items: center; gap: 0.3rem;
+            padding: 0.34rem 0.5rem; border: none; border-radius: 8px;
+            background: none; color: var(--notif-text);
+            font-size: 0.74rem; font-weight: 600; line-height: 1.1;
+        }
+        .notif-action i { font-size: 0.85rem; }
+        .notif-action:hover, .notif-action:focus-visible { background: var(--notif-hover); color: var(--notif-title); }
+        .notif-action.is-danger { color: #e2596a; }
+        .notif-action.is-danger:hover, .notif-action.is-danger:focus-visible { background: rgba(220, 53, 69, 0.12); color: #dc3545; }
+        .notif-action[disabled] { opacity: 0.4; pointer-events: none; }
+
+        /* ---- Scrollable list ---- */
+        .notif-list {
+            flex: 1 1 auto; min-height: 0;
+            overflow-y: auto; overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        .notif-item {
+            position: relative;
+            display: flex; gap: 0.65rem; align-items: flex-start;
+            padding: 0.75rem 0.6rem 0.75rem 0.9rem;
+            border-bottom: 1px solid var(--notif-line);
+        }
+        .notif-item:last-child { border-bottom: none; }
+        .notif-item.is-unread { background: var(--notif-unread-bg); }
+        /* Left rail — the fastest read-state cue when scanning the list. */
+        .notif-item.is-unread::before {
+            content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+            width: 3px; background: var(--notif-accent);
+        }
+        .notif-item-icon {
+            flex: none; width: 34px; height: 34px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.85rem;
+            background: var(--notif-hover); color: var(--notif-muted);
+        }
+        .notif-item.is-unread .notif-item-icon { background: var(--notif-accent-soft); color: var(--notif-accent); }
         .notif-item-body { flex: 1 1 auto; min-width: 0; }
         /* Each notification's message is a long standardized sentence — with
            several stacked in the panel that made every open of the bell a
-           wall of text to scroll through before you could even see how many
-           there were. Collapsed to title + time by default, click/tap the
-           title row to expand just that one's message (an accordion, not a
-           single toggle-all) so scanning the list stays quick and the detail
-           is still one tap away. */
+           wall of text. Collapsed to title + meta by default; tap the title
+           row to expand just that one (an accordion, not a toggle-all). */
         .notif-item-title-row {
             display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem;
             cursor: pointer; background: none; border: none; padding: 0; width: 100%; text-align: left;
             font: inherit; color: inherit;
         }
-        .notif-item-title { font-weight: 600; font-size: 0.88rem; word-break: break-word; }
-        .notif-item-chevron { flex: none; font-size: 0.8rem; color: #9ca3af; margin-top: 0.15rem; transition: transform 0.2s ease; }
+        .notif-item-title {
+            font-size: 0.87rem; line-height: 1.3; word-break: break-word;
+            font-weight: 500; color: var(--notif-text);
+        }
+        .notif-item.is-unread .notif-item-title { font-weight: 700; color: var(--notif-title); }
+        .notif-item-chevron { flex: none; font-size: 0.75rem; color: var(--notif-muted); margin-top: 0.2rem; transition: transform 0.2s ease; }
         .notif-item.expanded .notif-item-chevron { transform: rotate(180deg); }
         .notif-item-message {
-            font-size: 0.82rem; color: #6b7280; margin: 0; word-break: break-word;
-            display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 0.2s ease, opacity 0.2s ease, margin 0.2s ease;
+            font-size: 0.8rem; line-height: 1.45; color: var(--notif-text); margin: 0; word-break: break-word;
+            display: grid; grid-template-rows: 0fr; opacity: 0;
+            transition: grid-template-rows 0.2s ease, opacity 0.2s ease, margin 0.2s ease;
         }
         .notif-item-message > div { overflow: hidden; }
-        .notif-item.expanded .notif-item-message { grid-template-rows: 1fr; opacity: 1; margin: 0.3rem 0; }
-        .notif-item-time { font-size: 0.72rem; color: #9ca3af; margin-top: 0.2rem; }
-        .notif-item-delete { background: none; border: none; color: #9ca3af; padding: 0.25rem; flex: none; min-width: 32px; min-height: 32px; }
-        .notif-item-delete:hover { color: #dc3545; }
-        .notif-empty { padding: 2rem 1rem; text-align: center; color: #9ca3af; font-size: 0.85rem; }
+        .notif-item.expanded .notif-item-message { grid-template-rows: 1fr; opacity: 1; margin: 0.35rem 0 0.1rem; }
+        .notif-item-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.3rem; }
+        .notif-item-time { font-size: 0.71rem; color: var(--notif-muted); }
+        .notif-status {
+            font-size: 0.6rem; font-weight: 700; line-height: 1;
+            letter-spacing: 0.04em; text-transform: uppercase;
+            padding: 0.18rem 0.4rem; border-radius: 999px;
+        }
+        .notif-status.is-new { background: var(--notif-accent); color: #fff; }
+        .notif-status.is-read { color: var(--notif-muted); border: 1px solid var(--notif-line); }
+        .notif-item-delete {
+            flex: none; width: 34px; height: 34px; border-radius: 9px;
+            display: flex; align-items: center; justify-content: center;
+            background: none; border: none; color: var(--notif-muted); padding: 0;
+        }
+        .notif-item-delete:hover, .notif-item-delete:focus-visible { background: rgba(220, 53, 69, 0.12); color: #dc3545; }
+        .notif-empty {
+            padding: 2.4rem 1.25rem; text-align: center;
+            color: var(--notif-muted); font-size: 0.85rem;
+        }
+        .notif-empty i { display: block; font-size: 1.6rem; margin-bottom: 0.5rem; opacity: 0.55; }
 
-        @media (max-width: 480px) {
-            /* Was previously a bottom sheet (bottom:0/left:0/right:0) — that
-               read as disconnected from the bell it opened from and didn't
-               match the rest of this app's anchored-popover interactions.
-               Anchored near the top instead, just under the mobile topbar,
-               horizontally centered so it doesn't hug either edge. See
-               positionNotifPanel() — it clears any inline top/right/left
-               left over from a wider viewport at this breakpoint so these
-               values are the ones that actually apply. */
+        @media (max-width: 576px) {
+            /* Anchored sheet under the mobile topbar, edge-to-edge minus a
+               small inset, over a real dimming backdrop — so it reads as a
+               contained panel rather than as text layered on the page.
+               positionNotifPanel() clears any inline top/right/left left over
+               from a wider viewport at this breakpoint so these values are
+               the ones that actually apply. */
+            .notif-backdrop { background: rgba(8, 13, 25, 0.5); }
             .notif-panel {
-                position: fixed;
-                top: calc(var(--topbar-h) + 10px); bottom: auto;
-                left: 50%; right: auto; transform: translateX(-50%);
-                width: calc(100vw - 24px); max-width: 420px;
-                max-height: calc(100dvh - var(--topbar-h) - 24px);
+                top: calc(var(--topbar-h) + 8px); bottom: auto;
+                left: 12px; right: 12px; width: auto; max-width: none;
+                max-height: calc(100dvh - var(--topbar-h) - 20px);
                 border-radius: 16px;
+                transform-origin: top center;
             }
+            .notif-panel-header { padding: 0.8rem 0.75rem 0.55rem; }
+            .notif-panel-toolbar { gap: 0.4rem; }
+            .notif-tabs { flex: 1 1 auto; }
+            .notif-tab { flex: 1 1 0; justify-content: center; padding: 0.45rem 0.5rem; font-size: 0.78rem; }
+            .notif-panel-header-actions { width: 100%; margin-left: 0; justify-content: flex-end; }
+            /* Comfortable 40px+ tap targets on touch. */
+            .notif-action { padding: 0.45rem 0.55rem; }
+            .notif-item { padding: 0.85rem 0.5rem 0.85rem 0.85rem; gap: 0.6rem; }
+            .notif-item-title { font-size: 0.88rem; }
+            .notif-item-delete { width: 40px; height: 40px; }
+            .notif-panel-close { width: 36px; height: 36px; }
+        }
+        /* Very narrow phones: labels on the bulk actions would wrap awkwardly
+           next to the tabs, so the icons carry them (aria-label keeps them
+           announced). */
+        @media (max-width: 380px) {
+            .notif-action span { display: none; }
+            .notif-action { padding: 0.45rem; }
+        }
+        /* Panel open on a phone locks the page behind it so a drag on the
+           backdrop does not scroll the content under the sheet. */
+        @media (max-width: 576px) {
+            body.notif-panel-open { overflow: hidden; }
         }
 
         .content-body { padding: 2rem 1.75rem 3.5rem; flex-grow: 1; }
@@ -2468,16 +2641,39 @@
                 <!-- Authenticated only — an anonymous /survey-offline visitor has no
                      account session to fetch notifications for. -->
                 <div class="notif-bell-wrap">
-                    <button id="btn-notif-bell" type="button" class="btn-fullscreen" title="Notifications" aria-label="Notifications" onclick="toggleNotificationPanel()">
+                    <button id="btn-notif-bell" type="button" class="btn-fullscreen" title="Notifications" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false" aria-controls="notifPanel" onclick="toggleNotificationPanel()">
                         <i class="bi bi-bell"></i>
                         <span id="notifUnreadBadge" class="notif-unread-badge" hidden>0</span>
                     </button>
-                    <div id="notifPanel" class="notif-panel" hidden>
+                    <div id="notifPanel" class="notif-panel" role="dialog" aria-modal="false" aria-label="Notifications" hidden>
                         <div class="notif-panel-header">
-                            <span class="fw-semibold">Notifications</span>
-                            <div class="notif-panel-header-actions">
-                                <button type="button" class="btn btn-link btn-sm p-0" onclick="markAllNotificationsRead()">Mark all read</button>
-                                <button type="button" class="btn btn-link btn-sm p-0 text-danger" onclick="clearAllNotifications()">Clear all</button>
+                            <div class="notif-panel-header-top">
+                                <span class="notif-panel-title">Notifications</span>
+                                <span id="notifHeaderCount" class="notif-panel-count" hidden>0 new</span>
+                                <button type="button" class="notif-panel-close" onclick="closeNotificationPanel()" aria-label="Close notifications">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                            <div class="notif-panel-toolbar">
+                                <!-- Read-state filter: "All" vs "Unread", each with a live
+                                     count, so an unread item is one tap away from being
+                                     isolated instead of hunted for in the list. -->
+                                <div class="notif-tabs" role="tablist" aria-label="Filter notifications">
+                                    <button type="button" class="notif-tab is-active" role="tab" aria-selected="true" data-notif-filter="all" onclick="setNotificationFilter('all')">
+                                        All <span class="notif-tab-count" id="notifTabCountAll">0</span>
+                                    </button>
+                                    <button type="button" class="notif-tab" role="tab" aria-selected="false" data-notif-filter="unread" onclick="setNotificationFilter('unread')">
+                                        Unread <span class="notif-tab-count" id="notifTabCountUnread">0</span>
+                                    </button>
+                                </div>
+                                <div class="notif-panel-header-actions">
+                                    <button type="button" id="notifMarkAllBtn" class="notif-action" onclick="markAllNotificationsRead()" aria-label="Mark all as read" title="Mark all as read">
+                                        <i class="bi bi-check2-all"></i><span>Mark all read</span>
+                                    </button>
+                                    <button type="button" id="notifClearAllBtn" class="notif-action is-danger" onclick="clearAllNotifications()" aria-label="Clear all notifications" title="Clear all notifications">
+                                        <i class="bi bi-trash3"></i><span>Clear all</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div id="notifList" class="notif-list"></div>
@@ -4028,76 +4224,176 @@ function timeAgo(isoString) {
     return new Date(isoString).toLocaleDateString('en-PH', { dateStyle: 'medium' });
 }
 
+// Panel state kept client-side so switching the All/Unread filter re-renders
+// from what we already have instead of round-tripping to the server, and so a
+// refresh (after mark-read / delete) can restore which rows the user had
+// expanded rather than collapsing the whole list under them.
+const notifState = { items: [], filter: 'all', expanded: new Set() };
+
+let notifRenderedSignature = '';
 function renderNotifications(notifications) {
+    notifState.items = Array.isArray(notifications) ? notifications : [];
+    // The 45s poll calls this on every tick. Re-rendering an open panel that
+    // hasn't actually changed would reset the list's scroll position out from
+    // under someone mid-read, so unchanged payloads are a no-op.
+    const signature = notifState.items.map(n => n.id + ':' + (n.is_read ? 1 : 0)).join(',');
+    if (signature === notifRenderedSignature) return;
+    notifRenderedSignature = signature;
+    // An id that no longer exists (deleted / cleared) is dropped from the
+    // expanded set so it cannot leak into a later render.
+    const alive = new Set(notifState.items.map(n => String(n.id)));
+    notifState.expanded.forEach(id => { if (!alive.has(id)) notifState.expanded.delete(id); });
+    renderNotifList();
+}
+
+function renderNotifList() {
     const list = document.getElementById('notifList');
     if (!list) return;
 
-    if (!notifications.length) {
+    const all = notifState.items;
+    const unreadCount = all.filter(n => !n.is_read).length;
+    updateNotifPanelChrome(all.length, unreadCount);
+
+    // Unread-first ordering inside "All": the whole point of opening the bell
+    // is the things you haven't seen, so they sit at the top instead of being
+    // scattered through the date-ordered list. Server order is preserved
+    // within each group (it already returns newest first).
+    const visible = notifState.filter === 'unread'
+        ? all.filter(n => !n.is_read)
+        : all.slice().sort((a, b) => Number(!!a.is_read) - Number(!!b.is_read));
+
+    if (!visible.length) {
         const empty = document.createElement('div');
         empty.className = 'notif-empty';
-        empty.textContent = 'No notifications yet.';
+        const icon = document.createElement('i');
+        icon.className = notifState.filter === 'unread' ? 'bi bi-check2-circle' : 'bi bi-bell-slash';
+        empty.appendChild(icon);
+        empty.appendChild(document.createTextNode(
+            notifState.filter === 'unread'
+                ? (all.length ? "You're all caught up — nothing unread." : 'No notifications yet.')
+                : 'No notifications yet.'
+        ));
         list.replaceChildren(empty);
         return;
     }
 
-    const items = notifications.map((n) => {
-        const item = document.createElement('div');
-        item.className = 'notif-item' + (n.is_read ? '' : ' is-unread');
+    list.replaceChildren(...visible.map(buildNotifItem));
+}
 
-        const dot = document.createElement('span');
-        dot.className = 'notif-item-dot';
-        item.appendChild(dot);
+function buildNotifItem(n) {
+    const id = String(n.id);
+    const isUnread = !n.is_read;
+    const isExpanded = notifState.expanded.has(id);
 
-        const body = document.createElement('div');
-        body.className = 'notif-item-body';
+    const item = document.createElement('div');
+    item.className = 'notif-item' + (isUnread ? ' is-unread' : '') + (isExpanded ? ' expanded' : '');
 
-        const titleRow = document.createElement('button');
-        titleRow.type = 'button';
-        titleRow.className = 'notif-item-title-row';
-        titleRow.setAttribute('aria-expanded', 'false');
-        titleRow.addEventListener('click', () => {
-            item.classList.toggle('expanded');
-            titleRow.setAttribute('aria-expanded', item.classList.contains('expanded') ? 'true' : 'false');
-            if (!n.is_read) markNotificationRead(n.id);
-        });
+    // Read state is carried by four stacked cues (rail, tint, icon, pill) so
+    // it survives whichever one a given viewer is least sensitive to.
+    const icon = document.createElement('span');
+    icon.className = 'notif-item-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = isUnread ? '<i class="bi bi-bell-fill"></i>' : '<i class="bi bi-check2"></i>';
+    item.appendChild(icon);
 
-        const title = document.createElement('span');
-        title.className = 'notif-item-title';
-        title.textContent = n.title;
-        titleRow.appendChild(title);
+    const body = document.createElement('div');
+    body.className = 'notif-item-body';
 
-        const chevron = document.createElement('i');
-        chevron.className = 'bi bi-chevron-down notif-item-chevron';
-        titleRow.appendChild(chevron);
-
-        body.appendChild(titleRow);
-
-        const message = document.createElement('div');
-        message.className = 'notif-item-message';
-        const messageInner = document.createElement('div');
-        messageInner.textContent = n.message;
-        message.appendChild(messageInner);
-        body.appendChild(message);
-
-        const time = document.createElement('div');
-        time.className = 'notif-item-time';
-        time.textContent = timeAgo(n.created_at);
-        body.appendChild(time);
-
-        item.appendChild(body);
-
-        const delBtn = document.createElement('button');
-        delBtn.type = 'button';
-        delBtn.className = 'notif-item-delete';
-        delBtn.setAttribute('aria-label', 'Delete notification');
-        delBtn.innerHTML = '<i class="bi bi-trash"></i>';
-        delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteNotification(n.id); });
-        item.appendChild(delBtn);
-
-        return item;
+    const titleRow = document.createElement('button');
+    titleRow.type = 'button';
+    titleRow.className = 'notif-item-title-row';
+    titleRow.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+    titleRow.addEventListener('click', () => {
+        const nowExpanded = !item.classList.contains('expanded');
+        item.classList.toggle('expanded', nowExpanded);
+        titleRow.setAttribute('aria-expanded', nowExpanded ? 'true' : 'false');
+        if (nowExpanded) notifState.expanded.add(id); else notifState.expanded.delete(id);
+        if (!n.is_read) {
+            // Flip the local copy first so the row's read styling and the
+            // tab counts update on the tap, not a network round-trip later.
+            n.is_read = 1;
+            notifRenderedSignature = notifState.items.map(x => x.id + ':' + (x.is_read ? 1 : 0)).join(',');
+            markNotificationRead(n.id);
+            item.classList.remove('is-unread');
+            icon.innerHTML = '<i class="bi bi-check2"></i>';
+            const pill = item.querySelector('.notif-status');
+            if (pill) { pill.className = 'notif-status is-read'; pill.textContent = 'Read'; }
+            updateNotifPanelChrome(notifState.items.length, notifState.items.filter(x => !x.is_read).length);
+        }
     });
 
-    list.replaceChildren(...items);
+    const title = document.createElement('span');
+    title.className = 'notif-item-title';
+    title.textContent = n.title;
+    titleRow.appendChild(title);
+
+    const chevron = document.createElement('i');
+    chevron.className = 'bi bi-chevron-down notif-item-chevron';
+    chevron.setAttribute('aria-hidden', 'true');
+    titleRow.appendChild(chevron);
+
+    body.appendChild(titleRow);
+
+    const message = document.createElement('div');
+    message.className = 'notif-item-message';
+    const messageInner = document.createElement('div');
+    messageInner.textContent = n.message;
+    message.appendChild(messageInner);
+    body.appendChild(message);
+
+    const meta = document.createElement('div');
+    meta.className = 'notif-item-meta';
+    const status = document.createElement('span');
+    status.className = 'notif-status ' + (isUnread ? 'is-new' : 'is-read');
+    status.textContent = isUnread ? 'New' : 'Read';
+    meta.appendChild(status);
+    const time = document.createElement('span');
+    time.className = 'notif-item-time';
+    time.textContent = timeAgo(n.created_at);
+    meta.appendChild(time);
+    body.appendChild(meta);
+
+    item.appendChild(body);
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'notif-item-delete';
+    delBtn.setAttribute('aria-label', 'Delete notification');
+    delBtn.innerHTML = '<i class="bi bi-trash3"></i>';
+    delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteNotification(n.id); });
+    item.appendChild(delBtn);
+
+    return item;
+}
+
+// Header count pill, both tab counts, and whether the bulk actions are even
+// applicable — all derived from the same two numbers in one place.
+function updateNotifPanelChrome(total, unread) {
+    const headerCount = document.getElementById('notifHeaderCount');
+    if (headerCount) {
+        headerCount.textContent = unread + ' new';
+        headerCount.hidden = unread === 0;
+    }
+    const allCount = document.getElementById('notifTabCountAll');
+    if (allCount) allCount.textContent = String(total);
+    const unreadTabCount = document.getElementById('notifTabCountUnread');
+    if (unreadTabCount) unreadTabCount.textContent = String(unread);
+    const markAll = document.getElementById('notifMarkAllBtn');
+    if (markAll) markAll.disabled = unread === 0;
+    const clearAll = document.getElementById('notifClearAllBtn');
+    if (clearAll) clearAll.disabled = total === 0;
+}
+
+function setNotificationFilter(filter) {
+    notifState.filter = filter === 'unread' ? 'unread' : 'all';
+    document.querySelectorAll('.notif-tab').forEach(tab => {
+        const active = tab.getAttribute('data-notif-filter') === notifState.filter;
+        tab.classList.toggle('is-active', active);
+        tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    renderNotifList();
+    const list = document.getElementById('notifList');
+    if (list) list.scrollTop = 0;
 }
 
 function updateNotifBadge(count) {
@@ -4125,24 +4421,36 @@ function loadNotifications() {
         .catch(err => console.error('[Notifications] Failed to load:', err));
 }
 
-// Moves #notifPanel to a direct child of <body> the first time it opens —
-// see the CSS comment on .notif-panel for why: nested inside .topbar (a
-// sticky + z-indexed stacking-context boundary), the panel's own z-index
-// only ever wins against OTHER things inside .topbar, so it could be
-// covered/clipped by unrelated page content regardless of how high that
-// number is set. Living at <body> level with `position: fixed` sidesteps
-// every ancestor's stacking context and overflow entirely. Positioning is
-// computed from the bell's live bounding rect rather than CSS anchoring to
-// a small icon, so it also survives the sidebar/topbar layout changing
-// underneath it.
+// Moves #notifPanel (and its backdrop) to direct children of <body> the first
+// time it opens — see the CSS comment on .notif-panel for why: nested inside
+// .topbar (a sticky + z-indexed stacking-context boundary), the panel's own
+// z-index only ever wins against OTHER things inside .topbar, so it could be
+// covered/clipped by unrelated page content regardless of how high that number
+// is set. Living at <body> level with `position: fixed` sidesteps every
+// ancestor's stacking context and overflow entirely. Positioning is computed
+// from the bell's live bounding rect rather than CSS-anchoring to a small icon,
+// so it also survives the sidebar/topbar layout changing underneath it.
+function getNotifBackdrop() {
+    let backdrop = document.getElementById('notifBackdrop');
+    if (!backdrop) {
+        backdrop = document.createElement('div');
+        backdrop.id = 'notifBackdrop';
+        backdrop.className = 'notif-backdrop';
+        backdrop.hidden = true;
+        backdrop.addEventListener('click', closeNotificationPanel);
+        document.body.appendChild(backdrop);
+    }
+    return backdrop;
+}
+
 function positionNotifPanel(panel, bell) {
     if (panel.parentElement !== document.body) {
         document.body.appendChild(panel);
     }
-    // The ≤480px bottom-sheet layout anchors to the viewport edges via CSS
-    // (bottom/left/right:0) — clear any leftover inline coordinates from a
-    // wider viewport so that CSS wins instead of a stale inline style.
-    if (window.innerWidth <= 480) {
+    // The ≤576px sheet layout anchors to the viewport edges via CSS
+    // (top/left/right) — clear any leftover inline coordinates from a wider
+    // viewport so that CSS wins instead of a stale inline style.
+    if (window.innerWidth <= 576) {
         panel.style.top = '';
         panel.style.right = '';
         panel.style.left = '';
@@ -4163,18 +4471,42 @@ function repositionNotifPanelIfOpen() {
     positionNotifPanel(panel, document.getElementById('btn-notif-bell'));
 }
 
-function toggleNotificationPanel() {
+function openNotificationPanel() {
     const panel = document.getElementById('notifPanel');
     const bell = document.getElementById('btn-notif-bell');
     if (!panel) return;
-    const opening = panel.hidden;
-    if (opening) {
-        positionNotifPanel(panel, bell);
-        panel.hidden = false;
-        if (!notificationsLoaded) loadNotifications();
-    } else {
-        panel.hidden = true;
-    }
+    positionNotifPanel(panel, bell);
+    const backdrop = getNotifBackdrop();
+    backdrop.hidden = false;
+    // Next frame so the opacity transition actually runs from 0.
+    requestAnimationFrame(() => backdrop.classList.add('is-open'));
+    panel.hidden = false;
+    if (bell) bell.classList.add('is-active');
+    bell && bell.setAttribute('aria-expanded', 'true');
+    document.body.classList.add('notif-panel-open');
+    // Open always starts on "All" — otherwise a filter left on "Unread" from
+    // a previous open shows an empty panel once those have been read.
+    setNotificationFilter('all');
+    // setNotificationFilter() already painted what we have; refresh behind it
+    // (the 45s poll may be up to 45s stale at the moment of the tap).
+    loadNotifications();
+}
+
+function closeNotificationPanel() {
+    const panel = document.getElementById('notifPanel');
+    const bell = document.getElementById('btn-notif-bell');
+    if (!panel || panel.hidden) return;
+    panel.hidden = true;
+    const backdrop = document.getElementById('notifBackdrop');
+    if (backdrop) { backdrop.classList.remove('is-open'); backdrop.hidden = true; }
+    if (bell) { bell.classList.remove('is-active'); bell.setAttribute('aria-expanded', 'false'); }
+    document.body.classList.remove('notif-panel-open');
+}
+
+function toggleNotificationPanel() {
+    const panel = document.getElementById('notifPanel');
+    if (!panel) return;
+    if (panel.hidden) openNotificationPanel(); else closeNotificationPanel();
 }
 // Passive, lightweight listeners kept registered permanently (not added/
 // removed per open/close) — repositionNotifPanelIfOpen() itself is a no-op
@@ -4187,7 +4519,13 @@ document.addEventListener('click', (e) => {
     const bell = document.getElementById('btn-notif-bell');
     if (!panel || panel.hidden) return;
     if (panel.contains(e.target) || (bell && bell.contains(e.target))) return;
-    panel.hidden = true;
+    closeNotificationPanel();
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const panel = document.getElementById('notifPanel');
+    if (panel && !panel.hidden) closeNotificationPanel();
 });
 
 function markNotificationRead(id) {
