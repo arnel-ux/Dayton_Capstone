@@ -6,6 +6,12 @@
         /* Reset and Base Styles */
         html, body {
             height: 100vh;
+            /* dvh follows the phone browser's collapsing address bar. With
+               plain 100vh the box is sized to the LARGEST viewport (bar
+               hidden), so while the bar is showing the page is taller than
+               the visible area — which is what made this page scroll on a
+               phone even though nothing here is meant to scroll. */
+            height: 100dvh;
             margin: 0;
             padding: 0;
             overflow: hidden; /* Para walang lumabas na scrollbar */
@@ -18,7 +24,7 @@
            read as one consistent backdrop. */
         .bg-blurred {
             position: fixed;
-            top: 0; left: 0; width: 100vw; height: 100vh;
+            top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh;
             background-image: url('<%- heroImageUrl %>');
             background-size: cover;
             /* The CSPC monument (seal/torch/globe) sits in the upper half
@@ -55,16 +61,31 @@
             left: 0;
             width: 100vw;
             height: 100vh;
-            max-height: 100vh;
+            height: 100dvh;
+            max-height: 100dvh;
             display: flex;
             flex-direction: column; /* Para magpatong ang titles at card */
             align-items: center;    /* Centers horizontally */
             justify-content: flex-start;
             padding: 1rem;
-            padding-top: clamp(1.5rem, 9vh, 4rem);
-            padding-bottom: 5rem;
+            /* Was clamp(1.5rem, 9vh, 4rem) — on a phone the 9vh term alone
+               burned ~70px of the fold before the title even started, and
+               together with the 5rem bottom reserve it pushed the card past
+               the bottom edge, which is what forced the page to scroll.
+               Both ends pulled in so the title + card start near the top and
+               the whole block fits the fold on a normal phone. */
+            padding-top: clamp(0.6rem, 2.5vh, 1.75rem);
+            /* Only enough to clear the floating home button (3rem tall,
+               1.25rem from the bottom) instead of a flat 5rem. */
+            padding-bottom: calc(3.25rem + env(safe-area-inset-bottom));
             z-index: 1;
-            overflow-y: auto; /* Safety fallback: scroll instead of clipping on short viewports */
+            /* Safety fallback only: on a normal phone portrait viewport the
+               content now fits and this never engages. It stays `auto` (not
+               `hidden`) so genuinely short viewports — landscape phones, a
+               desktop window dragged short — can still reach the Login
+               button rather than having it clipped off with no way back. */
+            overflow-y: auto;
+            overscroll-behavior: contain;
         }
 
         /* --- BAGONG DAGDAG NA HEADER STYLES & ANIMATIONS --- */
@@ -176,6 +197,11 @@
             flex-direction: column;
             justify-content: center;
             padding: 1.5rem 2.25rem;
+            /* public/css/style.css gives every .card-custom a 1.5rem bottom
+               margin — right for the stacked cards on the dashboard pages it
+               was written for, but here it's a single centered card and that
+               24px was pure dead space under it, counted against the fold. */
+            margin-bottom: 0;
             opacity: 0;
             animation: fadeSlideUp 0.7s ease-out 0.15s forwards;
         }
@@ -190,8 +216,18 @@
            covers every phone width, including the larger Pro Max/Android
            sizes the old 400px cutoff missed. */
         @media (max-width: 480px) {
-            /* Round-2: hero-to-card gap trimmed further. */
-            .header-container { margin-bottom: 0.7rem; }
+            /* Round-3 density pass. Goal here is a no-scroll fold on a normal
+               phone: everything (hero text + card + reCAPTCHA + Google button)
+               has to clear ~740px of visible viewport, and measured at 360px
+               wide it was ~90px over. The trims below are spread across the
+               hero block, the card header and the inter-field gaps rather
+               than taken out of any one place, so nothing collapses visibly —
+               and the input/button tap heights (41px/40px) and the 16px input
+               font that prevents iOS focus-zoom are deliberately NOT touched. */
+            .header-container { margin-bottom: 0.45rem; }
+            .main-title { font-size: 1.18rem; margin-bottom: 0.25rem; line-height: 1.2; }
+            .sub-title { font-size: 0.8rem; margin-bottom: 0.4rem; line-height: 1.3; }
+            .portal-text { min-height: 30px; padding: 0.3rem 0.85rem; }
             /* Density pass: card was 92vw with 21.6/24px padding on a 28px
                desktop border-radius — resized to the calc(100% - 24px) /
                18-20px-padding / 22-26px-radius login-card targets, logo
@@ -205,9 +241,12 @@
                 padding: 1rem 1rem;
                 border-radius: 22px;
             }
-            .card-custom .cqa-logo { width: 50px; }
-            .card-custom h4 { font-size: 1.35rem; }
-            .card-custom p.text-xsmall { font-size: 0.92rem; }
+            .card-custom .cqa-logo { width: 40px; }
+            .card-custom h4 { font-size: 1.15rem; }
+            .card-custom p.text-xsmall { font-size: 0.85rem; }
+            .card-custom .text-center.mb-2 { margin-bottom: 0.25rem !important; }
+            .card-custom .cqa-logo.mb-1 { margin-bottom: 0.1rem !important; }
+            .card-custom .divider-soft { margin: 0.3rem auto 0.35rem; }
             /* Google's reCAPTCHA checkbox widget is a fixed 304x78px iframe —
                wider than the card's content area on every phone (the card's
                own side padding leaves well under 304px). Scaling it down
@@ -238,9 +277,13 @@
                 min-height: 41px;
             }
             .input-modern .input-icon { width: 2.6rem; font-size: 1.1rem; }
-            .field-group { margin-bottom: 0.6rem; }
-            .field-label { font-size: 0.8rem; margin-bottom: 0.3rem; }
-            .field-hint { font-size: 0.74rem; margin-top: 0.35rem; }
+            /* Matches the 41px input min-height so the toggle spans the full
+               field height — the whole right edge of the box is tappable. */
+            .password-toggle { width: 2.9rem; min-height: 41px; font-size: 1.05rem; }
+            .pw-strength-label { font-size: 0.74rem; }
+            .field-group { margin-bottom: 0.5rem; }
+            .field-label { font-size: 0.8rem; margin-bottom: 0.25rem; }
+            .field-hint { font-size: 0.74rem; margin-top: 0.3rem; line-height: 1.3; }
 
             /* Buttons: kept >=40px tap height, unchanged legible font. */
             .btn-login, .btn-google {
@@ -261,13 +304,35 @@
             }
             .field-group .d-flex.justify-content-between { gap: 0.75rem; }
 
-            .divider-or { margin: 0.6rem 0; }
+            .divider-or { margin: 0.5rem 0; }
+            .card-custom { padding: 0.85rem 0.9rem; }
+            /* Smaller FAB on phones — it's a secondary action, and its old
+               3rem box (plus the wrapper's bottom reserve sized to clear it)
+               was eating fold height the card needed. */
+            .btn-home { width: 2.6rem; height: 2.6rem; font-size: 0.95rem; bottom: 0.8rem; }
 
             /* Subtitle/eyebrow text was down at 12.48px/10.4px — bump both
                into comfortably-readable territory on a phone screen. */
             .sub-title { font-size: 0.9rem; }
             .portal-text { font-size: 0.7rem; padding: 0.4rem 0.9rem; min-height: 36px; }
 
+        }
+
+        /* Short viewports — a 360x740-class phone, or a desktop window dragged
+           down. Width-based queries alone can't catch these (a short phone is
+           the same WIDTH as a tall one), so this is keyed on height: one more
+           compression step on the hero block and the inter-field gaps, which
+           is what keeps the fold clear at 740px. Tap targets and the 16px
+           input font stay untouched here too. */
+        @media (max-height: 780px) {
+            .login-wrapper { padding-top: clamp(0.4rem, 1.2vh, 0.9rem); }
+            .header-container { margin-bottom: 0.35rem; }
+            .main-title { font-size: 1.08rem; margin-bottom: 0.2rem; }
+            .sub-title { font-size: 0.76rem; margin-bottom: 0.3rem; }
+            .portal-text { min-height: 28px; font-size: 0.64rem; padding: 0.25rem 0.8rem; }
+            .field-group { margin-bottom: 0.4rem; }
+            .divider-or { margin: 0.4rem 0; }
+            .card-custom .cqa-logo { width: 36px; }
         }
 
         /* Narrowest phones (320-375px): the reCAPTCHA's 0.85 scale above
@@ -363,6 +428,92 @@
             outline: none;
             box-shadow: none;
         }
+
+        /* Show/hide password toggle — lives inside .input-modern on the right,
+           mirroring the .input-icon on the left so the field stays visually
+           balanced. 44px square keeps it a comfortable thumb target, and
+           `background: none` means it reads as an icon, not a second button
+           competing with Login. */
+        .password-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.9rem;
+            min-height: 2.6rem;
+            flex-shrink: 0;
+            border: none;
+            background: none;
+            padding: 0;
+            color: #94a3b8;
+            font-size: 0.95rem;
+            cursor: pointer;
+            border-radius: 0.75rem;
+            transition: color 0.2s ease, background-color 0.2s ease;
+        }
+        .password-toggle:hover { color: #251d3a; background: rgba(37, 29, 58, 0.06); }
+        .password-toggle:focus-visible { outline: 2px solid #251d3a; outline-offset: -2px; }
+
+        /* Password strength meter — a 4-segment bar plus a short label.
+           Collapsed to zero height while the field is empty (.is-empty) so it
+           costs no vertical space on first paint; only the typing user pays
+           for it, which matters on a page that must fit the fold. */
+        .pw-strength {
+            margin-top: 0.4rem;
+            overflow: hidden;
+            /* Only a collapse mechanism, never a real size limit — set well
+               above the ~24px the meter actually needs so a hint that wraps
+               to a second line on a narrow phone can't get clipped. */
+            max-height: 5rem;
+            opacity: 1;
+            transition: max-height 0.25s ease, opacity 0.25s ease, margin-top 0.25s ease;
+        }
+        .pw-strength.is-empty {
+            max-height: 0;
+            opacity: 0;
+            margin-top: 0;
+        }
+        .pw-strength-bars {
+            display: flex;
+            gap: 4px;
+        }
+        .pw-strength-bars span {
+            flex: 1 1 0;
+            height: 4px;
+            border-radius: 50px;
+            background: #e2e8f0;
+            transition: background-color 0.25s ease;
+        }
+        .pw-strength-label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            margin: 0.3rem 0 0;
+            font-size: 0.7rem;
+            font-weight: 600;
+            line-height: 1.3;
+            color: #94a3b8;
+        }
+        .pw-strength-label .pw-strength-text { flex: 0 0 auto; }
+        .pw-strength-label .pw-strength-hint {
+            flex: 1 1 auto;
+            text-align: right;
+            font-weight: 500;
+            color: #94a3b8;
+            /* Long hints wrap instead of widening the card on small phones. */
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+        /* Filled-segment + label colors per level. Each level fills its own
+           segment count via the [data-level] attribute set in JS. */
+        .pw-strength[data-level="1"] .pw-strength-bars span:nth-child(-n+1) { background: #ef4444; }
+        .pw-strength[data-level="2"] .pw-strength-bars span:nth-child(-n+2) { background: #f59e0b; }
+        .pw-strength[data-level="3"] .pw-strength-bars span:nth-child(-n+3) { background: #eab308; }
+        .pw-strength[data-level="4"] .pw-strength-bars span:nth-child(-n+4) { background: #16a34a; }
+        .pw-strength[data-level="1"] .pw-strength-text { color: #ef4444; }
+        .pw-strength[data-level="2"] .pw-strength-text { color: #d97706; }
+        .pw-strength[data-level="3"] .pw-strength-text { color: #ca8a04; }
+        .pw-strength[data-level="4"] .pw-strength-text { color: #16a34a; }
 
         .field-hint {
             font-size: 0.68rem;
@@ -645,7 +796,22 @@
                     </div>
                     <div class="input-modern">
                         <span class="input-icon"><i class="fas fa-lock"></i></span>
-                        <input type="password" name="password" id="passwordInput" class="form-control" placeholder="Enter your password" required title="Password">
+                        <input type="password" name="password" id="passwordInput" class="form-control" placeholder="Enter your password" required title="Password" autocomplete="current-password">
+                        <button type="button" class="password-toggle" id="passwordToggleBtn" title="Show password" aria-label="Show password" aria-pressed="false" aria-controls="passwordInput">
+                            <i class="fas fa-eye-slash" id="passwordToggleIcon"></i>
+                        </button>
+                    </div>
+                    <!-- Strength meter. aria-live="polite" so a screen reader
+                         announces the level as it changes, but only between
+                         keystrokes rather than interrupting on every letter. -->
+                    <div class="pw-strength is-empty" id="pwStrength" data-level="0">
+                        <div class="pw-strength-bars" aria-hidden="true">
+                            <span></span><span></span><span></span><span></span>
+                        </div>
+                        <p class="pw-strength-label" aria-live="polite">
+                            <span class="pw-strength-text" id="pwStrengthText"></span>
+                            <span class="pw-strength-hint" id="pwStrengthHint"></span>
+                        </p>
                     </div>
                 </div>
 
@@ -691,6 +857,86 @@
         // admin.sid is shared by every tab in the browser, so that would log out
         // every OTHER open admin tab too.
         try { sessionStorage.setItem('__loginBoundary', window.location.pathname); } catch (e) {}
+    </script>
+
+    <script>
+        // Password field UX: the show/hide toggle and the strength meter.
+        // Both are purely client-side display helpers — neither changes what
+        // gets submitted, and the meter never blocks or validates the login
+        // (an existing account may well have a weak password; refusing to
+        // submit it would lock that user out of their own account). It's
+        // feedback only.
+        (function initPasswordField() {
+            const input = document.getElementById('passwordInput');
+            const toggleBtn = document.getElementById('passwordToggleBtn');
+            const toggleIcon = document.getElementById('passwordToggleIcon');
+            const meter = document.getElementById('pwStrength');
+            const meterText = document.getElementById('pwStrengthText');
+            const meterHint = document.getElementById('pwStrengthHint');
+            if (!input) return;
+
+            if (toggleBtn && toggleIcon) {
+                toggleBtn.addEventListener('click', () => {
+                    const show = input.type === 'password';
+                    input.type = show ? 'text' : 'password';
+                    // The icon reflects the CURRENT STATE, not the action:
+                    // open eye = the password is visible right now, slashed
+                    // eye = it's hidden. (The other common convention shows
+                    // the action instead — open eye meaning "tap to reveal"
+                    // — which reads backwards to most users here.)
+                    toggleIcon.className = show ? 'fas fa-eye' : 'fas fa-eye-slash';
+                    const label = show ? 'Hide password' : 'Show password';
+                    toggleBtn.setAttribute('aria-label', label);
+                    toggleBtn.setAttribute('title', label);
+                    toggleBtn.setAttribute('aria-pressed', show ? 'true' : 'false');
+                    // Keep the caret where the user left it — flipping .type
+                    // moves it to the end in some browsers, which is jarring
+                    // mid-word.
+                    const pos = input.value.length;
+                    input.focus();
+                    try { input.setSelectionRange(pos, pos); } catch (e) { /* type=text only in some browsers */ }
+                });
+            }
+
+            // Score 0-4. Length carries the most weight (it's what actually
+            // costs an attacker time), with character variety on top.
+            function scorePassword(v) {
+                if (!v) return { level: 0, text: '', hint: '' };
+                const variety = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/]
+                    .reduce((n, re) => n + (re.test(v) ? 1 : 0), 0);
+                let score = 0;
+                if (v.length >= 8) score++;
+                if (v.length >= 12) score++;
+                if (variety >= 2) score++;
+                if (variety >= 3 && v.length >= 8) score++;
+                // A short password is weak no matter how varied it is.
+                if (v.length < 8) score = Math.min(score, 1);
+                // All one character class, whatever the length.
+                if (variety === 1) score = Math.min(score, 2);
+                const level = Math.max(1, Math.min(4, score));
+
+                let hint = '';
+                if (level < 4) {
+                    if (v.length < 8) hint = 'Use at least 8 characters';
+                    else if (v.length < 12) hint = 'Longer is stronger';
+                    else if (variety < 3) hint = 'Mix letters, numbers & symbols';
+                }
+                return { level: level, text: ['', 'Weak', 'Fair', 'Good', 'Strong'][level], hint: hint };
+            }
+
+            function renderStrength() {
+                if (!meter) return;
+                const r = scorePassword(input.value);
+                meter.classList.toggle('is-empty', !input.value);
+                meter.setAttribute('data-level', String(r.level));
+                if (meterText) meterText.textContent = r.text;
+                if (meterHint) meterHint.textContent = r.hint;
+            }
+
+            input.addEventListener('input', renderStrength);
+            // Autofilled/restored values don't fire `input` — sync on load too.
+            renderStrength();
+        })();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="/js/alerts.js"></script>
