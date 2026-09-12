@@ -855,12 +855,19 @@
                its normal content-height box into a full-viewport panel so the
                whole page sits behind it, not just the header's own row. */
             .sticky-top-section.nav-open-header {
-                bottom: 0; height: 100vh;
-                /* dvh tracks the collapsing/expanding mobile browser UI bars, so
-                   the overlay ends exactly at the visible viewport on Chrome/
-                   Safari Android + iOS; the 100vh above stays as the fallback
-                   for browsers without dvh. */
-                height: 100dvh;
+                /* Drops down over roughly the top half of the screen instead of
+                   filling it. It used to stretch to 100dvh — that was chosen so
+                   the panel would look identical whether or not the page was
+                   already scrolled, but a whole blank screen for four links read
+                   as a full-page takeover. It's position:fixed either way, so a
+                   short panel still overlays the page (never reflows it) and
+                   still behaves the same at any scroll position.
+                   Height comes from the content, capped so a future longer menu
+                   scrolls inside the panel rather than growing past half. */
+                bottom: auto;
+                height: auto;
+                max-height: 55vh;
+                max-height: 55dvh;
                 background: rgba(37, 29, 58, 0.98);
                 overflow-y: auto; overscroll-behavior: contain;
                 /* Notch / gesture-bar clearance on iPhone X-class and Android
@@ -869,9 +876,15 @@
                 padding-bottom: max(var(--sp-2), env(safe-area-inset-bottom));
                 padding-left: max(var(--sp-2), env(safe-area-inset-left));
                 padding-right: max(var(--sp-2), env(safe-area-inset-right));
+                /* Reads as a panel sitting above the page now that the page is
+                   visible underneath it. */
+                box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.55);
+                border-bottom: 1px solid rgba(255, 204, 0, 0.35);
             }
             body.dark-mode .sticky-top-section.nav-open-header { background: rgba(4, 8, 18, 0.98); }
-            .sticky-top-section.nav-open-header .nav-inner { height: 100%; align-content: flex-start; }
+            /* height:100% here was for the full-screen version; the panel is
+               content-height now, so the row must not be stretched. */
+            .sticky-top-section.nav-open-header .nav-inner { height: auto; align-content: flex-start; }
             /* The brand block is `flex: 1` on mobile; without min-width:0 its
                text sets the floor for how narrow it can get, which on 320px
                phones pushed the row wider than the screen. */
@@ -2211,21 +2224,22 @@
         // =========================================================================
         gsap.ticker.lagSmoothing(0);
 
-        function initScrollReveals() {
-            // Mobile browsers change viewport height as the address bar shows/hides
-            // while scrolling, which throws off ScrollTrigger's trigger-position math
-            // — the practical result is [data-reveal] elements that never fire and
-            // stay stuck at their `opacity: 0` starting state (or a half-tweened
-            // in-between), which is exactly what read as "ghosted text" and "huge
-            // blank gaps" on phones. Desktop's animation is untouched — mobile just
-            // skips the scroll-triggered tween and shows content immediately.
-            if (window.matchMedia('(max-width: 62rem)').matches) {
-                document.querySelectorAll('[data-reveal]').forEach(el => {
-                    gsap.set(el, { opacity: 1, x: 0, y: 0, scale: 1 });
-                });
-                return;
-            }
+        // Mobile browsers resize the visual viewport every time the address bar
+        // slides away, and ScrollTrigger's default response is to recompute every
+        // trigger position mid-scroll. That recalculation is what used to leave
+        // [data-reveal] elements stranded at their `opacity: 0` start state on
+        // phones ("ghosted text" / big blank gaps), and why the reveals were
+        // previously switched off below 62rem entirely.
+        //
+        // ignoreMobileResize is GSAP's own switch for exactly this: it tells
+        // ScrollTrigger to ignore those address-bar-sized height changes instead
+        // of refreshing on them. With it on, the same reveals that always ran on
+        // desktop now run on phones and tablets too, so this no longer needs a
+        // per-device branch at all.
+        // (applied in the DOMContentLoaded block below, right after
+        // gsap.registerPlugin, so it can never run before the plugin exists)
 
+        function initScrollReveals() {
             document.querySelectorAll('[data-reveal]').forEach(el => {
                 const type = el.dataset.reveal;
                 const delay = parseFloat(el.dataset.revealDelay || 0) / 1000;
@@ -2240,8 +2254,49 @@
                     duration: 1.2,
                     delay,
                     ease: 'expo.out',
-                    scrollTrigger: { trigger: el, start: 'top 88%', toggleActions: 'restart none restart none' }
+                    scrollTrigger: {
+                        trigger: el,
+                        // 88% sat far enough down that a short phone viewport could
+                        // scroll an element fully into view before its trigger line
+                        // was crossed; 92% fires it as it genuinely enters.
+                        start: 'top 92%',
+                        toggleActions: 'restart none restart none',
+                        invalidateOnRefresh: true
+                    }
                 });
+            });
+
+            revealSafetyNet();
+        }
+
+        // Hard guarantee that no content can end up permanently invisible.
+        //
+        // The reveals above start every element at opacity 0 and rely on a
+        // ScrollTrigger firing to bring it back. That is a single point of
+        // failure: if a trigger's position is ever miscomputed (a late-loading
+        // font or image reflowing the page, an orientation flip, a browser whose
+        // scroll metrics GSAP reads differently), the element just stays blank
+        // with no way to recover. This sweeps for anything that is on screen yet
+        // still transparent and forces it visible — animation is a nice-to-have,
+        // readable content is not.
+        function revealSafetyNet() {
+            const rescue = () => {
+                document.querySelectorAll('[data-reveal]').forEach(el => {
+                    const rect = el.getBoundingClientRect();
+                    const onScreen = rect.top < window.innerHeight && rect.bottom > 0;
+                    if (!onScreen) return;
+                    if (parseFloat(getComputedStyle(el).opacity) < 0.05) {
+                        gsap.set(el, { opacity: 1, x: 0, y: 0, scale: 1 });
+                    }
+                });
+            };
+            // After first paint, once more when late assets have settled, and
+            // again whenever the viewport geometry actually changes.
+            requestAnimationFrame(rescue);
+            setTimeout(rescue, 1200);
+            window.addEventListener('load', () => { ScrollTrigger.refresh(); rescue(); });
+            window.addEventListener('orientationchange', () => {
+                setTimeout(() => { ScrollTrigger.refresh(); rescue(); }, 300);
             });
         }
 
@@ -2511,6 +2566,7 @@
             syncHeaderSpacer();
 
             gsap.registerPlugin(ScrollTrigger);
+            ScrollTrigger.config({ ignoreMobileResize: true });
             initScrollReveals();
             initMagneticButtons();
             initGlowCards();

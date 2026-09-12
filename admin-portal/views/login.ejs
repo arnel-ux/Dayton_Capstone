@@ -187,8 +187,13 @@
             border-radius: 1.75rem;
             box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
 
-            /* Dito natin ginawang Square */
-            width: 400px;
+            /* Widened from a fixed 400px. The reCAPTCHA widget alone is 304px,
+               so at 400px minus the card's own side padding the form sat in a
+               ~310px column — the field hint and the helper text underneath it
+               wrapped onto extra lines, which is height this page can't spare
+               on a short desktop window. min() keeps it from ever exceeding the
+               viewport on a narrow one. */
+            width: min(480px, 92vw);
             height: auto;
             flex-shrink: 0;
 
@@ -302,10 +307,6 @@
 
             .divider-or { margin: 0.5rem 0; }
             .card-custom { padding: 0.85rem 0.9rem; }
-            /* Smaller FAB on phones — it's a secondary action, and its old
-               3rem box (plus the wrapper's bottom reserve sized to clear it)
-               was eating fold height the card needed. */
-            .btn-home { width: 2.6rem; height: 2.6rem; font-size: 0.95rem; bottom: 0.8rem; }
 
             /* Subtitle/eyebrow text was down at 12.48px/10.4px — bump both
                into comfortably-readable territory on a phone screen. */
@@ -327,8 +328,45 @@
             .sub-title { font-size: 0.76rem; margin-bottom: 0.3rem; }
             .portal-text { min-height: 28px; font-size: 0.64rem; padding: 0.25rem 0.8rem; }
             .field-group { margin-bottom: 0.4rem; }
-            .divider-or { margin: 0.4rem 0; }
+            .divider-or { margin: 0.3rem 0; }
             .card-custom .cqa-logo { width: 36px; }
+
+            /* Round-2 for short viewports. The rules above only ever trimmed
+               the hero block above the card; on a short DESKTOP window (a
+               1024x640 or a part-height browser window) the hero was already
+               small and the remaining overflow was all inside the card itself,
+               so this compresses the card's own vertical rhythm too. Input and
+               button tap heights stay usable — only the padding and the gaps
+               between blocks come down. */
+            .login-wrapper { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+            .card-custom { padding: 0.9rem 1.75rem; }
+            .card-custom .text-center.mb-2 { margin-bottom: 0.2rem !important; }
+            .card-custom .cqa-logo.mb-1 { margin-bottom: 0.1rem !important; }
+            .card-custom h4 { font-size: 0.95rem; }
+            .card-custom .divider-soft { margin: 0.25rem auto 0.3rem; }
+            .card-custom p.text-xsmall { font-size: 0.72rem; }
+            .field-hint { font-size: 0.66rem; margin-top: 0.2rem; }
+            .field-label { margin-bottom: 0.2rem; }
+            .btn-login, .btn-google { padding: 0.5rem 1rem; }
+        }
+
+        /* Very short viewports (<=680px tall) — a 1024x640-class laptop screen,
+           or a browser window dragged down to roughly half a 1080p display.
+           The 780px step above gets those within ~20px of fitting; this is the
+           last squeeze that closes the gap, kept in its own breakpoint so the
+           700-780px range isn't compressed more than it needs to be. */
+        @media (max-height: 680px) {
+            .login-wrapper { padding-top: 0.3rem; padding-bottom: calc(0.5rem + env(safe-area-inset-bottom)); }
+            .header-container { margin-bottom: 0.25rem; }
+            .main-title { font-size: 1rem; }
+            .sub-title { font-size: 0.72rem; }
+            .portal-text { min-height: 24px; }
+            .card-custom { padding: 0.7rem 1.5rem; }
+            .card-custom .cqa-logo { width: 30px; }
+            .field-group { margin-bottom: 0.3rem; }
+            .field-hint { line-height: 1.25; margin-top: 0.15rem; }
+            .divider-or { margin: 0.2rem 0; }
+            .btn-login, .btn-google { padding: 0.45rem 1rem; }
         }
 
         /* Narrowest phones (320-375px): the reCAPTCHA's 0.85 scale above
@@ -559,6 +597,39 @@
             background: rgba(255, 255, 255, 0.25);
             color: #ffffff;
             transform: translateX(-50%) translateY(-2px);
+        }
+
+        /* ---- .btn-home responsive overrides ----
+           These MUST stay below the base rule above. They were originally
+           written up inside the earlier media-query blocks, but those sit
+           before the base declaration in this stylesheet — same specificity,
+           earlier in source order, so the base simply won and none of it
+           applied (the button stayed a 3rem bottom-centre FAB everywhere,
+           including where it was supposed to move out of the way). */
+
+        /* Phones: smaller box, tighter to the bottom edge. */
+        @media (max-width: 480px) {
+            .btn-home { width: 2.6rem; height: 2.6rem; font-size: 0.95rem; bottom: 0.8rem; }
+        }
+
+        /* Short viewports: the wrapper stops reserving ~52px of bottom padding
+           for this button (that reserve was the biggest single chunk of the
+           remaining overflow), so the button has to leave the bottom centre —
+           otherwise it would sit directly on top of "Sign in with Google".
+           Top-left corner keeps it available without costing any fold height. */
+        @media (max-height: 780px) {
+            .btn-home {
+                top: 0.75rem;
+                left: 0.75rem;
+                bottom: auto;
+                transform: none;
+                width: 2.4rem;
+                height: 2.4rem;
+                font-size: 0.9rem;
+            }
+            /* The base :hover re-applies translateX(-50%) for the centred
+               placement — neutralised here for the corner one. */
+            .btn-home:hover { transform: translateY(-2px); }
         }
 
         /* Same "viewing offline" pill as client-login.ejs / index.ejs —
