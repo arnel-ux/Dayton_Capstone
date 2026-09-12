@@ -4080,18 +4080,22 @@ app.get('/client-survey', ensureClientAuth, noCache, (req, res) => {
 // not just be hidden in the UI. Only respondent_name can be changed.
 app.get('/api/client-profile', ensureClientAuth, noCache, (req, res) => {
     db.query(
-        'SELECT email, respondent_name, region, age, gender, google_photo_url FROM client_accounts WHERE email = ? LIMIT 1',
+        'SELECT email, respondent_name, region, age, gender, google_photo_url, password FROM client_accounts WHERE email = ? LIMIT 1',
         [req.clientEmail],
         (err, rows) => {
             if (err) return res.status(500).json({ success: false, message: 'Server error loading your profile.' });
-            const row = (rows && rows.length > 0) ? rows[0] : { email: req.clientEmail, respondent_name: null, region: null, age: null, gender: null, google_photo_url: null };
+            const row = (rows && rows.length > 0) ? rows[0] : { email: req.clientEmail, respondent_name: null, region: null, age: null, gender: null, google_photo_url: null, password: null };
             const profile = {
                 email: row.email,
                 respondent_name: row.respondent_name,
                 region: row.region,
                 age: row.age,
                 gender: row.gender,
-                photo_url: row.google_photo_url || null
+                photo_url: row.google_photo_url || null,
+                // Whether one EXISTS, never the hash itself — the Profile tab
+                // needs this to decide between "set a password" and "change
+                // your password" (a Google-only account has none yet).
+                has_password: !!row.password
             };
             res.json({ success: true, profile });
         }
@@ -4296,6 +4300,71 @@ app.post('/api/client-profile', ensureClientAuth, (req, res) => {
             res.json({ success: true, respondent_name: respondentName });
         }
     );
+});
+
+// ==========================================
+// CLIENT ACCOUNT — Change password (Profile tab)
+// ==========================================
+// Session-authenticated, but still rate-limited: the current-password check
+// below is an online guessing oracle for anyone who gets hold of a live
+// session, so a wrong current password must not be cheap to retry.
+const clientPasswordChangeLimiter = jsonRateLimiter('client-password-change', { windowMs: 15 * 60 * 1000, max: 10 });
+
+app.post('/api/client-password', ensureClientAuth, clientPasswordChangeLimiter, async (req, res) => {
+    const currentPassword = String(req.body.currentPassword || '');
+    const newPassword = String(req.body.newPassword || '');
+    const confirmPassword = String(req.body.confirmPassword || '');
+
+    // Same 8-character floor the account was created under
+    // (/complete-google-registration), so the two can't drift apart.
+    if (newPassword.length < 8) {
+        return res.status(400).json({ success: false, message: 'Your new password must be at least 8 characters long.' });
+    }
+    if (newPassword !== confirmPassword) {
+        return res.status(400).json({ success: false, message: 'Your new passwords do not match.' });
+    }
+
+    try {
+        const rows = await dbQuery('SELECT password FROM client_accounts WHERE email = ? LIMIT 1', [req.clientEmail]);
+        if (!rows.length) {
+            return res.status(404).json({ success: false, message: 'Account not found.' });
+        }
+
+        const existingHash = rows[0].password;
+
+        // A NULL hash means this account has never had a password — a
+        // Google-only sign-in. There is no current password to prove, so this
+        // becomes a "set a password" flow rather than a change. The session
+        // already proves who they are, which is the same standard
+        // /complete-google-registration used to set the first one.
+        if (existingHash) {
+            if (!currentPassword) {
+                return res.status(400).json({ success: false, message: 'Please enter your current password.' });
+            }
+            const ok = await bcrypt.compare(currentPassword, existingHash);
+            if (!ok) {
+                return res.status(400).json({ success: false, message: 'Your current password is incorrect.' });
+            }
+            // Pointless churn, and a good sign the user misunderstood the form.
+            const same = await bcrypt.compare(newPassword, existingHash);
+            if (same) {
+                return res.status(400).json({ success: false, message: 'Your new password must be different from your current one.' });
+            }
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await dbQuery('UPDATE client_accounts SET password = ? WHERE email = ?', [hashedPassword, req.clientEmail]);
+
+        // Session deliberately left intact: the user is standing at their own
+        // profile page and just confirmed their current password, so logging
+        // them out here would be pure friction, not added safety.
+        return res.json({
+            success: true,
+            message: existingHash ? 'Your password has been updated.' : 'Your password has been set.'
+        });
+    } catch (e) {
+        return res.status(500).json({ success: false, message: 'Could not update your password. Please try again.' });
+    }
 });
 
 // ==========================================

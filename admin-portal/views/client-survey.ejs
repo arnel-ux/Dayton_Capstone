@@ -816,23 +816,48 @@
            vertical centering anywhere. No fixed height added — a taller
            profile (long name, many fields) still just flows/scrolls
            normally, exactly as it already does elsewhere. */
+        /* Portrait-style hero: one large centered avatar with the person's
+           name and email stacked under it. Was a 60px avatar in a left-aligned
+           row next to a duplicate "My Profile" heading. */
         .profile-hero {
-            display: flex; align-items: center; gap: 1.1rem;
-            padding: 1.75rem clamp(1.25rem, 4vw, 3rem);
-            background: var(--surface);
+            display: flex; flex-direction: column; align-items: center; text-align: center;
+            gap: 0.9rem;
+            padding: 2.25rem clamp(1.25rem, 4vw, 3rem) 1.9rem;
+            /* A soft tint fading into the card colour gives the avatar
+               something to sit on, so the bigger portrait reads as deliberate
+               rather than as an oversized icon floating on a flat panel. */
+            background: linear-gradient(180deg, var(--ring) 0%, var(--surface) 78%);
             border-bottom: 1px solid var(--line-soft);
         }
         .profile-hero-avatar {
-            width: 60px; height: 60px; border-radius: 50%; flex-shrink: 0;
+            /* Scales with the viewport instead of a single fixed size: big
+               enough to be the focal point on a phone, without eating the
+               fold on the smallest screens. */
+            width: clamp(104px, 26vw, 136px);
+            height: clamp(104px, 26vw, 136px);
+            border-radius: 50%; flex-shrink: 0;
             background: var(--ring); color: var(--brand);
-            display: flex; align-items: center; justify-content: center; font-size: 1.55rem;
+            display: flex; align-items: center; justify-content: center;
+            font-size: clamp(2.6rem, 9vw, 3.4rem);
             overflow: hidden;
+            /* Ring + lift so the portrait separates cleanly from the tinted
+               band behind it in both light and dark mode. */
+            border: 4px solid var(--surface);
+            box-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--line-soft);
         }
         .profile-hero-avatar img {
             width: 100%; height: 100%; object-fit: cover; border-radius: 50%;
         }
-        .profile-hero-text h3 { margin: 0 0 0.15rem; font-weight: 700; color: var(--ink-900); }
-        .profile-hero-text p { margin: 0; color: var(--ink-600); font-size: 0.86rem; }
+        .profile-hero-text { min-width: 0; max-width: 100%; }
+        .profile-hero-text h3 {
+            margin: 0 0 0.2rem; font-weight: 700; color: var(--ink-900);
+            font-size: clamp(1.15rem, 4.5vw, 1.45rem); line-height: 1.25;
+            overflow-wrap: anywhere;
+        }
+        .profile-hero-text p {
+            margin: 0; color: var(--ink-600); font-size: 0.86rem;
+            overflow-wrap: anywhere;
+        }
 
         .profile-body { padding: clamp(1.25rem, 4vw, 2.5rem); }
 
@@ -854,6 +879,86 @@
         }
         .btn-edit-profile:hover { background: var(--brand); color: #fff; transform: translateY(-1px); box-shadow: 0 8px 18px -8px rgba(37,84,199,0.6); }
         .btn-edit-profile:active { transform: translateY(0); }
+
+        /* ---- Password / security panel ---- */
+        .profile-security {
+            margin-top: 2rem;
+            padding-top: 1.6rem;
+            border-top: 1px solid var(--line-soft);
+        }
+        .profile-security-hint {
+            margin: -0.3rem 0 0; color: var(--ink-600); font-size: 0.82rem; line-height: 1.5;
+        }
+        .profile-password-card {
+            margin-top: 1.1rem;
+            padding: 1.25rem;
+            border: 1px solid var(--line-soft);
+            border-radius: 16px;
+            background: var(--surface);
+        }
+        .profile-field { margin-bottom: 1rem; }
+        .profile-field-label {
+            display: block; margin-bottom: 0.4rem;
+            font-size: 0.78rem; font-weight: 700; letter-spacing: 0.02em;
+            color: var(--ink-900);
+        }
+        .profile-field-error {
+            margin: 0.4rem 0 0; font-size: 0.78rem; font-weight: 600; color: #dc2626;
+        }
+        /* Toggle + strength-meter styling, defined in full here on purpose.
+           public/js/alerts.js injects both widgets and public/css/style.css
+           styles them for the auth pages — but this page is standalone and
+           never loads that stylesheet, so without these rules the toggle falls
+           back to a default browser button (a grey bordered box splitting the
+           field) and the meter renders as unstyled inline text with no bars.
+           Written against this page's own theme tokens so both follow light
+           and dark mode with everything else here. */
+        .profile-password-card .password-toggle {
+            display: flex; align-items: center; justify-content: center;
+            width: 2.9rem; min-height: 2.6rem; flex-shrink: 0;
+            border: 1px solid var(--line-soft); border-left: 0;
+            border-top-right-radius: 0.5rem; border-bottom-right-radius: 0.5rem;
+            background: var(--surface); color: var(--ink-600);
+            padding: 0; font-size: 0.95rem; line-height: 1; cursor: pointer;
+            transition: color .15s ease, background-color .15s ease;
+        }
+        .profile-password-card .password-toggle:hover { color: var(--brand); background: var(--ring); }
+        .profile-password-card .password-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+
+        .profile-password-card .pw-strength {
+            margin-top: 0.5rem; overflow: hidden; max-height: 5rem; opacity: 1;
+            transition: max-height .25s ease, opacity .25s ease, margin-top .25s ease;
+        }
+        .profile-password-card .pw-strength.is-empty { max-height: 0; opacity: 0; margin-top: 0; }
+        .profile-password-card .pw-strength-bars { display: flex; gap: 4px; }
+        .profile-password-card .pw-strength-bars span {
+            flex: 1 1 0; height: 4px; border-radius: 50px;
+            background: var(--line-soft); transition: background-color .25s ease;
+        }
+        .profile-password-card .pw-strength-label {
+            display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+            margin: 0.35rem 0 0; font-size: 0.74rem; font-weight: 700; line-height: 1.3;
+            color: var(--ink-600);
+        }
+        .profile-password-card .pw-strength-text { flex: 0 0 auto; }
+        .profile-password-card .pw-strength-hint {
+            flex: 1 1 auto; text-align: right; font-weight: 500;
+            color: var(--ink-400); min-width: 0; overflow-wrap: anywhere;
+        }
+        .profile-password-card .pw-strength[data-level="1"] .pw-strength-bars span:nth-child(-n+1) { background: #ef4444; }
+        .profile-password-card .pw-strength[data-level="2"] .pw-strength-bars span:nth-child(-n+2) { background: #f59e0b; }
+        .profile-password-card .pw-strength[data-level="3"] .pw-strength-bars span:nth-child(-n+3) { background: #eab308; }
+        .profile-password-card .pw-strength[data-level="4"] .pw-strength-bars span:nth-child(-n+4) { background: #16a34a; }
+        .profile-password-card .pw-strength[data-level="1"] .pw-strength-text { color: #ef4444; }
+        .profile-password-card .pw-strength[data-level="2"] .pw-strength-text { color: #d97706; }
+        .profile-password-card .pw-strength[data-level="3"] .pw-strength-text { color: #ca8a04; }
+        .profile-password-card .pw-strength[data-level="4"] .pw-strength-text { color: #16a34a; }
+
+        /* The injected toggle is appended as the .input-group's last child, so
+           the input in the middle must not keep a rounded right edge. */
+        .profile-password-card .input-group > .form-control {
+            border-top-right-radius: 0; border-bottom-right-radius: 0;
+        }
 
         .profile-info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
         @media (max-width: 640px) { .profile-info-grid { grid-template-columns: 1fr; } }
@@ -964,12 +1069,21 @@
             .view-header p { font-size: 0.78rem; }
             #view-history > .card > .card-body { padding: 0.9rem 0.75rem !important; }
 
-            .profile-hero { padding: 1rem 0.9rem; gap: 0.75rem; }
-            .profile-hero-avatar { width: 44px; height: 44px; font-size: 1.15rem; }
+            /* This block used to shrink the avatar to 44px on phones, back
+               when the hero was a compact icon-beside-heading row. The hero is
+               now a centered portrait and the avatar is the focal point, so it
+               keeps its clamp() size here — only the surrounding padding is
+               tightened for small screens. */
+            .profile-hero { padding: 1.5rem 0.9rem 1.25rem; gap: 0.7rem; }
             .profile-hero-text h3 { font-size: 1.05rem; }
             .profile-hero-text p { font-size: 0.78rem; }
             .profile-body { padding: 0.9rem; }
             .profile-section-label { font-size: 0.66rem; margin-bottom: 0.6rem; }
+            .profile-security { margin-top: 1.5rem; padding-top: 1.25rem; }
+            .profile-password-card { padding: 1rem; border-radius: 14px; }
+            /* Full-width stacked buttons are easier to hit than two half-width
+               ones squeezed onto one row at phone widths. */
+            .profile-password-card .btn { width: 100%; }
             .profile-info-grid { gap: 0.6rem; }
             .profile-info-card { padding: 0.7rem 0.85rem; gap: 0.6rem; border-radius: 12px; }
             .profile-info-icon { width: 32px; height: 32px; font-size: 0.9rem; border-radius: 9px; }
@@ -2961,11 +3075,19 @@
             <div class="card border-0 view-card profile-view-card">
                 <div class="card-body p-0">
 
+                    <!-- Centered, portrait-style hero. The old layout was a small
+                         60px avatar beside an <h3>My Profile</h3> — but the app
+                         header already renders "My Profile" as this view's title
+                         (VIEW_TITLES.profile), so that heading was the same words
+                         twice on one screen. The avatar now carries the top of the
+                         card on its own, and the identity underneath it (the
+                         person's actual name and email) is the part that isn't
+                         already stated anywhere else on the page. -->
                     <div class="profile-hero">
                         <div class="profile-hero-avatar" id="pf-avatar"><i class="bi bi-person-fill"></i></div>
                         <div class="profile-hero-text">
-                            <h3>My Profile</h3>
-                            <p>View and update your registered account details.</p>
+                            <h3 id="pf-hero-name">&nbsp;</h3>
+                            <p id="pf-hero-email">&nbsp;</p>
                         </div>
                     </div>
 
@@ -3043,6 +3165,65 @@
                                             <i class="bi bi-check2-circle me-1"></i> Update
                                         </button>
                                         <button type="button" class="btn btn-outline-secondary fw-semibold px-4" onclick="exitProfileEditMode()">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                            <!-- ================= SECURITY ================= -->
+                            <!-- Password management. Collapsed by default so the
+                                 profile still opens on the account summary rather
+                                 than on a form nobody asked for yet. The toggle
+                                 button and the strength meter are both injected by
+                                 public/js/alerts.js (this page loads it) — the meter
+                                 because of data-pw-strength on the new-password
+                                 field. -->
+                            <div id="profileSecurity" class="profile-security">
+                                <div class="profile-section-header">
+                                    <div class="profile-section-label mb-0">Password</div>
+                                    <button type="button" id="btnTogglePassword" class="btn-edit-profile" onclick="togglePasswordPanel()">
+                                        <i class="bi bi-shield-lock-fill me-1"></i> <span id="btnTogglePasswordText">Change Password</span>
+                                    </button>
+                                </div>
+
+                                <p class="profile-security-hint" id="pf-password-hint">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Used to sign in with your email on the login page.
+                                </p>
+
+                                <form id="passwordForm" class="profile-password-card d-none" onsubmit="return saveClientPassword(event);">
+                                    <div class="profile-field" id="currentPasswordField">
+                                        <label class="profile-field-label" for="pf-current-password">Current Password</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="bi bi-lock-fill"></i></span>
+                                            <input type="password" id="pf-current-password" class="form-control" placeholder="Enter your current password" autocomplete="current-password">
+                                        </div>
+                                    </div>
+
+                                    <div class="profile-field">
+                                        <label class="profile-field-label" for="pf-new-password">New Password</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="bi bi-key-fill"></i></span>
+                                            <input type="password" id="pf-new-password" class="form-control" placeholder="At least 8 characters" minlength="8" required autocomplete="new-password" data-pw-strength>
+                                        </div>
+                                    </div>
+
+                                    <div class="profile-field">
+                                        <label class="profile-field-label" for="pf-confirm-password">Confirm New Password</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="bi bi-key-fill"></i></span>
+                                            <input type="password" id="pf-confirm-password" class="form-control" placeholder="Re-enter your new password" minlength="8" required autocomplete="new-password">
+                                        </div>
+                                        <p class="profile-field-error d-none" id="pf-password-mismatch">
+                                            <i class="bi bi-exclamation-circle me-1"></i> The two passwords don't match.
+                                        </p>
+                                    </div>
+
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <button type="submit" id="pf-password-save-btn" class="btn btn-primary fw-semibold px-4">
+                                            <i class="bi bi-check2-circle me-1"></i> Update Password
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary fw-semibold px-4" onclick="togglePasswordPanel(false)">
                                             Cancel
                                         </button>
                                     </div>
@@ -4601,9 +4782,23 @@ function renderProfileView(p, fromCache) {
             const age = p.age || (localSaved && localSaved.age) || '';
             const gender = p.gender || '';
 
-            document.getElementById('pf-email').textContent = p.email || currentClientEmail || '—';
+            const resolvedEmail = p.email || currentClientEmail || '—';
+            document.getElementById('pf-email').textContent = resolvedEmail;
             document.getElementById('pf-name-display').textContent = respondentName || 'Not set yet';
             document.getElementById('pf-name-input').value = respondentName;
+
+            // The hero used to read "My Profile", which the app header already
+            // says — it shows who is signed in instead.
+            const heroNameEl = document.getElementById('pf-hero-name');
+            const heroEmailEl = document.getElementById('pf-hero-email');
+            if (heroNameEl) heroNameEl.textContent = respondentName || 'Welcome';
+            if (heroEmailEl) heroEmailEl.textContent = resolvedEmail;
+
+            // An account created purely through Google sign-in may not have a
+            // password yet, so the panel has to ask to SET one rather than to
+            // change one (and must not demand a current password that doesn't
+            // exist). /api/client-password applies the same rule server-side.
+            applyPasswordPanelMode(p.has_password !== false);
 
             // Google account photo, when we have one on file (captured at Google sign-in —
             // see /auth/google/callback). Falls back to the generic person icon otherwise
@@ -4680,6 +4875,132 @@ function enterProfileEditMode() {
 function exitProfileEditMode() {
     document.getElementById('profileEditMode').classList.add('d-none');
     document.getElementById('profileViewMode').classList.remove('d-none');
+}
+
+// ==========================================
+// PROFILE — Password management
+// ==========================================
+// `hasPassword` false means this account signed up through Google and has
+// never set a password, so the whole panel becomes "set" rather than "change"
+// and the Current Password field is removed (there is nothing to prove).
+let clientHasPassword = true;
+
+function applyPasswordPanelMode(hasPassword) {
+    clientHasPassword = hasPassword !== false;
+
+    const currentField = document.getElementById('currentPasswordField');
+    const currentInput = document.getElementById('pf-current-password');
+    const btnText = document.getElementById('btnTogglePasswordText');
+    const hint = document.getElementById('pf-password-hint');
+    const saveBtn = document.getElementById('pf-password-save-btn');
+
+    if (currentField) currentField.classList.toggle('d-none', !clientHasPassword);
+    // Cleared as well as hidden, so a stale value can never be posted.
+    if (currentInput) {
+        currentInput.required = clientHasPassword;
+        if (!clientHasPassword) currentInput.value = '';
+    }
+    if (btnText) btnText.textContent = clientHasPassword ? 'Change Password' : 'Set Password';
+    if (saveBtn) saveBtn.innerHTML = clientHasPassword
+        ? '<i class="bi bi-check2-circle me-1"></i> Update Password'
+        : '<i class="bi bi-check2-circle me-1"></i> Set Password';
+    if (hint) {
+        hint.innerHTML = clientHasPassword
+            ? '<i class="bi bi-info-circle me-1"></i> Used to sign in with your email on the login page.'
+            : '<i class="bi bi-info-circle me-1"></i> You signed in with Google. Set a password to also sign in with your email.';
+    }
+}
+
+// `force` lets Cancel close the panel unconditionally; omitted, it toggles.
+function togglePasswordPanel(force) {
+    const form = document.getElementById('passwordForm');
+    if (!form) return;
+    const willOpen = typeof force === 'boolean' ? force : form.classList.contains('d-none');
+
+    form.classList.toggle('d-none', !willOpen);
+    if (!willOpen) {
+        form.reset();
+        // reset() restores the default value but fires no `input` event, so the
+        // injected strength meter would keep showing the old level — nudge it.
+        const newPw = document.getElementById('pf-new-password');
+        if (newPw) newPw.dispatchEvent(new Event('input', { bubbles: true }));
+        const mismatch = document.getElementById('pf-password-mismatch');
+        if (mismatch) mismatch.classList.add('d-none');
+    } else {
+        const first = clientHasPassword
+            ? document.getElementById('pf-current-password')
+            : document.getElementById('pf-new-password');
+        if (first) first.focus();
+    }
+}
+
+function saveClientPassword(event) {
+    event.preventDefault();
+
+    const currentPassword = (document.getElementById('pf-current-password') || {}).value || '';
+    const newPassword = document.getElementById('pf-new-password').value;
+    const confirmPassword = document.getElementById('pf-confirm-password').value;
+    const mismatchEl = document.getElementById('pf-password-mismatch');
+    const saveBtn = document.getElementById('pf-password-save-btn');
+
+    // Inline (not a modal) — it's a field-level problem the user fixes right
+    // where they are.
+    const mismatch = newPassword !== confirmPassword;
+    if (mismatchEl) mismatchEl.classList.toggle('d-none', !mismatch);
+    if (mismatch) {
+        document.getElementById('pf-confirm-password').focus();
+        return false;
+    }
+    if (newPassword.length < 8) {
+        AppAlert.warning('Your new password must be at least 8 characters long.', 'Password Too Short');
+        return false;
+    }
+
+    const originalHtml = saveBtn.innerHTML;
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving…';
+
+    fetch('/api/client-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword, confirmPassword })
+    })
+        .then(async (res) => {
+            // Not every response to this POST is JSON. A session that expired
+            // mid-edit redirects to the HTML login page, and an unmatched route
+            // (server running older code than this page) hits Express's default
+            // HTML 404 — blindly calling res.json() on either surfaces as the
+            // useless 'Unexpected token <, "<!DOCTYPE"... is not valid JSON'
+            // rather than telling the user what actually went wrong.
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                if (res.status === 404) {
+                    throw new Error('This feature isn\'t available on the server yet. Please refresh the page, or contact your administrator if it keeps happening.');
+                }
+                if (res.status === 401 || res.status === 403 || res.redirected) {
+                    throw new Error('Your session has expired. Please sign in again and retry.');
+                }
+                throw new Error('The server returned an unexpected response. Please try again.');
+            }
+            return res.json();
+        })
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Could not update your password.');
+            // The account definitely has one now, so a later open of this panel
+            // asks for the current password even if it didn't before.
+            applyPasswordPanelMode(true);
+            togglePasswordPanel(false);
+            AppAlert.success(data.message || 'Your password has been updated.', 'Password Updated');
+        })
+        .catch(err => {
+            AppAlert.error(err.message || 'Could not update your password. Please try again.', 'Update Failed');
+        })
+        .finally(() => {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = originalHtml;
+        });
+
+    return false;
 }
 
 function saveProfile(event) {
