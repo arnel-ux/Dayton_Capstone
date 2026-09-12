@@ -11,6 +11,10 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="/js/offline-db.js"></script>
 
+    <meta name="theme-color" content="#251d3a">
+    <!-- Fullscreen on first tap (phones only) — it cannot run on page load,
+         requestFullscreen() needs a user gesture. See the file for details. -->
+    <script src="/js/mobile-fullscreen.js" defer></script>
     <!-- Animation stack: GSAP + ScrollTrigger for scroll-driven reveals/parallax (native scroll, no smooth-scroll library) -->
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>

@@ -64,6 +64,10 @@
          install prompt). The service worker below still provides offline
          caching — that's independent of installability, manifest.json is
          what Chrome/Edge actually key the install criteria on. -->
+    <meta name="theme-color" content="#251d3a">
+    <!-- Fullscreen on first tap (phones only) — it cannot run on page load,
+         requestFullscreen() needs a user gesture. See the file for details. -->
+    <script src="/js/mobile-fullscreen.js" defer></script>
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">

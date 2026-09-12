@@ -105,3 +105,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 <link rel="stylesheet" href="/css/style.css">
+<!-- Tints the phone browser's own UI (address bar / status bar) to match the
+     app, so on any device where fullscreen isn't available — iOS Safari has no
+     Fullscreen API for ordinary elements — the bar at least stops reading as a
+     foreign white strip above the page. -->
+<meta name="theme-color" content="#251d3a">
+<!-- Requests fullscreen on the visitor's FIRST TAP. It cannot be done on load:
+     requestFullscreen() requires a real user gesture and every browser rejects
+     it otherwise. See the file for the full explanation and platform notes. -->
+<script src="/js/mobile-fullscreen.js" defer></script>
