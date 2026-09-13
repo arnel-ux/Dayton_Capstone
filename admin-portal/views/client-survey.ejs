@@ -1107,29 +1107,42 @@
             transition: max-height .25s ease, opacity .25s ease, margin-top .25s ease;
         }
         .profile-password-card .pw-strength.is-empty { max-height: 0; opacity: 0; margin-top: 0; }
-        .profile-password-card .pw-strength-bars { display: flex; gap: 4px; }
-        .profile-password-card .pw-strength-bars span {
-            flex: 1 1 0; height: 4px; border-radius: 50px;
-            background: var(--line-soft); transition: background-color .25s ease;
+        .profile-password-card .pw-strength-track {
+            height: 6px; border-radius: 50px; background: var(--line-soft);
+            box-shadow: inset 0 1px 2px rgba(15,23,42,0.05); overflow: hidden;
+        }
+        .profile-password-card .pw-strength-fill {
+            height: 100%; width: 0%; border-radius: 50px;
+            background: var(--line-soft); transition: width .3s ease, background .3s ease;
         }
         .profile-password-card .pw-strength-label {
             display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
-            margin: 0.35rem 0 0; font-size: 0.74rem; font-weight: 700; line-height: 1.3;
-            color: var(--ink-600);
+            margin: 0.45rem 0 0; line-height: 1.3;
         }
-        .profile-password-card .pw-strength-text { flex: 0 0 auto; }
+        .profile-password-card .pw-strength-badge {
+            display: inline-flex; align-items: center; gap: 0.32rem; flex: 0 0 auto;
+            padding: 0.16rem 0.55rem; border-radius: 50px; font-size: 0.66rem; font-weight: 700;
+            letter-spacing: 0.03em; text-transform: uppercase;
+            background: var(--ring); color: var(--ink-400);
+            transition: background-color .25s ease, color .25s ease;
+        }
+        .profile-password-card .pw-strength-badge .pw-strength-icon { font-size: 0.6rem; }
         .profile-password-card .pw-strength-hint {
-            flex: 1 1 auto; text-align: right; font-weight: 500;
+            flex: 1 1 auto; text-align: right; font-size: 0.7rem; font-weight: 500;
             color: var(--ink-400); min-width: 0; overflow-wrap: anywhere;
         }
-        .profile-password-card .pw-strength[data-level="1"] .pw-strength-bars span:nth-child(-n+1) { background: #ef4444; }
-        .profile-password-card .pw-strength[data-level="2"] .pw-strength-bars span:nth-child(-n+2) { background: #f59e0b; }
-        .profile-password-card .pw-strength[data-level="3"] .pw-strength-bars span:nth-child(-n+3) { background: #eab308; }
-        .profile-password-card .pw-strength[data-level="4"] .pw-strength-bars span:nth-child(-n+4) { background: #16a34a; }
-        .profile-password-card .pw-strength[data-level="1"] .pw-strength-text { color: #ef4444; }
-        .profile-password-card .pw-strength[data-level="2"] .pw-strength-text { color: #d97706; }
-        .profile-password-card .pw-strength[data-level="3"] .pw-strength-text { color: #ca8a04; }
-        .profile-password-card .pw-strength[data-level="4"] .pw-strength-text { color: #16a34a; }
+        .profile-password-card .pw-strength[data-level="1"] .pw-strength-fill { width: 25%; background: linear-gradient(90deg, #ef4444, #f87171); }
+        .profile-password-card .pw-strength[data-level="2"] .pw-strength-fill { width: 50%; background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .profile-password-card .pw-strength[data-level="3"] .pw-strength-fill { width: 75%; background: linear-gradient(90deg, #eab308, #facc15); }
+        .profile-password-card .pw-strength[data-level="4"] .pw-strength-fill { width: 100%; background: linear-gradient(90deg, #16a34a, #22c55e); }
+        .profile-password-card .pw-strength[data-level="1"] .pw-strength-badge { background: #fee2e2; color: #dc2626; }
+        .profile-password-card .pw-strength[data-level="2"] .pw-strength-badge { background: #fef3c7; color: #b45309; }
+        .profile-password-card .pw-strength[data-level="3"] .pw-strength-badge { background: #fef9c3; color: #a16207; }
+        .profile-password-card .pw-strength[data-level="4"] .pw-strength-badge { background: #dcfce7; color: #15803d; }
+        [data-bs-theme="dark"] .profile-password-card .pw-strength[data-level="1"] .pw-strength-badge { background: rgba(239,68,68,0.18); color: #f87171; }
+        [data-bs-theme="dark"] .profile-password-card .pw-strength[data-level="2"] .pw-strength-badge { background: rgba(245,158,11,0.18); color: #fbbf24; }
+        [data-bs-theme="dark"] .profile-password-card .pw-strength[data-level="3"] .pw-strength-badge { background: rgba(234,179,8,0.18); color: #facc15; }
+        [data-bs-theme="dark"] .profile-password-card .pw-strength[data-level="4"] .pw-strength-badge { background: rgba(22,163,74,0.18); color: #4ade80; }
 
         /* The injected toggle is appended as the .input-group's last child, so
            the input in the middle must not keep a rounded right edge. */

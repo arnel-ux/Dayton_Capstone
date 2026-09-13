@@ -290,9 +290,10 @@ function initPasswordStrength(root) {
         meter.className = 'pw-strength is-empty';
         meter.setAttribute('data-level', '0');
         meter.innerHTML =
-            '<div class="pw-strength-bars" aria-hidden="true"><span></span><span></span><span></span><span></span></div>' +
+            '<div class="pw-strength-track" aria-hidden="true"><div class="pw-strength-fill"></div></div>' +
             '<p class="pw-strength-label" aria-live="polite">' +
-            '<span class="pw-strength-text"></span><span class="pw-strength-hint"></span></p>';
+            '<span class="pw-strength-badge"><i class="fas pw-strength-icon"></i><span class="pw-strength-text"></span></span>' +
+            '<span class="pw-strength-hint"></span></p>';
 
         // Sits directly under the whole field (the wrapper, when there is
         // one), never inside it — dropping it inside an .input-group would
@@ -303,6 +304,8 @@ function initPasswordStrength(root) {
 
         const textEl = meter.querySelector('.pw-strength-text');
         const hintEl = meter.querySelector('.pw-strength-hint');
+        const iconEl = meter.querySelector('.pw-strength-icon');
+        const ICONS = ['', 'fa-triangle-exclamation', 'fa-shield-halved', 'fa-shield-halved', 'fa-shield-halved'];
 
         // Score 0-4. Length carries the most weight (it's what actually costs
         // an attacker time), with character variety on top.
@@ -334,6 +337,7 @@ function initPasswordStrength(root) {
             meter.setAttribute('data-level', String(r.level));
             textEl.textContent = r.text;
             hintEl.textContent = r.hint;
+            iconEl.className = 'fas pw-strength-icon ' + (ICONS[r.level] || '');
         }
 
         input.addEventListener('input', render);
