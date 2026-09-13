@@ -937,13 +937,6 @@
                area without changing how the control looks. */
             #terms-box .form-check { padding: 0.4rem 0; gap: 0.6rem !important; }
             .section-title .form-check.form-switch { padding: 0.35rem 0; }
-            /* Male/Female radio rows: each option is a whole clickable
-               <label>, but its hit height was just the text line (~24px)
-               with only 1.5rem between the two — pad each row taller and
-               let them wrap with a visible gap instead of sitting close
-               enough to mis-tap the wrong one. */
-            #gender-field-group { gap: 1.25rem !important; row-gap: 0.75rem !important; }
-            #gender-field-group label { padding: 0.4rem 0; min-height: 44px; }
 
             /* Profile "Edit" button and history badges/meta text were on the
                small side for a phone (~34px tap height, ~12.5px meta text). */
@@ -1741,21 +1734,14 @@
                 width: 100%;
                 min-width: 0;
             }
-            #stage2 .form-check-input { width: 19px; height: 19px; }
-            /* The generic 19x19 square above was also landing on the Autofill
-               SWITCH's own checkbox input (it lives inside #stage2 too) —
-               forcing a pill-shaped toggle into a square knob so it rendered
-               as a plain radio-looking dot instead of a switch. Restore the
-               switch's own proportions after the generic rule so it still
-               reads as a slider on phones. */
+            /* The Autofill toggle's checkbox is the only .form-check-input
+               inside #stage2 (Sex is now a plain <select>, not a radio
+               group) — a stray 19x19 square rule here used to squash this
+               switch into a radio-looking dot instead of a pill/slider. */
             #stage2 .form-switch .form-check-input { width: 2.15em; height: 1.2em; }
-            #stage2 .form-check-label, #gender-field-group label { font-size: 0.92rem; }
+            #stage2 .form-check-label { font-size: 0.92rem; }
             #stage2 .lock-icon { font-size: 0.78rem; }
             #stage2 .row.g-4 > * { padding-top: 0.1rem; }
-            /* Male/Female used Bootstrap's gap-4 (1.5rem/24px) utility, which
-               ships !important — far wider than the two short options need
-               once labels are already trimmed to phone size. */
-            #gender-field-group.gap-4 { gap: 0.9rem !important; }
 
             /* Terms checkbox: show the label text first, checkbox centered
                below it — instead of a left-aligned row whose wrapped 2nd
@@ -1907,13 +1893,6 @@
             background-color: #f1f5f9;
         }
 
-        .locked-field {
-            opacity: 0.75;
-        }
-
-        .locked-field .radio-custom {
-            cursor: not-allowed;
-        }
 
         .radio-custom {
             width: 19px;
@@ -2968,18 +2947,12 @@
                         <div class="col-md-6">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_sex"></label>
                             <i id="gender-lock-note" class="bi bi-lock-fill lock-icon d-none" data-bs-toggle="tooltip" data-bs-placement="top" title="You have already answered this section. It is now locked."></i>
-                            <div id="gender-field-group" class="d-flex flex-wrap gap-4 pt-2">
-                                <label class="d-flex align-items-center gap-2 text-dark">
-                                    <!-- PINALITAN ANG name="sex" NG name="gender" AT NAGDAGDAG NG value="Male" -->
-                                    <input type="radio" name="gender" value="Male" class="radio-custom">
-                                    <span data-i18n="lbl_male"></span>
-                                </label>
-                                <label class="d-flex align-items-center gap-2 text-dark">
-                                    <!-- PINALITAN ANG name="sex" NG name="gender" AT NAGDAGDAG NG value="Female" -->
-                                    <input type="radio" name="gender" value="Female" class="radio-custom">
-                                    <span data-i18n="lbl_female"></span>
-                                </label>
-                            </div>
+                            <select name="gender" class="form-select">
+                                <option value="" disabled selected data-i18n="opt_select_gender"></option>
+                                <option value="Male" data-i18n="lbl_male"></option>
+                                <option value="Female" data-i18n="lbl_female"></option>
+                                <option value="Prefer not to say" data-i18n="lbl_prefer_not_say"></option>
+                            </select>
                         </div>
 
                         <div class="col-md-6">
@@ -5017,14 +4990,13 @@ function applyLockedProfile(profile) {
     // the client_accounts column name) — accept either.
     const genderValue = profile.gender || profile.sex;
     if (genderValue) {
-        document.querySelectorAll('input[name="gender"]').forEach(radio => {
-            radio.disabled = true;
-            if (radio.value === genderValue) radio.checked = true;
-        });
+        const genderSelect = document.querySelector('select[name="gender"]');
+        if (genderSelect) {
+            genderSelect.value = genderValue;
+            genderSelect.disabled = true;
+        }
         const note = document.getElementById('gender-lock-note');
         if (note) note.classList.remove('d-none');
-        const group = document.getElementById('gender-field-group');
-        if (group) group.classList.add('locked-field');
     }
 
     // Activate Bootstrap tooltips on any lock icons just revealed
@@ -5047,9 +5019,9 @@ function unlockProfileFields() {
     if (ageSelect) ageSelect.disabled = false;
     document.getElementById('age-lock-note')?.classList.add('d-none');
 
-    document.querySelectorAll('input[name="gender"]').forEach(radio => { radio.disabled = false; });
+    const genderSelect = document.querySelector('select[name="gender"]');
+    if (genderSelect) genderSelect.disabled = false;
     document.getElementById('gender-lock-note')?.classList.add('d-none');
-    document.getElementById('gender-field-group')?.classList.remove('locked-field');
 }
 
 // Snapshot of Name/Sex/Age/Region taken right before the switch is turned on,
@@ -5078,7 +5050,7 @@ function toggleAutofillClientProfile(enabled) {
             respondent_name: document.querySelector('input[name="respondent_name"]')?.value ?? '',
             region: document.querySelector('select[name="region"]')?.value ?? '',
             age: document.querySelector('select[name="age"]')?.value ?? '',
-            gender: document.querySelector('input[name="gender"]:checked')?.value ?? ''
+            gender: document.querySelector('select[name="gender"]')?.value ?? ''
         };
 
         fetchWithTimeout('/api/client-profile', {}, 5000)
@@ -5095,10 +5067,8 @@ function toggleAutofillClientProfile(enabled) {
                 const ageSelect = document.querySelector('select[name="age"]');
                 if (ageSelect && !ageSelect.disabled && p.age) ageSelect.value = p.age;
 
-                const genderRadios = document.querySelectorAll('input[name="gender"]');
-                if (genderRadios.length && !genderRadios[0].disabled && p.gender) {
-                    genderRadios.forEach(radio => { radio.checked = (radio.value === p.gender); });
-                }
+                const genderSelect = document.querySelector('select[name="gender"]');
+                if (genderSelect && !genderSelect.disabled && p.gender) genderSelect.value = p.gender;
 
                 // Fall back to this account's own locally-remembered answers
                 // for Client Type/Age/Region only where the server didn't
@@ -5126,10 +5096,8 @@ function toggleAutofillClientProfile(enabled) {
         const ageSelect = document.querySelector('select[name="age"]');
         if (ageSelect && !ageSelect.disabled) ageSelect.value = autofillSnapshot.age;
 
-        const genderRadios = document.querySelectorAll('input[name="gender"]');
-        if (genderRadios.length && !genderRadios[0].disabled) {
-            genderRadios.forEach(radio => { radio.checked = (radio.value === autofillSnapshot.gender); });
-        }
+        const genderSelect = document.querySelector('select[name="gender"]');
+        if (genderSelect && !genderSelect.disabled) genderSelect.value = autofillSnapshot.gender;
 
         autofillSnapshot = null;
     }
@@ -5848,6 +5816,7 @@ function scrollToInvalid(el) {
 
 const REQUIRED_STAGE2_SELECTORS = [
     'select[name="client_type"]',
+    'select[name="gender"]',
     'select[name="age"]',
     'input[name="survey_date"]',
     'input[name="office_visited_time"]',
@@ -5872,9 +5841,6 @@ const REQUIRED_STAGE2_SELECTORS = [
         const el = e.target;
         if (!el.matches) return;
         clearLeafIfFilled(el);
-        if (el.matches('input[name="gender"]')) {
-            clearGroupInvalid(document.getElementById('gender-field-group').closest('.col-md-6'));
-        }
         if (el.matches('input[name="cc1"], input[name="cc2"], input[name="cc3"]')) {
             clearGroupInvalid(el.closest('.qa-block'));
         }
@@ -5937,13 +5903,6 @@ function validateStage(stageNum, scroll) {
                 clearLeafInvalid(el);
             }
         });
-        const genderGroup = document.getElementById('gender-field-group').closest('.col-md-6');
-        if (!document.querySelector('input[name="gender"]:checked')) {
-            markGroupInvalid(genderGroup, t.answerRequired);
-            if (!firstInvalid) firstInvalid = genderGroup;
-        } else {
-            clearGroupInvalid(genderGroup);
-        }
         if (firstInvalid) {
             // Gated on `scroll` too (not just used to conditionally scroll):
             // submitAll()'s silent detection pass over a stage that isn't
@@ -6155,8 +6114,10 @@ const i18n = {
         opt_gov: "Government (Employee or another agency)",
         opt_student: "Student",
         lbl_sex: "Sex:",
+        opt_select_gender: "Select...",
         lbl_male: "Male",
         lbl_female: "Female",
+        lbl_prefer_not_say: "Prefer not to say",
         lbl_age: "Age:",
         opt_sel_age: "Select Age...",
         opt_18_below: "18 and below",
@@ -6301,8 +6262,10 @@ const i18n = {
         opt_gov: "Gobyerno",
         opt_student: "Estudyante",
         lbl_sex: "Kasarian:",
+        opt_select_gender: "Pumili...",
         lbl_male: "Lalaki",
         lbl_female: "Babae",
+        lbl_prefer_not_say: "Mas gustong hindi sabihin",
         lbl_age: "Edad:",
         opt_sel_age: "Pumili ng Edad...",
         opt_18_below: "18 pababa",
@@ -6578,7 +6541,7 @@ function renderReviewSummary() {
     document.getElementById('rv-name').textContent = val('input[name="respondent_name"]').trim() || 'Anonymous';
     document.getElementById('rv-email').textContent = val('input[name="email"]') || '—';
     document.getElementById('rv-clienttype').textContent = selectedText('select[name="client_type"]');
-    document.getElementById('rv-gender').textContent = checkedLabelText('gender');
+    document.getElementById('rv-gender').textContent = selectedText('select[name="gender"]');
     document.getElementById('rv-age').textContent = selectedText('select[name="age"]');
     document.getElementById('rv-date').textContent = val('input[name="survey_date"]') || '—';
     document.getElementById('rv-office-visited-time').textContent = formatDateTimeForDisplay(val('input[name="office_visited_time"]'));

@@ -1335,7 +1335,7 @@ function escapeHtml(str) {
 // (invalid values fall through to the safe 'Not Specified' default) instead
 // of trying to escape "/" as a workaround.
 const VALID_AGE_BRACKETS = new Set(['18 and below', '19-24', '25-39', '40-59', '60 and above']);
-const VALID_GENDERS = new Set(['Male', 'Female']);
+const VALID_GENDERS = new Set(['Male', 'Female', 'Prefer not to say']);
 const VALID_REGIONS = new Set([
     'NCR - National Capital Region', 'CAR - Cordillera Administrative Region',
     'Region I - Ilocos Region', 'Region II - Cagayan Valley', 'Region III - Central Luzon',
