@@ -774,12 +774,16 @@
            home content ends for one-tap access without hunting for the menu. */
         .home-cta { margin-top: 2.25rem; padding-top: 2rem; border-top: 1px solid var(--line-soft); }
         .home-cta-btn {
-            display: inline-flex; align-items: center; gap: 0.6rem;
-            padding: 0.85rem 2.25rem; border-radius: 50px; font-weight: 700;
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.6rem 1.6rem; border-radius: 50px; font-weight: 700;
+            font-size: 0.95rem;
             box-shadow: 0 10px 26px -10px rgba(37,84,199,0.55);
             transition: box-shadow .25s ease, transform .25s ease;
         }
         .home-cta-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 32px -10px rgba(37,84,199,0.65); }
+        @media (max-width: 575.98px) {
+            .home-cta-btn { padding: 0.55rem 1.35rem; font-size: 0.88rem; }
+        }
 
         /* ---- Entrance animation — staggered fade + rise for hero and cards ---- */
         .home-anim { opacity: 0; animation: homeFadeUp .25s ease-out forwards; }
@@ -2778,7 +2782,7 @@
             </div>
 
             <div class="home-cta text-center home-anim" style="animation-delay:0.85s">
-                <button type="button" class="btn btn-primary btn-lg home-cta-btn" onclick="return switchView('survey');">
+                <button type="button" class="btn btn-primary home-cta-btn" onclick="return switchView('survey');">
                     <i class="bi bi-clipboard2-check-fill"></i> <span data-i18n="home_cta_btn">Take Survey</span>
                 </button>
             </div>
