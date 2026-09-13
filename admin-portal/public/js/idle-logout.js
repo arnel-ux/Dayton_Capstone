@@ -18,9 +18,35 @@
         timer = setTimeout(doLogout, IDLE_LIMIT_MS);
     }
 
-    ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(function (evt) {
-        window.addEventListener(evt, resetTimer, { passive: true });
+    // Capture phase so activity is still seen even if a component (modal,
+    // dropdown, data table, etc.) calls stopPropagation() on the bubble
+    // phase, and so scroll events inside inner scrollable containers (which
+    // don't bubble to window at all) are still caught.
+    [
+        'mousemove', 'mousedown', 'keydown', 'scroll', 'wheel',
+        'touchstart', 'touchmove', 'pointerdown', 'pointermove',
+        'click', 'input'
+    ].forEach(function (evt) {
+        document.addEventListener(evt, resetTimer, { passive: true, capture: true });
     });
+
+    // Any network request the admin's own actions trigger (saving a form,
+    // loading a record, etc.) also counts as activity, even during stretches
+    // with no mouse/keyboard input in between.
+    if (window.fetch) {
+        var originalFetch = window.fetch;
+        window.fetch = function () {
+            resetTimer();
+            return originalFetch.apply(this, arguments);
+        };
+    }
+    if (window.XMLHttpRequest) {
+        var originalOpen = window.XMLHttpRequest.prototype.open;
+        window.XMLHttpRequest.prototype.open = function () {
+            resetTimer();
+            return originalOpen.apply(this, arguments);
+        };
+    }
 
     resetTimer();
 })();
