@@ -11,12 +11,21 @@
 // matched — see splitTopic below). Every topic here has "General" listed
 // first, representing exactly that "topic matched, no specific item" case,
 // EXCEPT "Transaction" (whose three subtopics are already General/Slow/Fast
-// by design — see topic_common.py's _transaction_subtopic) and "Unclassified"
-// (whose one subtopic, "No Meaningful Feedback", is not a "General" case at
-// all). The topic names and item labels below are kept textually in sync
-// with topic_common.py's candidate_topics/TOPIC_ITEM_KEYWORDS by hand, since
-// Python and Node can't literally share one source file across the language
-// boundary — if the Python taxonomy changes, update this file to match.
+// by design — see topic_common.py's _transaction_subtopic) and "No Feedback"
+// (whose one subtopic is also "No Feedback" — a comment that has nothing
+// meaningful to classify, not a "General" case at all). The topic names and
+// item labels below are kept textually in sync with topic_common.py's
+// candidate_topics/TOPIC_ITEM_KEYWORDS by hand, since Python and Node can't
+// literally share one source file across the language boundary — if the
+// Python taxonomy changes, update this file to match.
+//
+// Both the Topic and Subtopic dropdowns also carry a trailing "Custom" entry
+// (appended at render time, not stored in this object — see
+// survey-records.ejs's populateSelect) that swaps the <select> for a free-text
+// input, letting an admin type any topic/subtopic that isn't in this list.
+// The PATCH /api/admin/survey-response/:id/analysis endpoint accepts any
+// non-empty topic/subtopic string (within column length limits) for exactly
+// this reason — it does not require the pair to appear together here.
 const TOPIC_TAXONOMY = {
     "Queueing and Waiting Time": ["General", "Numbering System", "Long Lines"],
     "Transaction": ["General", "Slow", "Fast"],
@@ -42,30 +51,56 @@ const TOPIC_TAXONOMY = {
     "Guidance and Counseling Services": ["General"],
     "Scholarship and Financial Assistance": ["General", "Financial Assistance/Grants-in-Aid", "Scholarship Application/Grant"],
     "General Feedback": ["General"],
-    "Unclassified": ["No Meaningful Feedback"],
+    "No Feedback": ["No Feedback"],
 };
 
-const SENTIMENT_VALUES = ["Positive", "Neutral", "Negative"];
+const SENTIMENT_VALUES = ["Positive", "Neutral", "Negative", "No Sentiment"];
 
 // Splits a stored "{Topic} - {Item}" (or bare "{Topic}") string into
 // { topic, subtopic } for display. A bare topic (no " - Item" suffix) means
 // no specific item matched, which maps to the "General" subtopic — except
-// "Unclassified", whose bare form always pairs with "No Meaningful Feedback"
+// "No Feedback", whose bare form always pairs with the "No Feedback" subtopic
 // (there's no "General" case for it), and "General Feedback" itself, whose
 // only subtopic is "General".
+//
+// "Unclassified" / "Unclassified - No Meaningful Feedback" are normalized to
+// "No Feedback" / "No Feedback" here too — that was this topic's name before
+// it was renamed to match the "No Feedback" wording used everywhere else in
+// the admin UI. Rows classified before the rename still hold the old string
+// in the database, and this keeps them displaying correctly forever without
+// a data migration.
 function splitTopic(topicString) {
     if (!topicString) return { topic: null, subtopic: null };
     const sepIndex = topicString.indexOf(" - ");
     if (sepIndex === -1) {
-        if (topicString === "Unclassified") {
-            return { topic: "Unclassified", subtopic: "No Meaningful Feedback" };
+        if (topicString === "Unclassified" || topicString === "No Feedback") {
+            return { topic: "No Feedback", subtopic: "No Feedback" };
         }
         return { topic: topicString, subtopic: "General" };
     }
-    return {
-        topic: topicString.slice(0, sepIndex),
-        subtopic: topicString.slice(sepIndex + 3),
-    };
+    let topic = topicString.slice(0, sepIndex);
+    let subtopic = topicString.slice(sepIndex + 3);
+    if (topic === "Unclassified") {
+        topic = "No Feedback";
+        subtopic = "No Feedback";
+    }
+    return { topic, subtopic };
 }
 
-module.exports = { TOPIC_TAXONOMY, SENTIMENT_VALUES, splitTopic };
+// Inverse of splitTopic: recombines an (admin-overridden) topic/subtopic pair
+// back into the same "{Topic} - {Item}" storage format the AI classifier
+// uses, so report/dashboard queries that group or display by the raw topic
+// string stay consistent whether a row was AI-classified or admin-corrected.
+// A null/undefined subtopic, or the "General" subtopic, collapses to the bare
+// topic — mirroring splitTopic's bare-form handling above — EXCEPT
+// "Transaction" (whose raw AI form always spells out "Transaction - General",
+// never bare — see _transaction_subtopic) and "No Feedback" (whose only
+// subtopic, "No Feedback", is itself the bare form).
+function combineTopic(topic, subtopic) {
+    if (!topic) return null;
+    if (topic === "No Feedback") return "No Feedback";
+    if (topic !== "Transaction" && (!subtopic || subtopic === "General")) return topic;
+    return `${topic} - ${subtopic}`;
+}
+
+module.exports = { TOPIC_TAXONOMY, SENTIMENT_VALUES, splitTopic, combineTopic };

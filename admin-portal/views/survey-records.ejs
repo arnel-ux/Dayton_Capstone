@@ -773,6 +773,7 @@
 
     function sentimentBadgeClass(sentiment) {
         const lower = (sentiment || '').toLowerCase();
+        if (lower === 'no sentiment') return 'bg-sentiment-none';
         if (lower.includes('positive')) return 'bg-sentiment-positive';
         if (lower.includes('negative')) return 'bg-sentiment-negative';
         return 'bg-sentiment-neutral';
@@ -789,7 +790,7 @@
     // server, this is cosmetic only.
     function topicBadgeClass(topic) {
         const lower = (topic || '').toLowerCase();
-        if (lower.startsWith('unclassified')) return 'bg-unclassified';
+        if (lower.startsWith('unclassified') || lower.startsWith('no feedback')) return 'bg-unclassified';
         if (lower.includes('restroom') || lower.includes('cleanliness')) return 'bg-cr';
         if (lower.includes('aircon') || lower.includes('cooling')) return 'bg-aircon';
         if (lower.includes('facility') || lower.includes('equipment') || lower.includes('furniture') || lower.includes('seating') || lower.includes('power') || lower.includes('lighting')) return 'bg-facility';
@@ -807,21 +808,54 @@
         if (selectedValue && options.includes(selectedValue)) selectEl.value = selectedValue;
     }
 
-    // Resets the three <select> elements to exactly currentAnalysis — called
-    // every time "Edit Analysis" is opened, so a previously-cancelled,
-    // never-saved edit can never resurface.
+    // Shows/hides a topic/subtopic "Custom" free-text input to match its
+    // <select>'s current value, pre-filling it with `value` when the select
+    // just landed on "Custom" because a saved override doesn't match any
+    // known taxonomy entry (an admin-typed custom value from a prior save).
+    function syncCustomInput(inputEl, isCustom, value) {
+        inputEl.style.display = isCustom ? '' : 'none';
+        inputEl.value = isCustom ? (value || '') : '';
+    }
+
+    // Resets the three <select> elements (plus their "Custom" text inputs) to
+    // exactly currentAnalysis — called every time "Edit Analysis" is opened,
+    // so a previously-cancelled, never-saved edit can never resurface.
     function resetAnalysisEditor() {
         const sentimentSelect = document.getElementById('analysisSentimentSelect');
         const topicSelect = document.getElementById('analysisTopicSelect');
         const subtopicSelect = document.getElementById('analysisSubtopicSelect');
+        const topicCustomInput = document.getElementById('analysisTopicCustomInput');
+        const subtopicCustomInput = document.getElementById('analysisSubtopicCustomInput');
         if (!sentimentSelect || !topicSelect || !subtopicSelect || !currentAnalysis) return;
 
         populateSelect(sentimentSelect, SENTIMENT_VALUES, currentAnalysis.sentiment);
-        populateSelect(topicSelect, Object.keys(TOPIC_TAXONOMY), currentAnalysis.topic);
-        populateSelect(subtopicSelect, TOPIC_TAXONOMY[topicSelect.value] || [], currentAnalysis.subtopic);
+
+        const topicOptions = [...Object.keys(TOPIC_TAXONOMY), 'Custom'];
+        populateSelect(topicSelect, topicOptions, currentAnalysis.topic);
+        // A saved topic that isn't one of the known taxonomy keys is itself an
+        // admin-typed custom value — land the select on "Custom" and show it,
+        // rather than silently falling back to the first option in the list.
+        if (currentAnalysis.topic && !topicOptions.includes(currentAnalysis.topic)) {
+            topicSelect.value = 'Custom';
+        }
+        syncCustomInput(topicCustomInput, topicSelect.value === 'Custom', currentAnalysis.topic);
+
+        const subtopicOptions = [...(TOPIC_TAXONOMY[topicSelect.value] || []), 'Custom'];
+        populateSelect(subtopicSelect, subtopicOptions, currentAnalysis.subtopic);
+        if (currentAnalysis.subtopic && !subtopicOptions.includes(currentAnalysis.subtopic)) {
+            subtopicSelect.value = 'Custom';
+        }
+        syncCustomInput(subtopicCustomInput, subtopicSelect.value === 'Custom', currentAnalysis.subtopic);
 
         topicSelect.onchange = () => {
-            populateSelect(subtopicSelect, TOPIC_TAXONOMY[topicSelect.value] || [], null);
+            const isCustomTopic = topicSelect.value === 'Custom';
+            syncCustomInput(topicCustomInput, isCustomTopic, '');
+            populateSelect(subtopicSelect, [...(isCustomTopic ? [] : (TOPIC_TAXONOMY[topicSelect.value] || [])), 'Custom'], null);
+            syncCustomInput(subtopicCustomInput, false, '');
+        };
+
+        subtopicSelect.onchange = () => {
+            syncCustomInput(subtopicCustomInput, subtopicSelect.value === 'Custom', '');
         };
     }
 
@@ -851,11 +885,28 @@
         const sentimentSelect = document.getElementById('analysisSentimentSelect');
         const topicSelect = document.getElementById('analysisTopicSelect');
         const subtopicSelect = document.getElementById('analysisSubtopicSelect');
+        const topicCustomInput = document.getElementById('analysisTopicCustomInput');
+        const subtopicCustomInput = document.getElementById('analysisSubtopicCustomInput');
         const saveBtn = document.getElementById('analysisSaveBtn');
+
+        const isCustomTopic = topicSelect.value === 'Custom';
+        const isCustomSubtopic = subtopicSelect.value === 'Custom';
+        const topicValue = isCustomTopic ? topicCustomInput.value.trim() : topicSelect.value;
+        const subtopicValue = isCustomSubtopic ? subtopicCustomInput.value.trim() : subtopicSelect.value;
+
+        if (isCustomTopic && !topicValue) {
+            AppAlert.toast('error', 'Please type a custom topic.');
+            return;
+        }
+        if (isCustomSubtopic && !subtopicValue) {
+            AppAlert.toast('error', 'Please type a custom subtopic.');
+            return;
+        }
+
         const payload = {
             sentiment: sentimentSelect.value,
-            topic: topicSelect.value,
-            subtopic: subtopicSelect.value,
+            topic: topicValue,
+            subtopic: subtopicValue,
         };
 
         saveBtn.disabled = true;
@@ -1015,10 +1066,12 @@
                             <div class="result-item">
                                 <div class="label">Topic</div>
                                 <select class="form-select form-select-sm" id="analysisTopicSelect"></select>
+                                <input type="text" class="form-control form-control-sm mt-1" id="analysisTopicCustomInput" placeholder="Type a custom topic" style="display:none;">
                             </div>
                             <div class="result-item">
                                 <div class="label">Subtopic</div>
                                 <select class="form-select form-select-sm" id="analysisSubtopicSelect"></select>
+                                <input type="text" class="form-control form-control-sm mt-1" id="analysisSubtopicCustomInput" placeholder="Type a custom subtopic" style="display:none;">
                             </div>
                         </div>
                         <div id="analysisEditActions" class="d-flex gap-2 justify-content-end mt-3" style="display:none;">

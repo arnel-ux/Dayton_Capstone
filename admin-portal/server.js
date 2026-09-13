@@ -18,9 +18,26 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const multer = require('multer');
-const { TOPIC_TAXONOMY, SENTIMENT_VALUES, splitTopic } = require('./shared/topicTaxonomy');
+const { TOPIC_TAXONOMY, SENTIMENT_VALUES, splitTopic, combineTopic } = require('./shared/topicTaxonomy');
 const app = express();
 const port = 3000;
+
+// SQL mirrors of shared/topicTaxonomy.js's combineTopic()/effective-sentiment
+// rule, for the handful of report/dashboard queries below that GROUP BY or
+// otherwise need the admin-corrected topic/sentiment at the database level
+// rather than after fetching rows into JS. Keep in sync with combineTopic —
+// "No Feedback" has no "General"-style bare/item split (its one subtopic IS
+// "No Feedback"), everything else collapses to the bare topic when its
+// subtopic is missing or "General".
+const EFFECTIVE_TOPIC_SQL = `
+    CASE
+        WHEN s.topic_override IS NULL THEN s.topic
+        WHEN s.topic_override = 'No Feedback' THEN 'No Feedback'
+        WHEN s.topic_override <> 'Transaction' AND (s.subtopic_override IS NULL OR s.subtopic_override = 'General') THEN s.topic_override
+        ELSE CONCAT(s.topic_override, ' - ', s.subtopic_override)
+    END
+`;
+const EFFECTIVE_SENTIMENT_SQL = `COALESCE(s.sentiment_override, s.sentiment)`;
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -5693,7 +5710,7 @@ function loadDashboardData(req, callback) {
                         const topOffices = rankedOffices.slice(0, 5);
                         const bottomOffices = rankedOffices.slice(-5).reverse().filter(o => !topOffices.includes(o));
 
-                        const sentimentQuery = `SELECT sentiment, COUNT(*) AS c FROM survey_responses s${dateWhere} GROUP BY sentiment`;
+                        const sentimentQuery = `SELECT ${EFFECTIVE_SENTIMENT_SQL} AS sentiment, COUNT(*) AS c FROM survey_responses s${dateWhere} GROUP BY ${EFFECTIVE_SENTIMENT_SQL}`;
                         db.query(sentimentQuery, dateParams, (err, sentimentRows) => {
                             logErr('sentiment breakdown')(err);
                             const sentimentBreakdown = { Positive: 0, Neutral: 0, Negative: 0 };
@@ -5705,10 +5722,10 @@ function loadDashboardData(req, callback) {
                             const sentimentTotal = sentimentBreakdown.Positive + sentimentBreakdown.Neutral + sentimentBreakdown.Negative;
 
                             const topicsQuery = `
-                                SELECT topic, COUNT(*) AS c
+                                SELECT ${EFFECTIVE_TOPIC_SQL} AS topic, COUNT(*) AS c
                                 FROM survey_responses s
-                                ${dateWhere ? `${dateWhere} AND` : 'WHERE'} topic IS NOT NULL AND topic <> ''
-                                GROUP BY topic ORDER BY c DESC LIMIT 6
+                                ${dateWhere ? `${dateWhere} AND` : 'WHERE'} (s.topic_override IS NOT NULL OR (s.topic IS NOT NULL AND s.topic <> ''))
+                                GROUP BY ${EFFECTIVE_TOPIC_SQL} ORDER BY c DESC LIMIT 6
                             `;
 
                             db.query(topicsQuery, dateParams, (err, topicRows) => {
@@ -5721,7 +5738,7 @@ function loadDashboardData(req, callback) {
                                 }));
 
                                 const recentQuery = `
-                                    SELECT s.id, o.office_name, o.cluster_name, s.sentiment, s.topic, s.created_at
+                                    SELECT s.id, o.office_name, o.cluster_name, ${EFFECTIVE_SENTIMENT_SQL} AS sentiment, ${EFFECTIVE_TOPIC_SQL} AS topic, s.created_at
                                     FROM survey_responses s
                                     JOIN offices o ON o.id = s.office_id
                                     ${dateWhere}
@@ -6068,7 +6085,7 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
         const commentsWhere = conditions.length
             ? ` AND ${conditions.join(' AND ')}`
             : '';
-        const commentsQuery = `SELECT s.comments, s.sentiment, s.topic FROM survey_responses s LEFT JOIN offices o ON s.office_id = o.id WHERE s.comments IS NOT NULL AND TRIM(s.comments) != ''${commentsWhere}`;
+        const commentsQuery = `SELECT s.comments, ${EFFECTIVE_SENTIMENT_SQL} AS sentiment, ${EFFECTIVE_TOPIC_SQL} AS topic FROM survey_responses s LEFT JOIN offices o ON s.office_id = o.id WHERE s.comments IS NOT NULL AND TRIM(s.comments) != ''${commentsWhere}`;
 
         db.query(commentsQuery, queryParams, (err, commentsResult) => {
             res.json({
@@ -6199,7 +6216,7 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                     let badgeClass = 'bg-general';
                     const topicLower = (effectiveTopic || '').toLowerCase();
                     if (!hasFeedback) badgeClass = 'bg-no-feedback';
-                    else if (topicLower.startsWith('unclassified')) badgeClass = 'bg-unclassified';
+                    else if (topicLower.startsWith('unclassified') || topicLower.startsWith('no feedback')) badgeClass = 'bg-unclassified';
                     else if (topicLower.includes('restroom') || topicLower.includes('cleanliness')) badgeClass = 'bg-cr';
                     else if (topicLower.includes('aircon') || topicLower.includes('cooling')) badgeClass = 'bg-aircon';
                     else if (
@@ -6280,13 +6297,22 @@ app.patch('/api/admin/survey-response/:id/analysis', ensureAdminAuth, async (req
         return res.status(400).json({ success: false, message: 'Invalid survey response id.' });
     }
 
-    const { sentiment, topic, subtopic } = req.body || {};
-    if (!SENTIMENT_VALUES.includes(sentiment)) {
+    if (!SENTIMENT_VALUES.includes(req.body?.sentiment)) {
         return res.status(400).json({ success: false, message: 'Invalid sentiment value.' });
     }
-    const allowedSubtopics = TOPIC_TAXONOMY[topic];
-    if (!allowedSubtopics || !allowedSubtopics.includes(subtopic)) {
-        return res.status(400).json({ success: false, message: 'Invalid topic/subtopic combination.' });
+    // Topic/subtopic are intentionally NOT restricted to TOPIC_TAXONOMY's
+    // known pairs — the modal's "Custom" option lets an admin type any
+    // topic/subtopic text, so this only guards against empty/oversized input
+    // (matching the topic_override/subtopic_override column widths) rather
+    // than a fixed allowlist.
+    const sentiment = req.body.sentiment;
+    const topic = typeof req.body.topic === 'string' ? req.body.topic.trim() : '';
+    const subtopic = typeof req.body.subtopic === 'string' ? req.body.subtopic.trim() : '';
+    if (!topic || topic.length > 150) {
+        return res.status(400).json({ success: false, message: 'Please enter a topic between 1 and 150 characters.' });
+    }
+    if (!subtopic || subtopic.length > 100) {
+        return res.status(400).json({ success: false, message: 'Please enter a subtopic between 1 and 100 characters.' });
     }
 
     try {
@@ -6857,7 +6883,7 @@ app.get('/api/public-dashboard', (req, res) => {
                 o.cluster_name,
                 o.office_name,
                 s.sqd1, s.sqd2, s.sqd3, s.sqd4, s.sqd5, s.sqd6, s.sqd7, s.sqd8,
-                s.cc1, s.period_year_quarter, s.sentiment
+                s.cc1, s.period_year_quarter, ${EFFECTIVE_SENTIMENT_SQL} AS sentiment
             FROM survey_responses s
             JOIN offices o ON s.office_id = o.id
             WHERE o.is_archived = 0 AND s.canonical_status = 'canonical'

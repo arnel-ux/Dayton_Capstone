@@ -241,13 +241,13 @@ CASES.append(OFFICE_HINT_CASE)
 # =============================================================================
 CASES += [
     # Gibberish / non-feedback — must NOT become "General Feedback".
-    ("XZ", "Neutral", "Unclassified - No Meaningful Feedback", None),
-    ("hahhdahsdhas", "Neutral", "Unclassified - No Meaningful Feedback", None),
-    ("Hfrrg", "Neutral", "Unclassified - No Meaningful Feedback", None),
+    ("XZ", "Neutral", "No Feedback - No Feedback", None),
+    ("hahhdahsdhas", "Neutral", "No Feedback - No Feedback", None),
+    ("Hfrrg", "Neutral", "No Feedback - No Feedback", None),
     # Greetings — valid text, but not service feedback.
-    ("Hello po", "Neutral", "Unclassified - No Meaningful Feedback", None),
-    ("Hi", "Neutral", "Unclassified - No Meaningful Feedback", None),
-    ("Hi po", "Neutral", "Unclassified - No Meaningful Feedback", None),
+    ("Hello po", "Neutral", "No Feedback - No Feedback", None),
+    ("Hi", "Neutral", "No Feedback - No Feedback", None),
+    ("Hi po", "Neutral", "No Feedback - No Feedback", None),
     # Transaction — General only when no speed/duration evidence is present.
     ("Hindi maayos yung transaction", "Negative", "Transaction - General", None),
     ("Maayos yung transaction", "Positive", "Transaction - General", None),
