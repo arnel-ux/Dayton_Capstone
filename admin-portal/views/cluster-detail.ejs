@@ -50,17 +50,34 @@
             background: white; border-radius: 16px; padding: 18px 22px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.03); margin-top: 20px;
         }
-        .filter-bar .filter-group { display: flex; flex-direction: column; gap: 4px; flex: 0 1 auto; }
-        .filter-bar label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
-        .filter-bar .btn-generate { margin-left: auto; flex-shrink: 0; align-self: flex-end; }
-        /* Fixed (not min-) width keeps long office names from auto-expanding the
-           <select> and pushing the Generate Report button onto its own line. */
+        .filter-bar { gap: 12px 16px; }
+        /* Four dropdowns share the row evenly and shrink together as it narrows,
+           instead of each holding a fixed width and shoving the button onto its
+           own line. min-width: 0 lets them actually shrink inside the flex row. */
+        .filter-bar .filter-group { display: flex; flex-direction: column; gap: 4px; flex: 1 1 180px; min-width: 0; }
+        .filter-bar label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; white-space: nowrap; }
         .filter-bar .filter-group select {
-            width: 230px;
+            width: 100%;
             max-width: 100%;
             text-overflow: ellipsis;
             white-space: nowrap;
             overflow: hidden;
+        }
+        /* Compact button — it's the one control that doesn't need the row's width,
+           so it stays a fixed, small size at the end of the filters. */
+        .filter-bar .btn-generate {
+            flex: 0 0 auto;
+            align-self: flex-end;
+            padding: 0.375rem 0.85rem;
+            font-size: 0.78rem;
+            font-weight: 600;
+            border-radius: 10px;
+            white-space: nowrap;
+        }
+        .filter-bar .btn-generate i { font-size: 0.75rem; }
+        @media (max-width: 768px) {
+            .filter-bar .filter-group { flex: 1 1 100%; }
+            .filter-bar .btn-generate { width: 100%; }
         }
 
         /* Unconditional (not just @media print) so html2pdf's 'css' pagebreak
@@ -150,13 +167,22 @@
                     </div>
                     <div class="filter-group">
                         <label for="officeFilter">Select Office</label>
-                        <select id="officeFilter" name="office" class="form-select form-select-sm" title="Filter by office">
+                        <select id="officeFilter" name="office" class="form-select form-select-sm" title="Filter by office" onchange="populateServiceFilter()">
                             <option value="" selected disabled>Select Office</option>
                             <% if (typeof officesInCluster !== 'undefined') { %>
                                 <% officesInCluster.forEach(o => { %>
-                                    <option value="<%= o.id %>"><%= o.office_name %></option>
+                                    <%# data-report-name is the office's spelled-out name — the
+                                        dropdown keeps showing the short one staff recognise, but
+                                        the generated report prints this. %>
+                                    <option value="<%= o.id %>" data-report-name="<%= o.report_name || o.office_name %>"><%= o.office_name %></option>
                                 <% }) %>
                             <% } %>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="serviceFilter">Select Service</label>
+                        <select id="serviceFilter" class="form-select form-select-sm" title="Filter by service availed" disabled>
+                            <option value="" selected>Select Office first</option>
                         </select>
                     </div>
                     <div class="filter-group">
@@ -166,8 +192,8 @@
                             <option value="respondents">Number of Respondents</option>
                         </select>
                     </div>
-                    <button type="button" class="btn btn-primary btn-generate" onclick="renderOfficeReport()" title="Generate a report based on the selected filters">
-                        <i class="fas fa-file-invoice me-2"></i> Generate Report
+                    <button type="button" class="btn btn-primary btn-sm btn-generate" onclick="renderOfficeReport()" title="Generate a report based on the selected filters">
+                        <i class="fas fa-file-invoice me-1"></i> Generate
                     </button>
                 </form>
 
@@ -213,55 +239,23 @@
                         </div>
 
                         <div id="officeReportContentToExport">
-                        <!-- PAGE 1: NUMERICAL SUMMARY -->
+                        <!-- PAGE 1: NUMBER OF RESPONDENTS - the SQD 0 / SQD 1-8 rating-bucket
+                             breakdown. It opens the packet; the Percentage/Rating scorecard and
+                             the AI feedback comments follow on their own pages. -->
                         <div class="report-container" style="margin-bottom: 30px;">
-                            <%- include('layout/report-header', { showSQDFormCode: false, docCode: 'CSPC-F-CQA-06', bottomId: 'officeReportHeaderBottom1' }) %>
+                            <%- include('layout/report-header', { showSQDFormCode: false, bottomId: 'officeReportHeaderBottom1' }) %>
 
                             <div class="sqd-report-title" id="officeReportMainTitle1">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
                             <p class="sqd-office-name" id="officeReportTitle1"></p>
+                            <p class="sqd-service-line" id="officeReportService1"></p>
 
                             <div class="sqd-meta-block">
                                 <div class="sqd-meta-row"><span class="sqd-meta-label">Period Covered:</span> <span class="sqd-meta-value" id="officeReportPeriod1"></span></div>
                                 <div class="sqd-meta-row"><span class="sqd-meta-label">Number of Respondents:</span> <span class="sqd-meta-value" id="officeReportTotal1">0</span></div>
                             </div>
 
-                            <!-- SQD Result Report: the official Percentage/Rating scorecard
-                                 (live from /api/report-data's sqd1..sqd8/overall_score %s). -->
-                            <div id="percentageReportTable">
-                                <table class="report-table">
-                                    <thead>
-                                        <tr class="header-blue">
-                                            <th rowspan="2" style="width: 60%;">SERVICE QUALITY DIMENSIONS<br><span style="font-weight: normal;">(Mga Dimensyon sa Kalidad na Serbisyo)</span></th>
-                                            <th colspan="2">COMPUTATION</th>
-                                        </tr>
-                                        <tr class="header-blue">
-                                            <th style="width: 20%;">PERCENTAGE</th>
-                                            <th style="width: 20%;">RATING</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr><td>1. Responsiveness (Pagtugon)/(Pagsimbag)</td><td class="text-center" id="off_sqd1_score">0.00%</td><td class="text-center" id="off_sqd1_interp">Poor</td></tr>
-                                        <tr><td>2. Reliability (Quality)/Mapagkakatiwalaan</td><td class="text-center" id="off_sqd2_score">0.00%</td><td class="text-center" id="off_sqd2_interp">Poor</td></tr>
-                                        <tr><td>3. Access & Facilities/Akses/Gamit at Pasilidad</td><td class="text-center" id="off_sqd3_score">0.00%</td><td class="text-center" id="off_sqd3_interp">Poor</td></tr>
-                                        <tr><td>4. Communication/Komunikasyon</td><td class="text-center" id="off_sqd4_score">0.00%</td><td class="text-center" id="off_sqd4_interp">Poor</td></tr>
-                                        <tr><td>5. Costs (Gastos)/ Kantidad</td><td class="text-center" id="off_sqd5_score">0.00%</td><td class="text-center" id="off_sqd5_interp">Poor</td></tr>
-                                        <tr><td>6. Integrity/(Integredad)</td><td class="text-center" id="off_sqd6_score">0.00%</td><td class="text-center" id="off_sqd6_interp">Poor</td></tr>
-                                        <tr><td>7. Assurance (Kasiguruhan)</td><td class="text-center" id="off_sqd7_score">0.00%</td><td class="text-center" id="off_sqd7_interp">Poor</td></tr>
-                                        <tr><td>8. Outcome (Resulta)</td><td class="text-center" id="off_sqd8_score">0.00%</td><td class="text-center" id="off_sqd8_interp">Poor</td></tr>
-                                        <tr class="header-blue fw-bold">
-                                            <td class="text-end" style="padding-right: 20px;">OVERALL SCORE</td>
-                                            <td class="text-center" id="off_overall_score">0.00%</td>
-                                            <td class="text-center" id="off_overall_interp">POOR</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                                <!-- Interpretation of Results now lives in the combined
-                                     .sqd-report-footer-layout below (SQD report only) instead
-                                     of a separate floating block here. -->
-                            </div>
-
-                            <!-- "Number of Respondents" + one office selected: SQD 0 / SQD 1-8
-                                 rating-bucket breakdown (live from /api/report-data). -->
+                            <!-- One office selected: SQD 0 / SQD 1-8 rating-bucket breakdown
+                                 (live from /api/report-data). -->
                             <div id="sqdReportTables" class="d-none">
                                 <div class="section-title">SQD 0 Results</div>
                                 <table class="report-table">
@@ -300,18 +294,11 @@
                                 </table>
                             </div>
 
-                            <!-- "Number of Respondents" + ALL OFFICES: one full SQD 0 / SQD 1-8
-                                 section per office in the cluster (from /api/report-data-by-cluster),
-                                 built client-side into this container by renderMultiOfficeReport(). -->
+                            <!-- ALL OFFICES: one full SQD 0 / SQD 1-8 section per office in the
+                                 cluster (from /api/report-data-by-cluster), built client-side into
+                                 this container by renderMultiOfficeReport(). -->
                             <div id="multiOfficeReportBody" class="d-none"></div>
 
-                            <!-- SQD Result Report only: the official lower-section layout
-                                 (Prepared/Interpretation/Noted/Reviewed grid). "Number of
-                                 Respondents" keeps the plain two-column footer below instead —
-                                 it isn't the SQD report, so it doesn't get this template. -->
-                            <div id="officeReportSqdFooter1" class="d-none">
-                                <%- include('layout/sqd-report-footer') %>
-                            </div>
                             <div id="officeReportOldFooter1">
                                 <div class="signature-section">
                                     <div class="sig-block">
@@ -332,22 +319,78 @@
                                 </div>
                             </div>
 
-                            <!-- Effectivity/Rev./Page footer: only the SQD Result Report is CSPC's
-                                 official CSM survey result format that requires it — the "Number of
-                                 Respondents" report reuses this same page but must not show it, so
-                                 renderOfficeReport() toggles this wrapper's visibility by reportType
-                                 rather than hiding it globally. -->
+                            <!-- Effectivity/Rev./Page footer: part of CSPC's official CSM survey
+                                 result format, so renderOfficeReport() toggles this wrapper by
+                                 reportType rather than hiding it globally. -->
                             <div id="officeReportFooter1">
-                                <%- include('layout/report-footer', { pageLabel: 'Page 1 of 2', footerId: 'footerPageLabel1' }) %>
+                                <%- include('layout/report-footer', { pageLabel: 'Page 1 of 3', footerId: 'footerPageLabel1' }) %>
                             </div>
                         </div>
 
-                        <!-- PAGE 2: WRITTEN COMMENTS & AI ANALYTICS (SQD Result Report only) -->
+                        <!-- PAGE 2: SQD RESULT - the official Percentage/Rating scorecard, on its
+                             own sheet after the respondents breakdown. -->
+                        <div class="report-container page-break" id="reportPageSqd" style="margin-bottom: 30px;">
+                            <%- include('layout/report-header', { showSQDFormCode: true, docCode: 'CSPC-F-CQA-06' }) %>
+
+                            <div class="sqd-report-title">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
+                            <p class="sqd-office-name" id="officeReportTitleSqd"></p>
+                            <p class="sqd-service-line" id="officeReportServiceSqd"></p>
+
+                            <div class="sqd-meta-block">
+                                <div class="sqd-meta-row"><span class="sqd-meta-label">Period Covered:</span> <span class="sqd-meta-value" id="officeReportPeriodSqd"></span></div>
+                                <div class="sqd-meta-row"><span class="sqd-meta-label">Number of Respondents:</span> <span class="sqd-meta-value" id="officeReportTotalSqd">0</span></div>
+                            </div>
+
+                            <!-- SQD Result Report: the official Percentage/Rating scorecard
+                                 (live from /api/report-data's sqd1..sqd8/overall_score %s). -->
+                            <div id="percentageReportTable">
+                                <table class="report-table">
+                                    <thead>
+                                        <tr class="header-blue">
+                                            <th rowspan="2" style="width: 60%;">SERVICE QUALITY DIMENSIONS<br><span style="font-weight: normal;">(Mga Dimensyon sa Kalidad na Serbisyo)</span></th>
+                                            <th colspan="2">COMPUTATION</th>
+                                        </tr>
+                                        <tr class="header-blue">
+                                            <th style="width: 20%;">PERCENTAGE</th>
+                                            <th style="width: 20%;">RATING</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td>1. Responsiveness (Pagtugon)/(Pagsimbag)</td><td class="text-center" id="off_sqd1_score">0.00%</td><td class="text-center" id="off_sqd1_interp">Poor</td></tr>
+                                        <tr><td>2. Reliability (Quality)/Mapagkakatiwalaan</td><td class="text-center" id="off_sqd2_score">0.00%</td><td class="text-center" id="off_sqd2_interp">Poor</td></tr>
+                                        <tr><td>3. Access & Facilities/Akses/Gamit at Pasilidad</td><td class="text-center" id="off_sqd3_score">0.00%</td><td class="text-center" id="off_sqd3_interp">Poor</td></tr>
+                                        <tr><td>4. Communication/Komunikasyon</td><td class="text-center" id="off_sqd4_score">0.00%</td><td class="text-center" id="off_sqd4_interp">Poor</td></tr>
+                                        <tr><td>5. Costs (Gastos)/ Kantidad</td><td class="text-center" id="off_sqd5_score">0.00%</td><td class="text-center" id="off_sqd5_interp">Poor</td></tr>
+                                        <tr><td>6. Integrity/(Integredad)</td><td class="text-center" id="off_sqd6_score">0.00%</td><td class="text-center" id="off_sqd6_interp">Poor</td></tr>
+                                        <tr><td>7. Assurance (Kasiguruhan)</td><td class="text-center" id="off_sqd7_score">0.00%</td><td class="text-center" id="off_sqd7_interp">Poor</td></tr>
+                                        <tr><td>8. Outcome (Resulta)</td><td class="text-center" id="off_sqd8_score">0.00%</td><td class="text-center" id="off_sqd8_interp">Poor</td></tr>
+                                        <tr class="header-blue fw-bold">
+                                            <td class="text-end" style="padding-right: 20px;">OVERALL SCORE</td>
+                                            <td class="text-center" id="off_overall_score">0.00%</td>
+                                            <td class="text-center" id="off_overall_interp">POOR</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- The official lower-section layout (Prepared/Interpretation/
+                                 Noted/Reviewed grid) belongs to this scorecard page. -->
+                            <div id="officeReportSqdFooter1">
+                                <%- include('layout/sqd-report-footer') %>
+                            </div>
+
+                            <div id="officeReportFooterSqd">
+                                <%- include('layout/report-footer', { pageLabel: 'Page 2 of 3', footerId: 'footerPageLabelSqd' }) %>
+                            </div>
+                        </div>
+
+                        <!-- PAGE 3: WRITTEN COMMENTS & AI ANALYTICS (SQD Result Report only) -->
                         <div class="report-container page-break" id="reportPage2">
                             <%- include('layout/report-header', { showSQDFormCode: false }) %>
 
                             <div class="report-title">AI FEEDBACK SENTIMENT & TOPIC ANALYTICS</div>
                             <p class="office-title" id="officeReportTitle2"></p>
+                            <p class="sqd-service-line" id="officeReportService2"></p>
 
                             <div class="meta-info mt-4">
                                 <div><span>Period Covered:</span> <strong id="officeReportPeriod2"></strong></div>
@@ -410,6 +453,66 @@
         // DOMContentLoaded closure below) so the Number of Respondents report — built by
         // renderOfficeReport() further down — can reuse it without a second request.
         const currentData = <%- typeof data !== 'undefined' ? JSON.stringify(data) : '[]' %>;
+
+        // Every service offered by the offices in this cluster, grouped by office id,
+        // so "Select Service" can be refilled from the picked office without another
+        // request. Offices with no services row simply get an empty list and the
+        // dropdown stays on "All Services".
+        const OFFICE_SERVICES = (function () {
+            const rows = <%- typeof servicesInCluster !== 'undefined' ? JSON.stringify(servicesInCluster) : '[]' %>;
+            const map = {};
+            rows.forEach(r => {
+                const key = String(r.office_id);
+                (map[key] = map[key] || []).push(r.service_name);
+            });
+            return map;
+        })();
+
+        // Office names and service names are both long enough to blow the native
+        // <select> popup far past the filter bar (and past the page). Both lists
+        // get the same clipped label so the two dropdowns open at a consistent
+        // width; the untouched full text stays in the option's value and title.
+        const FILTER_LABEL_MAX = 44;
+        function clipFilterLabel(text) {
+            const str = String(text == null ? '' : text).trim();
+            return str.length > FILTER_LABEL_MAX ? str.slice(0, FILTER_LABEL_MAX - 1).trimEnd() + '…' : str;
+        }
+
+        // Applies that clipping to the server-rendered office options once, on load.
+        function clipOfficeFilterLabels() {
+            Array.from(document.getElementById('officeFilter').options).forEach(opt => {
+                if (!opt.value) return;
+                // Hovering shows the complete name, which is what the report prints —
+                // not just the unclipped version of the acronym shown in the list.
+                const full = (opt.dataset.reportName || opt.textContent).trim();
+                opt.title = full;
+                opt.textContent = clipFilterLabel(opt.textContent.trim());
+            });
+        }
+
+        // Refill "Select Service" for the office just picked. Kept as its own
+        // function (not an inline handler) so the initial render can call it too.
+        function populateServiceFilter() {
+            const officeId = document.getElementById('officeFilter').value;
+            const serviceSelect = document.getElementById('serviceFilter');
+            const services = OFFICE_SERVICES[String(officeId)] || [];
+
+            if (!officeId) {
+                serviceSelect.innerHTML = '<option value="" selected>Select Office first</option>';
+                serviceSelect.disabled = true;
+                return;
+            }
+
+            serviceSelect.disabled = false;
+            serviceSelect.innerHTML = '<option value="" selected>All Services</option>';
+            services.forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.title = name;
+                opt.textContent = clipFilterLabel(name);
+                serviceSelect.appendChild(opt);
+            });
+        }
 
         document.addEventListener("DOMContentLoaded", function() {
             Chart.register(ChartDataLabels);
@@ -518,6 +621,7 @@
 
             updateDashboardUI(currentData);
             renderChart(currentData);
+            clipOfficeFilterLabels();
         });
 
         // --- OFFICE-LEVEL REPORT (mirrors report.ejs's generateReport pipeline) ---
@@ -579,9 +683,13 @@
             const officeSelect = document.getElementById('officeFilter');
             const periodSelect = document.getElementById('periodCovered');
             const reportTypeSelect = document.getElementById('reportType');
+            const serviceSelect = document.getElementById('serviceFilter');
             const officeId = officeSelect.value;
             const periodCovered = periodSelect.value;
             const reportType = reportTypeSelect.value;
+            // Blank = every service the office offers; otherwise only the respondents
+            // who availed of this one service feed the report's computation.
+            const serviceAvailed = serviceSelect.value;
 
             // Reports are generated per individual office only — there is no
             // "All Offices" option in the dropdown any more, so bail out instead
@@ -591,66 +699,65 @@
                 return;
             }
 
-            const officeLabel = officeSelect.options[officeSelect.selectedIndex].text;
+            const selectedOfficeOption = officeSelect.options[officeSelect.selectedIndex];
+            // The report carries the office's complete name (data-report-name), never the
+            // acronym the dropdown shows nor its clipped label.
+            const officeLabel = (selectedOfficeOption.dataset.reportName
+                || selectedOfficeOption.title
+                || selectedOfficeOption.text).trim();
             const periodLabel = periodCovered
                 ? periodSelect.options[periodSelect.selectedIndex].text
                 : 'All Periods';
 
-            // Per the official CQA report template: "CLIENT SATISFACTION MEASUREMENT
-            // SURVEY RESULT" for the SQD Result Report, "NUMBER OF RESPONDENTS" for
-            // the respondents-count report — both sit above the CENTER FOR QUALITY
-            // ASSURANCE / office-name lines.
+            // Per the official CQA report template both reports print under the same
+            // heading — "CLIENT SATISFACTION MEASUREMENT SURVEY RESULT" — above the
+            // CENTER FOR QUALITY ASSURANCE / office-name lines. The respondents report
+            // no longer carries its own "NUMBER OF RESPONDENTS" heading.
             const mainTitleEl = document.getElementById('officeReportMainTitle1');
             mainTitleEl.classList.remove('d-none');
-            mainTitleEl.innerText = reportType === 'respondents'
-                ? 'NUMBER OF RESPONDENTS'
-                : 'CLIENT SATISFACTION MEASUREMENT SURVEY RESULT';
+            mainTitleEl.innerText = 'CLIENT SATISFACTION MEASUREMENT SURVEY RESULT';
             document.getElementById('officeReportTitle1').innerText = officeLabel;
+            document.getElementById('officeReportTitleSqd').innerText = officeLabel;
             document.getElementById('officeReportTitle2').innerText = officeLabel;
+            // Italic service line directly under the office name — names the service
+            // the figures below cover, or "All Services" when the office's whole
+            // service list is rolled up.
+            const serviceLabel = serviceAvailed || 'All Services';
+            ['officeReportService1', 'officeReportServiceSqd', 'officeReportService2']
+                .forEach(id => { document.getElementById(id).innerText = serviceLabel; });
             document.getElementById('officeReportPeriod1').innerText = periodLabel;
+            document.getElementById('officeReportPeriodSqd').innerText = periodLabel;
             document.getElementById('officeReportPeriod2').innerText = periodLabel;
 
-            // Written Comments & AI Analytics only exists alongside the SQD Result Report —
-            // Number of Respondents is a pure SQD-numbers packet, single office or all of them.
-            const hasPage2 = reportType !== 'respondents';
-            document.getElementById('reportPage2').classList.toggle('d-none', !hasPage2);
-            // Page 1's footer label follows suit — "Page 1 of 2" when the AI Feedback page
-            // is also printing, "Page 1 of 1" when this is the only page.
-            document.getElementById('footerPageLabel1').innerText = hasPage2 ? 'Page 1 of 2' : 'Page 1 of 1';
+            // The SQD Result Report prints as a three-page packet:
+            //   page 1 — Number of Respondents (SQD 0 / SQD 1-8 bucket breakdown)
+            //   page 2 — SQD Result (Percentage/Rating scorecard)
+            //   page 3 — Written Comments & AI Analytics
+            // "Number of Respondents" on its own is just page 1 of that packet.
+            const isFullPacket = reportType !== 'respondents';
+            document.getElementById('reportPageSqd').classList.toggle('d-none', !isFullPacket);
+            document.getElementById('reportPage2').classList.toggle('d-none', !isFullPacket);
+            // Page 1's footer label follows suit — "Page 1 of 3" for the full packet,
+            // "Page 1 of 1" when the respondents breakdown is the only page.
+            document.getElementById('footerPageLabel1').innerText = isFullPacket ? 'Page 1 of 3' : 'Page 1 of 1';
             // Effectivity/Rev./Page footer is CSPC's official CSM survey result footer —
-            // the SQD Result Report only. Number of Respondents reuses this same page
-            // but must not show it (page 2's AI Feedback report never shows it either,
-            // so it has no footer markup at all).
+            // the SQD Result Report packet only (page 3's AI Feedback report never shows
+            // it either, so it has no footer markup at all).
             document.getElementById('officeReportFooter1').classList.toggle('d-none', reportType !== 'sqd');
-            // SQD report only gets the Prepared/Interpretation/Noted/Reviewed grid
-            // template — "Number of Respondents" keeps the plain two-column footer.
-            document.getElementById('officeReportSqdFooter1').classList.toggle('d-none', reportType !== 'sqd');
-            document.getElementById('officeReportOldFooter1').classList.toggle('d-none', reportType === 'sqd');
+            // Signatures are signed once per packet: the official Prepared/Interpretation/
+            // Noted/Reviewed grid on the scorecard page covers the full SQD packet, so
+            // page 1 only carries its own plain signature block when it prints alone.
+            document.getElementById('officeReportOldFooter1').classList.toggle('d-none', isFullPacket);
 
-            // Document code (CSPC-F-CQA-06) belongs on the official SQD Result Report
-            // only — Number of Respondents reuses this same page/header but must show
-            // the plain blue rule with no code, so it's added/removed here rather than
-            // rendered statically by views/layout/report-header.ejs.
-            const headerBottom1 = document.getElementById('officeReportHeaderBottom1');
-            let docCodeEl1 = headerBottom1.querySelector('.doc-code');
-            if (reportType === 'sqd') {
-                if (!docCodeEl1) {
-                    docCodeEl1 = document.createElement('div');
-                    docCodeEl1.className = 'doc-code';
-                    docCodeEl1.textContent = 'CSPC-F-CQA-06';
-                    headerBottom1.appendChild(docCodeEl1);
-                }
-            } else if (docCodeEl1) {
-                docCodeEl1.remove();
-            }
+            // The document code (CSPC-F-CQA-06) sits on the scorecard page's letterhead,
+            // rendered statically by views/layout/report-header.ejs — page 1's respondents
+            // breakdown keeps the plain blue rule with no code.
 
-            // Three mutually exclusive report bodies:
-            //  - percentageReportTable: SQD Result Report (official Percentage/Rating scorecard)
-            //  - sqdReportTables:       Number of Respondents + one office (SQD 0/1-8 bucket breakdown)
-            //  - multiOfficeReportBody: Number of Respondents + All Offices (that same breakdown, per office)
-            const isAllOfficesPacket = reportType === 'respondents' && !officeId;
-            const isBucketSingle = reportType === 'respondents' && !!officeId;
-            document.getElementById('percentageReportTable').classList.toggle('d-none', reportType !== 'sqd');
+            // Page 1's two mutually exclusive bodies:
+            //  - sqdReportTables:       one office selected (SQD 0 / SQD 1-8 bucket breakdown)
+            //  - multiOfficeReportBody: that same breakdown per office for an all-offices packet
+            const isAllOfficesPacket = !officeId;
+            const isBucketSingle = !!officeId;
             document.getElementById('sqdReportTables').classList.toggle('d-none', !isBucketSingle);
             document.getElementById('multiOfficeReportBody').classList.toggle('d-none', !isAllOfficesPacket);
 
@@ -662,14 +769,15 @@
             fetch('/api/report-data', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cluster: CLUSTER_NAME, officeId: officeId, periodCovered: periodCovered })
+                body: JSON.stringify({ cluster: CLUSTER_NAME, officeId: officeId, periodCovered: periodCovered, serviceAvailed: serviceAvailed })
             })
                 .then(res => res.json())
                 .then(data => {
+                    // Page 1 (bucket breakdown) always renders; the scorecard page only
+                    // when the full SQD Result packet was asked for.
+                    updateOfficeReportStats(data.stats || {});
                     if (reportType === 'sqd') {
                         updatePercentageTable(data.stats || {});
-                    } else {
-                        updateOfficeReportStats(data.stats || {});
                     }
                     updateOfficeReportComments(data.comments || []);
 
@@ -703,7 +811,7 @@
         // a misleading 0.00%/Poor.
         function updatePercentageTable(stats) {
             const totalResp = stats.total_respondents || 0;
-            document.getElementById('officeReportTotal1').innerText = totalResp;
+            document.getElementById('officeReportTotalSqd').innerText = totalResp;
             document.getElementById('officeReportTotal2').innerText = totalResp;
 
             let overallAnswerable = 0;
@@ -872,25 +980,39 @@
             const officeSelect = document.getElementById('officeFilter');
             const officeLabel = officeSelect.value ? officeSelect.options[officeSelect.selectedIndex].text : 'All_Offices';
             const reportType = document.getElementById('reportType').value;
-            // "Number of Respondents" hides the AI Feedback section entirely
-            // (reportPage2 gets d-none in renderOfficeReport()) — a single-section
-            // document, so every page repeats that one header.
-            const hasPage2 = reportType !== 'respondents';
+            // "Number of Respondents" hides the scorecard and AI Feedback sections
+            // entirely (reportPageSqd/reportPage2 get d-none in renderOfficeReport()) —
+            // a single-section document, so every page repeats that one header.
+            const isFullPacket = reportType !== 'respondents';
 
-            const sqdHeader = {
+            // Page 1 — respondents breakdown; plain letterhead, no document code.
+            const respondentsHeader = {
                 title: document.getElementById('officeReportMainTitle1').textContent.trim(),
                 subtitle: document.getElementById('officeReportTitle1').textContent.trim(),
                 subtitleUnderline: true,
+                serviceLine: document.getElementById('officeReportService1').textContent.trim(),
                 metaLines: [
                     { label: 'Period Covered:', value: document.getElementById('officeReportPeriod1').textContent.trim() },
                     { label: 'Number of Respondents:', value: document.getElementById('officeReportTotal1').textContent.trim() }
+                ]
+            };
+            // Page 2 — the official SQD Result scorecard; carries CSPC-F-CQA-06.
+            const sqdHeader = {
+                title: 'CLIENT SATISFACTION MEASUREMENT SURVEY RESULT',
+                subtitle: document.getElementById('officeReportTitleSqd').textContent.trim(),
+                subtitleUnderline: true,
+                serviceLine: document.getElementById('officeReportServiceSqd').textContent.trim(),
+                metaLines: [
+                    { label: 'Period Covered:', value: document.getElementById('officeReportPeriodSqd').textContent.trim() },
+                    { label: 'Number of Respondents:', value: document.getElementById('officeReportTotalSqd').textContent.trim() }
                 ],
-                docCode: reportType === 'sqd' ? 'CSPC-F-CQA-06' : undefined
+                docCode: 'CSPC-F-CQA-06'
             };
             const aiHeader = {
                 title: 'AI Feedback Sentiment & Topic Analytics',
                 subtitle: document.getElementById('officeReportTitle2').textContent.trim(),
                 subtitleUnderline: true,
+                serviceLine: document.getElementById('officeReportService2').textContent.trim(),
                 period: 'Period Covered: ' + document.getElementById('officeReportPeriod2').textContent.trim(),
                 meta: 'Analyzed Feedbacks: ' + document.getElementById('officeReportTotal2').textContent.trim()
             };
@@ -913,8 +1035,11 @@
                 filename: opt.filename,
                 opt,
                 headerHeightIn: 2.4,
-                headerHideSelectors: ['.report-header-block', '#officeReportMainTitle1', '.sqd-office-name', '.sqd-meta-block', '.office-title', '.meta-info'],
-                getHeaderForPage: (pageNum) => (!hasPage2 || pageNum === 1) ? sqdHeader : aiHeader,
+                headerHideSelectors: ['.report-header-block', '#officeReportMainTitle1', '.sqd-office-name', '.sqd-service-line', '.sqd-meta-block', '.office-title', '.meta-info'],
+                getHeaderForPage: (pageNum) => {
+                    if (!isFullPacket || pageNum === 1) return respondentsHeader;
+                    return pageNum === 2 ? sqdHeader : aiHeader;
+                },
                 avoidSplitSelector: '.sqd-signature-grid'
             });
         }

@@ -15,9 +15,9 @@
            ============================================================ */
         :root {
             --primary-gradient: linear-gradient(135deg, #251d3a 0%, #2a2550 100%);
-            --bg-body: #f4f6fb;
-            --border-soft: rgba(15, 23, 42, 0.06);
-            --border-soft-strong: rgba(15, 23, 42, 0.1);
+            --bg-body: #eceff8;
+            --border-soft: rgba(37, 29, 58, 0.10);
+            --border-soft-strong: rgba(37, 29, 58, 0.16);
             --text-dark: #0f172a;
             --text-muted: #64748b;
             --text-faint: #94a3b8;
@@ -33,24 +33,60 @@
             --radius-md: 14px;
             --radius-sm: 10px;
 
-            --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.03);
-            --shadow-card-hover: 0 10px 24px -8px rgba(15, 23, 42, 0.16);
+            /* Layered shadows: a tight contact shadow + a wide ambient one. The
+               ambient layer is what separates a white card from the tinted
+               page behind it -- a single flat shadow read as "plain". */
+            --shadow-card:
+                0 1px 2px rgba(15, 23, 42, 0.05),
+                0 6px 16px -10px rgba(37, 29, 58, 0.22),
+                0 20px 40px -26px rgba(37, 29, 58, 0.30);
+            --shadow-card-hover:
+                0 2px 4px rgba(15, 23, 42, 0.06),
+                0 16px 32px -14px rgba(37, 29, 58, 0.30),
+                0 32px 64px -32px rgba(37, 29, 58, 0.38);
             --shadow-hero: 0 24px 48px -16px rgba(37, 29, 58, 0.4), 0 2px 8px rgba(37, 29, 58, 0.2);
 
+            /* Brand accent rail drawn along the top edge of every major panel. */
+            --accent-rail: linear-gradient(90deg, var(--navy-900) 0%, #5b4b93 55%, var(--gold-500) 100%);
+
             --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+            --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
-        body { background-color: var(--bg-body); font-family: 'Plus Jakarta Sans', sans-serif; color: var(--text-dark); }
+        /* Tinted, fixed backdrop. The old flat #f4f6fb sat too close to the
+           white cards, so the containers read as floating text blocks rather
+           than surfaces. These soft brand washes give every card something to
+           sit on top of. */
+        body {
+            background-color: var(--bg-body);
+            background-image:
+                radial-gradient(1100px 520px at 10% -10%, rgba(37, 29, 58, 0.10), transparent 62%),
+                radial-gradient(900px 460px at 104% 2%, rgba(255, 204, 0, 0.11), transparent 58%),
+                radial-gradient(900px 620px at 50% 118%, rgba(37, 29, 58, 0.07), transparent 60%);
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: var(--text-dark);
+        }
 
         /* ============================================================
            2. PAGE HEADER
            ============================================================ */
+        /* Controls-only strip. It carries no heading of its own — the navbar
+           above already names the page — so it sits tight under the navbar and
+           gives the vertical space back to the cards. */
         .dash-toolbar {
-            padding-bottom: 22px; margin-bottom: 24px; border-bottom: 1px solid var(--border-soft);
+            display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap;
+            margin-bottom: 14px;
         }
+        .dash-toolbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
-        .dash-title { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.03em; color: var(--text-dark); margin: 0; }
-        .dash-subtitle { color: var(--text-muted); font-size: 0.92rem; margin: 4px 0 0; max-width: 46ch; }
+        /* Pull the whole page up toward the navbar. Scoped to this page's own
+           stylesheet so no other view's navbar spacing changes. */
+        .top-navbar { margin-bottom: 1rem !important; }
+        #content > .container-fluid { padding-top: 14px !important; padding-bottom: 20px !important; }
+        /* Tighter, even rhythm between the stacked card rows. */
+        #content > .container-fluid > .row { margin-bottom: 16px !important; }
 
         .btn-generate-report {
             background: linear-gradient(160deg, var(--navy-900), var(--navy-700)); border: none; color: #fff; font-weight: 700;
@@ -62,31 +98,40 @@
         .btn-generate-report:focus-visible { outline: 2px solid var(--navy-700); outline-offset: 2px; }
 
         /* ============================================================
-           3. FILTER ROW — period filter on the left, Generate Report
-              pinned to the right corner via ms-auto (stays right-aligned
-              even if it wraps to its own line on narrow screens).
+           3. TOOLBAR CONTROLS — the period filter and Generate Report sit
+              together on the right of the page header. Both are pinned to the
+              same 50px control height so they read as one control group
+              instead of a small pill next to an oversized button.
            ============================================================ */
-        .dash-filter-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
-        .dash-filter-row .btn-generate-report { flex-shrink: 0; }
+        .dash-toolbar-actions .btn-generate-report {
+            flex-shrink: 0; height: 38px; display: inline-flex; align-items: center;
+            padding: 0 15px; font-size: 0.8rem; border-radius: 10px;
+            box-shadow: 0 6px 16px -8px rgba(37, 29, 58, 0.5);
+        }
+        .dash-toolbar-actions .btn-generate-report:hover { box-shadow: 0 10px 22px -8px rgba(37, 29, 58, 0.55); }
         .filter-bar-v2 {
-            background: var(--card-bg); border: 1px solid var(--border-soft); border-radius: var(--radius-md);
-            box-shadow: var(--shadow-card); padding: 12px 18px;
-            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+            height: 38px;
+            background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+            border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+            box-shadow: var(--shadow-card); padding: 0 10px 0 7px;
+            display: flex; align-items: center; gap: 8px;
         }
         .filter-bar-v2 .filter-icon {
-            width: 34px; height: 34px; border-radius: 9px; background: rgba(37, 29, 58, 0.07);
+            width: 26px; height: 26px; border-radius: 7px; background: rgba(37, 29, 58, 0.07);
             color: var(--navy-900); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+            font-size: 0.72rem;
         }
-        .filter-bar-v2 .filter-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }
+        .filter-bar-v2 .filter-field { display: flex; align-items: center; gap: 7px; min-width: 0; }
+        .filter-bar-v2 .filter-label { font-size: 0.6rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 0; white-space: nowrap; }
         .filter-bar-v2 select.form-select {
-            border: 1px solid var(--border-soft-strong); border-radius: 9px; font-weight: 600; font-size: 0.85rem;
-            min-width: 190px; transition: border-color 0.2s ease, box-shadow 0.2s ease;
-            background-color: #fff; color: var(--text-dark);
+            border: 1px solid var(--border-soft-strong); border-radius: 9px; font-weight: 700; font-size: 0.84rem;
+            min-width: 155px; height: 28px; transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            background-color: #fff; color: var(--text-dark); padding: 0 26px 0 9px; background-position: right 7px center;
         }
         .filter-bar-v2 select.form-select:focus { border-color: var(--navy-700); box-shadow: 0 0 0 3px rgba(37, 29, 58, 0.12); }
         .filter-clear-btn {
             display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600;
-            color: var(--text-muted); background: rgba(15, 23, 42, 0.05); border-radius: 9px; padding: 8px 14px;
+            color: var(--text-muted); background: rgba(15, 23, 42, 0.05); border-radius: 7px; padding: 5px 10px; font-size: 0.72rem;
             transition: background-color 0.15s ease, color 0.15s ease;
         }
         .filter-clear-btn:hover { background: rgba(239, 68, 68, 0.1); color: #b91c1c; }
@@ -100,6 +145,11 @@
             border: 1px solid rgba(255, 255, 255, 0.08);
             color: #fff; box-shadow: var(--shadow-hero); padding: 18px 22px; height: 100%;
             box-sizing: border-box;
+            transition: transform 0.28s var(--ease-out), box-shadow 0.28s var(--ease-out);
+        }
+        .hero-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 32px 60px -18px rgba(37, 29, 58, 0.5), 0 4px 12px rgba(37, 29, 58, 0.25);
         }
         .hero-card::before {
             content: ''; position: absolute; inset: 0;
@@ -115,9 +165,9 @@
             -webkit-mask-image: linear-gradient(135deg, rgba(0,0,0,0.6), transparent 65%);
         }
 
-        .hero-flex { position: relative; z-index: 1; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; height: 100%; }
+        .hero-flex { position: relative; z-index: 1; display: flex; align-items: center; gap: 22px; flex-wrap: wrap; height: 100%; }
 
-        .hero-gauge-wrap { position: relative; width: 74px; height: 74px; flex-shrink: 0; }
+        .hero-gauge-wrap { position: relative; width: 126px; height: 126px; flex-shrink: 0; }
         .hero-gauge-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
         .hero-gauge-wrap .gauge-track { fill: none; stroke: rgba(255, 255, 255, 0.14); stroke-width: 8; }
         .hero-gauge-wrap .gauge-fill {
@@ -125,26 +175,77 @@
             stroke-dasharray: 339.29; stroke-dashoffset: 339.29;
             transition: stroke-dashoffset 1.15s var(--ease-out);
         }
+        /* The score now lives inside the ring instead of a decorative icon —
+           the gauge and the number it represents read as one object. */
         .hero-gauge-center {
-            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            position: absolute; inset: 0; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; line-height: 1;
         }
-        .hero-gauge-center i { font-size: 0.9rem; color: #fff; opacity: 0.9; }
+        .hero-gauge-score { display: flex; align-items: baseline; gap: 1px; }
+        .hero-gauge-score > span:first-child { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.035em; }
+        .hero-gauge-pct { font-size: 0.8rem; font-weight: 700; opacity: 0.6; }
+        .hero-gauge-cap {
+            margin-top: 5px; font-size: 0.52rem; font-weight: 700; letter-spacing: 0.12em;
+            text-transform: uppercase; color: rgba(255, 255, 255, 0.55);
+        }
 
-        .hero-info { flex: 1 1 200px; min-width: 180px; }
+        .hero-info { flex: 1 1 190px; min-width: 170px; }
         .hero-info-eyebrow {
             font-size: 0.6rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
-            color: rgba(255, 255, 255, 0.6); margin-bottom: 2px;
+            color: rgba(255, 255, 255, 0.6); margin-bottom: 4px;
         }
-        .hero-score-line { display: flex; align-items: baseline; gap: 3px; line-height: 1; }
-        .hero-score-number { font-size: 1.65rem; font-weight: 800; letter-spacing: -0.03em; }
-        .hero-score-sign { font-size: 0.85rem; opacity: 0.55; font-weight: 700; }
+        .hero-level-name {
+            font-size: 1.45rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1;
+            margin: 0 0 10px; color: #fff;
+        }
 
-        .hero-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+        .hero-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        /* Tone comes from the band the score actually falls into — see the
+           ratingBands table in the template body. */
         .hero-level-badge {
-            display: inline-flex; align-items: center; gap: 5px; background: rgba(34, 197, 94, 0.18);
-            color: #86efac; border: 1px solid rgba(134, 239, 172, 0.35); font-weight: 700; font-size: 0.64rem;
-            letter-spacing: 0.02em; padding: 4px 9px; border-radius: 999px;
+            display: inline-flex; align-items: center; gap: 5px;
+            font-weight: 700; font-size: 0.64rem; letter-spacing: 0.02em;
+            padding: 4px 9px; border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2);
         }
+        .hero-level-badge.tone-poor { background: rgba(239, 68, 68, 0.2);  color: #fca5a5; border-color: rgba(252, 165, 165, 0.4); }
+        .hero-level-badge.tone-fair { background: rgba(249, 115, 22, 0.2); color: #fdba74; border-color: rgba(253, 186, 116, 0.4); }
+        .hero-level-badge.tone-ok   { background: rgba(234, 179, 8, 0.2);  color: #fde047; border-color: rgba(253, 224, 71, 0.4); }
+        .hero-level-badge.tone-good { background: rgba(34, 197, 94, 0.18); color: #86efac; border-color: rgba(134, 239, 172, 0.35); }
+        .hero-level-badge.tone-best { background: rgba(255, 204, 0, 0.22); color: #ffe27a; border-color: rgba(255, 226, 122, 0.45); }
+
+        /* Rating band strip — five segments for the five interpretation bands,
+           the one the score falls into lit in brand gold, the ones below it
+           dimly filled. Segments grow in on load. */
+        .hero-band {
+            flex: 1 1 210px; min-width: 190px;
+            border-left: 1px solid rgba(255, 255, 255, 0.12); padding-left: 20px;
+        }
+        .hero-band-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+        .hero-band-label { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255, 255, 255, 0.6); }
+        .hero-band-scale { font-size: 0.6rem; font-weight: 600; color: rgba(255, 255, 255, 0.4); }
+        .hero-band-track { display: flex; gap: 5px; }
+        .hero-band-seg {
+            flex: 1 1 0; height: 9px; border-radius: 999px;
+            background: rgba(255, 255, 255, 0.13);
+            transform-origin: left center;
+            animation: bandGrow 0.55s var(--ease-out) both;
+        }
+        .hero-band-seg.is-passed { background: rgba(255, 255, 255, 0.32); }
+        .hero-band-seg.is-active {
+            background: linear-gradient(90deg, #ffe27a, #ffcc00);
+            box-shadow: 0 0 0 3px rgba(255, 204, 0, 0.18), 0 4px 12px -2px rgba(255, 204, 0, 0.5);
+        }
+        @keyframes bandGrow { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
+
+        /* Deliberately NOT a flex container: the note is one sentence with an
+           inline <strong> in it, and flex would turn each text run into its own
+           flex item and space the words apart. */
+        .hero-band-note {
+            margin: 11px 0 0; font-size: 0.72rem; font-weight: 600; color: rgba(255, 255, 255, 0.72);
+        }
+        .hero-band-note i { margin-right: 6px; opacity: 0.8; }
+        .hero-band-note strong { color: var(--gold-500); font-weight: 800; }
         .hero-period-badge {
             display: inline-flex; align-items: center; gap: 5px; background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.14); color: rgba(255, 255, 255, 0.9);
@@ -156,18 +257,40 @@
            5. SECONDARY STAT CARD (Total Completed Surveys)
            ============================================================ */
         .stat-card {
-            background: var(--card-bg); border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
+            background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+            border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
             transition: transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out), border-color 0.22s ease;
             height: 100%; text-decoration: none !important;
             display: flex; flex-direction: column; color: inherit;
             box-shadow: var(--shadow-card);
         }
-        .stat-card:hover { border-color: rgba(37, 29, 58, 0.22); box-shadow: var(--shadow-card-hover); transform: translateY(-3px); }
-        .stat-card.p-4 { padding: 16px 20px !important; }
-        .stat-card .bg-primary.bg-opacity-10 { background: rgba(37, 29, 58, 0.08) !important; }
-        .stat-card .text-primary { color: var(--navy-900) !important; }
-        .stat-card .progress { background-color: rgba(15, 23, 42, 0.07) !important; }
-        .stat-card .progress-bar.bg-primary { background: linear-gradient(90deg, var(--navy-900), var(--navy-700)) !important; }
+        .stat-card { padding: 17px 20px; }
+        .stat-card:hover { border-color: rgba(37, 29, 58, 0.22); box-shadow: var(--shadow-card-hover); transform: translateY(-4px); }
+
+        .stat-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 11px; }
+        .stat-icon {
+            width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(37, 29, 58, 0.08); color: var(--navy-900); font-size: 0.95rem;
+            transition: transform 0.35s var(--ease-spring), background-color 0.25s ease, color 0.25s ease;
+        }
+        .stat-card:hover .stat-icon { background: var(--navy-900); color: var(--gold-500); transform: scale(1.08) rotate(-6deg); }
+        .stat-label {
+            margin: 0; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--text-muted);
+        }
+
+        /* The old 100%-wide progress bar under this number tracked nothing —
+           it was a decorative full bar on every render — so it is gone; the
+           card now ends on the action instead. */
+        .stat-value-row { display: flex; align-items: baseline; gap: 8px; }
+        .stat-unit { font-size: 0.78rem; font-weight: 600; color: var(--text-faint); }
+        .stat-sub { margin: 6px 0 0; font-size: 0.8rem; color: var(--text-muted); }
+        .stat-sub strong { color: var(--text-dark); font-weight: 700; }
+        .stat-card-foot {
+            margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border-soft);
+            display: flex; justify-content: flex-end;
+        }
 
         .view-details-pill {
             display: inline-flex; align-items: center; gap: 5px;
@@ -179,14 +302,15 @@
         }
         .stat-card:hover .view-details-pill { background: var(--navy-900); color: #fff !important; transform: translateX(2px); }
 
-        .count-up { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text-dark); }
+        .count-up { font-size: 2.5rem; font-weight: 800; letter-spacing: -0.04em; color: var(--text-dark); line-height: 1; }
 
         /* ============================================================
            6. INSIGHT CHIPS
            ============================================================ */
         .insight-chip {
-            background: var(--card-bg); border: 1px solid var(--border-soft); border-radius: var(--radius-md);
-            padding: 14px 16px; display: flex; align-items: center; gap: 12px; height: 100%;
+            background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+            border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+            padding: 13px 15px 13px 18px; display: flex; align-items: center; gap: 11px; height: 100%; min-height: 78px;
             box-shadow: var(--shadow-card); transition: box-shadow 0.2s ease, transform 0.2s var(--ease-out);
         }
         .insight-chip:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-2px); }
@@ -197,6 +321,14 @@
         .insight-chip-icon.good { background: rgba(16, 185, 129, 0.14); color: #059669; }
         .insight-chip-icon.active { background: rgba(37, 29, 58, 0.08); color: var(--navy-900); }
         .insight-chip-icon.warn { background: rgba(239, 68, 68, 0.12); color: #dc2626; }
+        /* Clamped to two lines so one very long office name cannot make its
+           chip twice the height of the other two in the same row. */
+        .insight-chip-body { min-width: 0; }
+        .insight-chip-value {
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+            overflow: hidden; overflow-wrap: anywhere;
+        }
+        .insight-chip-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .insight-chip-label { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }
         .insight-chip-value { font-size: 0.8rem; font-weight: 700; color: var(--text-dark); line-height: 1.3; }
         .insight-chip-sub { font-size: 0.72rem; color: var(--text-muted); }
@@ -205,13 +337,19 @@
            8. ANALYTICS CHART
            ============================================================ */
         .chart-container-main {
-            background: var(--card-bg); border: 1px solid var(--border-soft);
-            border-radius: var(--radius-lg); padding: 28px; box-shadow: var(--shadow-card);
+            background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+            border: 1px solid var(--border-soft);
+            border-radius: var(--radius-lg); padding: 22px 24px; box-shadow: var(--shadow-card);
             box-sizing: border-box;
         }
 
         .section-eyebrow {
             font-size: 0.7rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--navy-700);
+            display: inline-flex; align-items: center; gap: 7px;
+        }
+        .section-eyebrow::before {
+            content: ''; width: 14px; height: 3px; border-radius: 2px;
+            background: var(--accent-rail); flex-shrink: 0;
         }
         .chart-toggle-group {
             display: inline-flex; background: rgba(15, 23, 42, 0.05); border-radius: 10px; padding: 4px; gap: 4px;
@@ -231,8 +369,9 @@
            9. SIDE PANELS (Sentiment / Topics / Recent)
            ============================================================ */
         .side-panel-card {
-            background: var(--card-bg); border: 1px solid var(--border-soft);
-            border-radius: var(--radius-lg); padding: 26px; box-shadow: var(--shadow-card); height: 100%;
+            background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+            border: 1px solid var(--border-soft);
+            border-radius: var(--radius-lg); padding: 22px 24px; box-shadow: var(--shadow-card); height: 100%;
             box-sizing: border-box;
         }
 
@@ -288,29 +427,160 @@
         .rank-score.bad { background: #fee2e2; color: #b91c1c; }
 
         /* ============================================================
-           11. SCROLL-REVEAL + MOTION SYSTEM
+           11. SURFACE SYSTEM — shared container treatment
+           Every panel on the page gets the same three cues so it reads as a
+           raised surface instead of a plain block: a layered ambient shadow,
+           a brand accent rail on the top edge that extends on hover, and a
+           lift on hover. Kept in one place so the panels stay consistent.
            ============================================================ */
-        .reveal-section { opacity: 0; transform: translateY(16px); transition: opacity 0.5s var(--ease-out), transform 0.5s var(--ease-out); }
-        .reveal-section.is-visible { opacity: 1; transform: translateY(0); }
+        .chart-container-main,
+        .side-panel-card,
+        .stat-card,
+        .insight-chip,
+        .filter-bar-v2 {
+            position: relative;
+            transition: transform 0.28s var(--ease-out),
+                        box-shadow 0.28s var(--ease-out),
+                        border-color 0.28s ease;
+        }
+
+        /* Accent rail. Sits on the top border and grows to the card's full
+           width on hover. */
+        .chart-container-main::before,
+        .side-panel-card::before,
+        .stat-card::before {
+            content: '';
+            position: absolute; top: 0; left: 0;
+            height: 3px; width: 74px;
+            background: var(--accent-rail);
+            border-radius: var(--radius-lg) 0 var(--radius-lg) 0;
+            opacity: 0.75;
+            transition: width 0.45s var(--ease-out), opacity 0.25s ease;
+            pointer-events: none;
+        }
+        .chart-container-main:hover::before,
+        .side-panel-card:hover::before,
+        .stat-card:hover::before {
+            width: 100%;
+            opacity: 1;
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        }
+
+        .chart-container-main:hover,
+        .side-panel-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card-hover);
+            border-color: rgba(37, 29, 58, 0.20);
+        }
+
+        .filter-bar-v2:hover { box-shadow: var(--shadow-card-hover); border-color: rgba(37, 29, 58, 0.18); }
+
+        /* Insight chips get a colour-matched rail down the left edge instead,
+           so the three of them stay visually distinct from one another. */
+        .insight-chip { overflow: hidden; }
+        .insight-chip::before {
+            content: '';
+            position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+            background: var(--navy-900);
+            transform: scaleY(0.35);
+            transform-origin: center;
+            transition: transform 0.35s var(--ease-out);
+        }
+        .insight-chip:has(.insight-chip-icon.good)::before { background: #059669; }
+        .insight-chip:has(.insight-chip-icon.warn)::before { background: #dc2626; }
+        .insight-chip:hover::before { transform: scaleY(1); }
+        .insight-chip-icon { transition: transform 0.35s var(--ease-spring); }
+        .insight-chip:hover .insight-chip-icon { transform: scale(1.12) rotate(-6deg); }
+
+        /* Hero: slow drifting light so the largest surface is not static. */
+        .hero-card::before { animation: heroDrift 11s ease-in-out infinite alternate; }
+        @keyframes heroDrift {
+            from { transform: translate3d(0, 0, 0) scale(1); opacity: 0.85; }
+            to   { transform: translate3d(-3%, 2%, 0) scale(1.12); opacity: 1; }
+        }
+
+        /* Ranking rows: highlight the row under the pointer. */
+        .rank-item {
+            border-radius: 10px;
+            transition: background-color 0.2s ease, padding 0.25s var(--ease-out);
+        }
+        .rank-item:hover { background: rgba(37, 29, 58, 0.045); padding-left: 10px; padding-right: 10px; }
+        .rank-badge { transition: transform 0.3s var(--ease-spring); }
+        .rank-item:hover .rank-badge { transform: scale(1.12); }
+
+        .chart-legend-row { border-radius: 8px; padding: 2px 6px; margin: -2px -6px; transition: background-color 0.2s ease; }
+        .chart-legend-row:hover { background: rgba(37, 29, 58, 0.05); }
+
+        /* ============================================================
+           11b. MOTION SYSTEM — entrance choreography
+           Above-the-fold panels animate in on load with a short stagger;
+           everything further down waits for the IntersectionObserver and
+           staggers its own columns as the row scrolls into view.
+           ============================================================ */
+        @keyframes surfaceRise {
+            from { opacity: 0; transform: translateY(24px) scale(0.985); }
+            to   { opacity: 1; transform: none; }
+        }
+
+        /* The animation is applied to the Bootstrap column, never to the card
+           itself — an animation with fill-mode:both would otherwise win over
+           the card's own :hover transform. */
+        .dash-toolbar,
+        .container-fluid > .row:not(.reveal-section) > [class*="col-"] {
+            animation: surfaceRise 0.7s var(--ease-out) both;
+        }
+        .dash-toolbar { animation-delay: 0.02s; }
+        .container-fluid > .row:not(.reveal-section) > [class*="col-"]:nth-child(1) { animation-delay: 0.10s; }
+        .container-fluid > .row:not(.reveal-section) > [class*="col-"]:nth-child(2) { animation-delay: 0.18s; }
+        .container-fluid > .row:not(.reveal-section) > [class*="col-"]:nth-child(3) { animation-delay: 0.26s; }
+        .container-fluid > .row:not(.reveal-section) > [class*="col-"]:nth-child(4) { animation-delay: 0.34s; }
+
+        /* The row itself no longer moves; its columns do, so side-by-side
+           panels fade in one after the other rather than as one slab. */
+        .reveal-section { opacity: 1; }
+        .reveal-section > [class*="col-"] {
+            opacity: 0; transform: translateY(22px);
+            transition: opacity 0.55s var(--ease-out), transform 0.55s var(--ease-out);
+        }
+        .reveal-section.is-visible > [class*="col-"] { opacity: 1; transform: translateY(0); }
+        .reveal-section.is-visible > [class*="col-"]:nth-child(2) { transition-delay: 0.13s; }
+        .reveal-section.is-visible > [class*="col-"]:nth-child(3) { transition-delay: 0.26s; }
 
         @media (prefers-reduced-motion: reduce) {
             .stat-card, .count-up, [style*="animation"] { animation: none !important; }
-            .reveal-section { opacity: 1 !important; transform: none !important; }
+            .reveal-section, .reveal-section > [class*="col-"],
+            .dash-toolbar, .hero-band-seg,
+            .container-fluid > .row:not(.reveal-section) > [class*="col-"] {
+                opacity: 1 !important; transform: none !important; animation: none !important;
+            }
+            .hero-card::before { animation: none !important; }
             * { transition-duration: 0.001ms !important; }
         }
 
         /* ============================================================
            12. RESPONSIVE
            ============================================================ */
+        @media (max-width: 991.98px) {
+            /* Below the xl breakpoint the hero drops to one column, so the band
+               strip moves under the score rather than beside it. */
+            .hero-band { border-left: none; padding-left: 0; padding-top: 18px; border-top: 1px solid rgba(255, 255, 255, 0.12); flex-basis: 100%; }
+        }
+
         @media (max-width: 767.98px) {
-            .hero-card { padding: 26px; }
-            .hero-score-number { font-size: 2.4rem; }
-            .hero-gauge-wrap { width: 108px; height: 108px; }
-            .dash-title { font-size: 1.55rem; }
+            .dash-toolbar { align-items: stretch; }
+            .dash-toolbar-actions { width: 100%; }
+            .dash-toolbar-actions .filter-bar-v2 { flex: 1 1 auto; }
+            .filter-bar-v2 .filter-label { display: none; }
+            .filter-bar-v2 select.form-select { min-width: 0; width: 100%; }
+            .hero-card { padding: 18px; }
+            .hero-flex { gap: 18px; }
+            .hero-gauge-wrap { width: 112px; height: 112px; }
+            .count-up { font-size: 2.1rem; }
         }
 
         /* --- REPORT MODAL INTERFACE STYLES --- */
-        #reportModal, #dashboardReportModal {
+        .cluster-report-table .overall-cluster-row td { border-top: 2px solid #000; font-weight: 800; }
+        #reportModal, #overallClusterReportModal, #dashboardReportModal {
             display: none;
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.7); z-index: 9999; overflow-y: auto; padding: 20px;
@@ -345,10 +615,11 @@
         .sign-name { font-weight: bold; text-decoration: underline; margin-top: 35px; margin-bottom: 2px; text-transform: uppercase; }
 
         @media print {
+            body { background: #fff !important; background-image: none !important; }
             #wrapper, .modal-controls { display: none !important; }
             /* Only the modal actually opened (inline display:block from JS) prints —
                this rule repositions it for print without forcing the other one open. */
-            #reportModal, #dashboardReportModal { position: absolute; background: white; padding: 0; left: 0; top: 0; width: 100%; }
+            #reportModal, #overallClusterReportModal, #dashboardReportModal { position: absolute; background: white; padding: 0; left: 0; top: 0; width: 100%; }
             .modal-report-container { margin: 0; box-shadow: none; max-width: 100%; padding: 0; }
             .print-footer { break-inside: avoid; page-break-inside: avoid; }
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -375,39 +646,60 @@
                 }
                 const topOffice = (typeof topOffices !== 'undefined' && topOffices.length > 0) ? topOffices[0] : null;
                 const attentionOffice = (typeof bottomOffices !== 'undefined' && bottomOffices.length > 0) ? bottomOffices[0] : null;
+
+                // Rating bands. These are the SAME cut-offs loadDashboardData()
+                // already uses to derive dashboardData.overallLevel — restated
+                // here only so the hero can show which band the score sits in
+                // and how far the next one is. The badge previously printed a
+                // hardcoded "LEVEL 4" (and was styled green) no matter what the
+                // score was; the level number and its colour now both come from
+                // the band the score actually falls into.
+                const ratingBands = [
+                    { level: 1, label: 'POOR',              min: 0,  tone: 'poor', range: 'below 60%'      },
+                    { level: 2, label: 'FAIR',              min: 60, tone: 'fair', range: '60% – 79.99%'   },
+                    { level: 3, label: 'SATISFACTORY',      min: 80, tone: 'ok',   range: '80% – 89.99%'   },
+                    { level: 4, label: 'VERY SATISFACTORY', min: 90, tone: 'good', range: '90% – 94.99%'   },
+                    { level: 5, label: 'OUTSTANDING',       min: 95, tone: 'best', range: '95% and above'  }
+                ];
+                const heroScore = (typeof satisfactionRate !== 'undefined') ? (Number(satisfactionRate) || 0) : 0;
+                const heroLevelName = (typeof dashboardData !== 'undefined' && dashboardData.overallLevel) ? dashboardData.overallLevel : 'POOR';
+                const activeBand = ratingBands.find(b => b.label === heroLevelName) || ratingBands[0];
+                const nextBand = ratingBands.find(b => b.min > heroScore) || null;
+                const periodLabel = (typeof dashboardData !== 'undefined' && dashboardData.periodCoveredLabel) ? dashboardData.periodCoveredLabel : 'All Periods';
             %>
 
-        
+            <div class="dash-toolbar">
+                <div class="dash-toolbar-actions">
+                    <form action="/dashboard" method="GET" class="filter-bar-v2">
+                        <div class="filter-icon"><i class="fas fa-sliders-h"></i></div>
+                        <div class="filter-field">
+                            <label for="periodCovered" class="filter-label mb-0">Period</label>
+                            <select id="periodCovered" name="periodCovered" class="form-select form-select-sm" title="Filter records by period covered" onchange="handlePeriodSelectChange(this)">
+                                <option value="">All Periods</option>
+                                <% if (typeof periodOptions !== 'undefined') { %>
+                                    <% periodOptions.forEach(opt => { %>
+                                        <option value="<%= opt.value %>" <%= selectedPeriod === opt.value ? 'selected' : '' %>><%= opt.label %></option>
+                                    <% }) %>
+                                <% } %>
+                                <option disabled>──────────</option>
+                                <option value="__add_new_period__">+ Add New Period</option>
+                            </select>
+                        </div>
+                        <% if (typeof hasQueryParam !== 'undefined' && hasQueryParam) { %>
+                            <a href="/dashboard" class="filter-clear-btn" title="Clear the period filter"><i class="fas fa-times"></i> Clear</a>
+                        <% } %>
+                    </form>
 
-            <div class="dash-filter-row">
-                <form action="/dashboard" method="GET" class="filter-bar-v2">
-                    <div class="filter-icon"><i class="fas fa-sliders-h"></i></div>
-                    <div>
-                        <label for="periodCovered" class="filter-label mb-0">Period Covered</label>
-                        <select id="periodCovered" name="periodCovered" class="form-select form-select-sm" title="Filter records by period covered" onchange="handlePeriodSelectChange(this)">
-                            <option value="">All Periods</option>
-                            <% if (typeof periodOptions !== 'undefined') { %>
-                                <% periodOptions.forEach(opt => { %>
-                                    <option value="<%= opt.value %>" <%= selectedPeriod === opt.value ? 'selected' : '' %>><%= opt.label %></option>
-                                <% }) %>
-                            <% } %>
-                            <option disabled>──────────</option>
-                            <option value="__add_new_period__">+ Add New Period</option>
-                        </select>
+                    <div class="dropdown">
+                        <button class="btn btn-generate-report dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Generate a printable report">
+                            <i class="fas fa-file-invoice me-2"></i> Generate Report
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <li><a class="dropdown-item" href="#" onclick="openReportModal(); return false;"><i class="fas fa-file-alt me-2 text-muted"></i> Per Cluster Report</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="openOverallClusterReportModal(); return false;"><i class="fas fa-layer-group me-2 text-muted"></i> Overall Cluster Report</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="openDashboardReportModal(); return false;"><i class="fas fa-chart-line me-2 text-muted"></i> Dashboard Report</a></li>
+                        </ul>
                     </div>
-                    <% if (typeof hasQueryParam !== 'undefined' && hasQueryParam) { %>
-                        <a href="/dashboard" class="filter-clear-btn" title="Clear the period filter"><i class="fas fa-times"></i> Clear</a>
-                    <% } %>
-                </form>
-
-                <div class="dropdown ms-auto">
-                    <button class="btn btn-generate-report dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Generate a printable report">
-                        <i class="fas fa-file-invoice me-2"></i> Generate Report
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                        <li><a class="dropdown-item" href="#" onclick="openReportModal(); return false;"><i class="fas fa-file-alt me-2 text-muted"></i> Per Cluster Report</a></li>
-                        <li><a class="dropdown-item" href="#" onclick="openDashboardReportModal(); return false;"><i class="fas fa-chart-line me-2 text-muted"></i> Dashboard Report</a></li>
-                    </ul>
                 </div>
             </div>
 
@@ -419,46 +711,69 @@
                                 <svg viewBox="0 0 120 120">
                                     <defs>
                                         <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                            <stop offset="0%" stop-color="#ffcc00" />
+                                            <stop offset="0%" stop-color="#ffe27a" />
                                             <stop offset="100%" stop-color="#ffcc00" />
                                         </linearGradient>
                                     </defs>
                                     <circle class="gauge-track" cx="60" cy="60" r="54" />
                                     <circle id="heroGaugeFill" class="gauge-fill" cx="60" cy="60" r="54" />
                                 </svg>
-                                <div class="hero-gauge-center"><i class="fas fa-certificate"></i></div>
+                                <div class="hero-gauge-center">
+                                    <span class="hero-gauge-score">
+                                        <span id="heroScoreValue" data-target="<%= heroScore %>">0.00</span><span class="hero-gauge-pct">%</span>
+                                    </span>
+                                    <span class="hero-gauge-cap">Satisfaction</span>
+                                </div>
                             </div>
+
                             <div class="hero-info">
                                 <p class="hero-info-eyebrow">Overall Institutional Satisfaction</p>
-                                <div class="hero-score-line">
-                                    <span id="heroScoreValue" class="hero-score-number" data-target="<%= typeof satisfactionRate !== 'undefined' ? satisfactionRate : 0 %>">0.00</span>
-                                    <span class="hero-score-sign">%</span>
-                                </div>
+                                <h2 class="hero-level-name"><%= heroLevelName %></h2>
                                 <div class="hero-badges">
-                                    <span class="hero-level-badge"><i class="fas fa-certificate"></i> LEVEL 4 &middot; <%= typeof dashboardData !== 'undefined' ? dashboardData.overallLevel : 'OUTSTANDING' %></span>
-                                    <span class="hero-period-badge"><i class="far fa-calendar-check"></i> <%= typeof dashboardData !== 'undefined' ? dashboardData.periodCoveredLabel : 'All Periods' %></span>
+                                    <span class="hero-level-badge tone-<%= activeBand.tone %>"><i class="fas fa-certificate"></i> Level <%= activeBand.level %> of 5</span>
+                                    <span class="hero-period-badge"><i class="far fa-calendar-check"></i> <%= periodLabel %></span>
                                 </div>
+                            </div>
+
+                            <div class="hero-band">
+                                <div class="hero-band-head">
+                                    <span class="hero-band-label">Rating Band</span>
+                                    <span class="hero-band-scale">0 – 100%</span>
+                                </div>
+                                <div class="hero-band-track" role="img" aria-label="Rating band <%= activeBand.level %> of 5: <%= heroLevelName %>">
+                                    <% ratingBands.forEach(b => { %>
+                                        <span class="hero-band-seg<%= b.level === activeBand.level ? ' is-active' : (b.level < activeBand.level ? ' is-passed' : '') %>"
+                                              style="animation-delay: <%= (0.35 + b.level * 0.09).toFixed(2) %>s"
+                                              title="<%= b.label %> — <%= b.range %>"></span>
+                                    <% }) %>
+                                </div>
+                                <p class="hero-band-note">
+                                    <% if (nextBand) { %>
+                                        <i class="fas fa-arrow-trend-up"></i>
+                                        <strong><%= (nextBand.min - heroScore).toFixed(2) %>%</strong> more to reach <%= nextBand.label %>
+                                    <% } else { %>
+                                        <i class="fas fa-circle-check"></i> Highest rating band reached
+                                    <% } %>
+                                </p>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="col-xl-4 col-lg-5">
-                    <a href="/survey-records" class="stat-card p-4">
-                        <div class="d-flex align-items-center mb-2">
-                            <div class="p-2 bg-primary bg-opacity-10 rounded-3 text-primary me-2">
-                                <i class="fas fa-clipboard-check"></i>
-                            </div>
-                            <div>
-                                <h6 class="text-muted fw-bold mb-0 small text-uppercase">Total Completed Surveys</h6>
-                                <span class="view-details-pill mt-1">View Details <i class="fas fa-arrow-right ms-1"></i></span>
-                            </div>
+                    <a href="/survey-records" class="stat-card">
+                        <div class="stat-card-head">
+                            <div class="stat-icon"><i class="fas fa-clipboard-check"></i></div>
+                            <h6 class="stat-label">Total Completed Surveys</h6>
                         </div>
-                        <h2 class="count-up mb-0 text-dark"><%= typeof totalRespondents !== 'undefined' ? totalRespondents : '0' %></h2>
-                        <div class="progress mt-2" style="height: 5px;">
-                            <div class="progress-bar bg-primary" style="width: 100%"></div>
+                        <div class="stat-value-row">
+                            <span class="count-up"><%= typeof totalRespondents !== 'undefined' ? totalRespondents : '0' %></span>
+                            <span class="stat-unit">responses</span>
                         </div>
-                        <p class="text-muted small mt-2 mb-0">Aggregate data from <strong><%= typeof totalOffices !== 'undefined' ? totalOffices : '0' %> registered offices</strong></p>
+                        <p class="stat-sub">Aggregated from <strong><%= typeof totalOffices !== 'undefined' ? totalOffices : '0' %></strong> registered offices</p>
+                        <div class="stat-card-foot">
+                            <span class="view-details-pill">View Details <i class="fas fa-arrow-right ms-1"></i></span>
+                        </div>
                     </a>
                 </div>
             </div>
@@ -467,10 +782,10 @@
                 <div class="col-md-4">
                     <div class="insight-chip">
                         <div class="insight-chip-icon active"><i class="fas fa-layer-group"></i></div>
-                        <div>
+                        <div class="insight-chip-body">
                             <div class="insight-chip-label">Most Active Cluster</div>
                             <% if (mostActiveCluster) { %>
-                                <div class="insight-chip-value"><%= mostActiveCluster.name %></div>
+                                <div class="insight-chip-value" title="<%= mostActiveCluster.name %>"><%= mostActiveCluster.name %></div>
                                 <div class="insight-chip-sub"><%= mostActiveCluster.respondents %> respondents</div>
                             <% } else { %>
                                 <div class="insight-chip-value text-muted">No data yet</div>
@@ -482,10 +797,10 @@
                 <div class="col-md-4">
                     <div class="insight-chip">
                         <div class="insight-chip-icon good"><i class="fas fa-trophy"></i></div>
-                        <div>
+                        <div class="insight-chip-body">
                             <div class="insight-chip-label">Highest Performing Office</div>
                             <% if (topOffice) { %>
-                                <div class="insight-chip-value"><%= topOffice.name %></div>
+                                <div class="insight-chip-value" title="<%= topOffice.name %>"><%= topOffice.name %></div>
                                 <div class="insight-chip-sub"><%= topOffice.cluster %> &middot; <%= topOffice.score.toFixed(2) %>%</div>
                             <% } else { %>
                                 <div class="insight-chip-value text-muted">No data yet</div>
@@ -497,10 +812,10 @@
                 <div class="col-md-4">
                     <div class="insight-chip">
                         <div class="insight-chip-icon warn"><i class="fas fa-triangle-exclamation"></i></div>
-                        <div>
+                        <div class="insight-chip-body">
                             <div class="insight-chip-label">Needs Immediate Attention</div>
                             <% if (attentionOffice) { %>
-                                <div class="insight-chip-value"><%= attentionOffice.name %></div>
+                                <div class="insight-chip-value" title="<%= attentionOffice.name %>"><%= attentionOffice.name %></div>
                                 <div class="insight-chip-sub"><%= attentionOffice.cluster %> &middot; <%= attentionOffice.score.toFixed(2) %>%</div>
                             <% } else { %>
                                 <div class="insight-chip-value text-muted">No data yet</div>
@@ -514,7 +829,7 @@
             <div class="row g-4 mb-4 reveal-section">
                 <div class="col-12">
                     <div class="chart-container-main">
-                        <div class="d-md-flex justify-content-between align-items-center mb-4">
+                        <div class="d-md-flex justify-content-between align-items-center mb-3">
                             <div>
                                 <p class="section-eyebrow mb-1">ANALYTICS</p>
                                 <h5 class="fw-bold text-dark mb-1">Cluster Performance Analytics</h5>
@@ -731,6 +1046,29 @@
             <p class="print-period">Period covered : <%= typeof dashboardData !== 'undefined' ? dashboardData.periodCoveredLabel : 'All Periods' %></p>
 
             <%- include('layout/report-cluster-table', { reportData: typeof reportData !== 'undefined' ? reportData : [] }) %>
+
+            <%- include('layout/report-signatories') %>
+        </div>
+    </div>
+</div>
+
+<div id="overallClusterReportModal">
+    <div class="modal-report-container shadow-lg">
+        <div class="modal-controls">
+            <button onclick="downloadOverallClusterPDF()" class="btn btn-danger btn-sm px-3"><i class="fas fa-file-pdf me-1"></i> Export PDF</button>
+            <button onclick="closeOverallClusterReportModal()" class="btn btn-dark btn-sm px-3">Close</button>
+        </div>
+
+        <div id="printableOverallClusterDocument">
+            <%- include('layout/report-header', { showSQDFormCode: false }) %>
+
+            <h5 class="print-title">Client Satisfaction Measurement Survey Result<br>Overall Cluster</h5>
+            <p class="print-period">Period covered : <%= typeof dashboardData !== 'undefined' ? dashboardData.periodCoveredLabel : 'All Periods' %></p>
+
+            <%- include('layout/report-overall-cluster-table', {
+                    reportData: typeof reportData !== 'undefined' ? reportData : [],
+                    overallClusterTotal: typeof overallClusterTotal !== 'undefined' ? overallClusterTotal : null
+                }) %>
 
             <%- include('layout/report-signatories') %>
         </div>
@@ -1500,6 +1838,51 @@ function downloadPDF() {
         // rest instead of pushing it to a fresh page). This measures real
         // layout pixels and moves the whole block to the next page only if it
         // would otherwise be cut.
+        avoidSplitSelector: '.cluster-report-signatures',
+        columnHeader: {
+            startYIn: 1.85,
+            columns: [
+                { label: 'NAME OF OFFICE', widthPct: 0.64, align: 'center' },
+                { label: 'OVERALL SCORE', widthPct: 0.16, align: 'center' },
+                { label: 'INTERPRETATION', widthPct: 0.20, align: 'center' }
+            ]
+        }
+    });
+}
+
+function openOverallClusterReportModal() {
+    document.getElementById('overallClusterReportModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeOverallClusterReportModal() {
+    document.getElementById('overallClusterReportModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+function downloadOverallClusterPDF() {
+    // Same one-identity document as the PER CLUSTER export (see downloadPDF) — same
+    // three columns and the same repeated header; only the subtitle differs, plus the
+    // closing OVERALL row this table adds at the very end.
+    const periodText = document.querySelector('#printableOverallClusterDocument .print-period')?.textContent.trim() || '';
+    const header = { title: 'Client Satisfaction Measurement Survey Result', subtitle: 'Overall Cluster', period: periodText };
+
+    const opt = {
+        margin:       [0, 0.5, 0.45, 0.5],
+        filename:     'CSPC-CSM-Overall-Cluster-Report.pdf',
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false, letterRendering: true, scrollY: 0, backgroundColor: '#ffffff' },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
+        pagebreak:    { mode: ['css', 'legacy'], avoid: ['.cluster-row', '.cluster-total-row', '.cluster-report-signatures', 'tr'] }
+    };
+
+    exportRepeatingHeaderPdf({
+        elementId: 'printableOverallClusterDocument',
+        filename: opt.filename,
+        opt,
+        headerHeightIn: 2.15,
+        headerHideSelectors: ['.report-header-block', '.print-title', '.print-period', '.cluster-report-table thead'],
+        getHeaderForPage: () => header,
         avoidSplitSelector: '.cluster-report-signatures',
         columnHeader: {
             startYIn: 1.85,

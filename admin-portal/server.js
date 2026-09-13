@@ -1381,10 +1381,15 @@ const sqdStatementFor = (label) => {
 // This is purely a numeric-rating computation and never touches the AI sentiment/topic
 // pipeline (see analyzeComment) — the two scores are computed independently of each other.
 function sqdScoreExpr(cols) {
+    // (Strongly Agree + Agree) / (total responses - N/A) * 100.
+    // The denominator counts answers that actually carry a rating (1..5) rather
+    // than `COUNT(s.id) * cols - (answers equal to 0)`: a column left NULL is an
+    // unanswered item, which sqdBucketExprs() already buckets as N/A, so counting
+    // it in the denominator here made the scorecard's % disagree with the SQD 0 /
+    // SQD 1-8 tables' Overall % on the very same report.
     const agreeSum = cols.map(c => `SUM(CASE WHEN ${c} IN (4,5) THEN 1 ELSE 0 END)`).join(' + ');
-    const naSum = cols.map(c => `SUM(CASE WHEN ${c} = 0 THEN 1 ELSE 0 END)`).join(' + ');
-    const answerable = `(COUNT(s.id) * ${cols.length} - (${naSum}))`;
-    return `IFNULL(ROUND((${agreeSum}) / NULLIF(${answerable}, 0) * 100, 2), 0)`;
+    const answerable = cols.map(c => `SUM(CASE WHEN ${c} BETWEEN 1 AND 5 THEN 1 ELSE 0 END)`).join(' + ');
+    return `IFNULL(ROUND((${agreeSum}) / NULLIF((${answerable}), 0) * 100, 2), 0)`;
 }
 const ALL_SQD_COLS = [1, 2, 3, 4, 5, 6, 7, 8].map(i => `s.sqd${i}`);
 
@@ -1403,6 +1408,16 @@ const CLUSTER_REPORT_ORDER = [
 // attaches each cluster's own weighted overall score/interpretation from
 // clusterRatingMap (cluster_name -> { rating }) so the report can print a
 // TOTAL row per cluster instead of only one institution-wide total.
+// An office (or cluster) nobody has answered for yet has no score to print — a
+// literal 0.00%/POOR would read as "rated, and rated badly". Reports print N/A
+// instead, so an empty office is identifiable at a glance.
+const NO_DATA = 'N/A';
+function scoreCell(respondents, rawScore, interpretFn) {
+    if (!respondents) return { score: NO_DATA, interpretation: NO_DATA };
+    const score = parseFloat(rawScore || 0);
+    return { score: score.toFixed(2), interpretation: interpretFn(score) };
+}
+
 function buildOrderedClusterReport(clustersMap, clusterRatingMap, interpretFn) {
     const byName = new Map();
     Object.keys(clustersMap).forEach(name => byName.set(name, clustersMap[name]));
@@ -1417,9 +1432,11 @@ function buildOrderedClusterReport(clustersMap, clusterRatingMap, interpretFn) {
 
     ordered.forEach(cluster => {
         const rating = clusterRatingMap[cluster.clusterName];
-        const score = rating ? parseFloat(rating.rating || 0) : 0;
-        cluster.overallScore = score.toFixed(2);
-        cluster.interpretation = interpretFn(score);
+        // A cluster whose offices have no responses at all prints N/A too, the same
+        // way each of those offices does — see scoreCell.
+        const cell = scoreCell(rating ? rating.respondents : 0, rating ? rating.rating : 0, interpretFn);
+        cluster.overallScore = cell.score;
+        cluster.interpretation = cell.interpretation;
     });
 
     return ordered;
@@ -1428,6 +1445,11 @@ function buildOrderedClusterReport(clustersMap, clusterRatingMap, interpretFn) {
 // Per-column rating breakdown (Strongly Agree..N/A bucket counts) for the
 // "SQD Results" detailed report — same 5/4/3/2/1/0 scale as sqdScoreExpr,
 // but returns each bucket's count instead of collapsing straight to a %.
+// The name an office prints under on a report: its spelled-out `full_name` when
+// one is set, otherwise `office_name` (already the complete name for most
+// offices). Kept as one expression so every report resolves it identically.
+const OFFICE_REPORT_NAME_EXPR = "COALESCE(NULLIF(TRIM(o.full_name), ''), o.office_name)";
+
 function sqdBucketExprs(col, alias) {
     return [
         `SUM(CASE WHEN ${col} = 5 THEN 1 ELSE 0 END) AS ${alias}_sa`,
@@ -2395,6 +2417,12 @@ db.query(createClustersTableQuery, (err) => {
                 // hash, set by the super admin via /offices/add or /offices/edit. NULL
                 // means this office has no login set up yet.
                 db.query("ALTER TABLE offices ADD COLUMN password VARCHAR(255) NULL", () => {});
+                // Complete office name for printed reports. Thirteen offices are stored
+                // under the acronym staff use day to day (CCS, VPAA, RFOIU, ...) — fine in
+                // dropdowns and charts, but the official CSM report has to spell the office
+                // out. NULL/blank means office_name is already the full name, and reports
+                // fall back to it. Backfilled by migrations/add_office_full_name.sql.
+                db.query("ALTER TABLE offices ADD COLUMN full_name VARCHAR(255) NULL", () => {});
 
                 // Services table (per office) — powers the dependent "Service Availed" dropdown
                 db.query(createServicesTableQuery, (err) => {
@@ -5547,7 +5575,7 @@ function loadDashboardData(req, callback) {
                                 color: colors[idx % colors.length]
                             });
 
-                            clusterRatingMap[row.cluster_name] = { rating: safeRating };
+                            clusterRatingMap[row.cluster_name] = { rating: safeRating, respondents: row.cluster_volume || 0 };
                         });
                     }
 
@@ -5584,7 +5612,8 @@ function loadDashboardData(req, callback) {
                                 }
 
                                 let score = parseFloat(row.office_score || 0);
-                                clustersMap[cName].offices.push({ name: row.office_name, score: score.toFixed(2), interpretation: interpretForDashboard(score) });
+                                const cell = scoreCell(row.office_volume, row.office_score, interpretForDashboard);
+                                clustersMap[cName].offices.push({ name: row.office_name, score: cell.score, interpretation: cell.interpretation });
 
                                 if (row.office_volume > 0) {
                                     rankedOffices.push({ name: row.office_name, cluster: cName, score, respondents: row.office_volume });
@@ -5596,6 +5625,27 @@ function loadDashboardData(req, callback) {
                         // and Finance, Research/Innovation/Collaboration, Academic) with each
                         // cluster's own TOTAL row attached — see CLUSTER_REPORT_ORDER.
                         const reportData = buildOrderedClusterReport(clustersMap, clusterRatingMap, interpretForDashboard);
+
+                        // OVERALL CLUSTER report: every cluster with the offices inside it, as
+                        // one continuous list, closed by a single TOTAL for the whole institution.
+                        // Each office score is the weighted sqdScoreExpr figure already printed
+                        // above it; the TOTAL is their plain average — the surveyed offices' overall
+                        // scores added up, divided by how many were surveyed. Being a per-office
+                        // average, it will differ from the respondent-weighted rating the dashboard
+                        // shows: the two answer different questions.
+                        // Only offices that were actually surveyed count toward it — an office
+                        // with no respondents at all has no score to average, so including it
+                        // would just be dividing by offices that never took part. An office WITH
+                        // respondents stays in even when it scored 0.00%: that is a real result.
+                        const scoredOffices = (reportRows || []).filter(row => (row.office_volume || 0) > 0);
+                        const officeScores = scoredOffices.map(row => parseFloat(row.office_score || 0));
+                        const officeScoreSum = officeScores.reduce((sum, score) => sum + score, 0);
+                        const overallAllClusters = officeScores.length ? officeScoreSum / officeScores.length : 0;
+                        const overallClusterTotal = {
+                            officeCount: officeScores.length,
+                            overallScore: officeScores.length ? overallAllClusters.toFixed(2) : NO_DATA,
+                            interpretation: officeScores.length ? interpretForDashboard(overallAllClusters) : NO_DATA
+                        };
 
                         rankedOffices.sort((a, b) => b.score - a.score);
                         const topOffices = rankedOffices.slice(0, 5);
@@ -5651,6 +5701,7 @@ function loadDashboardData(req, callback) {
                                             dashboardData: { overallRating: overallAvgScore, overallLevel: interpretation, periodCoveredLabel: selectedPeriod || 'All Periods' },
                                             chartData: chartData, clusterCards: clusterCards, satisfactionRate: overallAvgScore,
                                             totalRespondents: totalRespondents, totalOffices: totalOffices, reportData: reportData,
+                                            overallClusterTotal: overallClusterTotal,
                                             periodOptions: periodOptions, selectedPeriod: selectedPeriod || '',
                                             hasQueryParam: hasQueryParam,
                                             sentimentBreakdown: sentimentBreakdown, sentimentTotal: sentimentTotal,
@@ -5826,11 +5877,11 @@ app.get('/print', ensureAdminAuth, noCache, (req, res) => {
                         chartData.respondents.push(row.cluster_volume);
                         chartData.ratings.push(rating);
                         clusterCards.push({ name, rating: rating.toFixed(2), respondents: row.cluster_volume, color: colors[idx % colors.length] });
-                        clusterRatingMap[row.cluster_name] = { rating };
+                        clusterRatingMap[row.cluster_name] = { rating, respondents: row.cluster_volume || 0 };
                     });
 
                     const officeQuery = `
-                        SELECT o.cluster_name, o.office_name, ${sqdScoreExpr(ALL_SQD_COLS)} as office_score
+                        SELECT o.cluster_name, o.office_name, COUNT(s.id) as office_volume, ${sqdScoreExpr(ALL_SQD_COLS)} as office_score
                         FROM offices o
                         LEFT JOIN survey_responses s ON o.id = s.office_id${dateWhereAnd}
                         WHERE o.is_archived = 0
@@ -5845,8 +5896,8 @@ app.get('/print', ensureAdminAuth, noCache, (req, res) => {
                             if (!clustersMap[cName]) {
                                 clustersMap[cName] = { clusterName: cName, offices: [] };
                             }
-                            const score = parseFloat(row.office_score || 0);
-                            clustersMap[cName].offices.push({ name: row.office_name, score: score.toFixed(2), interpretation: interpretFor(score) });
+                            const cell = scoreCell(row.office_volume, row.office_score, interpretFor);
+                            clustersMap[cName].offices.push({ name: row.office_name, score: cell.score, interpretation: cell.interpretation });
                         });
 
                         // PER CLUSTER report order with each cluster's own TOTAL row —
@@ -5889,7 +5940,7 @@ app.get('/report', ensureAdminAuth, noCache, (req, res) => {
 // scopes everything to that single client instead, so admins can verify the
 // SQD computation against one respondent's own answers.
 app.post('/api/report-data', ensureAdminAuth, (req, res) => {
-    const { office, officeId, cluster, periodCovered, respondentId } = req.body;
+    const { office, officeId, cluster, periodCovered, respondentId, serviceAvailed } = req.body;
 
     const conditions = [];
     const queryParams = [];
@@ -5927,6 +5978,13 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
             conditions.push(`${periodNormExpr('s.period_year_quarter')} = ?`);
             queryParams.push(normalizePeriodStr(periodCovered));
         }
+        // One service of the selected office — only respondents who availed of
+        // that exact service are counted. Omitted (or 'ALL SERVICES') keeps the
+        // office-wide totals across every service it offers.
+        if (serviceAvailed && serviceAvailed !== 'ALL SERVICES') {
+            conditions.push('s.service_availed = ?');
+            queryParams.push(serviceAvailed);
+        }
     }
 
     const whereClause = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
@@ -5944,6 +6002,7 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
             COUNT(s.id) as total_respondents,
             MAX(s.respondent_name) as respondent_name,
             MAX(o.office_name) as office_name,
+            MAX(${OFFICE_REPORT_NAME_EXPR}) as office_report_name,
             MAX(s.service_availed) as service_availed,
             MAX(s.period_year_quarter) as period_year_quarter,
             MAX(DATE_FORMAT(s.created_at, '%M %d, %Y')) as response_date,
@@ -6649,8 +6708,43 @@ function getClusterPerformanceData(clusterName, periodCovered, callback) {
 // Offices belonging to one cluster, for the "Select Office" filter dropdown.
 function getOfficesForCluster(clusterName, callback) {
     db.query(
-        'SELECT id, office_name FROM offices WHERE cluster_name = ? AND is_archived = 0 ORDER BY office_name',
+        `SELECT o.id, o.office_name, ${OFFICE_REPORT_NAME_EXPR} AS report_name
+         FROM offices o WHERE o.cluster_name = ? AND o.is_archived = 0 ORDER BY o.office_name`,
         [clusterName],
+        (err, rows) => {
+            // A failed query used to hand back an empty list silently, which emptied the
+            // "Select Office" dropdown with no clue as to why — log it instead.
+            if (err) console.error('❌ [getOfficesForCluster] query failed:', err.message);
+            callback(err ? [] : rows);
+        }
+    );
+}
+
+// Every service offered by those same offices, for the "Select Service" filter
+// that sits beside "Select Office" — the page keeps the whole cluster's list and
+// narrows it to the picked office client-side, so switching offices doesn't cost
+// a round trip. Keyed by office id, matching the office dropdown's values.
+// It UNIONs the office's service catalogue with the service names respondents
+// actually picked in `survey_responses`, so a service a client availed of still
+// appears here (and stays reportable) even after it was renamed or removed from
+// the `services` table — otherwise those responses would be uncountable.
+function getServicesForCluster(clusterName, callback) {
+    db.query(
+        `SELECT office_id, service_name FROM (
+             SELECT sv.office_id AS office_id, sv.service_name AS service_name, sv.id AS ord
+             FROM services sv
+             JOIN offices o ON o.id = sv.office_id
+             WHERE o.cluster_name = ? AND o.is_archived = 0
+             UNION
+             SELECT r.office_id AS office_id, r.service_availed AS service_name, 999999 AS ord
+             FROM survey_responses r
+             JOIN offices o2 ON o2.id = r.office_id
+             WHERE o2.cluster_name = ? AND o2.is_archived = 0
+               AND r.service_availed IS NOT NULL AND TRIM(r.service_availed) <> ''
+         ) AS merged
+         GROUP BY office_id, service_name
+         ORDER BY office_id, MIN(ord), service_name`,
+        [clusterName, clusterName],
         (err, rows) => callback(err ? [] : rows)
     );
 }
@@ -6671,14 +6765,17 @@ app.get('/cluster/:id', ensureAdminAuth, noCache, (req, res) => {
 
         getClusterPerformanceData(cluster.cluster_name, selectedPeriod, (err, data) => {
             getOfficesForCluster(cluster.cluster_name, (officesInCluster) => {
-                getMergedPeriodOptions((periodOptions) => {
-                    res.render('cluster-detail', {
-                        data: data || [],
-                        periodOptions: periodOptions,
-                        selectedPeriod: selectedPeriod || '',
-                        officesInCluster: officesInCluster,
-                        clusterName: cluster.cluster_name,
-                        clusterId: cluster.id
+                getServicesForCluster(cluster.cluster_name, (servicesInCluster) => {
+                    getMergedPeriodOptions((periodOptions) => {
+                        res.render('cluster-detail', {
+                            data: data || [],
+                            periodOptions: periodOptions,
+                            selectedPeriod: selectedPeriod || '',
+                            officesInCluster: officesInCluster,
+                            servicesInCluster: servicesInCluster,
+                            clusterName: cluster.cluster_name,
+                            clusterId: cluster.id
+                        });
                     });
                 });
             });

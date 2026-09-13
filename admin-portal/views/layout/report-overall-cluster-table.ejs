@@ -1,0 +1,64 @@
+<%
+/* Shared "OVERALL CLUSTER" table — the institution-wide companion to
+   report-cluster-table.ejs. Same three columns (NAME OF OFFICE / OVERALL SCORE /
+   INTERPRETATION) and the same cluster headings, but it runs as ONE continuous
+   list: no spacer between clusters and no per-cluster TOTAL, because this is the
+   overall document — it totals once, at the very bottom.
+   Expects:
+     `reportData` — the same array the PER CLUSTER report renders, i.e.
+       [{ clusterName, offices: [{name, score, interpretation}] }] already in
+       CLUSTER_REPORT_ORDER. Its per-cluster overallScore/interpretation are
+       deliberately ignored here.
+     `overallClusterTotal` — { officeCount, overallScore, interpretation } for
+       the closing row: the surveyed offices' overall scores added up, divided by
+       how many were surveyed — see loadDashboardData in server.js. officeCount is
+       carried for reference but deliberately not printed; the row reads TOTAL. */
+const _clusters = typeof reportData !== 'undefined' && Array.isArray(reportData) ? reportData : [];
+const _total = typeof overallClusterTotal !== 'undefined' && overallClusterTotal ? overallClusterTotal : null;
+%>
+<%
+/* An office or cluster with no responses yet carries the string "N/A" instead of a
+   number (see scoreCell in server.js) — print that as-is, never as "N/A%". */
+const _pct = (value) => (value === 'N/A' || value === null || value === undefined || value === '') ? 'N/A' : `${value}%`;
+%>
+<table class="cluster-report-table">
+    <colgroup>
+        <col style="width: 64%">
+        <col style="width: 16%">
+        <col style="width: 20%">
+    </colgroup>
+    <thead>
+        <tr>
+            <th>Name of Office</th>
+            <th class="score-col">Overall Score</th>
+            <th class="inter-col">Interpretation</th>
+        </tr>
+    </thead>
+    <% if (_clusters.length > 0) { %>
+        <%# One tbody for every cluster — keeps the list unbroken from the first
+            office to the last instead of the PER CLUSTER report's separate blocks. %>
+        <tbody class="cluster-section">
+            <% _clusters.forEach(cluster => { %>
+                <tr class="cluster-row"><td colspan="3"><%= cluster.clusterName.toUpperCase() %></td></tr>
+                <% cluster.offices.forEach((office) => { %>
+                    <tr>
+                        <td><%= office.name %></td>
+                        <td class="score-col"><%= _pct(office.score) %></td>
+                        <td class="inter-col"><%= office.interpretation %></td>
+                    </tr>
+                <% }) %>
+            <% }) %>
+            <% if (_total) { %>
+                <tr class="cluster-total-row overall-cluster-row">
+                    <td class="text-end">TOTAL</td>
+                    <td class="score-col"><%= _pct(_total.overallScore) %></td>
+                    <td class="inter-col"><%= _total.interpretation %></td>
+                </tr>
+            <% } %>
+        </tbody>
+    <% } else { %>
+        <tbody>
+            <tr><td colspan="3" class="text-center py-3 text-muted">No survey response submissions loaded yet for this period.</td></tr>
+        </tbody>
+    <% } %>
+</table>

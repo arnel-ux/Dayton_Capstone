@@ -8,6 +8,11 @@
    overallScore, interpretation } already placed in the required cluster order and
    carrying each cluster's own weighted total — see CLUSTER_REPORT_ORDER in server.js. */
 %>
+<%
+/* An office or cluster with no responses yet carries the string "N/A" instead of a
+   number (see scoreCell in server.js) — print that as-is, never as "N/A%". */
+const _pct = (value) => (value === 'N/A' || value === null || value === undefined || value === '') ? 'N/A' : `${value}%`;
+%>
 <table class="cluster-report-table">
     <colgroup>
         <col style="width: 64%">
@@ -31,13 +36,13 @@
                 <% cluster.offices.forEach((office) => { %>
                     <tr>
                         <td><%= office.name %></td>
-                        <td class="score-col"><%= office.score %>%</td>
+                        <td class="score-col"><%= _pct(office.score) %></td>
                         <td class="inter-col"><%= office.interpretation %></td>
                     </tr>
                 <% }) %>
                 <tr class="cluster-total-row">
                     <td class="text-end">TOTAL</td>
-                    <td class="score-col"><%= cluster.overallScore %>%</td>
+                    <td class="score-col"><%= _pct(cluster.overallScore) %></td>
                     <td class="inter-col"><%= cluster.interpretation %></td>
                 </tr>
             </tbody>

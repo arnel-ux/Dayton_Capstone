@@ -1220,20 +1220,38 @@
         return "Poor";
     }
 
+    // A dimension nobody could rate — no respondents at all, or every respondent
+    // marked it N/A — has no percentage to show. Printing 0.00%/Poor would read as
+    // "rated, and rated badly", so these cells print N/A instead, the same way the
+    // SQD 0 / SQD 1-8 bucket tables already do.
+    function sqdAnswerableCount(stats, prefix) {
+        return ['sa', 'a', 'n', 'd', 'sd'].reduce((sum, b) => sum + (parseInt(stats[`${prefix}_${b}`]) || 0), 0);
+    }
+
     function updateClientReportTable(stats) {
         const totalResp = stats.total_respondents || 0;
         document.getElementById('cr_totalRespondents1').innerText = totalResp;
         document.getElementById('cr_totalRespondents2').innerText = totalResp;
 
+        let overallAnswerable = 0;
         for (let i = 1; i <= 8; i++) {
-            const score = parseFloat(stats[`sqd${i}`] || 0);
-            document.getElementById(`cr_sqd${i}_score`).innerText = score.toFixed(2) + '%';
-            document.getElementById(`cr_sqd${i}_interp`).innerText = getClientReportInterpretation(score);
+            const answerable = sqdAnswerableCount(stats, `sqd${i}`);
+            overallAnswerable += answerable;
+            const scoreEl = document.getElementById(`cr_sqd${i}_score`);
+            const interpEl = document.getElementById(`cr_sqd${i}_interp`);
+            if (answerable === 0) {
+                scoreEl.innerText = 'N/A';
+                interpEl.innerText = 'N/A';
+            } else {
+                const score = parseFloat(stats[`sqd${i}`] || 0);
+                scoreEl.innerText = score.toFixed(2) + '%';
+                interpEl.innerText = getClientReportInterpretation(score);
+            }
         }
 
         const overall = parseFloat(stats.overall_score || 0);
-        document.getElementById('cr_overall_score').innerText = overall.toFixed(2) + '%';
-        document.getElementById('cr_overall_interp').innerText = getClientReportInterpretation(overall).toUpperCase();
+        document.getElementById('cr_overall_score').innerText = overallAnswerable === 0 ? 'N/A' : overall.toFixed(2) + '%';
+        document.getElementById('cr_overall_interp').innerText = overallAnswerable === 0 ? 'N/A' : getClientReportInterpretation(overall).toUpperCase();
     }
 
     function updateClientCommentsTable(comments) {
