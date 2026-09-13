@@ -1269,6 +1269,12 @@
                keeps its clamp() size here — only the surrounding padding is
                tightened for small screens. */
             .profile-hero { padding: 1.5rem 0.9rem 1.25rem; gap: 0.7rem; }
+            .profile-hero-avatar {
+                width: clamp(76px, 20vw, 108px);
+                height: clamp(76px, 20vw, 108px);
+                font-size: clamp(1.9rem, 7vw, 2.6rem);
+                border-width: 3px;
+            }
             .profile-hero-text h3 { font-size: 1.05rem; }
             .profile-hero-text p { font-size: 0.78rem; }
             .profile-body { padding: 0.9rem; }
@@ -1736,9 +1742,20 @@
                 min-width: 0;
             }
             #stage2 .form-check-input { width: 19px; height: 19px; }
+            /* The generic 19x19 square above was also landing on the Autofill
+               SWITCH's own checkbox input (it lives inside #stage2 too) —
+               forcing a pill-shaped toggle into a square knob so it rendered
+               as a plain radio-looking dot instead of a switch. Restore the
+               switch's own proportions after the generic rule so it still
+               reads as a slider on phones. */
+            #stage2 .form-switch .form-check-input { width: 2.15em; height: 1.2em; }
             #stage2 .form-check-label, #gender-field-group label { font-size: 0.92rem; }
             #stage2 .lock-icon { font-size: 0.78rem; }
             #stage2 .row.g-4 > * { padding-top: 0.1rem; }
+            /* Male/Female used Bootstrap's gap-4 (1.5rem/24px) utility, which
+               ships !important — far wider than the two short options need
+               once labels are already trimmed to phone size. */
+            #gender-field-group.gap-4 { gap: 0.9rem !important; }
 
             /* Terms checkbox: show the label text first, checkbox centered
                below it — instead of a left-aligned row whose wrapped 2nd
