@@ -78,6 +78,10 @@
         .dash-toolbar {
             display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap;
             margin-bottom: 14px;
+            /* The Generate Report dropdown opens downward over the cards below,
+               so the toolbar has to own a stacking context that sits above the
+               card rows -- otherwise the menu is painted behind them. */
+            position: relative; z-index: 20;
         }
         .dash-toolbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
@@ -229,7 +233,7 @@
             flex: 1 1 0; height: 9px; border-radius: 999px;
             background: rgba(255, 255, 255, 0.13);
             transform-origin: left center;
-            animation: bandGrow 0.55s var(--ease-out) both;
+            animation: bandGrow 0.55s var(--ease-out) backwards;
         }
         .hero-band-seg.is-passed { background: rgba(255, 255, 255, 0.32); }
         .hero-band-seg.is-active {
@@ -525,9 +529,17 @@
         /* The animation is applied to the Bootstrap column, never to the card
            itself — an animation with fill-mode:both would otherwise win over
            the card's own :hover transform. */
+        /* fill-mode is `backwards`, NOT `both`: backwards holds the from-state
+           during the stagger delay, which is all this needs, and then releases
+           the element completely once the animation ends. `both` kept the
+           animation "in effect" forever, and an element with an in-effect
+           opacity/transform animation gets its own stacking context -- which is
+           what was painting the card columns on top of the toolbar's open
+           dropdown menu. The end state is the element's own default (opacity 1,
+           no transform), so nothing moves when the fill is released. */
         .dash-toolbar,
         .container-fluid > .row:not(.reveal-section) > [class*="col-"] {
-            animation: surfaceRise 0.7s var(--ease-out) both;
+            animation: surfaceRise 0.7s var(--ease-out) backwards;
         }
         .dash-toolbar { animation-delay: 0.02s; }
         .container-fluid > .row:not(.reveal-section) > [class*="col-"]:nth-child(1) { animation-delay: 0.10s; }

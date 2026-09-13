@@ -2607,26 +2607,42 @@ db.query(createClustersTableQuery, (err) => {
                             // account as already onboarded (they never asked to see a first-run
                             // tour) — new accounts explicitly insert 0 in
                             // /complete-google-registration so only genuinely new signups see it.
-                            db.query("ALTER TABLE client_accounts ADD COLUMN onboarding_completed TINYINT(1) NOT NULL DEFAULT 1", () => {});
+                            // The backfill below NAMES onboarding_completed, so it must not be
+                            // issued until this ALTER has actually landed. `db` is a pool: two
+                            // queries fired back-to-back go out on two different connections and
+                            // are not ordered relative to each other, so the un-nested version of
+                            // this raced the ALTER and failed with ER_BAD_FIELD_ERROR on any
+                            // deployment whose client_accounts predates the column. Nesting the
+                            // backfill in the callback is what guarantees the ordering.
+                            db.query("ALTER TABLE client_accounts ADD COLUMN onboarding_completed TINYINT(1) NOT NULL DEFAULT 1", (alterErr) => {
+                                // ER_DUP_FIELDNAME here is the normal steady state (the CREATE
+                                // TABLE above already declares the column on fresh installs), so
+                                // the backfill still runs. Anything else means the column really
+                                // is missing and the backfill would only fail again.
+                                if (alterErr && alterErr.code !== 'ER_DUP_FIELDNAME') {
+                                    console.error("❌ Could not add client_accounts.onboarding_completed — skipping backfill:", alterErr.message);
+                                    return;
+                                }
 
-                            // Backfill: clients who submitted surveys before client_accounts existed
-                            // have no row here, so My Profile/autofill show "Not set yet" forever.
-                            // Seed one row per email from that email's most recent client_profiles
-                            // submission. INSERT IGNORE skips emails that already have an account row.
-                            const backfillAccountsQuery = `
-                                INSERT IGNORE INTO client_accounts (email, respondent_name, region, age, gender, onboarding_completed)
-                                SELECT cp.email, cp.respondent_name, cp.region, cp.age, cp.gender, 1
-                                FROM client_profiles cp
-                                INNER JOIN (
-                                    SELECT email, MAX(id) AS max_id
-                                    FROM client_profiles
-                                    WHERE email IS NOT NULL AND email <> ''
-                                    GROUP BY email
-                                ) latest ON cp.id = latest.max_id
-                            `;
-                            db.query(backfillAccountsQuery, (backfillErr, backfillResult) => {
-                                if (backfillErr) console.error("❌ Error backfilling client_accounts:", backfillErr);
-                                else if (backfillResult.affectedRows > 0) console.log(`✅ Backfilled ${backfillResult.affectedRows} client_accounts row(s) from client_profiles.`);
+                                // Backfill: clients who submitted surveys before client_accounts existed
+                                // have no row here, so My Profile/autofill show "Not set yet" forever.
+                                // Seed one row per email from that email's most recent client_profiles
+                                // submission. INSERT IGNORE skips emails that already have an account row.
+                                const backfillAccountsQuery = `
+                                    INSERT IGNORE INTO client_accounts (email, respondent_name, region, age, gender, onboarding_completed)
+                                    SELECT cp.email, cp.respondent_name, cp.region, cp.age, cp.gender, 1
+                                    FROM client_profiles cp
+                                    INNER JOIN (
+                                        SELECT email, MAX(id) AS max_id
+                                        FROM client_profiles
+                                        WHERE email IS NOT NULL AND email <> ''
+                                        GROUP BY email
+                                    ) latest ON cp.id = latest.max_id
+                                `;
+                                db.query(backfillAccountsQuery, (backfillErr, backfillResult) => {
+                                    if (backfillErr) console.error("❌ Error backfilling client_accounts:", backfillErr);
+                                    else if (backfillResult.affectedRows > 0) console.log(`✅ Backfilled ${backfillResult.affectedRows} client_accounts row(s) from client_profiles.`);
+                                });
                             });
 
                             // NOTE: a second-pass "fill any still-NULL region/age/gender from this
