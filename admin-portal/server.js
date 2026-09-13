@@ -2229,6 +2229,7 @@ CREATE TABLE IF NOT EXISTS client_accounts (
     region VARCHAR(100) NULL,
     age VARCHAR(50) NULL,
     gender VARCHAR(50) NULL,
+    onboarding_completed TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );`;
@@ -2573,14 +2574,20 @@ db.query(createClustersTableQuery, (err) => {
                             // value only ever exists in the emailed link itself) plus its expiry.
                             db.query("ALTER TABLE client_accounts ADD COLUMN reset_token_hash VARCHAR(255) NULL", () => {});
                             db.query("ALTER TABLE client_accounts ADD COLUMN reset_token_expires DATETIME NULL", () => {});
+                            // Drives the one-time setup wizard shown on /client-survey right after
+                            // registration. DEFAULT 1 here so this ALTER TABLE marks every EXISTING
+                            // account as already onboarded (they never asked to see a first-run
+                            // tour) — new accounts explicitly insert 0 in
+                            // /complete-google-registration so only genuinely new signups see it.
+                            db.query("ALTER TABLE client_accounts ADD COLUMN onboarding_completed TINYINT(1) NOT NULL DEFAULT 1", () => {});
 
                             // Backfill: clients who submitted surveys before client_accounts existed
                             // have no row here, so My Profile/autofill show "Not set yet" forever.
                             // Seed one row per email from that email's most recent client_profiles
                             // submission. INSERT IGNORE skips emails that already have an account row.
                             const backfillAccountsQuery = `
-                                INSERT IGNORE INTO client_accounts (email, respondent_name, region, age, gender)
-                                SELECT cp.email, cp.respondent_name, cp.region, cp.age, cp.gender
+                                INSERT IGNORE INTO client_accounts (email, respondent_name, region, age, gender, onboarding_completed)
+                                SELECT cp.email, cp.respondent_name, cp.region, cp.age, cp.gender, 1
                                 FROM client_profiles cp
                                 INNER JOIN (
                                     SELECT email, MAX(id) AS max_id
@@ -3733,8 +3740,11 @@ app.post('/complete-google-registration', async (req, res) => {
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
         db.query(
-            `INSERT INTO client_accounts (email, respondent_name, password, google_photo_url)
-             VALUES (?, ?, ?, ?)
+            // onboarding_completed only takes effect via INSERT (a brand-new account) —
+            // ON DUPLICATE KEY UPDATE deliberately omits it, so an email that already had
+            // an account (e.g. re-registering) doesn't get its onboarding state reset.
+            `INSERT INTO client_accounts (email, respondent_name, password, google_photo_url, onboarding_completed)
+             VALUES (?, ?, ?, ?, 0)
              ON DUPLICATE KEY UPDATE respondent_name = VALUES(respondent_name), password = VALUES(password), google_photo_url = VALUES(google_photo_url)`,
             [pending.email, pending.name || null, hashedPassword, pending.photo || null],
             (err) => {
@@ -4001,7 +4011,7 @@ app.get('/client-survey', ensureClientAuth, noCache, (req, res) => {
     const clientEmail = req.clientEmail;
 
     db.query('SELECT * FROM offices WHERE is_archived = 0 ORDER BY office_name ASC', (err, offices) => {
-        if (err) return res.render('client-survey', { offices: [], clientEmail, blockedCombos: {}, blockedUntil: {}, serviceAvailability: {}, clientProfile: null, officeServices: {}, offlineMode: false });
+        if (err) return res.render('client-survey', { offices: [], clientEmail, blockedCombos: {}, blockedUntil: {}, serviceAvailability: {}, clientProfile: null, officeServices: {}, offlineMode: false, showOnboarding: false });
 
         // All active services, grouped by office_id — powers the dependent
         // "Service Availed" dropdown (#serviceSelect) on the client side. Also
@@ -4060,15 +4070,31 @@ app.get('/client-survey', ensureClientAuth, noCache, (req, res) => {
                             // set at registration (Google name) and kept up to date on every
                             // survey submission, so it's always available here regardless of
                             // whether this is the account's first or a later visit.
-                            db.query('SELECT respondent_name, region, age, gender FROM client_accounts WHERE email = ? LIMIT 1', [clientEmail], (err3, profileRows) => {
+                            db.query('SELECT respondent_name, region, age, gender, onboarding_completed FROM client_accounts WHERE email = ? LIMIT 1', [clientEmail], (err3, profileRows) => {
                                 const clientProfile = (!err3 && profileRows && profileRows.length > 0) ? profileRows[0] : null;
-                                res.render('client-survey', { offices, clientEmail, blockedCombos, blockedUntil, serviceAvailability, clientProfile, officeServices, offlineMode: false });
+                                // Shows the one-time setup wizard only for accounts that registered
+                                // through /complete-google-registration with onboarding_completed = 0
+                                // still unset — see the ALTER TABLE comment near client_accounts for
+                                // why every pre-existing/backfilled account is excluded by default.
+                                const showOnboarding = !!(clientProfile && Number(clientProfile.onboarding_completed) === 0);
+                                res.render('client-survey', { offices, clientEmail, blockedCombos, blockedUntil, serviceAvailability, clientProfile, officeServices, offlineMode: false, showOnboarding });
                             });
                         }
                     );
                 }
             );
         });
+    });
+});
+
+// Marks the one-time setup wizard (shown on /client-survey right after
+// registration — see showOnboarding above) as dismissed, whether the client
+// finished it or clicked Skip. Idempotent: called at most once per account in
+// normal use, but harmless if called again.
+app.post('/api/onboarding-complete', ensureClientAuth, noCache, (req, res) => {
+    db.query('UPDATE client_accounts SET onboarding_completed = 1 WHERE email = ?', [req.clientEmail], (err) => {
+        if (err) return res.status(500).json({ success: false, message: 'Server error saving your progress.' });
+        res.json({ success: true });
     });
 });
 
@@ -4824,7 +4850,7 @@ app.get('/survey-offline', noCache, (req, res) => {
         if (err) {
             return res.render('client-survey', {
                 offices: [], clientEmail: null, blockedCombos: {}, blockedUntil: {},
-                serviceAvailability: {}, clientProfile: null, officeServices: {}, offlineMode: true
+                serviceAvailability: {}, clientProfile: null, officeServices: {}, offlineMode: true, showOnboarding: false
             });
         }
 
@@ -4841,7 +4867,7 @@ app.get('/survey-offline', noCache, (req, res) => {
 
             res.render('client-survey', {
                 offices, clientEmail: null, blockedCombos: {}, blockedUntil: {},
-                serviceAvailability, clientProfile: null, officeServices, offlineMode: true
+                serviceAvailability, clientProfile: null, officeServices, offlineMode: true, showOnboarding: false
             });
         });
     });

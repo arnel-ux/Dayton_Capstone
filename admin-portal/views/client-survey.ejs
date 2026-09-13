@@ -3507,6 +3507,94 @@
     </div>
 </div>
 
+<% if (showOnboarding) { %>
+<!-- First-time Setup Wizard — shown once, right after registration, on this
+     account's first /client-survey load (see showOnboarding in server.js).
+     Static backdrop + no close button on purpose: the "Skip Tour" link is the
+     one deliberate way out, so this always resolves to a POST
+     /api/onboarding-complete instead of silently reappearing next login. -->
+<div class="modal fade" id="onboardingWizardModal" tabindex="-1" aria-labelledby="onboardingWizardLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg onboarding-dialog">
+        <div class="modal-content">
+            <div class="modal-header onboarding-header">
+                <h5 class="modal-title fw-bold onboarding-title" id="onboardingWizardLabel"><i class="bi bi-stars me-1"></i> Welcome to the CQA Client Portal</h5>
+                <button type="button" class="btn btn-link btn-sm text-secondary text-decoration-none ms-auto onboarding-skip-btn" onclick="finishOnboarding()" title="Skip this tour">Skip Tour</button>
+            </div>
+            <div class="modal-body onboarding-body">
+                <div class="onboarding-step active" data-onboarding-step="1">
+                    <div class="text-center mb-3"><i class="bi bi-house-heart-fill text-primary onboarding-icon"></i></div>
+                    <h5 class="fw-semibold text-center mb-2">You're all set up!</h5>
+                    <p class="text-secondary text-center mb-0">Your account is ready. Here's a quick look at what you can do from this portal — it only takes a moment.</p>
+                </div>
+                <div class="onboarding-step" data-onboarding-step="2" hidden>
+                    <div class="text-center mb-3"><i class="bi bi-clipboard2-check-fill text-primary onboarding-icon"></i></div>
+                    <h5 class="fw-semibold text-center mb-2">Take a Survey</h5>
+                    <p class="text-secondary text-center mb-0">After availing any CSPC office's service, go to <strong>Take Survey</strong> to rate your experience. It's quick, confidential, and helps offices improve.</p>
+                </div>
+                <div class="onboarding-step" data-onboarding-step="3" hidden>
+                    <div class="text-center mb-3"><i class="bi bi-wifi-off text-primary onboarding-icon"></i></div>
+                    <h5 class="fw-semibold text-center mb-2">No Internet? No Problem</h5>
+                    <p class="text-secondary text-center mb-0">Since you've already registered while online, you can open this survey link even without an internet connection and submit it offline — your response is saved on this device and syncs automatically once you're back online.</p>
+                </div>
+                <div class="onboarding-step" data-onboarding-step="4" hidden>
+                    <div class="text-center mb-3"><i class="bi bi-clock-history text-primary onboarding-icon"></i></div>
+                    <h5 class="fw-semibold text-center mb-2">Track Your History</h5>
+                    <p class="text-secondary text-center mb-0">The <strong>History</strong> tab keeps every survey you've submitted, along with its review status, so you can check back anytime.</p>
+                </div>
+                <div class="onboarding-step" data-onboarding-step="5" hidden>
+                    <div class="text-center mb-3"><i class="bi bi-person-fill text-primary onboarding-icon"></i></div>
+                    <h5 class="fw-semibold text-center mb-2">Manage Your Profile</h5>
+                    <p class="text-secondary text-center mb-0">Visit <strong>Profile</strong> to update your name, set a local password, or check the account details tied to your surveys.</p>
+                </div>
+                <div class="text-center mt-4">
+                    <span class="onboarding-dot" data-dot="1"></span>
+                    <span class="onboarding-dot" data-dot="2"></span>
+                    <span class="onboarding-dot" data-dot="3"></span>
+                    <span class="onboarding-dot" data-dot="4"></span>
+                    <span class="onboarding-dot" data-dot="5"></span>
+                </div>
+            </div>
+            <div class="modal-footer onboarding-footer">
+                <button type="button" class="btn btn-outline-secondary onboarding-back-btn" id="onboardingBackBtn" onclick="onboardingStep(-1)" hidden>Back</button>
+                <button type="button" class="btn btn-primary px-4 onboarding-next-btn" id="onboardingNextBtn" onclick="onboardingStep(1)">Next</button>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+    .onboarding-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--bs-secondary-bg, #dee2e6); margin: 0 4px; transition: background-color .2s ease; }
+    .onboarding-dot.active { background: var(--bs-primary); }
+
+    /* Bootstrap's modal-dialog is already full-width-minus-margin below the
+       sm breakpoint, and modal-dialog-scrollable caps modal-content's height
+       to the viewport so short/landscape phones scroll the body text instead
+       of pushing the footer buttons off-screen — the rules below only tune
+       spacing/touch-target size, they don't reimplement responsiveness. */
+    .onboarding-icon { font-size: 2.4rem; }
+    .onboarding-body { min-height: 220px; }
+    .onboarding-header { flex-wrap: nowrap; gap: 0.5rem; }
+    .onboarding-skip-btn { flex: 0 0 auto; white-space: nowrap; min-height: 44px; }
+    .onboarding-footer { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; }
+    .onboarding-back-btn, .onboarding-next-btn { min-height: 44px; }
+    .onboarding-next-btn { margin-left: auto; }
+
+    @media (max-width: 575.98px) {
+        /* Bootstrap's own xs modal margin (0.5rem) already prevents edge-to-
+           edge overflow; this only trims internal padding/text sizes so the
+           5-dot progress row and both footer buttons never need to wrap or
+           clip on narrow (320-360px) screens. */
+        .onboarding-title { font-size: 1rem; }
+        .onboarding-icon { font-size: 2rem; }
+        .onboarding-body { min-height: 0; padding: 1rem; }
+        .onboarding-body h5 { font-size: 1.05rem; }
+        .onboarding-body p { font-size: 0.9rem; }
+        .onboarding-footer { flex-wrap: nowrap; }
+        .onboarding-back-btn, .onboarding-next-btn { flex: 1 1 0; padding-left: 0.75rem; padding-right: 0.75rem; }
+        .onboarding-next-btn { margin-left: 0; }
+    }
+</style>
+<% } %>
+
 <% if (!offlineMode) { %>
 <!-- ONLINE-SESSION OFFLINE TRANSITION — authenticated /client-survey only.
      /survey-offline (offlineMode) already has its own "you were always
@@ -6839,6 +6927,62 @@ async function logout(){
 document.getElementById('agreeTermsStage1').addEventListener('change', function () {
     document.getElementById('btnStartSurvey').disabled = !this.checked;
 });
+
+// ==========================================
+// First-time Setup Wizard (see showOnboarding in server.js's /client-survey
+// route, and the #onboardingWizardModal markup this drives)
+// ==========================================
+const ONBOARDING_STEP_COUNT = 5;
+let onboardingCurrentStep = 1;
+
+function renderOnboardingStep() {
+    document.querySelectorAll('.onboarding-step').forEach(el => {
+        const isActive = Number(el.getAttribute('data-onboarding-step')) === onboardingCurrentStep;
+        el.hidden = !isActive;
+        el.classList.toggle('active', isActive);
+    });
+    document.querySelectorAll('.onboarding-dot').forEach(el => {
+        el.classList.toggle('active', Number(el.getAttribute('data-dot')) === onboardingCurrentStep);
+    });
+    const backBtn = document.getElementById('onboardingBackBtn');
+    const nextBtn = document.getElementById('onboardingNextBtn');
+    if (backBtn) backBtn.hidden = onboardingCurrentStep === 1;
+    if (nextBtn) nextBtn.textContent = onboardingCurrentStep === ONBOARDING_STEP_COUNT ? 'Get Started' : 'Next';
+}
+
+function onboardingStep(delta) {
+    const next = onboardingCurrentStep + delta;
+    if (next > ONBOARDING_STEP_COUNT) {
+        finishOnboarding();
+        return;
+    }
+    onboardingCurrentStep = Math.min(Math.max(next, 1), ONBOARDING_STEP_COUNT);
+    renderOnboardingStep();
+}
+
+// Called on Finish AND on Skip Tour — both mean "don't show this again",
+// so both hit the same endpoint. Best-effort: even if the request fails
+// (e.g. connectivity), the modal still closes rather than trapping the user;
+// it will simply be offered again on this account's next /client-survey load.
+async function finishOnboarding() {
+    const modalEl = document.getElementById('onboardingWizardModal');
+    const instance = modalEl && bootstrap.Modal.getOrCreateInstance(modalEl);
+    if (instance) instance.hide();
+    try {
+        await fetch('/api/onboarding-complete', { method: 'POST' });
+    } catch (e) { /* best-effort — see comment above */ }
+}
+
+<% if (showOnboarding) { %>
+// Called directly (not on DOMContentLoaded) — this script block sits right
+// before </body>, after #onboardingWizardModal in the markup, matching the
+// rest of this file's "Initial Load Setup" calls just below.
+renderOnboardingStep();
+(function () {
+    const modalEl = document.getElementById('onboardingWizardModal');
+    if (modalEl) new bootstrap.Modal(modalEl).show();
+})();
+<% } %>
 
 // Initial Load Setup
 setLanguage('en');
