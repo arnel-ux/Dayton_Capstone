@@ -731,6 +731,78 @@
            mb-3 would leave a dangling gap above the card's bottom padding. */
         body.is-offline #offlineSurveyBtn { margin-bottom: 0 !important; }
 
+        /* The .btn-home responsive overrides above move the button to the
+           top-left corner on any viewport under 780px tall, because ONLINE
+           the fold is tight and a bottom-centre button would land on top of
+           "Sign in with Google". Offline that reasoning doesn't hold — the
+           card is short and the bottom half of the screen is empty — and the
+           button jumping corners between the two states is exactly the
+           inconsistency this fixes. Kept bottom-centre offline, matching the
+           online full-height placement. Specificity (0,2,1) beats the
+           media-query rules' (0,1,0), so source order doesn't matter here. */
+        body.is-offline .btn-home {
+            top: auto;
+            bottom: 0.9rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2.6rem;
+            height: 2.6rem;
+            font-size: 0.95rem;
+        }
+        /* Must re-apply the centring translate, or hovering snaps it left. */
+        body.is-offline .btn-home:hover { transform: translateX(-50%) translateY(-2px); }
+
+        /* ---- Offline flow guide ----
+           Without the login form the card is just a notice and a button, and
+           it isn't obvious that the survey still needs the user's registered
+           account — they find that out only after tapping through. Spelling
+           the two steps out here sets the expectation BEFORE they leave this
+           page, so they know to have their CQA email and password ready. */
+        .offline-steps {
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 0.75rem 0.85rem;
+            margin-bottom: 0.85rem;
+        }
+        .offline-steps-title {
+            margin: 0 0 0.55rem;
+            font-size: 0.7rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #64748b;
+        }
+        .offline-step { display: flex; align-items: flex-start; gap: 0.6rem; }
+        .offline-step + .offline-step { margin-top: 0.55rem; }
+        .offline-step .step-num {
+            flex: none;
+            width: 22px;
+            height: 22px;
+            margin-top: 1px;
+            border-radius: 50%;
+            background: #251d3a;
+            color: #ffffff;
+            font-size: 0.72rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .offline-step p { margin: 0; font-size: 0.82rem; line-height: 1.4; color: #334155; }
+        .offline-step strong { color: #1e293b; font-weight: 700; }
+        .offline-steps-foot {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.4rem;
+            margin: 0.6rem 0 0;
+            padding-top: 0.55rem;
+            border-top: 1px dashed #e2e8f0;
+            font-size: 0.75rem;
+            line-height: 1.35;
+            color: #64748b;
+        }
+
     </style>
 </head>
 <body>
@@ -781,20 +853,47 @@
                 <button type="button" class="notice-retry-btn" onclick="checkServerHealth()">Retry</button>
             </div>
 
+            <!-- Says WHY the username/password form is gone while offline, so
+                 the shortened card doesn't just look broken. Reuses the
+                 existing .offline-login-notice pattern. -->
+            <div id="offlineLoginNotice" class="offline-login-notice d-none">
+                <i class="fas fa-wifi"></i>
+                <span>You're offline. Signing in needs a connection — but you can still answer the survey now.</span>
+            </div>
+
+            <!-- The two steps mirror the real flow: this button leads to
+                 /survey-offline, whose form requires BOTH a registered email
+                 and that account's password (client-survey.ejs, offlineMode
+                 branch). Neither is checked on this device — verification
+                 happens at POST /api/offline-surveys/verify-and-sync once
+                 connectivity returns — which is exactly why the warning about
+                 getting them right belongs here, up front, and not after the
+                 user has already filled in the whole survey. -->
+            <div id="offlineStepsGuide" class="offline-steps d-none">
+                <p class="offline-steps-title">How to answer the survey offline</p>
+
+                <div class="offline-step">
+                    <span class="step-num" aria-hidden="true">1</span>
+                    <p>Tap <strong>Take Survey Offline</strong> below to open the survey form.</p>
+                </div>
+
+                <div class="offline-step">
+                    <span class="step-num" aria-hidden="true">2</span>
+                    <p>Enter the <strong>email and password of the account you registered</strong> with the CQA system, then answer the survey. Make sure both are correct — that account is how your response gets saved to you.</p>
+                </div>
+
+                <p class="offline-steps-foot">
+                    <i class="fas fa-sync-alt" aria-hidden="true"></i>
+                    <span>Your answers are kept on this device and sync automatically once you're back online.</span>
+                </p>
+            </div>
+
             <!-- Offline: signing in for real always needs the server (there is
                  no way to check a password with zero network access), so this
                  replaces the login form entirely rather than pretending it can
                  still work. Leads to the unauthenticated /survey-offline flow,
                  whose own account/password verification happens once back
                  online — see offline-db.js / pwa-client.js. -->
-            <!-- Says WHY the username/password form is gone while offline, so
-                 the shortened card doesn't just look broken. Reuses the
-                 existing .offline-login-notice pattern. -->
-            <div id="offlineLoginNotice" class="offline-login-notice d-none">
-                <i class="fas fa-wifi"></i>
-                <span>You're offline. Signing in needs a connection — but you can still answer the survey now and it will sync once you're back online.</span>
-            </div>
-
             <a href="/survey-offline" id="offlineSurveyBtn" class="btn btn-login w-100 d-none text-decoration-none mb-3" title="Complete the survey now — your account is verified once you're back online">
                 <i class="fas fa-clipboard-list me-2"></i> Take Survey Offline
             </a>
@@ -1020,6 +1119,9 @@
 
             const offlineLoginNotice = document.getElementById('offlineLoginNotice');
             if (offlineLoginNotice) offlineLoginNotice.classList.toggle('d-none', !offline);
+
+            const offlineStepsGuide = document.getElementById('offlineStepsGuide');
+            if (offlineStepsGuide) offlineStepsGuide.classList.toggle('d-none', !offline);
 
             // Drives the offline layout rules in the <style> block: hides the
             // form / OR divider / Google button, which is what keeps the
