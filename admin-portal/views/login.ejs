@@ -635,16 +635,20 @@
         /* Same "viewing offline" pill as client-login.ejs / index.ejs —
            centered (not pinned to the top-right corner) so it reads as a
            deliberate status banner rather than a notification badge, and
-           matches index.ejs's centered placement under its header. */
+           matches index.ejs's centered placement under its header.
+
+           IN FLOW, not position:fixed. Fixed at top:1rem put the pill in the
+           same band as .main-title, so offline it sat directly ON TOP of
+           "Office Of Center For Quality Assurance", blanking out the middle
+           of the heading. As the first flex child of .login-wrapper it is
+           still centered and still at the top, but it now pushes the header
+           down instead of covering it. */
         .offline-pill {
             display: none;
             align-items: center;
             gap: 0.4rem;
-            position: fixed;
-            top: 1rem;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 20;
+            flex: none;
+            margin-bottom: 0.5rem;
             padding: 0.35rem 0.85rem;
             border-radius: 50px;
             background: #fef3c7;
@@ -698,13 +702,38 @@
         }
         .offline-login-notice .notice-retry-btn:hover { background: rgba(255,255,255,0.85); }
 
+        /* ---- Offline layout ----
+           The online fold is tuned to fit EXACTLY (see the density passes in
+           the width/height breakpoints above). Offline then added the pill
+           (~34px) and the "Take Survey Offline" button (~72px) on top of
+           that, which is what pushed the card past the bottom edge and made
+           this page scroll — the one thing the online page is built not to do.
+
+           Rather than compressing everything further, offline hides the three
+           blocks that genuinely CANNOT work with zero network — the reCAPTCHA
+           widget never loads, the password check needs the server, and
+           /auth/google needs the redirect — which is exactly what the comment
+           on #offlineSurveyBtn already describes ("replaces the login form
+           entirely rather than pretending it can still work"). That frees far
+           more height than the offline extras take, so the offline card is
+           SHORTER than the online one and the fold stays clear.
+
+           Everything here is keyed on a class toggled by the same
+           navigator.onLine listener as the pill, so the form comes straight
+           back the moment connectivity returns — nothing is removed, only
+           hidden. */
+        body.is-offline #loginForm,
+        body.is-offline .divider-or,
+        body.is-offline #googleSignInBtn {
+            display: none !important;
+        }
+        /* No form under it, so the button is the card's last element — its
+           mb-3 would leave a dangling gap above the card's bottom padding. */
+        body.is-offline #offlineSurveyBtn { margin-bottom: 0 !important; }
+
     </style>
 </head>
 <body>
-
-    <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection.">
-        <span class="dot"></span><span class="label">Viewing Offline</span>
-    </span>
 
     <div class="bg-blurred"></div>
     <div class="bg-overlay"></div>
@@ -714,6 +743,10 @@
     </a>
 
     <div class="login-wrapper">
+
+        <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection.">
+            <span class="dot"></span><span class="label">Viewing Offline</span>
+        </span>
 
         <div class="header-container">
             <h1 class="main-title">Office Of Center For Quality Assurance (CQA)</h1>
@@ -754,6 +787,14 @@
                  still work. Leads to the unauthenticated /survey-offline flow,
                  whose own account/password verification happens once back
                  online — see offline-db.js / pwa-client.js. -->
+            <!-- Says WHY the username/password form is gone while offline, so
+                 the shortened card doesn't just look broken. Reuses the
+                 existing .offline-login-notice pattern. -->
+            <div id="offlineLoginNotice" class="offline-login-notice d-none">
+                <i class="fas fa-wifi"></i>
+                <span>You're offline. Signing in needs a connection — but you can still answer the survey now and it will sync once you're back online.</span>
+            </div>
+
             <a href="/survey-offline" id="offlineSurveyBtn" class="btn btn-login w-100 d-none text-decoration-none mb-3" title="Complete the survey now — your account is verified once you're back online">
                 <i class="fas fa-clipboard-list me-2"></i> Take Survey Offline
             </a>
@@ -962,10 +1003,12 @@
         // strictly decoupled from the /api/health probe below, which drives
         // a separate "server unavailable" notice for the very different case
         // of the browser being online but unable to reach this app's server.
-        // The normal login form (username/password + reCAPTCHA) is never
-        // touched by either state — a real sign-in always needs the network
-        // regardless of which of these two things is failing, so there is no
-        // "offline login" shortcut here anymore; see /survey-offline instead.
+        // There is no "offline login" shortcut here — a real sign-in always
+        // needs the network; see /survey-offline instead. navigator.onLine ===
+        // false (no network interface at all) therefore hides the form outright
+        // rather than leaving a dead one on screen. The /api/health "server
+        // unavailable" state below does NOT do this: there the browser still
+        // has a network, so the form is left alone and only a notice shows.
         function updateOfflineIndicator() {
             const offline = !navigator.onLine;
 
@@ -974,6 +1017,14 @@
 
             const offlineSurveyBtn = document.getElementById('offlineSurveyBtn');
             if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !offline);
+
+            const offlineLoginNotice = document.getElementById('offlineLoginNotice');
+            if (offlineLoginNotice) offlineLoginNotice.classList.toggle('d-none', !offline);
+
+            // Drives the offline layout rules in the <style> block: hides the
+            // form / OR divider / Google button, which is what keeps the
+            // offline card short enough to fit the fold without scrolling.
+            document.body.classList.toggle('is-offline', offline);
         }
         window.addEventListener('online', updateOfflineIndicator);
         window.addEventListener('offline', updateOfflineIndicator);
