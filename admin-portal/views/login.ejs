@@ -727,6 +727,20 @@
         body.is-offline #googleSignInBtn {
             display: none !important;
         }
+
+        /* Both of these exist to explain why SIGNING IN is currently blocked
+           — one for an unresolved previous-session logout, one for a server
+           that isn't answering. Offline the sign-in form is gone entirely and
+           #offlineLoginNotice already says why, so leaving them visible
+           stacked a second and third amber box saying "You're offline…" above
+           it (the pending-logout one literally opens with the same sentence).
+           Hidden in CSS only, never cleared: the pending-logout guard re-runs
+           attempt() on the 'online' event, so the moment the connection is
+           back the notice reappears with whatever state is then correct. */
+        body.is-offline #pendingLogoutNotice,
+        body.is-offline #serverUnavailableNotice {
+            display: none !important;
+        }
         /* No form under it, so the button is the card's last element — its
            mb-3 would leave a dangling gap above the card's bottom padding. */
         body.is-offline #offlineSurveyBtn { margin-bottom: 0 !important; }
@@ -751,6 +765,18 @@
         }
         /* Must re-apply the centring translate, or hovering snaps it left. */
         body.is-offline .btn-home:hover { transform: translateX(-50%) translateY(-2px); }
+
+        /* Bringing the button back to the bottom centre means bringing back
+           the bottom reserve that goes with it. The short-viewport rules drop
+           .login-wrapper's padding-bottom to 1rem / 0.5rem — correct there,
+           because those same rules move the button to the top-left corner so
+           nothing needs reserving. Offline the button is bottom-centre again,
+           and without this the card ran straight underneath it: the home icon
+           sat on top of "Take Survey Offline", covering the tap target of the
+           one action this page exists to offer. */
+        body.is-offline .login-wrapper {
+            padding-bottom: calc(3.6rem + env(safe-area-inset-bottom));
+        }
 
         /* ---- Offline flow guide ----
            Without the login form the card is just a notice and a button, and
@@ -879,12 +905,12 @@
 
                 <div class="offline-step">
                     <span class="step-num" aria-hidden="true">2</span>
-                    <p>Enter the <strong>email and password of the account you registered</strong> with the CQA system, then answer the survey. Make sure both are correct — that account is how your response gets saved to you.</p>
+                    <p>Enter the <strong>email and password of your registered CQA account</strong>, then answer the survey. Both must be correct — that account is how your response gets saved to you.</p>
                 </div>
 
                 <p class="offline-steps-foot">
                     <i class="fas fa-sync-alt" aria-hidden="true"></i>
-                    <span>Your answers are kept on this device and sync automatically once you're back online.</span>
+                    <span>Answers are saved on this device and sync automatically once you're back online.</span>
                 </p>
             </div>
 

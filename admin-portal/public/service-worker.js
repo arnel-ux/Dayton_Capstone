@@ -75,8 +75,15 @@ importScripts('/js/offline-db.js');
 // Services cluster tabs/office accordion rows, and Transparency Dashboard
 // KPI value/label + chart card header all tightened for phone widths.
 // Bumped so a v31-or-earlier install's precached copy of '/' is discarded.
-const STATIC_CACHE = 'cspc-static-v32';
-const RUNTIME_CACHE = 'cspc-runtime-v32';
+// v33: icon webfonts (bootstrap-icons.woff2/.woff, Font Awesome's
+// all.min.css + fa-solid/regular/brands woff2) added to CDN_PRECACHE_URLS,
+// and login.ejs gained the offline layout/steps block. Only the install
+// handler populates CDN_PRECACHE_URLS, so without this bump an existing
+// install would keep its v32 RUNTIME_CACHE and never fetch the fonts — the
+// offline tofu boxes would persist on every device that has already visited
+// the site, which is all of them.
+const STATIC_CACHE = 'cspc-static-v33';
+const RUNTIME_CACHE = 'cspc-runtime-v33';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
@@ -116,6 +123,41 @@ const CDN_PRECACHE_URLS = [
     'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
     'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
     'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css',
+    // ---- ICON WEBFONTS ----
+    // The two icon CSS files are useless offline on their own: they only
+    // declare @font-face, and every `bi bi-*` / `fas fa-*` glyph lives in the
+    // binary font file the CSS points at. Precaching the CSS but not the font
+    // is what made /survey-offline render empty tofu boxes where the sidebar,
+    // hamburger, fullscreen and section icons should be — the CSS was cached,
+    // the font was not, so the browser had a font-family it could not load.
+    // (The theme toggle's moon kept working throughout precisely because it's
+    // an inline <svg>, not a webfont glyph — that contrast is the tell.)
+    //
+    // These were reaching the cache only by luck before: cdn.jsdelivr.net and
+    // cdnjs.cloudflare.com are in RUNTIME_CACHE_HOSTS, so a font fetched
+    // during an online visit WHILE this worker already controlled the page got
+    // runtime-cached. On a first visit the worker isn't controlling yet, so
+    // the font request bypasses it entirely and nothing is stored. Listing
+    // them here makes it deterministic at install time instead.
+    //
+    // The ?dd670… on the Bootstrap Icons URLs is the cache-buster baked into
+    // bootstrap-icons.css's own @font-face src — the Cache API matches on the
+    // FULL url including the query, so the entries must carry it verbatim or
+    // the browser's request would miss them. cacheFirst() also falls back to
+    // an ignoreSearch match for font files, so a future version bump that
+    // changes this hash degrades to a stale-but-working glyph set rather than
+    // silently returning the tofu boxes.
+    'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2?dd67030699838ea613ee6dbda90effa6',
+    'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff?dd67030699838ea613ee6dbda90effa6',
+    // Font Awesome — used by the views that include layout/header.ejs, which
+    // is how /login (precached above) draws its icons, including the offline
+    // card's own wifi/clipboard/sync glyphs. The CSS itself was never listed
+    // here at all. fa-solid carries ~249 of the ~255 icons used across the
+    // views; regular and brands are 3 each but are cheap and complete the set.
+    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css',
+    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/webfonts/fa-solid-900.woff2',
+    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/webfonts/fa-regular-400.woff2',
+    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/webfonts/fa-brands-400.woff2',
     'https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css',
     'https://cdn.jsdelivr.net/npm/sweetalert2@11',
     'https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js',
@@ -369,6 +411,26 @@ async function staleWhileRevalidate(request, cacheName) {
     return cached || networkFetch;
 }
 
+// Icon/text webfonts are routinely served with a cache-busting query string
+// that belongs to the STYLESHEET's version, not the font's (Bootstrap Icons'
+// ?dd670… is the live example — see CDN_PRECACHE_URLS). The Cache API matches
+// on the full URL, so bumping the icon package to a version with a different
+// hash would turn every precached font into a miss and bring the tofu boxes
+// straight back. For a font file specifically, the same path with a different
+// query is the same typeface, so falling back to an ignoreSearch match is
+// safe and keeps icons rendering offline across such a bump.
+//
+// Deliberately NOT applied to every CDN request: fonts.googleapis.com serves
+// completely different stylesheets off the single path /css2, distinguished
+// only by ?family=… — an unscoped ignoreSearch there would happily return the
+// Inter stylesheet for a Plus Jakarta Sans request.
+const FONT_FILE_RE = /\.(woff2?|ttf|otf|eot)$/i;
+
+async function matchFontIgnoringQuery(request) {
+    if (!FONT_FILE_RE.test(new URL(request.url).pathname)) return undefined;
+    return caches.match(request, { ignoreSearch: true });
+}
+
 async function cacheFirst(request, cacheName) {
     const cached = await caches.match(request);
     if (cached) return cached;
@@ -382,6 +444,8 @@ async function cacheFirst(request, cacheName) {
     } catch (err) {
         const fallback = await caches.match(request);
         if (fallback) return fallback;
+        const fontFallback = await matchFontIgnoringQuery(request);
+        if (fontFallback) return fontFallback;
         throw err;
     }
 }
