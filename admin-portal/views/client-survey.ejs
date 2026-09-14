@@ -774,12 +774,16 @@
            home content ends for one-tap access without hunting for the menu. */
         .home-cta { margin-top: 2.25rem; padding-top: 2rem; border-top: 1px solid var(--line-soft); }
         .home-cta-btn {
-            display: inline-flex; align-items: center; gap: 0.6rem;
-            padding: 0.85rem 2.25rem; border-radius: 50px; font-weight: 700;
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.6rem 1.6rem; border-radius: 50px; font-weight: 700;
+            font-size: 0.95rem;
             box-shadow: 0 10px 26px -10px rgba(37,84,199,0.55);
             transition: box-shadow .25s ease, transform .25s ease;
         }
         .home-cta-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 32px -10px rgba(37,84,199,0.65); }
+        @media (max-width: 575.98px) {
+            .home-cta-btn { padding: 0.55rem 1.35rem; font-size: 0.88rem; }
+        }
 
         /* ---- Entrance animation — staggered fade + rise for hero and cards ---- */
         .home-anim { opacity: 0; animation: homeFadeUp .25s ease-out forwards; }
@@ -933,13 +937,6 @@
                area without changing how the control looks. */
             #terms-box .form-check { padding: 0.4rem 0; gap: 0.6rem !important; }
             .section-title .form-check.form-switch { padding: 0.35rem 0; }
-            /* Male/Female radio rows: each option is a whole clickable
-               <label>, but its hit height was just the text line (~24px)
-               with only 1.5rem between the two — pad each row taller and
-               let them wrap with a visible gap instead of sitting close
-               enough to mis-tap the wrong one. */
-            #gender-field-group { gap: 1.25rem !important; row-gap: 0.75rem !important; }
-            #gender-field-group label { padding: 0.4rem 0; min-height: 44px; }
 
             /* Profile "Edit" button and history badges/meta text were on the
                small side for a phone (~34px tap height, ~12.5px meta text). */
@@ -1107,29 +1104,42 @@
             transition: max-height .25s ease, opacity .25s ease, margin-top .25s ease;
         }
         .profile-password-card .pw-strength.is-empty { max-height: 0; opacity: 0; margin-top: 0; }
-        .profile-password-card .pw-strength-bars { display: flex; gap: 4px; }
-        .profile-password-card .pw-strength-bars span {
-            flex: 1 1 0; height: 4px; border-radius: 50px;
-            background: var(--line-soft); transition: background-color .25s ease;
+        .profile-password-card .pw-strength-track {
+            height: 6px; border-radius: 50px; background: var(--line-soft);
+            box-shadow: inset 0 1px 2px rgba(15,23,42,0.05); overflow: hidden;
+        }
+        .profile-password-card .pw-strength-fill {
+            height: 100%; width: 0%; border-radius: 50px;
+            background: var(--line-soft); transition: width .3s ease, background .3s ease;
         }
         .profile-password-card .pw-strength-label {
             display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
-            margin: 0.35rem 0 0; font-size: 0.74rem; font-weight: 700; line-height: 1.3;
-            color: var(--ink-600);
+            margin: 0.45rem 0 0; line-height: 1.3;
         }
-        .profile-password-card .pw-strength-text { flex: 0 0 auto; }
+        .profile-password-card .pw-strength-badge {
+            display: inline-flex; align-items: center; gap: 0.32rem; flex: 0 0 auto;
+            padding: 0.16rem 0.55rem; border-radius: 50px; font-size: 0.66rem; font-weight: 700;
+            letter-spacing: 0.03em; text-transform: uppercase;
+            background: var(--ring); color: var(--ink-400);
+            transition: background-color .25s ease, color .25s ease;
+        }
+        .profile-password-card .pw-strength-badge .pw-strength-icon { font-size: 0.6rem; }
         .profile-password-card .pw-strength-hint {
-            flex: 1 1 auto; text-align: right; font-weight: 500;
+            flex: 1 1 auto; text-align: right; font-size: 0.7rem; font-weight: 500;
             color: var(--ink-400); min-width: 0; overflow-wrap: anywhere;
         }
-        .profile-password-card .pw-strength[data-level="1"] .pw-strength-bars span:nth-child(-n+1) { background: #ef4444; }
-        .profile-password-card .pw-strength[data-level="2"] .pw-strength-bars span:nth-child(-n+2) { background: #f59e0b; }
-        .profile-password-card .pw-strength[data-level="3"] .pw-strength-bars span:nth-child(-n+3) { background: #eab308; }
-        .profile-password-card .pw-strength[data-level="4"] .pw-strength-bars span:nth-child(-n+4) { background: #16a34a; }
-        .profile-password-card .pw-strength[data-level="1"] .pw-strength-text { color: #ef4444; }
-        .profile-password-card .pw-strength[data-level="2"] .pw-strength-text { color: #d97706; }
-        .profile-password-card .pw-strength[data-level="3"] .pw-strength-text { color: #ca8a04; }
-        .profile-password-card .pw-strength[data-level="4"] .pw-strength-text { color: #16a34a; }
+        .profile-password-card .pw-strength[data-level="1"] .pw-strength-fill { width: 25%; background: linear-gradient(90deg, #ef4444, #f87171); }
+        .profile-password-card .pw-strength[data-level="2"] .pw-strength-fill { width: 50%; background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .profile-password-card .pw-strength[data-level="3"] .pw-strength-fill { width: 75%; background: linear-gradient(90deg, #eab308, #facc15); }
+        .profile-password-card .pw-strength[data-level="4"] .pw-strength-fill { width: 100%; background: linear-gradient(90deg, #16a34a, #22c55e); }
+        .profile-password-card .pw-strength[data-level="1"] .pw-strength-badge { background: #fee2e2; color: #dc2626; }
+        .profile-password-card .pw-strength[data-level="2"] .pw-strength-badge { background: #fef3c7; color: #b45309; }
+        .profile-password-card .pw-strength[data-level="3"] .pw-strength-badge { background: #fef9c3; color: #a16207; }
+        .profile-password-card .pw-strength[data-level="4"] .pw-strength-badge { background: #dcfce7; color: #15803d; }
+        [data-bs-theme="dark"] .profile-password-card .pw-strength[data-level="1"] .pw-strength-badge { background: rgba(239,68,68,0.18); color: #f87171; }
+        [data-bs-theme="dark"] .profile-password-card .pw-strength[data-level="2"] .pw-strength-badge { background: rgba(245,158,11,0.18); color: #fbbf24; }
+        [data-bs-theme="dark"] .profile-password-card .pw-strength[data-level="3"] .pw-strength-badge { background: rgba(234,179,8,0.18); color: #facc15; }
+        [data-bs-theme="dark"] .profile-password-card .pw-strength[data-level="4"] .pw-strength-badge { background: rgba(22,163,74,0.18); color: #4ade80; }
 
         /* The injected toggle is appended as the .input-group's last child, so
            the input in the middle must not keep a rounded right edge. */
@@ -1252,6 +1262,12 @@
                keeps its clamp() size here — only the surrounding padding is
                tightened for small screens. */
             .profile-hero { padding: 1.5rem 0.9rem 1.25rem; gap: 0.7rem; }
+            .profile-hero-avatar {
+                width: clamp(76px, 20vw, 108px);
+                height: clamp(76px, 20vw, 108px);
+                font-size: clamp(1.9rem, 7vw, 2.6rem);
+                border-width: 3px;
+            }
             .profile-hero-text h3 { font-size: 1.05rem; }
             .profile-hero-text p { font-size: 0.78rem; }
             .profile-body { padding: 0.9rem; }
@@ -1718,8 +1734,12 @@
                 width: 100%;
                 min-width: 0;
             }
-            #stage2 .form-check-input { width: 19px; height: 19px; }
-            #stage2 .form-check-label, #gender-field-group label { font-size: 0.92rem; }
+            /* The Autofill toggle's checkbox is the only .form-check-input
+               inside #stage2 (Sex is now a plain <select>, not a radio
+               group) — a stray 19x19 square rule here used to squash this
+               switch into a radio-looking dot instead of a pill/slider. */
+            #stage2 .form-switch .form-check-input { width: 2.15em; height: 1.2em; }
+            #stage2 .form-check-label { font-size: 0.92rem; }
             #stage2 .lock-icon { font-size: 0.78rem; }
             #stage2 .row.g-4 > * { padding-top: 0.1rem; }
 
@@ -1873,13 +1893,6 @@
             background-color: #f1f5f9;
         }
 
-        .locked-field {
-            opacity: 0.75;
-        }
-
-        .locked-field .radio-custom {
-            cursor: not-allowed;
-        }
 
         .radio-custom {
             width: 19px;
@@ -2765,7 +2778,7 @@
             </div>
 
             <div class="home-cta text-center home-anim" style="animation-delay:0.85s">
-                <button type="button" class="btn btn-primary btn-lg home-cta-btn" onclick="return switchView('survey');">
+                <button type="button" class="btn btn-primary home-cta-btn" onclick="return switchView('survey');">
                     <i class="bi bi-clipboard2-check-fill"></i> <span data-i18n="home_cta_btn">Take Survey</span>
                 </button>
             </div>
@@ -2934,18 +2947,12 @@
                         <div class="col-md-6">
                             <label class="form-label fw-semibold text-dark fs-6" data-i18n="lbl_sex"></label>
                             <i id="gender-lock-note" class="bi bi-lock-fill lock-icon d-none" data-bs-toggle="tooltip" data-bs-placement="top" title="You have already answered this section. It is now locked."></i>
-                            <div id="gender-field-group" class="d-flex flex-wrap gap-4 pt-2">
-                                <label class="d-flex align-items-center gap-2 text-dark">
-                                    <!-- PINALITAN ANG name="sex" NG name="gender" AT NAGDAGDAG NG value="Male" -->
-                                    <input type="radio" name="gender" value="Male" class="radio-custom">
-                                    <span data-i18n="lbl_male"></span>
-                                </label>
-                                <label class="d-flex align-items-center gap-2 text-dark">
-                                    <!-- PINALITAN ANG name="sex" NG name="gender" AT NAGDAGDAG NG value="Female" -->
-                                    <input type="radio" name="gender" value="Female" class="radio-custom">
-                                    <span data-i18n="lbl_female"></span>
-                                </label>
-                            </div>
+                            <select name="gender" class="form-select">
+                                <option value="" disabled selected data-i18n="opt_select_gender"></option>
+                                <option value="Male" data-i18n="lbl_male"></option>
+                                <option value="Female" data-i18n="lbl_female"></option>
+                                <option value="Prefer not to say" data-i18n="lbl_prefer_not_say"></option>
+                            </select>
                         </div>
 
                         <div class="col-md-6">
@@ -4983,14 +4990,13 @@ function applyLockedProfile(profile) {
     // the client_accounts column name) — accept either.
     const genderValue = profile.gender || profile.sex;
     if (genderValue) {
-        document.querySelectorAll('input[name="gender"]').forEach(radio => {
-            radio.disabled = true;
-            if (radio.value === genderValue) radio.checked = true;
-        });
+        const genderSelect = document.querySelector('select[name="gender"]');
+        if (genderSelect) {
+            genderSelect.value = genderValue;
+            genderSelect.disabled = true;
+        }
         const note = document.getElementById('gender-lock-note');
         if (note) note.classList.remove('d-none');
-        const group = document.getElementById('gender-field-group');
-        if (group) group.classList.add('locked-field');
     }
 
     // Activate Bootstrap tooltips on any lock icons just revealed
@@ -5013,9 +5019,9 @@ function unlockProfileFields() {
     if (ageSelect) ageSelect.disabled = false;
     document.getElementById('age-lock-note')?.classList.add('d-none');
 
-    document.querySelectorAll('input[name="gender"]').forEach(radio => { radio.disabled = false; });
+    const genderSelect = document.querySelector('select[name="gender"]');
+    if (genderSelect) genderSelect.disabled = false;
     document.getElementById('gender-lock-note')?.classList.add('d-none');
-    document.getElementById('gender-field-group')?.classList.remove('locked-field');
 }
 
 // Snapshot of Name/Sex/Age/Region taken right before the switch is turned on,
@@ -5044,7 +5050,7 @@ function toggleAutofillClientProfile(enabled) {
             respondent_name: document.querySelector('input[name="respondent_name"]')?.value ?? '',
             region: document.querySelector('select[name="region"]')?.value ?? '',
             age: document.querySelector('select[name="age"]')?.value ?? '',
-            gender: document.querySelector('input[name="gender"]:checked')?.value ?? ''
+            gender: document.querySelector('select[name="gender"]')?.value ?? ''
         };
 
         fetchWithTimeout('/api/client-profile', {}, 5000)
@@ -5061,10 +5067,8 @@ function toggleAutofillClientProfile(enabled) {
                 const ageSelect = document.querySelector('select[name="age"]');
                 if (ageSelect && !ageSelect.disabled && p.age) ageSelect.value = p.age;
 
-                const genderRadios = document.querySelectorAll('input[name="gender"]');
-                if (genderRadios.length && !genderRadios[0].disabled && p.gender) {
-                    genderRadios.forEach(radio => { radio.checked = (radio.value === p.gender); });
-                }
+                const genderSelect = document.querySelector('select[name="gender"]');
+                if (genderSelect && !genderSelect.disabled && p.gender) genderSelect.value = p.gender;
 
                 // Fall back to this account's own locally-remembered answers
                 // for Client Type/Age/Region only where the server didn't
@@ -5092,10 +5096,8 @@ function toggleAutofillClientProfile(enabled) {
         const ageSelect = document.querySelector('select[name="age"]');
         if (ageSelect && !ageSelect.disabled) ageSelect.value = autofillSnapshot.age;
 
-        const genderRadios = document.querySelectorAll('input[name="gender"]');
-        if (genderRadios.length && !genderRadios[0].disabled) {
-            genderRadios.forEach(radio => { radio.checked = (radio.value === autofillSnapshot.gender); });
-        }
+        const genderSelect = document.querySelector('select[name="gender"]');
+        if (genderSelect && !genderSelect.disabled) genderSelect.value = autofillSnapshot.gender;
 
         autofillSnapshot = null;
     }
@@ -5814,6 +5816,7 @@ function scrollToInvalid(el) {
 
 const REQUIRED_STAGE2_SELECTORS = [
     'select[name="client_type"]',
+    'select[name="gender"]',
     'select[name="age"]',
     'input[name="survey_date"]',
     'input[name="office_visited_time"]',
@@ -5838,9 +5841,6 @@ const REQUIRED_STAGE2_SELECTORS = [
         const el = e.target;
         if (!el.matches) return;
         clearLeafIfFilled(el);
-        if (el.matches('input[name="gender"]')) {
-            clearGroupInvalid(document.getElementById('gender-field-group').closest('.col-md-6'));
-        }
         if (el.matches('input[name="cc1"], input[name="cc2"], input[name="cc3"]')) {
             clearGroupInvalid(el.closest('.qa-block'));
         }
@@ -5903,13 +5903,6 @@ function validateStage(stageNum, scroll) {
                 clearLeafInvalid(el);
             }
         });
-        const genderGroup = document.getElementById('gender-field-group').closest('.col-md-6');
-        if (!document.querySelector('input[name="gender"]:checked')) {
-            markGroupInvalid(genderGroup, t.answerRequired);
-            if (!firstInvalid) firstInvalid = genderGroup;
-        } else {
-            clearGroupInvalid(genderGroup);
-        }
         if (firstInvalid) {
             // Gated on `scroll` too (not just used to conditionally scroll):
             // submitAll()'s silent detection pass over a stage that isn't
@@ -6121,8 +6114,10 @@ const i18n = {
         opt_gov: "Government (Employee or another agency)",
         opt_student: "Student",
         lbl_sex: "Sex:",
+        opt_select_gender: "Select...",
         lbl_male: "Male",
         lbl_female: "Female",
+        lbl_prefer_not_say: "Prefer not to say",
         lbl_age: "Age:",
         opt_sel_age: "Select Age...",
         opt_18_below: "18 and below",
@@ -6267,8 +6262,10 @@ const i18n = {
         opt_gov: "Gobyerno",
         opt_student: "Estudyante",
         lbl_sex: "Kasarian:",
+        opt_select_gender: "Pumili...",
         lbl_male: "Lalaki",
         lbl_female: "Babae",
+        lbl_prefer_not_say: "Mas gustong hindi sabihin",
         lbl_age: "Edad:",
         opt_sel_age: "Pumili ng Edad...",
         opt_18_below: "18 pababa",
@@ -6544,7 +6541,7 @@ function renderReviewSummary() {
     document.getElementById('rv-name').textContent = val('input[name="respondent_name"]').trim() || 'Anonymous';
     document.getElementById('rv-email').textContent = val('input[name="email"]') || '—';
     document.getElementById('rv-clienttype').textContent = selectedText('select[name="client_type"]');
-    document.getElementById('rv-gender').textContent = checkedLabelText('gender');
+    document.getElementById('rv-gender').textContent = selectedText('select[name="gender"]');
     document.getElementById('rv-age').textContent = selectedText('select[name="age"]');
     document.getElementById('rv-date').textContent = val('input[name="survey_date"]') || '—';
     document.getElementById('rv-office-visited-time').textContent = formatDateTimeForDisplay(val('input[name="office_visited_time"]'));

@@ -1615,7 +1615,7 @@ def fast_sentiment(text):
 # ---------------------------------------------------------------------------
 # NO-MEANINGFUL-FEEDBACK DETECTION (pure numbers / symbols / emoji /
 # keyboard-mash gibberish / greeting-only text) — a deterministic pre-check
-# so these get a clear, honest "Unclassified - No Meaningful Feedback" tag
+# so these get a clear, honest "No Feedback - No Feedback" tag
 # INSTANTLY, without ever spending a Gemini call on content that has no real
 # opinion to classify, and without it being counted as genuine (if generic)
 # "General Feedback" — that label means "meaningful feedback that doesn't fit
@@ -1651,7 +1651,7 @@ def fast_sentiment(text):
 # (see check #1 and the admin's original request that a real comment with a
 # typo must never be misread as gibberish).
 # ---------------------------------------------------------------------------
-UNCLASSIFIED_NO_FEEDBACK = "Unclassified - No Meaningful Feedback"
+UNCLASSIFIED_NO_FEEDBACK = "No Feedback - No Feedback"
 
 _GIBBERISH_MIN_LETTERS = 10
 _GIBBERISH_MAX_VOWEL_RATIO = 0.15
