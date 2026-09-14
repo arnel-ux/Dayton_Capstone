@@ -75,13 +75,16 @@ importScripts('/js/offline-db.js');
 // Services cluster tabs/office accordion rows, and Transparency Dashboard
 // KPI value/label + chart card header all tightened for phone widths.
 // Bumped so a v31-or-earlier install's precached copy of '/' is discarded.
-// v33: icon webfonts (bootstrap-icons.woff2/.woff, Font Awesome's
-// all.min.css + fa-solid/regular/brands woff2) added to CDN_PRECACHE_URLS,
-// and login.ejs gained the offline layout/steps block. Only the install
-// handler populates CDN_PRECACHE_URLS, so without this bump an existing
-// install would keep its v32 RUNTIME_CACHE and never fetch the fonts — the
-// offline tofu boxes would persist on every device that has already visited
-// the site, which is all of them.
+// v33: (1) icon webfonts (bootstrap-icons.woff2/.woff, Font Awesome's
+// all.min.css + fa-solid/regular/brands woff2) added to CDN_PRECACHE_URLS.
+// Only the install handler populates CDN_PRECACHE_URLS, so without this bump
+// an existing install would keep its v32 RUNTIME_CACHE and never fetch the
+// fonts — the offline tofu boxes would persist on every device that has
+// already visited the site, which is all of them. (2) login.ejs gained the
+// offline layout + two-step guide, and client-survey.ejs's back-online
+// notice became an overlay (was an inline banner) — both are precached
+// ('/login' in PRECACHE_URLS, '/survey-offline' in CRITICAL_PRECACHE_URLS),
+// so v32's copies must be discarded for either change to reach a device.
 const STATIC_CACHE = 'cspc-static-v33';
 const RUNTIME_CACHE = 'cspc-runtime-v33';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];

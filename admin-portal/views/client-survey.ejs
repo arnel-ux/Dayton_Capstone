@@ -300,20 +300,11 @@
         }
         @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
-        /* Green (not amber like .offline-pill): this is good news, not the
-           "you're on your own" state the amber pill represents. */
-        .back-online-banner {
-            background: #ecfdf5;
-            border: 1px solid #a7f3d0;
-            color: #065f46;
-            border-radius: 14px;
-            padding: 0.9rem 1.1rem;
-            margin-bottom: 1.25rem;
-        }
-        [data-bs-theme="dark"] .back-online-banner { background: rgba(16,185,129,0.12); color: #6ee7b7; border-color: rgba(16,185,129,0.35); }
-        .back-online-banner-title { font-weight: 700; display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.25rem; }
-        .back-online-banner-text { margin: 0 0 0.7rem; font-size: 0.88rem; }
-        .back-online-banner-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        /* The back-online notice is no longer an inline banner — it reuses
+           .offline-transition-overlay/.offline-transition-card below (with
+           .is-back-online for the green treatment) so both connectivity
+           transitions share one popup design. The old .back-online-banner*
+           rules were removed with it; see #backOnlineBanner's HTML comment. */
 
         /* =========================================================
            ONLINE-SESSION OFFLINE TRANSITION — see the HTML comment on
@@ -342,10 +333,11 @@
             display: flex; align-items: center; justify-content: center; font-size: 1.5rem;
             background: rgba(245, 158, 11, 0.14); color: #d97706;
         }
-        /* Swapped in once connectivity returns — green reads as "good news
-           resolved", distinct from the amber "still waiting" state, matching
-           the same amber/green convention already used by .offline-pill and
-           .back-online-banner elsewhere in this file. */
+        /* Green reads as "good news resolved", distinct from the amber "still
+           waiting" state, matching the same amber/green convention used by
+           .offline-pill elsewhere in this file. Used two ways: swapped onto
+           the offline overlay once connectivity returns, and set statically
+           on #backOnlineBanner, which is green from the moment it opens. */
         .offline-transition-overlay.is-back-online .offline-transition-icon { background: rgba(16,185,129,0.14); color: #059669; }
         .offline-transition-card h4 { font-weight: 700; margin-bottom: 0.5rem; color: var(--ink-900); }
         .offline-transition-card p { color: var(--ink-600); font-size: 0.9rem; line-height: 1.5; margin-bottom: 1.5rem; }
@@ -2721,22 +2713,6 @@
 
         <div class="content-body">
 
-        <% if (offlineMode) { %>
-        <!-- Shown by showBackOnlineBanner() (pwa-client.js-adjacent script below)
-             when the 'online' event fires on THIS page. Deliberately never
-             auto-navigates or reloads — see confirmLeaveOfflineSurvey() — so an
-             in-progress survey, the RAM-only password, and any already-queued
-             IndexedDB records all survive regardless of what the user picks. -->
-        <div id="backOnlineBanner" class="back-online-banner" hidden>
-            <div class="back-online-banner-title"><i class="bi bi-wifi"></i> You're Back Online</div>
-            <p class="back-online-banner-text">Your internet connection has been restored. Offline responses will synchronize automatically when eligible.</p>
-            <div class="back-online-banner-actions">
-                <button type="button" class="btn btn-sm btn-primary" onclick="confirmLeaveOfflineSurvey('/')">Go to Dashboard</button>
-                <button type="button" class="btn btn-sm btn-outline-primary" onclick="confirmLeaveOfflineSurvey('/login')">Login</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="dismissBackOnlineBanner()">Stay Here</button>
-            </div>
-        </div>
-        <% } %>
 
         <div class="app-view active" id="view-home">
         <div class="card border-0 view-card home-card">
@@ -3602,10 +3578,49 @@
 </style>
 <% } %>
 
+<% if (offlineMode) { %>
+<!-- BACK-ONLINE PROMPT — /survey-offline only, the mirror image of the
+     offline transition below: that one covers the screen when connectivity
+     is LOST, this one when it RETURNS.
+
+     Was an inline green banner at the top of .content-body. The problem with
+     that: it only exists on a page the user is actively filling in, and by
+     the time the connection comes back they are usually scrolled well down
+     it (SQD, stage 4 of 5) — so the one notice telling them their internet
+     is back, and offering the choice of where to go, sat off-screen above
+     them and was routinely never seen. As an overlay it is unmissable at the
+     moment it matters, which is the whole point of it.
+
+     Reuses .offline-transition-overlay/.offline-transition-card and its
+     existing .is-back-online green variant rather than a second popup
+     design, so both connectivity transitions look like the same system.
+
+     Still never auto-navigates or reloads — see confirmLeaveOfflineSurvey() —
+     so an in-progress survey, the RAM-only password, and any already-queued
+     IndexedDB records all survive regardless of what the user picks. Unlike
+     the offline overlay this one IS dismissable ("Stay Here", Escape, or a
+     tap on the backdrop): being back online takes nothing away, so trapping
+     the user here would be wrong. -->
+<div id="backOnlineBanner" class="offline-transition-overlay is-back-online" hidden role="dialog" aria-modal="true" aria-labelledby="backOnlineTitle">
+    <div class="offline-transition-card">
+        <div class="offline-transition-icon"><i class="bi bi-wifi"></i></div>
+        <h4 id="backOnlineTitle">You're Back Online</h4>
+        <p>Your internet connection has been restored. Offline responses will synchronize automatically when eligible.</p>
+        <div class="offline-transition-actions">
+            <button type="button" class="btn btn-primary fw-semibold" onclick="confirmLeaveOfflineSurvey('/')">Go to Dashboard</button>
+            <button type="button" class="btn btn-outline-primary fw-semibold" onclick="confirmLeaveOfflineSurvey('/login')">Login</button>
+            <!-- Listed last and visually quietest, but it is the safe choice:
+                 it keeps the half-finished survey exactly as it is. -->
+            <button type="button" class="btn btn-outline-secondary fw-semibold" onclick="dismissBackOnlineBanner()">Stay Here</button>
+        </div>
+    </div>
+</div>
+<% } %>
+
 <% if (!offlineMode) { %>
 <!-- ONLINE-SESSION OFFLINE TRANSITION — authenticated /client-survey only.
      /survey-offline (offlineMode) already has its own "you were always
-     offline" UI (the back-online banner above) and never had a real online
+     offline" UI (the back-online overlay above) and never had a real online
      session to lose in the first place, so this doesn't apply there.
 
      Why this exists: this page's session cookie (client.sid) is httpOnly —
@@ -4795,19 +4810,42 @@ document.addEventListener('DOMContentLoaded', updateOfflineIndicator);
 updateOfflineIndicator();
 
 // ==========================================
-// BACK-ONLINE BANNER — offlineMode only. Deliberately never reloads or
+// BACK-ONLINE PROMPT — offlineMode only. Deliberately never reloads or
 // auto-navigates: an automatic redirect could discard unfinished answers,
 // the current step, or the RAM-only credential. The user decides.
 // ==========================================
 function showBackOnlineBanner() {
     if (!OFFLINE_MODE) return;
     const banner = document.getElementById('backOnlineBanner');
-    if (banner) banner.hidden = false;
+    if (!banner || !banner.hidden) return;
+    banner.hidden = false;
+    // Move focus into the dialog so it's announced to a screen reader and
+    // the first action is keyboard-reachable, instead of focus staying on
+    // whichever survey field was being filled in behind the overlay.
+    const firstBtn = banner.querySelector('.offline-transition-actions .btn');
+    if (firstBtn) firstBtn.focus();
 }
 function dismissBackOnlineBanner() {
     const banner = document.getElementById('backOnlineBanner');
     if (banner) banner.hidden = true;
 }
+
+// Backdrop tap and Escape both mean "Stay Here" — the safe, non-destructive
+// choice that leaves the half-finished survey untouched. Only valid because
+// THIS overlay is dismissable; the offline one deliberately is not (there,
+// dismissing would hand back an authenticated UI that cannot work). The
+// click test is on the overlay itself, so a tap inside the card never
+// closes it.
+(function () {
+    const banner = document.getElementById('backOnlineBanner');
+    if (!banner) return;
+    banner.addEventListener('click', function (e) {
+        if (e.target === banner) dismissBackOnlineBanner();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !banner.hidden) dismissBackOnlineBanner();
+    });
+})();
 
 // Heuristic for "there is unfinished, unsubmitted survey information worth
 // warning about before navigating away" — past Stage 1 (Terms) counts,
