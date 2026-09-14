@@ -3607,11 +3607,32 @@
         <h4 id="backOnlineTitle">You're Back Online</h4>
         <p>Your internet connection has been restored. Offline responses will synchronize automatically when eligible.</p>
         <div class="offline-transition-actions">
-            <button type="button" class="btn btn-primary fw-semibold" onclick="confirmLeaveOfflineSurvey('/')">Go to Dashboard</button>
-            <button type="button" class="btn btn-outline-primary fw-semibold" onclick="confirmLeaveOfflineSurvey('/login')">Login</button>
-            <!-- Listed last and visually quietest, but it is the safe choice:
-                 it keeps the half-finished survey exactly as it is. -->
-            <button type="button" class="btn btn-outline-secondary fw-semibold" onclick="dismissBackOnlineBanner()">Stay Here</button>
+            <!-- This button leads and is the only visually-primary action: it
+                 is the one choice that costs the user nothing. The others
+                 navigate away from a survey that may be half-answered, and
+                 the RAM-only password does not survive that navigation — so
+                 the safe option is the one that should be easiest to hit, and
+                 the one focus lands on when this opens. Reconnecting is not a
+                 reason to leave the page; it just means the queued responses
+                 can sync.
+
+                 Labelled "Continue Survey" everywhere, never "Stay Here":
+                 this is the same action the authenticated page's offline
+                 overlay already calls Continue Survey, and one wording for
+                 one action is what keeps the two connectivity dialogs
+                 readable as the same system. "Stay Here" also understates it
+                 mid-attempt — what the user gets back is their part-filled
+                 form, not merely the current page. -->
+            <button type="button" class="btn btn-primary fw-semibold" onclick="dismissBackOnlineBanner()">Continue Survey</button>
+            <button type="button" class="btn btn-outline-primary fw-semibold" onclick="confirmLeaveOfflineSurvey('/')">Go to Dashboard</button>
+            <!-- Hidden while the survey view is open. /survey-offline needs no
+                 sign-in to work — the account is verified at sync time from
+                 the email/password typed into the form itself — so offering
+                 Login mid-attempt only advertises a route that abandons the
+                 answers already entered for no gain. It stays available from
+                 the Home view, where nothing is at stake and "just log in
+                 properly now that I'm online" is a reasonable choice. -->
+            <button type="button" id="backOnlineLoginBtn" class="btn btn-outline-secondary fw-semibold" onclick="confirmLeaveOfflineSurvey('/login')">Login</button>
         </div>
     </div>
 </div>
@@ -4818,6 +4839,14 @@ function showBackOnlineBanner() {
     if (!OFFLINE_MODE) return;
     const banner = document.getElementById('backOnlineBanner');
     if (!banner || !banner.hidden) return;
+
+    // Login is the only choice that varies: it's dropped once the survey view
+    // is open — see the HTML comment on that button for why. Re-evaluated on
+    // every open, not once at load, because the user can move between Home
+    // and the survey view while this page stays open.
+    const loginBtn = document.getElementById('backOnlineLoginBtn');
+    if (loginBtn) loginBtn.hidden = !!document.querySelector('#view-survey.active');
+
     banner.hidden = false;
     // Move focus into the dialog so it's announced to a screen reader and
     // the first action is keyboard-reachable, instead of focus staying on
