@@ -85,14 +85,26 @@ importScripts('/js/offline-db.js');
 // notice became an overlay (was an inline banner) — both are precached
 // ('/login' in PRECACHE_URLS, '/survey-offline' in CRITICAL_PRECACHE_URLS),
 // so v32's copies must be discarded for either change to reach a device.
-const STATIC_CACHE = 'cspc-static-v33';
-const RUNTIME_CACHE = 'cspc-runtime-v33';
+// v34: alerts are now themed by a single same-origin stylesheet,
+// /css/alerts.css, which every page links (via layout/header.ejs or its own
+// head). It is CRITICAL, not decorative: without it an offline dialog — the
+// "saved locally", "sync failed" and "discard this response?" prompts — has
+// no sizing or dark-mode rules at all, and SweetAlert2's own stylesheet is
+// a best-effort CDN entry that may itself be missing. Also bumped so
+// v33-or-earlier installs discard their precached copies of /js/alerts.js
+// (which now exports window.AppAlert — the fix that makes the offline sync
+// notifications fire at all), /js/pwa-client.js, '/survey-offline' and
+// '/login', none of which would otherwise reach an existing device.
+const STATIC_CACHE = 'cspc-static-v34';
+const RUNTIME_CACHE = 'cspc-runtime-v34';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
 const PRECACHE_URLS = [
     '/',
     '/js/alerts.js',
+    '/css/alerts.css',
+    '/css/style.css',
     '/js/offline-db.js',
     '/js/pwa-client.js',
     '/icons/icon.svg',
@@ -118,7 +130,7 @@ const PRECACHE_URLS = [
 // wrong key. A failure here is logged loudly, unlike the best-effort
 // PRECACHE_URLS/CDN_PRECACHE_URLS entries below (e.g. a decorative image),
 // where one bad resource staying uncached is harmless.
-const CRITICAL_PRECACHE_URLS = ['/survey-offline', '/js/pwa-client.js', '/js/offline-db.js', '/js/alerts.js'];
+const CRITICAL_PRECACHE_URLS = ['/survey-offline', '/js/pwa-client.js', '/js/offline-db.js', '/js/alerts.js', '/css/alerts.css'];
 
 // Third-party libraries the survey/login pages load from a CDN. Cached
 // individually (not via cache.addAll) so one failure doesn't abort install.

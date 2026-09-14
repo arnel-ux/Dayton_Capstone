@@ -24,7 +24,16 @@
     // page-side fallback sync below and for results reported back by the
     // Service Worker's Background Sync via postMessage.
     function notifySyncResult(result) {
-        if (!window.AppAlert) return;
+        // Loud, not silent. This guard used to hide a real outage: because
+        // alerts.js declared AppAlert with `const` (a lexical global, never
+        // a window property), window.AppAlert was ALWAYS undefined and every
+        // sync notification below was skipped without a trace. alerts.js now
+        // exports it explicitly; if it ever goes missing again, say so in
+        // the console instead of quietly telling the user nothing.
+        if (!window.AppAlert) {
+            console.error('[Offline Sync] AppAlert unavailable — sync result not shown to user:', result);
+            return;
+        }
         if (result.syncedCount > 0) {
             AppAlert.success(
                 `${result.syncedCount} offline survey${result.syncedCount > 1 ? 's' : ''} synced and analyzed successfully.`,
@@ -80,6 +89,8 @@
                 'You are currently offline. Your survey has been saved locally and will submit automatically when your connection returns.',
                 'Saved Offline'
             );
+        } else {
+            console.error('[Offline Sync] AppAlert unavailable — "saved offline" confirmation not shown to user.');
         }
 
         if ('serviceWorker' in navigator && 'SyncManager' in window) {
@@ -361,20 +372,17 @@
             discardBtn.textContent = 'Discard Local Response';
             discardBtn.addEventListener('click', async () => {
                 if (discardBtn.disabled) return;
-                let confirmed;
-                if (window.Swal) {
-                    const result = await Swal.fire({
-                        title: 'Discard this response?',
-                        text: 'This offline response will be permanently removed from this device. This cannot be undone.',
-                        icon: 'warning',
-                        showCancelButton: true,
-                        confirmButtonText: 'Discard',
-                        confirmButtonColor: '#dc3545'
-                    });
-                    confirmed = result.isConfirmed;
-                } else {
-                    confirmed = window.confirm('Discard this offline response? This cannot be undone.');
-                }
+                // AppAlert.confirm, not a raw Swal.fire with a
+                // window.confirm() fallback: this is the one destructive
+                // action in the offline flow, and it used to render as an
+                // unstyled native browser prompt on exactly the devices
+                // most likely to be here (no Swal == offline/first load).
+                // AppAlert now falls back to its own matching dialog, so
+                // this confirmation looks and behaves the same everywhere.
+                const confirmed = await AppAlert.confirm(
+                    'This offline response will be permanently removed from this device. This cannot be undone.',
+                    { title: 'Discard this response?', confirmText: 'Discard', danger: true }
+                );
                 if (!confirmed) return;
 
                 discardBtn.disabled = true;
@@ -414,7 +422,10 @@
     }
 
     function notifyOfflineVerifyOutcome(status, message) {
-        if (!window.AppAlert) return;
+        if (!window.AppAlert) {
+            console.error('[Offline Sync] AppAlert unavailable — outcome not shown to user:', status, message);
+            return;
+        }
         if (status === 'synced') {
             AppAlert.success(message || 'Survey successfully submitted.', 'Sync Complete');
         } else if (status === 'pending_approval') {

@@ -1,10 +1,28 @@
-// Centralized SweetAlert2 helpers so every page shares the same look & feel.
+// Centralized alert helpers so every page — online or offline, phone or
+// desktop, light or dark — shares one look and one behavior.
 //
-// Existing methods (success/error/info/warning/confirm) are UNCHANGED in
-// behavior/signature — many pages already call them. Everything below that
-// line is additive: toasts, loading state, button-loading helpers, and a
-// query-param flash-message reader so server-side redirects (?success=...
-// / ?error=...) get the same consistent notification as fetch()-driven pages.
+// The public API (success/error/info/warning/confirm/toast*/loading/
+// setButtonLoading/restoreButton/autoShowFromQuery) is UNCHANGED in
+// signature and return type; many pages already call it.
+//
+// What changed underneath:
+//
+// 1. NOTHING IS SILENT OFFLINE ANY MORE. SweetAlert2 is loaded from a CDN
+//    and only precached best-effort by the service worker, so a device
+//    that first opens the app offline (or whose CDN cache entry failed)
+//    has no `Swal` at all. Every AppAlert.* call then threw, and the user
+//    was told nothing — including about a survey that had just been
+//    queued or had failed to sync. Every method now falls back to a
+//    dependency-free renderer (`_fallback` below, styled by alerts.css to
+//    match the SweetAlert2 version) whenever Swal is missing.
+//
+// 2. All appearance lives in /css/alerts.css, not in per-page <style>
+//    blocks, so the same alert looks the same on every page and device.
+//
+// 3. Connection changes (going offline, coming back online) report
+//    through the same toasts as everything else instead of each feature
+//    inventing its own banner.
+
 const AppAlert = {
     theme: {
         confirmButtonColor: '#251d3a',
@@ -15,46 +33,193 @@ const AppAlert = {
         info: '#0d6efd'
     },
 
-    success(message, title = 'Success') {
-        return Swal.fire({
-            icon: 'success',
+    // ------------------------------------------------------------------
+    // ENGINE SELECTION
+    // ------------------------------------------------------------------
+    // True only when SweetAlert2 actually finished loading. Checked at
+    // CALL time, never cached: on a slow connection the library can still
+    // arrive after the first alert has already been shown by the fallback.
+    get hasSwal() {
+        return typeof window !== 'undefined' && typeof window.Swal !== 'undefined' && typeof window.Swal.fire === 'function';
+    },
+
+    // ------------------------------------------------------------------
+    // FALLBACK RENDERER — plain DOM, zero dependencies. Used only when
+    // hasSwal is false. Deliberately mirrors the SweetAlert2 markup's
+    // shape so /css/alerts.css can style the two identically; a user who
+    // is offline should not be able to tell which one they are looking at.
+    // ------------------------------------------------------------------
+    _fallback: {
+        // Text-only symbols, because the icon fonts (Font Awesome /
+        // Bootstrap Icons) are themselves CDN-loaded and may be just as
+        // missing as SweetAlert2 is in this code path.
+        _symbol: { success: '✓', error: '✕', warning: '!', info: 'i', question: '?' },
+
+        _open: null, // the single container currently on screen, if any
+
+        close() {
+            if (this._open && this._open.parentNode) this._open.parentNode.removeChild(this._open);
+            this._open = null;
+            if (this._restoreFocus && typeof this._restoreFocus.focus === 'function') {
+                try { this._restoreFocus.focus(); } catch (e) { /* element may be gone */ }
+            }
+            this._restoreFocus = null;
+        },
+
+        // Returns a Promise<boolean>: true only when the confirm button was
+        // used, matching AppAlert.confirm's contract.
+        show(opts) {
+            const o = opts || {};
+            const self = this;
+            this.close(); // never stack two fallback dialogs
+
+            const container = document.createElement('div');
+            container.className = 'appalert-fallback-container' + (o.toast ? ' is-toast' : '');
+
+            const popup = document.createElement('div');
+            popup.className = 'appalert-fallback-popup';
+            popup.setAttribute('data-type', o.type || 'info');
+            popup.setAttribute('role', o.type === 'error' ? 'alertdialog' : 'dialog');
+            popup.setAttribute('aria-modal', o.toast ? 'false' : 'true');
+            popup.setAttribute('aria-live', o.type === 'error' || o.type === 'warning' ? 'assertive' : 'polite');
+
+            const icon = document.createElement('span');
+            icon.className = 'appalert-fallback-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = this._symbol[o.type] || this._symbol.info;
+            popup.appendChild(icon);
+
+            if (o.title) {
+                const h = document.createElement('h2');
+                h.className = 'appalert-fallback-title';
+                h.textContent = o.title; // textContent, never innerHTML — messages can carry server text
+                popup.appendChild(h);
+            }
+            if (o.text) {
+                const p = document.createElement('p');
+                p.className = 'appalert-fallback-text';
+                p.textContent = o.text;
+                popup.appendChild(p);
+            }
+
+            return new Promise((resolve) => {
+                let settled = false;
+                const finish = (value) => {
+                    if (settled) return;
+                    settled = true;
+                    document.removeEventListener('keydown', onKey, true);
+                    self.close();
+                    resolve(value);
+                };
+
+                if (o.showCancel || o.showConfirm !== false) {
+                    const actions = document.createElement('div');
+                    actions.className = 'appalert-fallback-actions';
+
+                    if (o.showCancel) {
+                        const cancel = document.createElement('button');
+                        cancel.type = 'button';
+                        cancel.className = 'appalert-fallback-btn is-cancel';
+                        cancel.textContent = o.cancelText || 'Cancel';
+                        cancel.addEventListener('click', () => finish(false));
+                        actions.appendChild(cancel);
+                    }
+
+                    const confirm = document.createElement('button');
+                    confirm.type = 'button';
+                    confirm.className = 'appalert-fallback-btn' + (o.danger ? ' is-danger' : '');
+                    confirm.textContent = o.confirmText || 'OK';
+                    confirm.addEventListener('click', () => finish(true));
+                    actions.appendChild(confirm);
+
+                    popup.appendChild(actions);
+                    // Focus the SAFE action on a destructive confirm, so a
+                    // stray Enter keypress can never destroy anything.
+                    setTimeout(() => {
+                        const target = (o.showCancel && o.danger) ? actions.firstChild : confirm;
+                        if (target && target.focus) target.focus();
+                    }, 0);
+                }
+
+                const onKey = (e) => {
+                    if (e.key === 'Escape' && !o.blocking) finish(false);
+                };
+                document.addEventListener('keydown', onKey, true);
+
+                // Clicking the dimmed backdrop dismisses, except while a
+                // blocking/loading dialog is up.
+                if (!o.toast && !o.blocking) {
+                    container.addEventListener('click', (e) => { if (e.target === container) finish(false); });
+                }
+
+                container.appendChild(popup);
+                self._restoreFocus = document.activeElement;
+                (document.body || document.documentElement).appendChild(container);
+                self._open = container;
+
+                if (o.timer) setTimeout(() => finish(false), o.timer);
+            });
+        }
+    },
+
+    // ------------------------------------------------------------------
+    // MODAL ALERTS — unchanged signatures.
+    // ------------------------------------------------------------------
+    _modal(type, message, title, extra) {
+        if (!this.hasSwal) {
+            return this._fallback.show({
+                type,
+                title,
+                text: message,
+                confirmText: 'OK',
+                timer: (extra && extra.timer) || undefined
+            });
+        }
+        return Swal.fire(Object.assign({
+            icon: type,
             title,
             text: message,
             confirmButtonColor: this.theme.confirmButtonColor,
-            timer: 2500,
-            timerProgressBar: true
-        });
+            // Buttons stack on narrow screens (see alerts.css); reversed
+            // order keeps the primary action nearest the thumb.
+            reverseButtons: true
+        }, extra || {}));
+    },
+
+    success(message, title = 'Success') {
+        return this._modal('success', message, title, { timer: 2500, timerProgressBar: true });
     },
 
     error(message, title = 'Error') {
-        return Swal.fire({
-            icon: 'error',
-            title,
-            text: message,
-            confirmButtonColor: this.theme.confirmButtonColor
-        });
+        return this._modal('error', message, title);
     },
 
     info(message, title = 'Info') {
-        return Swal.fire({
-            icon: 'info',
-            title,
-            text: message,
-            confirmButtonColor: this.theme.confirmButtonColor
-        });
+        return this._modal('info', message, title);
     },
 
     warning(message, title = 'Warning') {
-        return Swal.fire({
-            icon: 'warning',
-            title,
-            text: message,
-            confirmButtonColor: this.theme.confirmButtonColor
-        });
+        return this._modal('warning', message, title);
     },
 
     // Resolves to true only if the user confirms.
     async confirm(message, { title = 'Are you sure?', confirmText = 'Yes, proceed!', danger = true } = {}) {
+        if (!this.hasSwal) {
+            // Previously the only no-Swal path in the app was a raw
+            // window.confirm(), which is unstyled, unbrandable, and on
+            // some mobile browsers can be suppressed entirely — meaning a
+            // destructive action either looked broken or silently did
+            // nothing. This renders the same dialog as everywhere else.
+            return this._fallback.show({
+                type: 'warning',
+                title,
+                text: message,
+                showCancel: true,
+                confirmText,
+                cancelText: 'Cancel',
+                danger
+            });
+        }
         const result = await Swal.fire({
             icon: 'warning',
             title,
@@ -72,22 +237,48 @@ const AppAlert = {
 
     // ------------------------------------------------------------------
     // TOASTS — short-lived corner notifications for routine confirmations
-    // (record saved, approved, declined, logged out, etc). Desktop: top-right.
-    // Mobile (<576px): top-center, full-width-ish, so it never gets clipped
-    // or overlaps content. Success/info auto-dismiss; error/warning need a
-    // manual close (or a longer timer) so the user has time to read them.
+    // (record saved, approved, declined, logged out, etc). Desktop:
+    // top-right. Mobile (<576px): top-center full-width strip, clear of
+    // the notch (see alerts.css). Success/info auto-dismiss; error/warning
+    // need a manual close so the user has time to read them.
     // ------------------------------------------------------------------
     _toastIcon: { success: 'success', error: 'error', warning: 'warning', info: 'info' },
 
+    // The offline sync loop retries on an interval, so without this the
+    // same "couldn't sync" toast could stack several deep. A repeat of the
+    // identical message within 4s is dropped.
+    _lastToast: { key: '', at: 0 },
+
     toast(type, message, opts = {}) {
+        const key = type + '|' + (opts.title || '') + '|' + message;
+        const now = Date.now();
+        if (key === this._lastToast.key && now - this._lastToast.at < 4000) return Promise.resolve();
+        this._lastToast = { key, at: now };
+
         const isMobile = window.innerWidth < 576;
         const autoClose = opts.autoClose !== undefined ? opts.autoClose : (type === 'success' || type === 'info');
+        const duration = opts.duration || (type === 'success' ? 3500 : 5000);
+
+        if (!this.hasSwal) {
+            return this._fallback.show({
+                type,
+                title: opts.title,
+                text: message,
+                toast: true,
+                showConfirm: false,
+                // A non-auto-closing fallback toast still has to be
+                // dismissible, and it has no close button of its own, so
+                // it gets a generous timer rather than sticking forever.
+                timer: autoClose ? duration : 10000
+            });
+        }
+
         const Toast = Swal.mixin({
             toast: true,
             position: isMobile ? 'top' : 'top-end',
             showConfirmButton: false,
             showCloseButton: true,
-            timer: autoClose ? (opts.duration || (type === 'success' ? 3500 : 5000)) : undefined,
+            timer: autoClose ? duration : undefined,
             timerProgressBar: !!autoClose,
             didOpen: (el) => {
                 el.addEventListener('mouseenter', Swal.stopTimer);
@@ -112,6 +303,15 @@ const AppAlert = {
     // finally block so it can never get stuck open.
     // ------------------------------------------------------------------
     loading(message = 'Processing your request...', title = 'Please wait') {
+        if (!this.hasSwal) {
+            return this._fallback.show({
+                type: 'info',
+                title,
+                text: message,
+                showConfirm: false,
+                blocking: true // no Escape, no backdrop click
+            });
+        }
         return Swal.fire({
             title,
             text: message,
@@ -123,7 +323,8 @@ const AppAlert = {
     },
 
     stopLoading() {
-        if (Swal.isVisible()) Swal.close();
+        if (this.hasSwal && Swal.isVisible()) Swal.close();
+        this._fallback.close();
     },
 
     // ------------------------------------------------------------------
@@ -148,6 +349,65 @@ const AppAlert = {
         button.innerHTML = button.dataset.originalHtml || button.innerHTML;
         delete button.dataset.loading;
         delete button.dataset.originalHtml;
+    },
+
+    // ------------------------------------------------------------------
+    // NETWORK-AWARE HELPERS
+    // Every feature that talks to the server needs to say the same thing
+    // when the request fails, and the right thing depends on whether the
+    // device is offline. Routing those through here means the offline
+    // survey, the login page and the admin tables all word it identically.
+    // ------------------------------------------------------------------
+    get isOnline() {
+        // navigator.onLine only proves a link exists, not that the server
+        // is reachable — so it is trusted for the NEGATIVE case only
+        // (false really does mean offline), which is how it is used here.
+        return typeof navigator === 'undefined' || navigator.onLine !== false;
+    },
+
+    // Standard message for an action that cannot run without a connection.
+    offline(message = 'You are currently offline. This action will be available again once your connection returns.', title = 'No Connection') {
+        return this.toast('warning', message, { title, autoClose: false });
+    },
+
+    // Call from a catch block around any fetch(). Picks the offline
+    // wording or the server-error wording automatically, so no caller has
+    // to re-implement that check.
+    fromError(err, fallbackMessage = 'Something went wrong. Please try again.') {
+        if (!this.isOnline) return this.offline();
+        const message = (err && err.message) ? err.message : fallbackMessage;
+        return this.toast('error', message, { autoClose: false });
+    },
+
+    // ------------------------------------------------------------------
+    // CONNECTION STATUS — one consistent notification for going offline
+    // and coming back, instead of each page inventing its own banner.
+    // Opt-in per page via AppAlert.watchConnection(); auto-enabled below
+    // for pages that opt in with <body data-connection-alerts>.
+    // ------------------------------------------------------------------
+    _connectionWatching: false,
+
+    watchConnection(opts = {}) {
+        if (this._connectionWatching) return;
+        this._connectionWatching = true;
+
+        const offlineMessage = opts.offlineMessage || 'You are offline. Your work is saved on this device and will sync automatically when the connection returns.';
+        const onlineMessage = opts.onlineMessage || 'Your connection is back. Syncing your saved work now.';
+
+        window.addEventListener('offline', () => {
+            this.toast('warning', offlineMessage, { title: 'Offline', autoClose: false });
+        });
+
+        window.addEventListener('online', () => {
+            this.toast('success', onlineMessage, { title: 'Back Online' });
+        });
+
+        // Say so on load too — a user who opens the app already offline
+        // otherwise gets no indication at all, because 'offline' only
+        // fires on a TRANSITION.
+        if (!this.isOnline && opts.announceOnLoad !== false) {
+            this.toast('warning', offlineMessage, { title: 'Offline', autoClose: false });
+        }
     },
 
     // ------------------------------------------------------------------
@@ -366,3 +626,36 @@ function showAlert({ type = 'info', title, message, toast = false } = {}) {
     const fn = AppAlert[type] || AppAlert.info;
     return title ? fn.call(AppAlert, message, title) : fn.call(AppAlert, message);
 }
+
+// ---------------------------------------------------------------------
+// EXPLICIT GLOBAL EXPORTS — load-bearing, do not remove.
+//
+// `const AppAlert = {...}` at the top level of a classic <script> creates
+// a binding in the global LEXICAL scope, which is NOT the same as a
+// property on `window`. So `AppAlert` resolved fine, but `window.AppAlert`
+// was permanently `undefined` — and pwa-client.js gates every one of its
+// offline-sync notifications on exactly that check:
+//
+//     if (!window.AppAlert) return;
+//
+// which meant the entire offline path — "saved locally, will submit when
+// you're back online", "N surveys synced", "couldn't be verified",
+// "rejected", "please wait" — silently showed the user NOTHING. The alerts
+// were written and wired up correctly; they simply never ran.
+//
+// Assigning here makes those guards true, and keeps the `window.` form
+// working from any other script regardless of load order.
+// ---------------------------------------------------------------------
+window.AppAlert = AppAlert;
+window.showAlert = showAlert;
+
+// Announce connection changes through the standard toasts on any page that
+// opts in with <body data-connection-alerts>. Opt-in rather than automatic
+// so pages that deliberately render their own richer offline UI (login's
+// offline overlay, the offline survey's own status strip) don't end up
+// showing two notices for the same event.
+document.addEventListener('DOMContentLoaded', () => {
+    if (document.body && document.body.hasAttribute('data-connection-alerts')) {
+        AppAlert.watchConnection();
+    }
+});

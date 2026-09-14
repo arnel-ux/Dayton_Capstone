@@ -1,0 +1,369 @@
+/* =====================================================================
+   alerts.css — the ONE place every alert/toast/confirm in the app gets
+   its look from.
+
+   Why this file exists: the phone-sizing rules for SweetAlert2 used to
+   live inline in client-survey.ejs only, so that page had readable
+   mobile dialogs and every other page (login, offices, survey-records,
+   dashboard, office-approvals, the offline survey...) still rendered
+   SweetAlert2's desktop defaults — a 512px popup with a 5em icon — on a
+   360px phone. Alerts also never followed the app's dark mode.
+
+   Two rules for anything added here:
+   1. Size with clamp()/min(), not with breakpoints. A dialog sized
+      fluidly keeps the same proportions on a 360px phone, a 768px
+      tablet and a 1440px desktop; breakpoints make it jump between
+      three different designs. Breakpoints below are used ONLY where the
+      LAYOUT genuinely has to change (toast position, button stacking),
+      never for size.
+   2. Colors come from the theme tokens in style.css so light/dark and
+      any future rebrand stay automatic.
+   ===================================================================== */
+
+:root {
+    /* Local fallbacks so this file is still correct on the few pages that
+       load it WITHOUT style.css (the standalone offline survey shell).
+       Where style.css is present its :root wins for the shared tokens. */
+    --alert-bg: var(--bg-card, #ffffff);
+    --alert-text: var(--text-main, #1f2937);
+    --alert-muted: var(--text-muted, #6b7280);
+    --alert-border: var(--border-color, #e5e7eb);
+    --alert-primary: var(--primary, #251d3a);
+    --alert-danger: #dc3545;
+    --alert-success: #198754;
+    --alert-warning: #b45309;
+    --alert-info: #0d6efd;
+    --alert-backdrop: rgba(15, 23, 42, 0.55);
+    --alert-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
+    --alert-radius: 18px;
+}
+
+html[data-bs-theme="dark"] {
+    --alert-bg: var(--bg-card, #141d30);
+    --alert-text: var(--text-main, #e2e8f0);
+    --alert-muted: var(--text-muted, #94a3b8);
+    --alert-border: var(--border-color, #263045);
+    --alert-backdrop: rgba(2, 6, 16, 0.7);
+    --alert-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+    /* Status colors lightened for contrast on the dark surface — the
+       light-mode values are AA on white but not on #141d30. */
+    --alert-danger: #f87171;
+    --alert-success: #34d399;
+    --alert-warning: #fbbf24;
+    --alert-info: #60a5fa;
+}
+
+/* ---------------------------------------------------------------------
+   POPUP (modal alerts + confirms)
+   Fluid sizing: never wider than 92% of the viewport, never wider than
+   30rem, so on a phone it lands at ~330-390px instead of overflowing.
+   --------------------------------------------------------------------- */
+.swal2-container { padding: 1rem; }
+.swal2-container.swal2-backdrop-show { background: var(--alert-backdrop); }
+
+.swal2-popup {
+    width: min(92vw, 30rem);
+    max-width: 30rem;
+    padding: clamp(1.1rem, 3.2vw, 1.6rem) clamp(1.1rem, 3.2vw, 1.75rem) clamp(1.25rem, 3.2vw, 1.6rem);
+    border-radius: var(--alert-radius);
+    background: var(--alert-bg);
+    color: var(--alert-text);
+    box-shadow: var(--alert-shadow);
+    /* Inherit the page's font so an alert never reads as a foreign
+       browser dialog dropped on top of the app. */
+    font-family: inherit;
+}
+
+.swal2-title {
+    font-size: clamp(1.05rem, 1rem + 0.6vw, 1.4rem);
+    line-height: 1.3;
+    font-weight: 700;
+    color: var(--alert-text);
+    padding: 0 0.4rem;
+    margin-bottom: 0.35rem;
+}
+
+.swal2-html-container {
+    font-size: clamp(0.875rem, 0.84rem + 0.25vw, 1rem);
+    line-height: 1.55;
+    color: var(--alert-muted);
+    margin: 0.45rem 0.5rem 0;
+    /* A long unbroken string (an email, a URL, a filename) must wrap
+       instead of forcing the popup wider than the phone. */
+    overflow-wrap: anywhere;
+}
+
+/* The icon scales with the popup so the ratio is the same everywhere.
+   SweetAlert2 sizes it in `em` off its own font-size, so it is set in
+   rem-clamp here rather than left at the 5em default. */
+.swal2-icon {
+    width: clamp(3.2rem, 2.6rem + 3vw, 4.5rem);
+    height: clamp(3.2rem, 2.6rem + 3vw, 4.5rem);
+    margin: clamp(0.5rem, 2vw, 1rem) auto clamp(0.85rem, 2vw, 1.1rem);
+    border-width: 3px;
+}
+.swal2-icon .swal2-icon-content { font-size: clamp(2rem, 1.6rem + 2vw, 2.75rem); }
+
+/* ---------------------------------------------------------------------
+   BUTTONS
+   Every action is at least 44px tall — the minimum reliable touch target
+   — on every device, and a pair stacks full-width when it no longer
+   fits side by side rather than being squeezed to two words each.
+   --------------------------------------------------------------------- */
+.swal2-actions {
+    margin-top: clamp(1.1rem, 3vw, 1.5rem);
+    gap: 0.6rem;
+    width: 100%;
+}
+
+.swal2-styled {
+    margin: 0;
+    padding: 0.62rem 1.15rem;
+    min-height: 44px;
+    font-size: clamp(0.875rem, 0.85rem + 0.2vw, 0.95rem);
+    font-weight: 600;
+    border-radius: 10px;
+    box-shadow: none;
+    transition: filter 0.15s ease, transform 0.15s ease;
+}
+.swal2-styled:hover { filter: brightness(1.08); }
+.swal2-styled:active { transform: translateY(1px); }
+.swal2-styled:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--alert-primary) 45%, transparent);
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+/* Under ~400px of usable width two side-by-side buttons stop being
+   comfortably tappable, so the pair stacks. reverseButtons is set in
+   alerts.js, so column-reverse keeps the confirm action on top. */
+@media (max-width: 400px) {
+    .swal2-actions { flex-direction: column-reverse; }
+    .swal2-actions .swal2-styled { width: 100%; }
+}
+
+/* ---------------------------------------------------------------------
+   TOASTS
+   Desktop: top-right corner card. Phone: full-width strip pinned under
+   the status bar, respecting the safe-area inset so it is never tucked
+   under a notch or a rounded corner.
+   --------------------------------------------------------------------- */
+.swal2-toast {
+    width: auto;
+    max-width: min(92vw, 26rem);
+    padding: 0.85rem 1rem;
+    border-radius: 14px;
+    background: var(--alert-bg);
+    color: var(--alert-text);
+    border: 1px solid var(--alert-border);
+    box-shadow: var(--alert-shadow);
+    font-family: inherit;
+}
+.swal2-toast .swal2-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--alert-text);
+    margin: 0;
+    padding: 0;
+}
+.swal2-toast .swal2-html-container {
+    font-size: 0.875rem;
+    line-height: 1.45;
+    color: var(--alert-muted);
+    margin: 0.15rem 0 0;
+}
+.swal2-toast .swal2-icon { width: 1.8em; height: 1.8em; margin: 0 0.6em 0 0; }
+.swal2-toast .swal2-close { align-self: center; font-size: 1.6em; color: var(--alert-muted); }
+
+/* A colored left edge makes the severity readable at a glance without
+   relying on the icon's color alone (which fails for color-blind users). */
+.swal2-toast.swal2-icon-success { border-left: 4px solid var(--alert-success); }
+.swal2-toast.swal2-icon-error   { border-left: 4px solid var(--alert-danger); }
+.swal2-toast.swal2-icon-warning { border-left: 4px solid var(--alert-warning); }
+.swal2-toast.swal2-icon-info,
+.swal2-toast.swal2-icon-question { border-left: 4px solid var(--alert-info); }
+
+.swal2-container.swal2-top,
+.swal2-container.swal2-top-end,
+.swal2-container.swal2-top-start {
+    padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+}
+
+@media (max-width: 575.98px) {
+    /* alerts.js switches the toast position to 'top' at this width; this
+       makes that top slot a full-width strip with even side gutters. */
+    .swal2-container.swal2-top { padding-left: 0.75rem; padding-right: 0.75rem; }
+    .swal2-container.swal2-top .swal2-toast { width: 100%; max-width: 100%; }
+}
+
+/* ---------------------------------------------------------------------
+   LOADING + INPUTS
+   --------------------------------------------------------------------- */
+.swal2-loader { border-color: var(--alert-primary) transparent var(--alert-primary) transparent; }
+html[data-bs-theme="dark"] .swal2-loader { border-color: var(--alert-info) transparent var(--alert-info) transparent; }
+
+/* Inputs inside a prompt-style alert must match the app's fields, not
+   SweetAlert2's white default, or they are invisible in dark mode. */
+.swal2-input, .swal2-textarea, .swal2-select, .swal2-file {
+    background: var(--alert-bg);
+    color: var(--alert-text);
+    border: 1px solid var(--alert-border);
+    border-radius: 10px;
+    font-size: 0.95rem;
+    min-height: 44px;
+    box-shadow: none;
+}
+.swal2-input:focus, .swal2-textarea:focus, .swal2-select:focus {
+    border-color: var(--alert-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--alert-primary) 22%, transparent);
+}
+.swal2-validation-message {
+    background: transparent;
+    color: var(--alert-danger);
+    font-size: 0.85rem;
+}
+
+/* =====================================================================
+   FALLBACK ALERT — used ONLY when SweetAlert2 itself is unavailable.
+   That is a real case in this app: the library is loaded from a CDN and
+   only precached best-effort by the service worker, so a device that
+   first opens the app offline (or whose CDN entry failed to cache) has
+   no Swal at all. Before, every AppAlert.* call on such a device threw
+   and the user was told NOTHING about a failed or queued submission.
+   These styles deliberately mirror the SweetAlert2 rules above so the
+   fallback is visually the same alert, not an obviously degraded one.
+   ===================================================================== */
+.appalert-fallback-container {
+    position: fixed;
+    inset: 0;
+    z-index: 20000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: var(--alert-backdrop);
+    animation: appalert-fade 0.15s ease-out;
+}
+.appalert-fallback-container.is-toast {
+    align-items: flex-start;
+    justify-content: flex-end;
+    background: transparent;
+    pointer-events: none;
+    padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+}
+.appalert-fallback-container.is-toast .appalert-fallback-popup {
+    pointer-events: auto;
+    width: auto;
+    max-width: min(92vw, 26rem);
+    padding: 0.85rem 1rem;
+    border-radius: 14px;
+    border: 1px solid var(--alert-border);
+    text-align: left;
+}
+
+.appalert-fallback-popup {
+    width: min(92vw, 30rem);
+    padding: clamp(1.1rem, 3.2vw, 1.6rem) clamp(1.1rem, 3.2vw, 1.75rem) clamp(1.25rem, 3.2vw, 1.6rem);
+    border-radius: var(--alert-radius);
+    background: var(--alert-bg);
+    color: var(--alert-text);
+    box-shadow: var(--alert-shadow);
+    text-align: center;
+    font-family: inherit;
+    animation: appalert-pop 0.2s ease-out;
+}
+
+.appalert-fallback-icon {
+    display: block;
+    width: clamp(3.2rem, 2.6rem + 3vw, 4.5rem);
+    height: clamp(3.2rem, 2.6rem + 3vw, 4.5rem);
+    margin: clamp(0.5rem, 2vw, 1rem) auto clamp(0.85rem, 2vw, 1.1rem);
+    border: 3px solid currentColor;
+    border-radius: 50%;
+    font-size: clamp(2rem, 1.6rem + 2vw, 2.75rem);
+    line-height: clamp(3.05rem, 2.45rem + 3vw, 4.35rem);
+    font-weight: 700;
+}
+.appalert-fallback-container.is-toast .appalert-fallback-icon {
+    display: inline-block;
+    width: 1.8em;
+    height: 1.8em;
+    margin: 0 0.6em 0 0;
+    font-size: 1rem;
+    line-height: 1.7em;
+    border-width: 2px;
+    vertical-align: middle;
+}
+.appalert-fallback-popup[data-type="success"] .appalert-fallback-icon { color: var(--alert-success); }
+.appalert-fallback-popup[data-type="error"]   .appalert-fallback-icon { color: var(--alert-danger); }
+.appalert-fallback-popup[data-type="warning"] .appalert-fallback-icon { color: var(--alert-warning); }
+.appalert-fallback-popup[data-type="info"]    .appalert-fallback-icon { color: var(--alert-info); }
+.appalert-fallback-popup[data-type="question"] .appalert-fallback-icon { color: var(--alert-warning); }
+
+.appalert-fallback-title {
+    font-size: clamp(1.05rem, 1rem + 0.6vw, 1.4rem);
+    font-weight: 700;
+    line-height: 1.3;
+    margin: 0 0 0.35rem;
+    color: var(--alert-text);
+}
+.appalert-fallback-container.is-toast .appalert-fallback-title {
+    display: inline;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+.appalert-fallback-text {
+    font-size: clamp(0.875rem, 0.84rem + 0.25vw, 1rem);
+    line-height: 1.55;
+    color: var(--alert-muted);
+    margin: 0.45rem 0 0;
+    overflow-wrap: anywhere;
+}
+.appalert-fallback-container.is-toast .appalert-fallback-text {
+    display: block;
+    font-size: 0.875rem;
+    margin: 0.15rem 0 0;
+}
+
+.appalert-fallback-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.6rem;
+    margin-top: clamp(1.1rem, 3vw, 1.5rem);
+}
+.appalert-fallback-btn {
+    flex: 0 1 auto;
+    padding: 0.62rem 1.15rem;
+    min-height: 44px;
+    border: none;
+    border-radius: 10px;
+    font: inherit;
+    font-size: clamp(0.875rem, 0.85rem + 0.2vw, 0.95rem);
+    font-weight: 600;
+    color: #fff;
+    background: var(--alert-primary);
+    cursor: pointer;
+}
+.appalert-fallback-btn.is-cancel { background: #6b7280; }
+.appalert-fallback-btn.is-danger { background: #dc3545; color: #fff; }
+.appalert-fallback-btn:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--alert-primary) 45%, transparent);
+    outline-offset: 2px;
+}
+@media (max-width: 400px) {
+    .appalert-fallback-actions { flex-direction: column-reverse; }
+    .appalert-fallback-btn { width: 100%; }
+}
+
+@keyframes appalert-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes appalert-pop {
+    from { opacity: 0; transform: scale(0.92); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+/* Respect a user who has asked the OS for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+    .appalert-fallback-container,
+    .appalert-fallback-popup { animation: none; }
+    .swal2-popup, .swal2-toast { animation: none !important; }
+}
