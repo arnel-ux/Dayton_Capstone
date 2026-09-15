@@ -127,26 +127,12 @@
    well — two ways to do the same thing, one of them sitting where it could be
    hit by accident, and the pair of them crowding the office's name. */
 
-/* The "viewing offline" chip now lives in the header, on a dark surface —
-   the pages' own pale-amber chip was drawn for a light bar under it. Same
-   amber identity, tuned for this background. */
-.topbar .offline-pill {
-    display: none;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.3rem 0.65rem;
-    border-radius: 50px;
-    background: rgba(245, 158, 11, 0.16);
-    color: #fbbf24;
-    border: 1px solid rgba(245, 158, 11, 0.35);
-    font-size: 0.74rem;
-    font-weight: 700;
-    white-space: nowrap;
-}
-.topbar .offline-pill.is-visible { display: inline-flex; }
-.topbar .offline-pill .dot {
-    width: 7px; height: 7px; border-radius: 50%; background: #fbbf24; flex: none;
-}
+/* The "viewing offline" chip is NOT in the header any more — it is the shared
+   floating chip from /css/offline-pill.css, fixed and centred just below this
+   bar. In the header it was the first thing squeezed on a phone, ending up
+   half-covered by the office name; below it, it has the full width to itself.
+   All this file owns is how far down that is. */
+:root { --offline-pill-top: calc(var(--office-topbar-h) + 10px); }
 
 /* ---- Sidebar ------------------------------------------------------------
    A drawer on phones and tablets, a permanent column from 992px up — the same
@@ -372,7 +358,8 @@
 
 /* ---- Phones ------------------------------------------------------------- */
 @media (max-width: 576px) {
-    :root { --office-topbar-h: 62px; }
+    /* Shorter bar on a phone — the floating offline chip follows it up. */
+    :root { --office-topbar-h: 62px; --offline-pill-top: calc(var(--office-topbar-h) + 8px); }
     .topbar { padding: 0.4rem 0.65rem; gap: 0.5rem; }
     .topbar-hamburger { width: 38px; height: 38px; }
     .topbar-brand-logo-wrap { width: 42px; height: 42px; right: calc(100% + 0.5rem); }

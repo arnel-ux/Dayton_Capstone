@@ -8,353 +8,31 @@
          caching — that's independent of installability, manifest.json is
          what Chrome/Edge actually key the install criteria on. -->
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/css/auth.css">
+    <link rel="stylesheet" href="/css/offline-pill.css">
     <style>
-        /* Reset and Base Styles */
-        html, body {
-            height: 100vh;
-            margin: 0;
-            padding: 0;
-            overflow: hidden; /* Para walang lumabas na scrollbar */
-            font-family: 'Plus Jakarta Sans', sans-serif;
-        }
+        /* The single Google button is this page's whole form, so it is sized
+           up a little from the shared .btn-google (which sits under an OR
+           divider next to a password form on /login). */
+        .btn-google { font-size: 0.98rem; gap: 12px; min-height: 48px; }
+        .btn-google img { width: 21px; height: 21px; }
 
-        /* 1. Background Image — same photo + treatment as the public landing
-           page (index.ejs .bg-image): full-bleed, no blur, pinned to the
-           viewport, so the two pages read as one consistent backdrop. */
-        .bg-blurred {
-            position: fixed;
-            top: 0; left: 0; width: 100vw; height: 100vh;
-            background-image: url('<%- heroImageUrl %>');
-            background-size: cover;
-            /* The CSPC monument sits in the upper half of this photo — on a
-               tall mobile viewport, centering it vertically cropped the
-               monument almost entirely out of frame. Anchoring to the top
-               keeps it in view. */
-            background-position: top center;
-            background-repeat: no-repeat;
-            z-index: -2;
-        }
-
-        /* 2. Overlay — same navy gradient as the landing page's .bg-overlay
-           (and login.ejs / forgot-password.ejs / reset-password.ejs), instead
-           of a flat tint, so every page sharing this backdrop matches. */
-        .bg-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: linear-gradient(180deg, rgba(37, 29, 58,0.92) 0%, rgba(37, 29, 58,0.85) 100%);
-            z-index: -1;
-        }
-
-        /* 3. Perfect Centering Wrapper */
-        .login-wrapper {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            max-height: 100vh;
-            display: flex;
-            flex-direction: column; /* Para magpatong ang titles at card */
-            align-items: center;    /* Centers vertically/horizontally */
-            justify-content: center;
-            z-index: 1;
-            padding: 1rem;
-            overflow-y: auto; /* safety fallback: scroll instead of clipping on short viewports — matches login.ejs/reset-password.ejs/complete-google-registration.ejs, which already had this and this file was missing */
-        }
-
-        /* --- BAGONG DAGDAG NA HEADER STYLES & ANIMATIONS --- */
-        
-        /* Keyframes para sa Fade & Slide Up Animation */
-        @keyframes fadeSlideUp {
-            0% {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            100% {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .header-container {
-            text-align: center;
-            margin-bottom: 2.25rem;
-            max-width: 800px; /* Para hindi masyadong humaba sa malaking screen */
-        }
-
-        .main-title {
-            color: #ffffff;
-            font-weight: 800;
-            font-size: 2rem;
-            text-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
-            margin-bottom: 0.5rem;
-            letter-spacing: 0.5px;
-            line-height: 1.25;
-
-            /* Apply animation (Mauuna) */
-            opacity: 0;
-            animation: fadeSlideUp 0.8s ease-out forwards;
-        }
-
-        .sub-title {
-            color: #e2e8f0;
-            font-weight: 400;
-            font-style: italic; /* Ibang style as requested */
-            font-size: 1.05rem;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
-            margin-bottom: 1rem;
-
-            /* Apply animation (Pangalawa, may delay na 0.3s) */
-            opacity: 0;
-            animation: fadeSlideUp 0.8s ease-out 0.3s forwards;
-        }
-
-        .portal-text {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: #ffffff;
-            font-weight: 700;
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 2.5px;
-            padding: 0.4rem 1rem;
-            background: rgba(37, 84, 199, 0.35);
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            border-radius: 50px;
-            backdrop-filter: blur(6px);
-            margin-bottom: 0;
-
-            /* Apply animation (Pangatlo, may delay na 0.6s) */
-            opacity: 0;
-            animation: fadeSlideUp 0.8s ease-out 0.6s forwards;
-        }
-
-        /* Responsive para sa Titles */
-        @media (max-width: 600px) {
-            .main-title {
-                font-size: 1.4rem;
-            }
-            .sub-title {
-                font-size: 0.9rem;
-                margin-bottom: 1rem;
-            }
-            /* Was font-size: 1.1rem (17.6px) — nearly 1.5x the DESKTOP badge
-               text size on a small uppercase letter-spaced pill, the same
-               "oversized badge" pattern flagged on real-device screenshots.
-               Reset to a compact label size and hit the 34-38px badge-height
-               target via an explicit min-height instead of oversized text. */
-            .portal-text {
-                font-size: 0.75rem;
-                min-height: 36px;
-                padding: 0.4rem 0.9rem;
-            }
-        }
-        /* -------------------------------------- */
-
-        /* 4. Card Styling — soft glassmorphism, refined shadow (still square-ish) */
-        .card-custom {
-            background: rgba(255, 255, 255, 0.92);
-            backdrop-filter: blur(18px) saturate(160%);
-            -webkit-backdrop-filter: blur(18px) saturate(160%);
-            border: 1px solid rgba(255, 255, 255, 0.6);
-            border-radius: 1.75rem;
-            box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
-
-            width: 390px;
-            height: 390px;
-
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            padding: 1.75rem 2.5rem;
-            transition: box-shadow 0.3s ease;
-        }
-
-        /* Responsive para sa mobile card
-           NOTE: the fixed 390px card (plus the wrapper's 1rem/16px side
-           padding) needs >= 422px of viewport to avoid overflowing. The old
-           400px cutoff missed the 401-421px range, which includes very common
-           phones like the Pixel 6/7 (412px) and iPhone 6/7/8 Plus / XR / 11
-           (414px) — on those the card was clipped by html/body's
-           overflow:hidden. Raised to 480px so every common phone is covered. */
-        @media (max-width: 480px) {
-            /* Round-2: hero-to-card gap trimmed (no mobile override existed
-               before — desktop's 2.25rem/36px carried straight through). */
-            .header-container { margin-bottom: 0.9rem; }
-            /* Density pass: was a fixed-square 92vw/92vw card with 24/28px
-               padding on an untouched 28px desktop border-radius — resized
-               to the calc(100% - 24px) / 18-20px-padding / 22-26px-radius
-               login-card targets. Square aspect dropped (height:auto) since
-               a card this dense no longer needs to force extra vertical
-               space to stay square. Logo (62px, over the 48-56px target) and
-               the "Client Login" heading (18.4px, under the 21-23px target)
-               tuned alongside it. Round-2: padding trimmed a further notch. */
-            .card-custom {
-                width: calc(100% - 24px);
-                margin-inline: 12px;
-                height: auto;
-                padding: 1rem 1rem;
-                border-radius: 22px;
-            }
-            .card-custom .cqa-logo { width: 52px; }
-            .card-custom h4 { font-size: 1.35rem; }
-
-            /* Readability: the "Sign in to your CQA Dashboard" caption and the
-               Gmail-account explainer paragraph were both under the ~14px
-               minimum comfortable body-text size on a phone (0.75rem / 12px
-               and inline 0.85rem / 13.6px). The explainer uses an inline
-               style="font-size:0.85rem" attribute, so it needs !important
-               here to actually win over it. */
-            .card-custom .text-xsmall { font-size: 0.92rem; }
-            .card-custom .text-center.mb-4 p { font-size: 0.9rem !important; }
-
-            /* The single "Sign in with Google" button used Bootstrap's py-3
-               (1rem/16px top+bottom, !important) on top of its own 0.98rem
-               font — measured out to ~55px, well past the 44-46px button-
-               height target. py-3 needs !important to move; font trimmed a
-               touch too. Kept a bit of breathing room above so it doesn't
-               sit right under the paragraph. */
-            .card-custom > a { margin-top: 0.2rem; display: block; }
-            .btn-google.py-3 { padding-top: 0.55rem !important; padding-bottom: 0.55rem !important; }
-            .btn-google { font-size: 0.92rem; min-height: 40px; }
-        }
-
-        .card-custom .cqa-logo {
-            width: 62px;
-            height: auto;
-        }
-
-        .card-custom h4 {
-            color: #0f172a;
-            font-size: 1.15rem;
-            letter-spacing: 0.2px;
-        }
-
-        .card-custom .divider-soft {
-            width: 42px;
-            height: 3px;
-            background: #2554c7;
-            border-radius: 50px;
-            margin: 0.6rem auto 0.85rem;
-        }
-
-        /* Google Button Styling */
-        .btn-google {
-            background-color: #ffffff;
-            color: #334155;
-            border: 1.5px solid #e2e8f0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            font-weight: 600;
-            font-size: 0.98rem;
-            transition: all 0.25s ease;
-            border-radius: 10px;
-        }
-
-        .btn-google:hover {
-            background-color: #f8fafc;
-            border-color: #2554c7;
-            box-shadow: 0 6px 16px -4px rgba(37, 84, 199, 0.25);
-            transform: translateY(-1px);
-        }
-
-        .btn-google:active {
-            transform: translateY(0);
-        }
-
-        .btn-google img {
-            width: 21px;
-            height: 21px;
-        }
-
-        /* Extra small text helper */
-        .text-xsmall {
-            font-size: 0.75rem;
-        }
-
-        /* Same "viewing offline" pill as client-survey.ejs — shown here too
-           since a signed-out (or not-yet-redirected) visitor can still land
-           on this page while offline. */
-        .offline-pill {
-            display: none;
-            align-items: center;
-            gap: 0.4rem;
-            position: fixed;
-            top: 1rem;
-            right: 1rem;
-            z-index: 20;
-            padding: 0.35rem 0.85rem;
-            border-radius: 50px;
-            background: #fef3c7;
-            color: #92400e;
-            border: 1px solid #fde68a;
-            font-size: 0.78rem;
-            font-weight: 700;
-            white-space: nowrap;
-        }
-        .offline-pill.is-visible { display: inline-flex; }
-        .offline-pill .dot {
-            width: 7px; height: 7px; border-radius: 50%; background: #d97706; flex: none;
-            animation: offlinePulse 1.6s ease-in-out infinite;
-        }
-        @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-
-        /* Same amber/red notice pattern as login.ejs's #pendingLogoutNotice
-           (and #serverUnavailableNotice) — blocks starting a NEW login here
-           while an old session's server-side logout is still unresolved.
-           See the JS comment near the bottom of this file for the race this
-           prevents. */
-        .pending-logout-notice {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: #fef3c7;
-            color: #92400e;
-            border: 1px solid #fde68a;
-            border-radius: 10px;
-            padding: 0.65rem 0.85rem;
-            font-size: 0.82rem;
-            font-weight: 600;
-            line-height: 1.4;
-            margin-bottom: 0.85rem;
-        }
-        .pending-logout-notice.is-error { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
-        .pending-logout-notice span { flex: 1 1 auto; }
-        .pending-logout-notice .notice-retry-btn {
-            flex: 0 0 auto;
-            background: rgba(255,255,255,0.55);
-            border: 1px solid currentColor;
-            color: inherit;
-            border-radius: 50px;
-            font-size: 0.72rem;
-            font-weight: 700;
-            padding: 0.25rem 0.7rem;
-            min-height: 30px;
-        }
-        .pending-logout-notice .notice-retry-btn:hover { background: rgba(255,255,255,0.85); }
-        /* Visual affordance only — the actual block is a JS click handler on
-           the wrapping <a> (see the script below), not pointer-events, so
-           that handler still gets to fire and show the "please wait"
-           message instead of the click silently doing nothing. */
+        /* Blocked while a previous session's server-side logout is still
+           unresolved — see the race guard in the script at the bottom. */
         #clientGoogleSignInBtn.is-blocked { opacity: 0.55; cursor: not-allowed; }
-        /* .card-custom is a fixed 390x390 square by design (see its own
-           rule above) — only relaxed to fit the extra notice box while that
-           notice is actually shown, via this modifier class toggled in JS,
-           so the normal (no notice) state is completely unaffected. */
-        .card-custom.has-notice { height: auto; min-height: 390px; padding-bottom: 1.75rem; }
     </style>
 </head>
 <body>
 
-    <div class="bg-blurred"></div>
+    <div class="bg-blurred" style="--auth-hero-image: url('<%- heroImageUrl %>')"></div>
     <div class="bg-overlay"></div>
 
-    <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection.">
-        <span class="dot"></span> Viewing Offline
-    </span>
+    <!-- Every other auth page has this; this one was the odd one out, leaving a
+         visitor who landed here by mistake with no way back except the browser
+         button. -->
+    <a href="/" class="btn-home" title="Return to Home Page" aria-label="Return to Home Page">
+        <i class="fas fa-home"></i>
+    </a>
 
     <div class="login-wrapper">
         
@@ -364,11 +42,17 @@
             <h2 class="portal-text">Client Portal</h2>
         </div>
 
+        <!-- Centred directly under the header block, above the card — see the
+             positioning note in /css/auth.css. -->
+        <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection.">
+            <span class="dot"></span><span class="label">Viewing Offline</span>
+        </span>
+
         <div class="card-custom">
 
-            <div class="text-center mb-3">
-                <img src="/images/cspc-logo.png" alt="CSPC Logo" class="cqa-logo mb-3">
-                <h4 class="fw-bold mb-0">Client Login</h4>
+            <div class="text-center mb-2">
+                <img src="/images/cspc-logo.png" alt="CSPC Logo" class="cqa-logo mb-1" width="46" height="46">
+                <h4 class="fw-bold text-dark mb-0">Client Login</h4>
                 <div class="divider-soft"></div>
                 <p class="text-muted text-xsmall mb-0">Sign in to your CQA Dashboard</p>
             </div>
@@ -389,11 +73,9 @@
                 <button type="button" id="pendingLogoutRetryBtn" class="notice-retry-btn d-none">Retry</button>
             </div>
 
-            <a href="/auth/google" class="text-decoration-none" id="clientGoogleSignInBtn">
-                <button type="button" class="btn btn-google w-100 py-3 shadow-sm">
-                    <img src="https://www.freepnglogos.com/uploads/google-logo-png/google-logo-png-google-icon-logo-png-transparent-svg-vector-bie-supply-14.png" alt="Google Logo">
-                    Sign in with Google
-                </button>
+            <a href="/auth/google" class="btn btn-google w-100" id="clientGoogleSignInBtn" title="Sign in with your Google account">
+                <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google">
+                Sign in with Google
             </a>
 
         </div>
@@ -440,15 +122,12 @@
             const text = document.getElementById('pendingLogoutNoticeText');
             const retryBtn = document.getElementById('pendingLogoutRetryBtn');
             const googleBtn = document.getElementById('clientGoogleSignInBtn');
-            const card = document.querySelector('.card-custom');
             let blocked = false;
 
             function setNotice(kind, message, showRetry) {
                 if (!notice) return;
-                const visible = !!message;
-                notice.classList.toggle('d-none', !visible);
+                notice.classList.toggle('d-none', !message);
                 notice.classList.toggle('is-error', kind === 'error');
-                if (card) card.classList.toggle('has-notice', visible);
                 if (icon) icon.className = kind === 'error' ? 'fas fa-triangle-exclamation' : 'fas fa-hourglass-half';
                 if (text) text.textContent = message || '';
                 if (retryBtn) retryBtn.classList.toggle('d-none', !showRetry);

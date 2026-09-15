@@ -44,12 +44,16 @@
         </div>
     </div>
 
-    <div class="topbar-side topbar-side-end">
-        <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — showing the last data loaded while you were connected.">
-            <span class="dot"></span><span class="label">Offline</span>
-        </span>
-    </div>
+    <div class="topbar-side topbar-side-end"></div>
 </header>
+
+<!-- Floating "Viewing Offline" chip: fixed, centred, just under the header
+     (/css/offline-pill.css positions it from --offline-pill-top). It used to
+     sit inside the header's right-hand zone, where a phone header had no room
+     left for it. -->
+<span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — showing the last data loaded while you were connected.">
+    <span class="dot"></span><span class="label">Viewing Offline</span>
+</span>
 
 <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 

@@ -83,8 +83,6 @@
            system. Placed in its own centered row under the topbar instead
            of squeezed in next to Logout/the portal-status pill, so it never
            overlaps or covers those on narrow screens. */
-        .offline-pill-row { text-align: center; background: #f0f3f9; }
-        .offline-pill-row:has(.offline-pill.is-visible) { padding: 0.6rem 1rem 0; }
         @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
         /* ==========================================================
@@ -640,6 +638,7 @@
          shell (header + sidebar), and loading it last is what lets it override
          whatever each page still defines for those parts. -->
     <link rel="stylesheet" href="/css/office-shell.css">
+    <link rel="stylesheet" href="/css/offline-pill.css">
 </head>
 <body data-connection-alerts>
 

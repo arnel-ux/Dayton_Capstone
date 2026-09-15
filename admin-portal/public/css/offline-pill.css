@@ -1,0 +1,135 @@
+/* ==========================================================================
+   offline-pill.css — the "you are offline" chip, for every page that has one.
+
+   WHY IT LOOKS AND SITS LIKE THIS
+   The chip used to be a child of each page's header bar (the client survey's
+   .topbar, the office portal's .topbar). On a phone the header is already full
+   — hamburger, logo, two lines of title, notification bell, fullscreen button —
+   so the chip was squeezed on top of the portal name and came out half-hidden
+   behind it: the one message that has to be unmissable was the least readable
+   thing on the screen.
+
+   So it is no longer IN the header. It is a fixed, centred chip floating just
+   BELOW the header, out of the layout entirely: it cannot be crowded by
+   anything, it cannot push anything down, and it stays put while the page
+   scrolls. Solid amber with white text (the old pale-amber-on-white fill
+   disappeared against a light page and washed out on a dark one), a real
+   shadow so it lifts off whatever is behind it, and a pulsing dot.
+
+   HOW A PAGE POSITIONS IT
+   Set --offline-pill-top to the height of that page's header (plus a little
+   breathing room). The default suits a page with no fixed header at all:
+
+       .topbar-page { --offline-pill-top: calc(var(--topbar-h) + 10px); }
+
+   A page whose header height is only known at runtime (index.ejs measures its
+   own) sets the same property from script.
+
+   VISIBILITY
+   One mechanism only: the chip is display:none until `.is-visible` is added by
+   that page's navigator.onLine listener. Never inline styles, never d-none.
+   ========================================================================== */
+
+.offline-pill {
+    position: fixed;
+    /* The default is carried in the var() fallback, NOT as a :root rule. A
+       :root default here loses to nothing but wins over a page's own :root
+       rule whenever this file happens to be linked last — which is exactly how
+       the office portal's chip ended up back on top of its header. As a
+       fallback it only ever applies when the page sets nothing at all. */
+    top: calc(var(--offline-pill-top, 0.75rem) + env(safe-area-inset-top, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    /* Above sticky headers (1020) and the survey's sidebar, below modals and
+       the offline overlay — it must never cover a dialog the user has to act
+       on. */
+    z-index: 1090;
+
+    display: none;
+    align-items: center;
+    gap: 0.45rem;
+    max-width: min(92vw, 30rem);
+    padding: 0.45rem 0.95rem;
+    border-radius: 50px;
+
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 10px 24px -8px rgba(146, 64, 14, 0.75), 0 2px 6px rgba(0, 0, 0, 0.25);
+    text-shadow: 0 1px 2px rgba(120, 53, 15, 0.35);
+
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.3;
+    /* NOT nowrap. "Viewing Offline" is short enough to stay on one line on its
+       own, but the landing page reuses this chip for the much longer
+       server-unavailable sentence, and nowrap clipped the end of it off the
+       screen on a phone — the half of the message that says what to do. */
+    text-align: center;
+}
+
+.offline-pill.is-visible {
+    display: inline-flex;
+    animation: offlinePillIn 0.28s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* The centring translate has to be carried through every keyframe, or the chip
+   snaps to the right of centre for the length of the animation. */
+@keyframes offlinePillIn {
+    0%   { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+    100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.offline-pill .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ffffff;
+    flex: none;
+    animation: offlinePulse 1.6s ease-in-out infinite;
+}
+
+@keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* A real server-side failure (a response came back, just not an ok one) as
+   opposed to "no network" — red is reserved for the server itself answering
+   and saying something is wrong. */
+.offline-pill.is-error {
+    background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+    box-shadow: 0 10px 24px -8px rgba(153, 27, 27, 0.75), 0 2px 6px rgba(0, 0, 0, 0.25);
+    text-shadow: 0 1px 2px rgba(127, 29, 29, 0.35);
+}
+
+/* Used by the server-unavailable variant on the landing page. */
+.offline-pill .notice-retry-btn {
+    flex: 0 0 auto;
+    margin-left: 0.15rem;
+    background: rgba(255, 255, 255, 0.9);
+    border: none;
+    color: #b45309;
+    border-radius: 50px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    padding: 0.2rem 0.65rem;
+    min-height: 26px;
+    text-shadow: none;
+}
+
+.offline-pill.is-error .notice-retry-btn { color: #b91c1c; }
+.offline-pill .notice-retry-btn:hover { background: #ffffff; }
+
+/* Phones: the chip has the full width of the screen to itself now that it is
+   out of the header, so the text is NOT abbreviated here — being readable is
+   the whole point. Only the box tightens. */
+@media (max-width: 480px) {
+    .offline-pill {
+        font-size: 0.75rem;
+        padding: 0.4rem 0.85rem;
+        max-width: calc(100vw - 24px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .offline-pill.is-visible { animation: none; }
+    .offline-pill .dot { animation: none; }
+}

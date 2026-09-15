@@ -18,58 +18,17 @@
     <!-- Animation stack: GSAP + ScrollTrigger for scroll-driven reveals/parallax (native scroll, no smooth-scroll library) -->
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+    <link rel="stylesheet" href="/css/offline-pill.css">
 
     <style>
-        /* Persistent "you're viewing offline" pill — same font-size/padding
-           as login.ejs / client-login.ejs for a consistent look everywhere.
-           Sat fixed top-right before, which overlapped the Login button on
-           narrow screens; now it's a normal in-flow element (see the
-           .offline-pill-row wrapper right under the header in the markup),
-           centered under the header instead of floating over it. Shown/
-           hidden by navigator.onLine (see the script near the closing
-           </body> tag). */
+        /* The "you're viewing offline" chip and its red server-unavailable twin
+           are /css/offline-pill.css now — the same floating chip the survey and
+           the office portal use, fixed and centred just below the header rather
+           than scrolling away with the page. syncHeaderSpacer() feeds it this
+           page's measured header height (see --offline-pill-top below).
+           .offline-pill-row still wraps the "Take Survey Offline" button, which
+           IS an in-flow element. */
         .offline-pill-row { text-align: center; }
-        .offline-pill {
-            display: none;
-            align-items: center;
-            gap: 0.4rem;
-            margin: 0.75rem 0;
-            padding: 0.35rem 0.85rem;
-            border-radius: 50px;
-            background: #fef3c7;
-            color: #92400e;
-            border: 1px solid #fde68a;
-            font-size: 0.78rem;
-            font-weight: 700;
-            white-space: nowrap;
-            box-shadow: 0 6px 16px -4px rgba(0,0,0,0.25);
-        }
-        .offline-pill.is-visible { display: inline-flex; }
-        .offline-pill .dot {
-            width: 7px; height: 7px; border-radius: 50%; background: #d97706; flex: none;
-            animation: offlinePulse 1.6s ease-in-out infinite;
-        }
-        @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-
-        /* Genuine server-side failure (a response actually came back, just
-           not an ok one) vs. #offlineIndicator/the default amber tone above,
-           which both mean "this is a connectivity hiccup, not a real
-           outage". Red is reserved for when the server itself answered and
-           said something is wrong. */
-        .offline-pill.is-error { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
-        .offline-pill .notice-retry-btn {
-            flex: 0 0 auto;
-            background: rgba(255,255,255,0.55);
-            border: 1px solid currentColor;
-            color: inherit;
-            border-radius: 50px;
-            font-size: 0.7rem;
-            font-weight: 700;
-            padding: 0.2rem 0.6rem;
-            min-height: 26px;
-            margin-left: 0.15rem;
-        }
-        .offline-pill .notice-retry-btn:hover { background: rgba(255,255,255,0.85); }
 
         /* Same visibility rule as the pill above — navigator.onLine only,
            never auto-navigated to. Matches login.ejs's .btn-login look. */
@@ -1292,6 +1251,10 @@
             const header = document.getElementById('siteHeader');
             const spacer = document.getElementById('header-spacer');
             spacer.style.height = header.offsetHeight + 'px';
+            // The floating offline chip sits just under that same header, and
+            // this header's height changes with the viewport (the nav wraps),
+            // so it is measured here rather than guessed at in CSS.
+            document.documentElement.style.setProperty('--offline-pill-top', (header.offsetHeight + 10) + 'px');
         }
         window.addEventListener('load', syncHeaderSpacer);
         window.addEventListener('resize', syncHeaderSpacer);

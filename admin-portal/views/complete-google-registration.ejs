@@ -2,219 +2,52 @@
 <html lang="en">
 <head>
     <%- include('layout/header', { forceLightMode: true }) %>
+    <link rel="stylesheet" href="/css/auth.css">
     <style>
-        html, body {
-            height: 100vh;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            font-family: 'Inter', 'Plus Jakarta Sans', sans-serif;
-            -webkit-font-smoothing: antialiased;
-        }
-
-        /* Same photo + treatment as the public landing page (index.ejs
-           .bg-image): full-bleed, no blur, pinned to the viewport. */
-        .bg-blurred {
-            position: fixed;
-            top: 0; left: 0; width: 100vw; height: 100vh;
-            background-image: url('<%- heroImageUrl %>');
-            background-size: cover;
-            /* The CSPC monument sits in the upper half of this photo — on a
-               tall mobile viewport, centering it vertically cropped the
-               monument almost entirely out of frame. Anchoring to the top
-               keeps it in view. */
-            background-position: top center;
-            background-repeat: no-repeat;
-            z-index: -2;
-        }
-
-        /* Same navy gradient as the landing page's .bg-overlay. */
-        .bg-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: linear-gradient(180deg, rgba(37, 29, 58,0.92) 0%, rgba(37, 29, 58,0.85) 100%);
-            z-index: -1;
-        }
-
-        .login-wrapper {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            height: 100dvh;
-            max-height: 100dvh;
+        /* ---- Registration progress ----
+           The Register tab on /login promises a two-step flow ("sign up with
+           your email, then fill in the registration form"). This is step 2, so
+           it says so — landing on a fresh card with no continuity was what made
+           the hand-off from Google feel like a separate, unexplained page. */
+        .reg-progress {
             display: flex;
-            flex-direction: column;
+            flex-wrap: wrap;
             align-items: center;
-            justify-content: flex-start;
-            padding: 1rem;
-            padding-top: clamp(0.6rem, 2.5vh, 1.75rem);
-            padding-bottom: 5rem;
-            z-index: 1;
-            overflow-y: auto; /* safety fallback: scroll instead of clipping on short viewports */
-        }
-
-        .header-container {
-            text-align: center;
-            margin-bottom: 2rem;
-            max-width: 800px;
-        }
-
-        .main-title {
-            color: #ffffff;
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            font-weight: 800;
-            font-size: 2rem;
-            text-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
-            margin-bottom: 0.5rem;
-            letter-spacing: 0.3px;
-        }
-
-        .sub-title {
-            color: #f8fafc;
-            font-weight: 400;
-            font-style: italic;
-            font-size: 1.1rem;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
-            margin-bottom: 1.2rem;
-        }
-
-        .portal-text {
-            color: #ffff;
-            font-weight: 700;
-            font-size: 1.25rem;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-            margin-bottom: 0;
-        }
-
-        @media (max-width: 600px) {
-            .main-title { font-size: 1.4rem; }
-            .sub-title { font-size: 0.9rem; margin-bottom: 1rem; }
-            .portal-text { font-size: 1.1rem; }
-        }
-
-        .card-custom {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            border-radius: 1.5rem;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            width: 440px;
-            height: auto;
-            display: flex;
-            flex-direction: column;
             justify-content: center;
-            padding: 2rem 2.25rem;
+            gap: 0.4rem;
+            margin-bottom: 0.85rem;
         }
+        .reg-progress-step {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.3rem 0.7rem;
+            border-radius: 50px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            line-height: 1.3;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            color: #94a3b8;
+        }
+        .reg-progress-step.is-done {
+            background: #ecfdf5;
+            border-color: #a7f3d0;
+            color: #047857;
+        }
+        .reg-progress-step.is-current {
+            background: linear-gradient(135deg, #251d3a, #2a2550);
+            border-color: transparent;
+            color: #ffffff;
+        }
+        .reg-progress-sep { color: #cbd5e1; font-size: 0.7rem; }
 
-        /* NOTE: the fixed 440px card (plus the wrapper's 1rem/16px side
-           padding) needs >= 472px of viewport to avoid overflowing. Raised
-           from 460px to 480px so it lines up with the other auth pages
-           (login/forgot-password/reset-password) and leaves no gap where the
-           card could still clip. */
         @media (max-width: 480px) {
-            .card-custom {
-                width: 90vw;
-                padding: 1.75rem;
-            }
-
-            /* ---- Touch targets + readability ----
-               This form has FOUR stacked fields (Name, Email, Create Password,
-               Confirm Password) — the most of any auth page here, so cramped
-               spacing/small text compounds fast on a phone. 16px input text
-               avoids iOS Safari's auto-zoom-on-focus; taller field/button
-               padding brings tap heights up to ~44px; extra margin between
-               the four stacked field groups keeps adjacent inputs from being
-               easy to mis-tap. */
-            .card-custom .form-control {
-                font-size: 16px;
-                padding-top: 0.75rem;
-                padding-bottom: 0.75rem;
-            }
-            .card-custom .input-group-text { font-size: 1rem; padding-left: 0.9rem; padding-right: 0.9rem; }
-            .card-custom label { font-size: 0.8rem; margin-bottom: 0.35rem !important; }
-            .card-custom form > div.mb-2 { margin-bottom: 1rem !important; }
-            .card-custom form > div.mb-3 { margin-bottom: 1.15rem !important; }
-            .card-custom .btn { padding-top: 0.85rem; padding-bottom: 0.85rem; font-size: 1rem; }
-            .text-xsmall { font-size: 0.85rem; }
+            .reg-progress { gap: 0.3rem; margin-bottom: 0.7rem; }
+            .reg-progress-step { font-size: 0.68rem; padding: 0.28rem 0.6rem; }
         }
-
-        .card-custom h4 {
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            font-size: 1.4rem;
-            font-weight: 700;
-            letter-spacing: -0.2px;
-        }
-
-        .card-custom label {
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: #334155 !important;
-            letter-spacing: 0.1px;
-        }
-
-        .card-custom .form-control {
-            font-size: 0.95rem;
-            padding-top: 0.6rem;
-            padding-bottom: 0.6rem;
-        }
-
-        .card-custom .input-group-text {
-            font-size: 0.95rem;
-        }
-
-        .card-custom .btn {
-            font-size: 0.95rem;
-            letter-spacing: 0.1px;
-        }
-
-        .form-control:focus {
-            border-color: #251d3a;
-            box-shadow: 0 0 0 0.25rem rgba(37, 29, 58, 0.25);
-        }
-
-        .form-control[readonly] {
-            background-color: #f1f5f9;
-            color: #475569;
-        }
-
-        .text-xsmall {
-            font-size: 0.85rem;
-            color: #64748b;
-            line-height: 1.6;
-        }
-
-        /* Back-to-login button — floating circular icon button, centered
-           at the bottom of the viewport so it reads as a proper
-           mobile-friendly FAB instead of a text pill up by the header. */
-        .btn-home {
-            position: fixed;
-            bottom: 1.25rem;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10;
-            width: 3rem;
-            height: 3rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(255, 255, 255, 0.12);
-            color: #ffffff;
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            border-radius: 50%;
-            font-size: 1.05rem;
-            backdrop-filter: blur(6px);
-            box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.45);
-            transition: all 0.3s ease;
-            text-decoration: none;
-        }
-        .btn-home:hover {
-            background: rgba(255, 255, 255, 0.25);
-            color: #ffffff;
-            transform: translateX(-50%) translateY(-2px);
+        @media (max-height: 780px) {
+            .reg-progress { margin-bottom: 0.55rem; }
         }
     </style>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
@@ -222,7 +55,7 @@
 </head>
 <body>
 
-    <div class="bg-blurred"></div>
+    <div class="bg-blurred" style="--auth-hero-image: url('<%- heroImageUrl %>')"></div>
     <div class="bg-overlay"></div>
 
     <a href="/login" class="btn-home" title="Back to Login" aria-label="Back to Login">
@@ -239,50 +72,57 @@
 
         <div class="card-custom">
 
-            <div class="text-center mb-3">
+            <div class="reg-progress" aria-label="Registration progress">
+                <span class="reg-progress-step is-done"><i class="fas fa-circle-check" aria-hidden="true"></i> 1. Email verified</span>
+                <span class="reg-progress-sep" aria-hidden="true"><i class="fas fa-chevron-right"></i></span>
+                <span class="reg-progress-step is-current"><i class="fas fa-key" aria-hidden="true"></i> 2. Register account</span>
+            </div>
+
+            <div class="text-center mb-2">
                 <% if (typeof photo !== 'undefined' && photo) { %>
-                    <img src="<%= photo %>" alt="Google profile photo" referrerpolicy="no-referrer" style="width: 55px; height: 55px; border-radius: 50%; object-fit: cover;" class="mb-2">
+                    <img src="<%= photo %>" alt="Google profile photo" referrerpolicy="no-referrer" class="cqa-logo mb-1" style="border-radius: 50%; object-fit: cover; aspect-ratio: 1;">
                 <% } else { %>
-                    <img src="/images/cspc-logo.png" alt="CSPC Logo" style="width: 55px; height: auto;" class="mb-2">
+                    <img src="/images/cspc-logo.png" alt="CSPC Logo" class="cqa-logo mb-1">
                 <% } %>
-                <h4 class="fw-bold text-dark mb-0">Welcome!</h4>
-                <p class="text-muted text-xsmall mb-0">We found your Google account. Set a password to finish creating your account.</p>
+                <h4 class="fw-bold text-dark mb-0">Register Your Account</h4>
+                <div class="divider-soft"></div>
+                <p class="text-muted text-xsmall mb-0">Your email is confirmed. Set a password to finish registering your CQA account.</p>
             </div>
 
             <form action="/complete-google-registration" method="POST" id="completeRegistrationForm">
-                <div class="mb-2">
-                    <label class="text-muted text-xsmall fw-semibold mb-1">Name</label>
-                    <div class="input-group">
-                        <span class="input-group-text bg-light border-end-0"><i class="fas fa-user text-muted"></i></span>
-                        <input type="text" class="form-control bg-light border-start-0 ps-0" value="<%= name %>" readonly title="Name from your Google account">
+                <div class="field-group">
+                    <label class="field-label" for="regName">Name</label>
+                    <div class="input-modern">
+                        <span class="input-icon"><i class="fas fa-user"></i></span>
+                        <input type="text" id="regName" class="form-control" value="<%= name %>" readonly title="Name from your Google account">
                     </div>
                 </div>
 
-                <div class="mb-2">
-                    <label class="text-muted text-xsmall fw-semibold mb-1">Email</label>
-                    <div class="input-group">
-                        <span class="input-group-text bg-light border-end-0"><i class="fas fa-envelope text-muted"></i></span>
-                        <input type="text" class="form-control bg-light border-start-0 ps-0" value="<%= email %>" readonly title="Email from your Google account">
+                <div class="field-group">
+                    <label class="field-label" for="regEmail">Email</label>
+                    <div class="input-modern">
+                        <span class="input-icon"><i class="fas fa-envelope"></i></span>
+                        <input type="text" id="regEmail" class="form-control" value="<%= email %>" readonly title="Email from your Google account">
                     </div>
                 </div>
 
-                <div class="mb-2">
-                    <label class="text-muted text-xsmall fw-semibold mb-1">Create Password</label>
-                    <div class="input-group">
-                        <span class="input-group-text bg-light border-end-0"><i class="fas fa-lock text-muted"></i></span>
-                        <input type="password" name="password" class="form-control bg-light border-start-0 ps-0" placeholder="At least 8 characters" minlength="8" required title="Create a password for future logins" data-pw-strength>
+                <div class="field-group">
+                    <label class="field-label" for="regPassword">Create Password</label>
+                    <div class="input-modern">
+                        <span class="input-icon"><i class="fas fa-lock"></i></span>
+                        <input type="password" name="password" id="regPassword" class="form-control" placeholder="At least 8 characters" minlength="8" required title="Create a password for future logins" autocomplete="new-password" data-pw-strength>
                     </div>
                 </div>
 
-                <div class="mb-3">
-                    <label class="text-muted text-xsmall fw-semibold mb-1">Confirm Password</label>
-                    <div class="input-group">
-                        <span class="input-group-text bg-light border-end-0"><i class="fas fa-lock text-muted"></i></span>
-                        <input type="password" name="confirmPassword" class="form-control bg-light border-start-0 ps-0" placeholder="Re-enter your password" minlength="8" required title="Confirm your password">
+                <div class="field-group">
+                    <label class="field-label" for="regConfirmPassword">Confirm Password</label>
+                    <div class="input-modern">
+                        <span class="input-icon"><i class="fas fa-lock"></i></span>
+                        <input type="password" name="confirmPassword" id="regConfirmPassword" class="form-control" placeholder="Re-enter your password" minlength="8" required title="Confirm your password" autocomplete="new-password">
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-primary w-100 fw-bold py-2" style="background-color: #251d3a; border-color: #251d3a;" title="Create your account">
+                <button type="submit" class="btn btn-login w-100" title="Create your account">
                     <i class="fas fa-user-plus me-2"></i> Create Account
                 </button>
 

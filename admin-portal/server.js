@@ -3254,7 +3254,7 @@ app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
             }
             const office = officeRows && officeRows[0];
             if (!office || !office.password) {
-                return res.redirect('/login?error=' + encodeURIComponent('No account found for that email. Please register using the "Sign in with Google" button first.'));
+                return res.redirect('/login?tab=register&error=' + encodeURIComponent('No account found for that email. Open the Register tab and sign up with your CSPC or personal email first.'));
             }
 
             const passwordMatches = await bcrypt.compare(password, office.password);
@@ -3950,7 +3950,7 @@ app.get('/auth/google/callback',
 
                 if (isResetIntent) {
                     if (!existingAccount) {
-                        return res.redirect('/login?error=' + encodeURIComponent('No account found for that Google email. Please register using the "Sign in with Google" button first.'));
+                        return res.redirect('/login?tab=register&error=' + encodeURIComponent('No account found for that Google email. Open the Register tab and sign up with that email first.'));
                     }
                     // Google already verified this identity in this same request — no
                     // separate e-mailed token is needed, just let them set a new password.

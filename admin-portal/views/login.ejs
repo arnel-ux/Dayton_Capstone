@@ -2,379 +2,35 @@
 <html lang="en">
 <head>
     <%- include('layout/header', { forceLightMode: true }) %>
+    <link rel="stylesheet" href="/css/auth.css">
+    <link rel="stylesheet" href="/css/offline-pill.css">
     <style>
-        /* Reset and Base Styles */
-        html, body {
-            height: 100vh;
-            /* dvh follows the phone browser's collapsing address bar. With
-               plain 100vh the box is sized to the LARGEST viewport (bar
-               hidden), so while the bar is showing the page is taller than
-               the visible area — which is what made this page scroll on a
-               phone even though nothing here is meant to scroll. */
-            height: 100dvh;
-            margin: 0;
-            padding: 0;
-            overflow: hidden; /* Para walang lumabas na scrollbar */
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            -webkit-font-smoothing: antialiased;
-        }
+        /* ------------------------------------------------------------------
+           /login only. Everything shared with the other auth pages — backdrop,
+           wrapper, card, fields, buttons, notices, and the density ladder that
+           keeps these pages inside the fold — lives in /css/auth.css. Only the
+           three things this page alone has are here: the reCAPTCHA widget, the
+           Login/Register switch, and offline mode.
+           ------------------------------------------------------------------ */
 
-        /* 1. Background Image — same photo + treatment as the public landing
-           page (index.ejs .bg-image): full-bleed, no blur, so the two pages
-           read as one consistent backdrop. */
-        .bg-blurred {
-            position: fixed;
-            top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh;
-            background-image: url('<%- heroImageUrl %>');
-            background-size: cover;
-            /* The CSPC monument (seal/torch/globe) sits in the upper half
-               of this photo. On a tall mobile viewport, "cover" scales the
-               image up enough that centering it vertically cropped the
-               monument almost entirely out of frame, leaving mostly sky and
-               pavement — anchoring to the top keeps it in view. */
-            background-position: top center;
-            background-repeat: no-repeat;
-            z-index: -2;
-        }
-
-        /* 2. Overlay — same navy gradient as the landing page's .bg-overlay,
-           instead of a flat tint, so the two pages match. */
-        .bg-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: linear-gradient(180deg, rgba(37, 29, 58,0.92) 0%, rgba(37, 29, 58,0.85) 100%);
-            z-index: -1;
-        }
-
-        /* 3. Header-anchored wrapper — the header sits at a FIXED offset from the
-           top of the viewport (not vertically centered as one block with the
-           card below it). Centering the whole [header + card] group made the
-           header land at a different height on every auth page depending on
-           how tall that page's card happened to be (e.g. login's card with
-           reCAPTCHA vs. forgot-password's shorter card) — pinning the header
-           instead is what keeps it at the exact same spot across every page
-           that shares this block (login.ejs, forgot-password.ejs,
-           reset-password.ejs, complete-google-registration.ejs). */
-        .login-wrapper {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            height: 100dvh;
-            max-height: 100dvh;
-            display: flex;
-            flex-direction: column; /* Para magpatong ang titles at card */
-            align-items: center;    /* Centers horizontally */
-            justify-content: flex-start;
-            padding: 1rem;
-            /* Was clamp(1.5rem, 9vh, 4rem) — on a phone the 9vh term alone
-               burned ~70px of the fold before the title even started, and
-               together with the 5rem bottom reserve it pushed the card past
-               the bottom edge, which is what forced the page to scroll.
-               Both ends pulled in so the title + card start near the top and
-               the whole block fits the fold on a normal phone. */
-            padding-top: clamp(0.6rem, 2.5vh, 1.75rem);
-            /* Only enough to clear the floating home button (3rem tall,
-               1.25rem from the bottom) instead of a flat 5rem. */
-            padding-bottom: calc(3.25rem + env(safe-area-inset-bottom));
-            z-index: 1;
-            /* Safety fallback only: on a normal phone portrait viewport the
-               content now fits and this never engages. It stays `auto` (not
-               `hidden`) so genuinely short viewports — landscape phones, a
-               desktop window dragged short — can still reach the Login
-               button rather than having it clipped off with no way back. */
-            overflow-y: auto;
-            overscroll-behavior: contain;
-        }
-
-        /* --- BAGONG DAGDAG NA HEADER STYLES & ANIMATIONS --- */
-        
-        /* Keyframes para sa Fade & Slide Up Animation */
-        @keyframes fadeSlideUp {
-            0% {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            100% {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .header-container {
-            text-align: center;
-            margin-bottom: 1.1rem;
-            max-width: 800px; /* Para hindi masyadong humaba sa malaking screen */
-            flex-shrink: 0;
-        }
-
-        .main-title {
-            color: #ffffff;
-            font-weight: 800;
-            font-size: 1.5rem;
-            text-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
-            margin-bottom: 0.35rem;
-            letter-spacing: 0.3px;
-            line-height: 1.25;
-
-            /* Apply animation (Mauuna) */
-            opacity: 0;
-            animation: fadeSlideUp 0.8s ease-out forwards;
-        }
-
-        .sub-title {
-            color: #e2e8f0;
-            font-weight: 400;
-            font-style: italic; /* Ibang style as requested */
-            font-size: 0.85rem;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
-            margin-bottom: 0.6rem;
-
-            /* Apply animation (Pangalawa, may delay na 0.3s) */
-            opacity: 0;
-            animation: fadeSlideUp 0.8s ease-out 0.3s forwards;
-        }
-
-        .portal-text {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: #ffffff; /* Distinct gold/yellow color para sa Admin Portal */
-            font-weight: 700;
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 2.2px;
-            padding: 0.3rem 0.9rem;
-            background: rgba(255, 204, 0, 0.35);
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            border-radius: 50px;
-            backdrop-filter: blur(6px);
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-            margin-bottom: 0;
-
-            /* Apply animation (Pangatlo, may delay na 0.6s) */
-            opacity: 0;
-            animation: fadeSlideUp 0.8s ease-out 0.6s forwards;
-        }
-
-        /* Responsive para sa Titles */
-        @media (max-width: 600px) {
-            /* Density pass: hero title (18.4px) and subtitle (12.48px) both
-               ran under the 22-26px / 14-16px targets — bumped into range.
-               Badge text/padding tuned via .portal-text's min-height below. */
-            .main-title {
-                font-size: 1.4rem;
-            }
-            .sub-title {
-                font-size: 0.9rem;
-                margin-bottom: 0.5rem;
-            }
-            .portal-text {
-                font-size: 0.68rem;
-                min-height: 36px;
-                padding: 0.4rem 0.9rem;
-            }
-        }
-        /* -------------------------------------- */
-
-        /* 4. Card Styling — refined glassmorphism, soft layered shadow */
-        .card-custom {
-            background: rgba(255, 255, 255, 0.94);
-            backdrop-filter: blur(18px) saturate(160%);
-            -webkit-backdrop-filter: blur(18px) saturate(160%);
-            border: 1px solid rgba(255, 255, 255, 0.6);
-            border-radius: 1.75rem;
-            box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
-
-            /* Widened from a fixed 400px. The reCAPTCHA widget alone is 304px,
-               so at 400px minus the card's own side padding the form sat in a
-               ~310px column — the field hint and the helper text underneath it
-               wrapped onto extra lines, which is height this page can't spare
-               on a short desktop window. min() keeps it from ever exceeding the
-               viewport on a narrow one. */
-            width: min(480px, 92vw);
-            height: auto;
-            flex-shrink: 0;
-
-            /* Para mag-center ang content sa loob ng square */
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            padding: 1.5rem 2.25rem;
-            /* public/css/style.css gives every .card-custom a 1.5rem bottom
-               margin — right for the stacked cards on the dashboard pages it
-               was written for, but here it's a single centered card and that
-               24px was pure dead space under it, counted against the fold. */
-            margin-bottom: 0;
-            opacity: 0;
-            animation: fadeSlideUp 0.7s ease-out 0.15s forwards;
-        }
-
-        /* Responsive para sa mobile card
-           NOTE: the fixed 400px card width above (plus the wrapper's 1rem/16px
-           side padding) needs >= 432px of viewport to avoid overflowing —
-           but common phones (375/390/393/412/414/428/430px) are ALL narrower
-           than that, and html/body has overflow:hidden, so on every real phone
-           the card was getting clipped off-screen on the sides instead of
-           shrinking. Raised the breakpoint from 400px to 480px so it now
-           covers every phone width, including the larger Pro Max/Android
-           sizes the old 400px cutoff missed. */
+        /* ---- reCAPTCHA ----
+           Google's checkbox widget is a fixed 304x78px iframe — wider than the
+           card's content area on every phone. Scaling it down and shrinking its
+           layout box by the same factor keeps it inside the card instead of
+           poking out past the edge. */
         @media (max-width: 480px) {
-            /* Round-3 density pass. Goal here is a no-scroll fold on a normal
-               phone: everything (hero text + card + reCAPTCHA + Google button)
-               has to clear ~740px of visible viewport, and measured at 360px
-               wide it was ~90px over. The trims below are spread across the
-               hero block, the card header and the inter-field gaps rather
-               than taken out of any one place, so nothing collapses visibly —
-               and the input/button tap heights (41px/40px) and the 16px input
-               font that prevents iOS focus-zoom are deliberately NOT touched. */
-            .header-container { margin-bottom: 0.45rem; }
-            .main-title { font-size: 1.18rem; margin-bottom: 0.25rem; line-height: 1.2; }
-            .sub-title { font-size: 0.8rem; margin-bottom: 0.4rem; line-height: 1.3; }
-            .portal-text { min-height: 30px; padding: 0.3rem 0.85rem; }
-            /* Density pass: card was 92vw with 21.6/24px padding on a 28px
-               desktop border-radius — resized to the calc(100% - 24px) /
-               18-20px-padding / 22-26px-radius login-card targets, logo
-               bumped from an under-target 46px, and the "CQA Portal Login"
-               heading (16.8px, unchanged since desktop) brought up into the
-               21-23px target. */
-            .card-custom {
-                width: calc(100% - 24px);
-                margin-inline: 12px;
-                height: auto;
-                padding: 1rem 1rem;
-                border-radius: 22px;
-            }
-            .card-custom .cqa-logo { width: 40px; }
-            .card-custom h4 { font-size: 1.15rem; }
-            .card-custom p.text-xsmall { font-size: 0.85rem; }
-            .card-custom .text-center.mb-2 { margin-bottom: 0.25rem !important; }
-            .card-custom .cqa-logo.mb-1 { margin-bottom: 0.1rem !important; }
-            .card-custom .divider-soft { margin: 0.3rem auto 0.35rem; }
-            /* Google's reCAPTCHA checkbox widget is a fixed 304x78px iframe —
-               wider than the card's content area on every phone (the card's
-               own side padding leaves well under 304px). Scaling it down
-               and shrinking its layout box by the same factor keeps it fully
-               inside the card instead of poking out past the edge. */
             .g-recaptcha {
                 transform: scale(0.85);
                 transform-origin: 0 0;
                 width: 258px;
                 height: 66px;
             }
-
-            /* ---- Touch targets + readability ----
-               The text inputs were ~34px tall with a 14.08px font — under the
-               ~44px comfortable tap-height guideline, and critically, any
-               input with a font-size below 16px makes iOS Safari auto-zoom
-               the whole page on focus (jarring layout jump, easy to trigger
-               here since these are the very first fields a phone user taps).
-               16px input text avoids that zoom outright — kept at 16px even
-               though it sits slightly above the general 14-15px mobile input
-               target, since regressing to 14-15px would reintroduce the
-               auto-zoom bug this fix was written for. Vertical padding
-               trimmed instead so overall input height lands at ~44px (was
-               ~48px), inside the 42-46px target. */
-            .input-modern .form-control {
-                font-size: 16px;
-                padding: 0.5rem 0.85rem 0.5rem 0;
-                min-height: 41px;
-            }
-            .input-modern .input-icon { width: 2.6rem; font-size: 1.1rem; }
-            .field-group { margin-bottom: 0.5rem; }
-            .field-label { font-size: 0.8rem; margin-bottom: 0.25rem; }
-            .field-hint { font-size: 0.74rem; margin-top: 0.3rem; line-height: 1.3; }
-
-            /* Buttons: kept >=40px tap height, unchanged legible font. */
-            .btn-login, .btn-google {
-                padding: 0.6rem 1rem;
-                font-size: 0.95rem;
-                min-height: 40px;
-            }
-
-            /* "Forgot Password?" sits inline next to the Password label —
-               it's a short link with almost no hit area beyond its own text
-               height. Padding it (and giving the row more gap) turns it into
-               a real tap target and keeps a thumb from clipping the label
-               next to it. */
-            .forgot-link {
-                padding: 0.35rem 0;
-                margin: -0.35rem 0;
-                font-size: 0.85rem;
-            }
-            .field-group .d-flex.justify-content-between { gap: 0.75rem; }
-
-            .divider-or { margin: 0.5rem 0; }
-            .card-custom { padding: 0.85rem 0.9rem; }
-
-            /* Subtitle/eyebrow text was down at 12.48px/10.4px — bump both
-               into comfortably-readable territory on a phone screen. */
-            .sub-title { font-size: 0.9rem; }
-            .portal-text { font-size: 0.7rem; padding: 0.4rem 0.9rem; min-height: 36px; }
-
         }
 
-        /* Short viewports — a 360x740-class phone, or a desktop window dragged
-           down. Width-based queries alone can't catch these (a short phone is
-           the same WIDTH as a tall one), so this is keyed on height: one more
-           compression step on the hero block and the inter-field gaps, which
-           is what keeps the fold clear at 740px. Tap targets and the 16px
-           input font stay untouched here too. */
-        @media (max-height: 780px) {
-            .login-wrapper { padding-top: clamp(0.4rem, 1.2vh, 0.9rem); }
-            .header-container { margin-bottom: 0.35rem; }
-            .main-title { font-size: 1.08rem; margin-bottom: 0.2rem; }
-            .sub-title { font-size: 0.76rem; margin-bottom: 0.3rem; }
-            .portal-text { min-height: 28px; font-size: 0.64rem; padding: 0.25rem 0.8rem; }
-            .field-group { margin-bottom: 0.4rem; }
-            .divider-or { margin: 0.3rem 0; }
-            .card-custom .cqa-logo { width: 36px; }
-
-            /* Round-2 for short viewports. The rules above only ever trimmed
-               the hero block above the card; on a short DESKTOP window (a
-               1024x640 or a part-height browser window) the hero was already
-               small and the remaining overflow was all inside the card itself,
-               so this compresses the card's own vertical rhythm too. Input and
-               button tap heights stay usable — only the padding and the gaps
-               between blocks come down. */
-            .login-wrapper { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
-            .card-custom { padding: 0.9rem 1.75rem; }
-            .card-custom .text-center.mb-2 { margin-bottom: 0.2rem !important; }
-            .card-custom .cqa-logo.mb-1 { margin-bottom: 0.1rem !important; }
-            .card-custom h4 { font-size: 0.95rem; }
-            .card-custom .divider-soft { margin: 0.25rem auto 0.3rem; }
-            .card-custom p.text-xsmall { font-size: 0.72rem; }
-            .field-hint { font-size: 0.66rem; margin-top: 0.2rem; }
-            .field-label { margin-bottom: 0.2rem; }
-            .btn-login, .btn-google { padding: 0.5rem 1rem; }
-        }
-
-        /* Very short viewports (<=680px tall) — a 1024x640-class laptop screen,
-           or a browser window dragged down to roughly half a 1080p display.
-           The 780px step above gets those within ~20px of fitting; this is the
-           last squeeze that closes the gap, kept in its own breakpoint so the
-           700-780px range isn't compressed more than it needs to be. */
-        @media (max-height: 680px) {
-            .login-wrapper { padding-top: 0.3rem; padding-bottom: calc(0.5rem + env(safe-area-inset-bottom)); }
-            .header-container { margin-bottom: 0.25rem; }
-            .main-title { font-size: 1rem; }
-            .sub-title { font-size: 0.72rem; }
-            .portal-text { min-height: 24px; }
-            .card-custom { padding: 0.7rem 1.5rem; }
-            .card-custom .cqa-logo { width: 30px; }
-            .field-group { margin-bottom: 0.3rem; }
-            .field-hint { line-height: 1.25; margin-top: 0.15rem; }
-            .divider-or { margin: 0.2rem 0; }
-            .btn-login, .btn-google { padding: 0.45rem 1rem; }
-        }
-
-        /* Narrowest phones (320-375px): the reCAPTCHA's 0.85 scale above
-           (258px effective width) can still run past the card's content
-           width once the card itself has shrunk to calc(100% - 24px) with
-           its own side padding subtracted — measured as low as ~226px on a
-           320px-wide viewport. Scaled down further here, without hiding any
-           of Google's own widget text/warnings (same iframe, smaller box). */
+        /* Narrowest phones (320-375px): at 0.85 the widget can still run past
+           the card's content width once the card itself has shrunk — measured
+           as low as ~226px on a 320px-wide viewport. Same iframe, smaller box;
+           none of Google's own widget text is hidden. */
         @media (max-width: 375px) {
             .g-recaptcha {
                 transform: scale(0.74);
@@ -384,376 +40,201 @@
             }
         }
 
-        .card-custom .cqa-logo {
-            width: 46px;
-            height: auto;
-        }
-
-        .card-custom h4 {
-            color: #0f172a;
-            font-size: 1.05rem;
-            letter-spacing: 0.2px;
-        }
-
-        .card-custom .divider-soft {
-            width: 36px;
-            height: 3px;
-            background: #ffcc00;
-            border-radius: 50px;
-            margin: 0.4rem auto 0.55rem;
-        }
-
-        /* Form field wrapper + label */
-        .field-group {
-            margin-bottom: 0.75rem;
-        }
-
-        .field-label {
-            display: block;
-            font-size: 0.68rem;
-            font-weight: 600;
-            letter-spacing: 0.4px;
-            text-transform: uppercase;
-            color: #64748b;
-            margin-bottom: 0.3rem;
-        }
-
-        /* Modern input group styling */
-        .input-modern {
+        /* ---- Login / Register switch ----
+           This one card serves two flows, so the control has to read as a
+           SWITCH (a track with a sliding thumb) rather than as two plain
+           buttons: the thing a first-time visitor must grasp instantly is that
+           Register is this same card in a different mode, not another page they
+           are being sent off to. Sized in rem/% only, so the same markup holds
+           from a 320px phone up to the desktop card. */
+        .auth-switch {
             position: relative;
-            display: flex;
-            align-items: center;
-            background: #f8fafc;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            padding: 4px;
+            margin-bottom: 0.85rem;
+            background: #f1f5f9;
             border: 1.5px solid #e2e8f0;
-            border-radius: 0.75rem;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+            border-radius: 50px;
         }
 
-        .input-modern:focus-within {
-            border-color: #251d3a;
-            background: #ffffff;
-            box-shadow: 0 0 0 0.2rem rgba(37, 29, 58, 0.15);
+        /* Thumb width is calc(50% - 4px), so translateX(100%) — i.e. by its OWN
+           width — lands it exactly on the right half's inset position.
+           Percentage-based, so it stays correct at every card width. */
+        .auth-switch-thumb {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            bottom: 4px;
+            width: calc(50% - 4px);
+            border-radius: 50px;
+            background: linear-gradient(135deg, #251d3a, #2a2550);
+            box-shadow: 0 6px 14px -6px rgba(37, 29, 58, 0.65);
+            transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .auth-switch[data-active="register"] .auth-switch-thumb {
+            transform: translateX(100%);
         }
 
-        .input-modern .input-icon {
+        .auth-switch-btn {
+            position: relative;
+            z-index: 1; /* above the thumb, so the label stays readable */
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 2.6rem;
-            flex-shrink: 0;
-            color: #94a3b8;
-            font-size: 0.9rem;
-            transition: color 0.2s ease;
-        }
-
-        .input-modern:focus-within .input-icon {
-            color: #251d3a;
-        }
-
-        .input-modern .form-control {
+            gap: 0.4rem;
+            background: none;
             border: none;
-            background: transparent;
-            padding: 0.55rem 0.85rem 0.55rem 0;
-            font-size: 0.88rem;
-            box-shadow: none !important;
+            border-radius: 50px;
+            padding: 0.5rem 0.4rem;
+            min-height: 40px; /* comfortable tap target on a phone */
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: #64748b;
+            transition: color 0.25s ease;
         }
+        .auth-switch-btn[aria-selected="true"] { color: #ffffff; }
+        .auth-switch-btn:focus-visible { outline: 2px solid #ffcc00; outline-offset: 2px; }
 
-        .input-modern .form-control:focus {
-            outline: none;
-            box-shadow: none;
+        /* Panels swap with .d-none — no absolute positioning, so the card's
+           height follows whichever panel is showing instead of being pinned to
+           the taller one. */
+        .auth-panel { animation: fadeSlideUp 0.35s ease-out both; }
+
+        /* ---- Register panel ----
+           Deliberately not a set of name/email/password fields: an account is
+           only ever created off an email Google has actually verified (see
+           /auth/google/callback -> /complete-google-registration in server.js),
+           so this panel explains that the email step comes first and then starts
+           it. An email field here would look like it registered something. */
+        .reg-emails {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin-bottom: 0.7rem;
         }
-
-        .field-hint {
-            font-size: 0.68rem;
-            color: #94a3b8;
-            margin-top: 0.3rem;
-            line-height: 1.35;
-        }
-
-        .forgot-link {
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: #251d3a;
-            text-decoration: none;
-            transition: color 0.2s ease;
-        }
-
-        .forgot-link:hover {
+        .reg-email-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            flex: 1 1 auto;
+            padding: 0.35rem 0.7rem;
+            border-radius: 50px;
+            background: #eef2ff;
+            border: 1px solid #e0e7ff;
             color: #3730a3;
-            text-decoration: underline;
+            font-size: 0.72rem;
+            font-weight: 700;
+            line-height: 1.3;
+            text-align: center;
         }
+        .reg-email-chip i { font-size: 0.78rem; }
 
-        /* Primary login button */
-        .btn-login {
+        .btn-register-google {
             background: linear-gradient(135deg, #251d3a, #2a2550);
             border: none;
-            border-radius: 0.75rem;
-            padding: 0.6rem 1rem;
-            font-weight: 700;
-            font-size: 0.9rem;
-            letter-spacing: 0.2px;
-            color: #ffffff;
-            box-shadow: 0 8px 18px -6px rgba(37, 29, 58, 0.55);
-            transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
-        }
-
-        .btn-login:hover {
-            filter: brightness(1.06);
-            transform: translateY(-1px);
-            box-shadow: 0 12px 22px -6px rgba(37, 29, 58, 0.6);
-            color: #ffffff;
-        }
-
-        .btn-login:active {
-            transform: translateY(0);
-        }
-
-        /* Divider */
-        .divider-or {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            margin: 0.9rem 0;
-        }
-
-        .divider-or hr {
-            flex: 1;
-            margin: 0;
-            border-top: 1px solid #e2e8f0;
-            opacity: 1;
-        }
-
-        .divider-or span {
-            font-size: 0.7rem;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            color: #94a3b8;
-        }
-
-        /* Google Button Styling */
-        .btn-google {
-            background-color: #ffffff;
-            color: #334155;
-            border: 1.5px solid #e2e8f0;
             border-radius: 0.75rem;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 10px;
-            font-weight: 600;
-            font-size: 0.9rem;
+            width: 100%;
+            min-height: 44px;
             padding: 0.6rem 1rem;
-            transition: all 0.25s ease;
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: #ffffff;
+            text-decoration: none;
+            box-shadow: 0 8px 18px -6px rgba(37, 29, 58, 0.55);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
         }
-        .btn-google.disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
-
-        .btn-google:hover {
-            background-color: #f8fafc;
-            border-color: #251d3a;
-            box-shadow: 0 6px 16px -4px rgba(37, 29, 58, 0.25);
+        .btn-register-google:hover {
+            color: #ffffff;
+            filter: brightness(1.08);
             transform: translateY(-1px);
+            box-shadow: 0 12px 22px -6px rgba(37, 29, 58, 0.6);
         }
+        .btn-register-google:active { transform: translateY(0); }
+        .btn-register-google:focus-visible { outline: 2px solid #ffcc00; outline-offset: 2px; }
+        .btn-register-google.disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 
-        .btn-google:active {
-            transform: translateY(0);
-        }
-
-        .btn-google img {
-            width: 18px;
-            height: 18px;
-        }
-
-        /* Extra small text helper */
-        .text-xsmall {
-            font-size: 0.75rem;
-        }
-
-        /* Home button (top-left, floating over the blurred background) */
-        /* Home button — floating circular icon button, centered at the
-           bottom of the viewport so it reads as a proper mobile-friendly
-           FAB instead of a text pill competing with the header above it. */
-        .btn-home {
-            position: fixed;
-            bottom: 1.25rem;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10;
-            width: 3rem;
-            height: 3rem;
-            display: flex;
+        /* White pill behind Google's multicoloured G — the raw logo on a navy
+           button loses its blue stroke entirely. */
+        .btn-register-google .g-badge {
+            display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: rgba(255, 255, 255, 0.12);
-            color: #ffffff;
-            border: 1px solid rgba(255, 255, 255, 0.4);
+            width: 24px;
+            height: 24px;
             border-radius: 50%;
-            font-size: 1.05rem;
-            backdrop-filter: blur(6px);
-            box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.45);
-            transition: all 0.3s ease;
-            text-decoration: none;
-        }
-        .btn-home:hover {
-            background: rgba(255, 255, 255, 0.25);
-            color: #ffffff;
-            transform: translateX(-50%) translateY(-2px);
-        }
-
-        /* ---- .btn-home responsive overrides ----
-           These MUST stay below the base rule above. They were originally
-           written up inside the earlier media-query blocks, but those sit
-           before the base declaration in this stylesheet — same specificity,
-           earlier in source order, so the base simply won and none of it
-           applied (the button stayed a 3rem bottom-centre FAB everywhere,
-           including where it was supposed to move out of the way). */
-
-        /* Phones: smaller box, tighter to the bottom edge. */
-        @media (max-width: 480px) {
-            .btn-home { width: 2.6rem; height: 2.6rem; font-size: 0.95rem; bottom: 0.8rem; }
-        }
-
-        /* Short viewports: the wrapper stops reserving ~52px of bottom padding
-           for this button (that reserve was the biggest single chunk of the
-           remaining overflow), so the button has to leave the bottom centre —
-           otherwise it would sit directly on top of "Sign in with Google".
-           Top-left corner keeps it available without costing any fold height. */
-        @media (max-height: 780px) {
-            .btn-home {
-                top: 0.75rem;
-                left: 0.75rem;
-                bottom: auto;
-                transform: none;
-                width: 2.4rem;
-                height: 2.4rem;
-                font-size: 0.9rem;
-            }
-            /* The base :hover re-applies translateX(-50%) for the centred
-               placement — neutralised here for the corner one. */
-            .btn-home:hover { transform: translateY(-2px); }
-        }
-
-        /* Same "viewing offline" pill as client-login.ejs / index.ejs —
-           centered (not pinned to the top-right corner) so it reads as a
-           deliberate status banner rather than a notification badge, and
-           matches index.ejs's centered placement under its header.
-
-           IN FLOW, not position:fixed. Fixed at top:1rem put the pill in the
-           same band as .main-title, so offline it sat directly ON TOP of
-           "Office Of Center For Quality Assurance", blanking out the middle
-           of the heading. As the first flex child of .login-wrapper it is
-           still centered and still at the top, but it now pushes the header
-           down instead of covering it. */
-        .offline-pill {
-            display: none;
-            align-items: center;
-            gap: 0.4rem;
+            background: #ffffff;
             flex: none;
-            margin-bottom: 0.5rem;
-            padding: 0.35rem 0.85rem;
-            border-radius: 50px;
-            background: #fef3c7;
-            color: #92400e;
-            border: 1px solid #fde68a;
+        }
+        .btn-register-google .g-badge img { width: 15px; height: 15px; }
+
+        .auth-swap-hint {
+            margin: 0.7rem 0 0;
+            text-align: center;
+            font-size: 0.78rem;
+            color: #64748b;
+        }
+        .auth-swap-hint button {
+            background: none;
+            border: none;
+            padding: 0.25rem 0.3rem;
             font-size: 0.78rem;
             font-weight: 700;
-            white-space: nowrap;
+            color: #251d3a;
+            text-decoration: underline;
         }
-        .offline-pill.is-visible { display: inline-flex; }
-        .offline-pill .dot {
-            width: 7px; height: 7px; border-radius: 50%; background: #d97706; flex: none;
-            animation: offlinePulse 1.6s ease-in-out infinite;
-        }
-        @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-
-        .offline-login-notice {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: #fef3c7;
-            color: #92400e;
-            border: 1px solid #fde68a;
-            border-radius: 10px;
-            padding: 0.65rem 0.85rem;
-            font-size: 0.82rem;
-            font-weight: 600;
-            line-height: 1.4;
-            margin-bottom: 0.85rem;
-        }
-        /* Genuine server-side failure (a real response came back, just not an
-           ok one) is visually distinct from the amber "your connection is
-           slow" case above — red reads as "something is actually wrong",
-           amber reads as "hang tight". */
-        .offline-login-notice.is-error {
-            background: #fee2e2;
-            color: #991b1b;
-            border-color: #fecaca;
-        }
-        .offline-login-notice span { flex: 1 1 auto; }
-        .offline-login-notice .notice-retry-btn {
-            flex: 0 0 auto;
-            background: rgba(255,255,255,0.55);
-            border: 1px solid currentColor;
-            color: inherit;
-            border-radius: 50px;
-            font-size: 0.72rem;
-            font-weight: 700;
-            padding: 0.25rem 0.7rem;
-            min-height: 30px;
-        }
-        .offline-login-notice .notice-retry-btn:hover { background: rgba(255,255,255,0.85); }
 
         /* ---- Offline layout ----
-           The online fold is tuned to fit EXACTLY (see the density passes in
-           the width/height breakpoints above). Offline then added the pill
-           (~34px) and the "Take Survey Offline" button (~72px) on top of
-           that, which is what pushed the card past the bottom edge and made
-           this page scroll — the one thing the online page is built not to do.
-
-           Rather than compressing everything further, offline hides the three
-           blocks that genuinely CANNOT work with zero network — the reCAPTCHA
-           widget never loads, the password check needs the server, and
-           /auth/google needs the redirect — which is exactly what the comment
-           on #offlineSurveyBtn already describes ("replaces the login form
-           entirely rather than pretending it can still work"). That frees far
-           more height than the offline extras take, so the offline card is
-           SHORTER than the online one and the fold stays clear.
-
+           The online fold fits EXACTLY (see the density ladder in auth.css), and
+           offline adds the pill (~34px) and the "Take Survey Offline" button
+           (~72px) on top of it. Rather than compressing everything further,
+           offline hides the blocks that genuinely CANNOT work with zero network
+           — the reCAPTCHA never loads, the password check needs the server, and
+           /auth/google (for signing in AND for registering) needs the redirect.
+           That frees far more height than the offline extras take, so the
+           offline card is shorter than the online one and the fold stays clear.
            Everything here is keyed on a class toggled by the same
-           navigator.onLine listener as the pill, so the form comes straight
-           back the moment connectivity returns — nothing is removed, only
-           hidden. */
+           navigator.onLine listener as the pill — nothing is removed, only
+           hidden, so the form comes straight back when connectivity returns. */
         body.is-offline #loginForm,
         body.is-offline .divider-or,
-        body.is-offline #googleSignInBtn {
+        body.is-offline #googleSignInBtn,
+        body.is-offline .auth-switch,
+        body.is-offline #registerPanel,
+        body.is-offline .auth-swap-hint {
             display: none !important;
         }
 
-        /* Both of these exist to explain why SIGNING IN is currently blocked
-           — one for an unresolved previous-session logout, one for a server
-           that isn't answering. Offline the sign-in form is gone entirely and
-           #offlineLoginNotice already says why, so leaving them visible
-           stacked a second and third amber box saying "You're offline…" above
-           it (the pending-logout one literally opens with the same sentence).
+        /* Both of these exist to explain why SIGNING IN is currently blocked —
+           one for an unresolved previous-session logout, one for a server that
+           isn't answering. Offline the sign-in form is gone entirely and
+           #offlineLoginNotice already says why, so leaving them visible stacked
+           a second and third amber box saying "You're offline…" above it.
            Hidden in CSS only, never cleared: the pending-logout guard re-runs
-           attempt() on the 'online' event, so the moment the connection is
-           back the notice reappears with whatever state is then correct. */
+           attempt() on the 'online' event. */
         body.is-offline #pendingLogoutNotice,
         body.is-offline #serverUnavailableNotice {
             display: none !important;
         }
-        /* No form under it, so the button is the card's last element — its
-           mb-3 would leave a dangling gap above the card's bottom padding. */
+
+        /* No form under it, so the button is the card's last element — its mb-3
+           would leave a dangling gap above the card's bottom padding. */
         body.is-offline #offlineSurveyBtn { margin-bottom: 0 !important; }
 
-        /* The .btn-home responsive overrides above move the button to the
-           top-left corner on any viewport under 780px tall, because ONLINE
-           the fold is tight and a bottom-centre button would land on top of
-           "Sign in with Google". Offline that reasoning doesn't hold — the
-           card is short and the bottom half of the screen is empty — and the
-           button jumping corners between the two states is exactly the
-           inconsistency this fixes. Kept bottom-centre offline, matching the
-           online full-height placement. Specificity (0,2,1) beats the
-           media-query rules' (0,1,0), so source order doesn't matter here. */
+        /* auth.css moves the home button to the top-left corner on any viewport
+           under 780px tall, because ONLINE the fold is tight and a bottom-centre
+           button would land on top of "Sign in with Google". Offline that
+           reasoning doesn't hold — the card is short and the bottom half of the
+           screen is empty — and the button jumping corners between the two
+           states is exactly the inconsistency this fixes. Specificity (0,2,1)
+           beats the media-query rules' (0,1,0), so source order doesn't matter. */
         body.is-offline .btn-home {
             top: auto;
             bottom: 0.9rem;
@@ -766,76 +247,56 @@
         /* Must re-apply the centring translate, or hovering snaps it left. */
         body.is-offline .btn-home:hover { transform: translateX(-50%) translateY(-2px); }
 
-        /* Bringing the button back to the bottom centre means bringing back
-           the bottom reserve that goes with it. The short-viewport rules drop
-           .login-wrapper's padding-bottom to 1rem / 0.5rem — correct there,
-           because those same rules move the button to the top-left corner so
-           nothing needs reserving. Offline the button is bottom-centre again,
-           and without this the card ran straight underneath it: the home icon
-           sat on top of "Take Survey Offline", covering the tap target of the
-           one action this page exists to offer. */
+        /* Bringing the button back to the bottom centre means bringing back the
+           bottom reserve that goes with it, or the card runs underneath it and
+           the home icon covers the tap target of the one action this page then
+           offers. */
         body.is-offline .login-wrapper {
             padding-bottom: calc(3.6rem + env(safe-area-inset-bottom));
         }
 
-        /* ---- Offline flow guide ----
-           Without the login form the card is just a notice and a button, and
-           it isn't obvious that the survey still needs the user's registered
-           account — they find that out only after tapping through. Spelling
-           the two steps out here sets the expectation BEFORE they leave this
-           page, so they know to have their CQA email and password ready. */
-        .offline-steps {
-            border: 1px solid #e2e8f0;
-            background: #f8fafc;
-            border-radius: 12px;
-            padding: 0.75rem 0.85rem;
-            margin-bottom: 0.85rem;
-        }
-        .offline-steps-title {
-            margin: 0 0 0.55rem;
-            font-size: 0.7rem;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 1.2px;
-            color: #64748b;
-        }
-        .offline-step { display: flex; align-items: flex-start; gap: 0.6rem; }
-        .offline-step + .offline-step { margin-top: 0.55rem; }
-        .offline-step .step-num {
-            flex: none;
-            width: 22px;
-            height: 22px;
-            margin-top: 1px;
-            border-radius: 50%;
-            background: #251d3a;
-            color: #ffffff;
-            font-size: 0.72rem;
-            font-weight: 800;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .offline-step p { margin: 0; font-size: 0.82rem; line-height: 1.4; color: #334155; }
-        .offline-step strong { color: #1e293b; font-weight: 700; }
-        .offline-steps-foot {
-            display: flex;
-            align-items: flex-start;
-            gap: 0.4rem;
-            margin: 0.6rem 0 0;
-            padding-top: 0.55rem;
-            border-top: 1px dashed #e2e8f0;
-            font-size: 0.75rem;
-            line-height: 1.35;
-            color: #64748b;
+        /* ---- Fold trims for the two step lists ---- */
+        @media (max-width: 480px) {
+            .auth-switch { margin-bottom: 0.7rem; }
+            .auth-switch-btn { font-size: 0.76rem; letter-spacing: 0.5px; }
+            /* Side by side, each of these two labels wraps to three cramped
+               lines on a phone — full width reads better. */
+            .reg-email-chip { font-size: 0.7rem; flex-basis: 100%; }
+            .reg-emails { gap: 0.3rem; margin-bottom: 0.55rem; }
+            .auth-steps { padding: 0.65rem 0.7rem; margin-bottom: 0.7rem; }
+            .auth-step p { font-size: 0.78rem; line-height: 1.35; }
+            .auth-step + .auth-step { margin-top: 0.45rem; }
+            .btn-register-google { font-size: 0.88rem; }
         }
 
+        @media (max-height: 780px) {
+            /* The steps are the point of the Register panel and stay; the
+               footnote is reassurance, and it is the one block here that can go
+               when the fold gets tight — the same trade the rest of the card's
+               short-viewport rules make. */
+            .auth-steps-foot { display: none; }
+            .auth-steps { padding: 0.6rem 0.7rem; margin-bottom: 0.55rem; }
+            .auth-step p { font-size: 0.76rem; }
+            .auth-switch { margin-bottom: 0.5rem; padding: 3px; }
+            .auth-switch-thumb { top: 3px; left: 3px; bottom: 3px; width: calc(50% - 3px); }
+            .auth-switch-btn { min-height: 34px; font-size: 0.72rem; }
+            .btn-register-google { min-height: 40px; padding: 0.5rem 1rem; }
+            .auth-swap-hint { margin-top: 0.5rem; font-size: 0.72rem; }
+        }
+
+        @media (max-height: 680px) {
+            .auth-switch { margin-bottom: 0.4rem; }
+            .auth-switch-btn { min-height: 30px; }
+            .reg-emails { margin-bottom: 0.45rem; }
+            .btn-register-google { min-height: 38px; padding: 0.45rem 1rem; }
+        }
     </style>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <link rel="stylesheet" href="/css/alerts.css">
 </head>
 <body>
 
-    <div class="bg-blurred"></div>
+    <div class="bg-blurred" style="--auth-hero-image: url('<%- heroImageUrl %>')"></div>
     <div class="bg-overlay"></div>
 
     <a href="/" class="btn-home" title="Return to Home Page" aria-label="Return to Home Page">
@@ -844,23 +305,25 @@
 
     <div class="login-wrapper">
 
-        <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection.">
-            <span class="dot"></span><span class="label">Viewing Offline</span>
-        </span>
-
         <div class="header-container">
             <h1 class="main-title">Office Of Center For Quality Assurance (CQA)</h1>
             <p class="sub-title">Digital Client Satisfaction Survey of Camarines Sur Polytechnic Colleges</p>
-            <h2 class="portal-text">Login Portal</h2>
+            <h2 class="portal-text" id="portalBadge">Login Portal</h2>
         </div>
+
+        <!-- Centred directly under the header block, above the card — see the
+             positioning note in /css/auth.css. -->
+        <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection.">
+            <span class="dot"></span><span class="label">Viewing Offline</span>
+        </span>
 
         <div class="card-custom">
 
             <div class="text-center mb-2">
                 <img src="/images/cspc-logo.png" alt="CSPC Logo" class="cqa-logo mb-1" width="46" height="46">
-                <h4 class="fw-bold text-dark mb-0">CQA Portal Login</h4>
+                <h4 class="fw-bold text-dark mb-0" id="cardTitle">CQA Portal Login</h4>
                 <div class="divider-soft"></div>
-                <p class="text-muted text-xsmall mb-0">Sign in to your account</p>
+                <p class="text-muted text-xsmall mb-0" id="cardSubtitle">Sign in to your account</p>
             </div>
 
             <!-- Blocks starting a NEW login while an old session's server-
@@ -897,20 +360,20 @@
                  connectivity returns — which is exactly why the warning about
                  getting them right belongs here, up front, and not after the
                  user has already filled in the whole survey. -->
-            <div id="offlineStepsGuide" class="offline-steps d-none">
-                <p class="offline-steps-title">How to answer the survey offline</p>
+            <div id="offlineStepsGuide" class="auth-steps d-none">
+                <p class="auth-steps-title">How to answer the survey offline</p>
 
-                <div class="offline-step">
+                <div class="auth-step">
                     <span class="step-num" aria-hidden="true">1</span>
                     <p>Tap <strong>Take Survey Offline</strong> below to open the survey form.</p>
                 </div>
 
-                <div class="offline-step">
+                <div class="auth-step">
                     <span class="step-num" aria-hidden="true">2</span>
                     <p>Enter the <strong>email and password of your registered CQA account</strong>, then answer the survey. Both must be correct — that account is how your response gets saved to you.</p>
                 </div>
 
-                <p class="offline-steps-foot">
+                <p class="auth-steps-foot">
                     <i class="fas fa-sync-alt" aria-hidden="true"></i>
                     <span>Answers are saved on this device and sync automatically once you're back online.</span>
                 </p>
@@ -925,6 +388,26 @@
             <a href="/survey-offline" id="offlineSurveyBtn" class="btn btn-login w-100 d-none text-decoration-none mb-3" title="Complete the survey now — your account is verified once you're back online">
                 <i class="fas fa-clipboard-list me-2"></i> Take Survey Offline
             </a>
+
+            <!-- LOGIN / REGISTER SWITCH
+                 Registering and logging in are two different jobs that were
+                 previously indistinguishable on this page: the only entry
+                 point for a brand-new client was the "Sign in with Google"
+                 button at the very bottom, under the OR divider, whose label
+                 says "sign IN" — so a first-time visitor had no way to tell
+                 that this was also where they sign UP. The switch names both
+                 states up front and puts them on equal footing. -->
+            <div class="auth-switch" id="authSwitch" data-active="login" role="tablist" aria-label="Login or Register">
+                <span class="auth-switch-thumb" aria-hidden="true"></span>
+                <button type="button" class="auth-switch-btn" id="loginTabBtn" role="tab" aria-selected="true" aria-controls="loginPanel" data-tab="login" title="Sign in to an account you already created">
+                    <i class="fas fa-right-to-bracket" aria-hidden="true"></i> Login
+                </button>
+                <button type="button" class="auth-switch-btn" id="registerTabBtn" role="tab" aria-selected="false" aria-controls="registerPanel" data-tab="register" title="Create a new account">
+                    <i class="fas fa-user-plus" aria-hidden="true"></i> Register
+                </button>
+            </div>
+
+            <div id="loginPanel" class="auth-panel" role="tabpanel" aria-labelledby="loginTabBtn">
 
             <!-- UNIFIED LOGIN FORM (POST REQUEST) -->
             <form action="/auth-login" method="POST" id="loginForm">
@@ -982,6 +465,65 @@
                 Sign in with Google
             </a>
 
+            <p class="auth-swap-hint mb-0">
+                No account yet?
+                <button type="button" data-auth-goto="register" title="Switch to the Register tab">Register here</button>
+            </p>
+
+            </div><!-- /#loginPanel -->
+
+            <!-- REGISTER PANEL
+                 Deliberately NOT a set of name/email/password fields. An
+                 account is only ever created off an email Google has actually
+                 verified (/auth/google/callback stashes the verified address
+                 in the session and hands over to /complete-google-registration,
+                 which is where the real registration form lives) — so the one
+                 honest thing this panel can do is explain that the email step
+                 comes first, then start it. Typing an email into a form here
+                 would look like it registered something and would not. -->
+            <div id="registerPanel" class="auth-panel d-none" role="tabpanel" aria-labelledby="registerTabBtn">
+
+                <div class="reg-emails">
+                    <span class="reg-email-chip"><i class="fas fa-graduation-cap" aria-hidden="true"></i> CSPC email (@my.cspc.edu.ph)</span>
+                    <span class="reg-email-chip"><i class="fas fa-envelope" aria-hidden="true"></i> Personal email (Gmail)</span>
+                </div>
+
+                <div class="auth-steps">
+                    <p class="auth-steps-title">How registration works</p>
+
+                    <div class="auth-step">
+                        <span class="step-num" aria-hidden="true">1</span>
+                        <p>Sign up using your <strong>CSPC email</strong> or a <strong>personal email</strong> through Google. This is how we confirm the email is really yours.</p>
+                    </div>
+
+                    <div class="auth-step">
+                        <span class="step-num" aria-hidden="true">2</span>
+                        <p>After you sign in, the <strong>account registration form</strong> opens — your name and email are already filled in, and you just <strong>set your password</strong>.</p>
+                    </div>
+
+                    <div class="auth-step">
+                        <span class="step-num" aria-hidden="true">3</span>
+                        <p>Done. From then on you can log in from the <strong>Login</strong> tab with that same email and password.</p>
+                    </div>
+
+                    <p class="auth-steps-foot">
+                        <i class="fas fa-shield-halved" aria-hidden="true"></i>
+                        <span>Your password is set by you here — Google never shares your Google password with this system.</span>
+                    </p>
+                </div>
+
+                <a href="/auth/google" class="btn-register-google" id="registerGoogleBtn" title="Sign up using your CSPC or personal email">
+                    <span class="g-badge"><img src="https://developers.google.com/identity/images/g-logo.png" alt=""></span>
+                    Sign up with Email (Google)
+                </a>
+
+                <p class="auth-swap-hint mb-0">
+                    Already registered?
+                    <button type="button" data-auth-goto="login" title="Switch to the Login tab">Log in instead</button>
+                </p>
+
+            </div><!-- /#registerPanel -->
+
         </div>
     </div>
 
@@ -1014,6 +556,117 @@
             if (btn) btn.disabled = true;
         }
     </script>
+    <script>
+        // ==========================================
+        // LOGIN / REGISTER TAB SWITCH
+        //
+        // Runs BEFORE the query-param script below on purpose: that one
+        // calls history.replaceState(..., location.pathname) to scrub the
+        // error/status flags out of the URL, which also drops ?tab=register.
+        // Reading the tab here first is what lets the server keep linking
+        // straight to the Register state (e.g. the "no account found for
+        // that email, please register" redirects in server.js).
+        // ==========================================
+        (function () {
+            const switcher = document.getElementById('authSwitch');
+            const tabButtons = Array.prototype.slice.call(document.querySelectorAll('.auth-switch-btn'));
+            const panels = {
+                login: document.getElementById('loginPanel'),
+                register: document.getElementById('registerPanel')
+            };
+            if (!switcher || !panels.login || !panels.register) return;
+
+            const cardTitle = document.getElementById('cardTitle');
+            const cardSubtitle = document.getElementById('cardSubtitle');
+            const portalBadge = document.getElementById('portalBadge');
+
+            const COPY = {
+                login: {
+                    title: 'CQA Portal Login',
+                    subtitle: 'Sign in to your account',
+                    badge: 'Login Portal'
+                },
+                register: {
+                    title: 'Create Your Account',
+                    subtitle: 'Sign up first with your CSPC or personal email',
+                    badge: 'Register Portal'
+                }
+            };
+
+            function setAuthTab(tab, opts) {
+                const options = opts || {};
+                const active = tab === 'register' ? 'register' : 'login';
+
+                switcher.setAttribute('data-active', active);
+
+                tabButtons.forEach(function (btn) {
+                    const isActive = btn.getAttribute('data-tab') === active;
+                    btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                    // Only the selected tab stays in the tab order; the arrow
+                    // keys below move between them, which is how a tablist is
+                    // expected to behave for keyboard users.
+                    btn.setAttribute('tabindex', isActive ? '0' : '-1');
+                });
+
+                panels.login.classList.toggle('d-none', active !== 'login');
+                panels.register.classList.toggle('d-none', active !== 'register');
+
+                const copy = COPY[active];
+                if (cardTitle) cardTitle.textContent = copy.title;
+                if (cardSubtitle) cardSubtitle.textContent = copy.subtitle;
+                if (portalBadge) portalBadge.textContent = copy.badge;
+
+                // Keeps the address bar honest, so a reload / shared link comes
+                // back to the same tab the user was looking at.
+                try {
+                    const url = new URL(window.location.href);
+                    if (active === 'register') {
+                        url.searchParams.set('tab', 'register');
+                    } else {
+                        url.searchParams.delete('tab');
+                    }
+                    window.history.replaceState({}, document.title, url.pathname + url.search);
+                } catch (e) { /* non-critical */ }
+
+                // Moving focus into the newly-shown panel helps a keyboard
+                // user, but on a phone focusing the username field pops the
+                // on-screen keyboard the moment someone merely taps "Login" to
+                // look at it — which covers half the card. Wide viewports only.
+                if (options.focus && window.matchMedia('(min-width: 768px)').matches) {
+                    const target = active === 'login'
+                        ? document.getElementById('usernameInput')
+                        : document.getElementById('registerGoogleBtn');
+                    if (target) target.focus({ preventScroll: true });
+                }
+            }
+
+            tabButtons.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    setAuthTab(btn.getAttribute('data-tab'), { focus: true });
+                });
+                btn.addEventListener('keydown', function (e) {
+                    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                    e.preventDefault();
+                    const next = btn.getAttribute('data-tab') === 'login' ? 'register' : 'login';
+                    setAuthTab(next);
+                    const nextBtn = document.querySelector('.auth-switch-btn[data-tab="' + next + '"]');
+                    if (nextBtn) nextBtn.focus();
+                });
+            });
+
+            // The "No account yet? / Already registered?" links at the foot of
+            // each panel — same switch, reached from where the user is looking.
+            document.querySelectorAll('[data-auth-goto]').forEach(function (link) {
+                link.addEventListener('click', function () {
+                    setAuthTab(link.getAttribute('data-auth-goto'), { focus: true });
+                });
+            });
+
+            const requestedTab = new URLSearchParams(window.location.search).get('tab');
+            setAuthTab(requestedTab === 'register' ? 'register' : 'login');
+        })();
+    </script>
+
     <script>
         const loginQueryParams = new URLSearchParams(window.location.search);
         const loginErrorMsg = loginQueryParams.get('error');
@@ -1240,7 +893,14 @@
             const icon = document.getElementById('pendingLogoutNoticeIcon');
             const text = document.getElementById('pendingLogoutNoticeText');
             const retryBtn = document.getElementById('pendingLogoutRetryBtn');
-            const googleBtn = document.getElementById('googleSignInBtn');
+            // Both Google entry points — "Sign in with Google" on the Login
+            // tab and "Sign up with Email (Google)" on the Register tab — hit
+            // the same /auth/google redirect and would create the same new
+            // session, so the guard has to cover both or the Register tab
+            // becomes a way around it.
+            const googleBtns = Array.prototype.slice.call(
+                document.querySelectorAll('#googleSignInBtn, #registerGoogleBtn')
+            );
             const loginForm = document.getElementById('loginForm');
             let blocked = false;
 
@@ -1255,7 +915,9 @@
 
             function setBlocked(isBlocked) {
                 blocked = isBlocked;
-                if (googleBtn) googleBtn.classList.toggle('disabled', isBlocked);
+                googleBtns.forEach(function (btn) {
+                    btn.classList.toggle('disabled', isBlocked);
+                });
             }
 
             function warnBlocked(e) {
@@ -1291,7 +953,9 @@
             }
 
             if (retryBtn) retryBtn.addEventListener('click', attempt);
-            if (googleBtn) googleBtn.addEventListener('click', warnBlocked);
+            googleBtns.forEach(function (btn) {
+                btn.addEventListener('click', warnBlocked);
+            });
             if (loginForm) loginForm.addEventListener('submit', warnBlocked);
             window.addEventListener('online', attempt);
 

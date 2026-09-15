@@ -95,8 +95,21 @@ importScripts('/js/offline-db.js');
 // (which now exports window.AppAlert — the fix that makes the offline sync
 // notifications fire at all), /js/pwa-client.js, '/survey-offline' and
 // '/login', none of which would otherwise reach an existing device.
-const STATIC_CACHE = 'cspc-static-v34';
-const RUNTIME_CACHE = 'cspc-runtime-v34';
+// v35: the auth pages' design moved out of their inline <style> blocks into
+// one shared same-origin stylesheet, /css/auth.css. That makes it CRITICAL for
+// the precached '/login' and '/client-login' shells: offline, the markup still
+// comes from the cache, but without this file it arrives with no backdrop, no
+// card, no fold-fitting rules — a stack of unstyled inputs. Bumped so v34-or-
+// earlier installs discard their cached copies of those two pages and re-fetch
+// them together with the new stylesheet.
+// v36: the "viewing offline" chip moved out of every page's header into one
+// shared stylesheet, /css/offline-pill.css. It is CRITICAL for the same reason
+// auth.css is — the precached '/login', '/client-login' and '/survey-offline'
+// shells are exactly the pages a device sees while OFFLINE, and without this
+// file the one message those pages exist to show ("you are offline") renders as
+// unstyled text in the corner. Bumped so v35-or-earlier installs re-fetch them.
+const STATIC_CACHE = 'cspc-static-v36';
+const RUNTIME_CACHE = 'cspc-runtime-v36';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
@@ -105,6 +118,8 @@ const PRECACHE_URLS = [
     '/js/alerts.js',
     '/css/alerts.css',
     '/css/style.css',
+    '/css/auth.css',
+    '/css/offline-pill.css',
     '/js/offline-db.js',
     '/js/pwa-client.js',
     '/icons/icon.svg',
@@ -130,7 +145,7 @@ const PRECACHE_URLS = [
 // wrong key. A failure here is logged loudly, unlike the best-effort
 // PRECACHE_URLS/CDN_PRECACHE_URLS entries below (e.g. a decorative image),
 // where one bad resource staying uncached is harmless.
-const CRITICAL_PRECACHE_URLS = ['/survey-offline', '/js/pwa-client.js', '/js/offline-db.js', '/js/alerts.js', '/css/alerts.css'];
+const CRITICAL_PRECACHE_URLS = ['/survey-offline', '/js/pwa-client.js', '/js/offline-db.js', '/js/alerts.js', '/css/alerts.css', '/css/auth.css', '/css/offline-pill.css'];
 
 // Third-party libraries the survey/login pages load from a CDN. Cached
 // individually (not via cache.addAll) so one failure doesn't abort install.
