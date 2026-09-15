@@ -241,32 +241,9 @@
            would leave a dangling gap above the card's bottom padding. */
         body.is-offline #offlineSurveyBtn { margin-bottom: 0 !important; }
 
-        /* auth.css moves the home button to the top-left corner on any viewport
-           under 780px tall, because ONLINE the fold is tight and a bottom-centre
-           button would land on top of "Sign in with Google". Offline that
-           reasoning doesn't hold — the card is short and the bottom half of the
-           screen is empty — and the button jumping corners between the two
-           states is exactly the inconsistency this fixes. Specificity (0,2,1)
-           beats the media-query rules' (0,1,0), so source order doesn't matter. */
-        body.is-offline .btn-home {
-            top: auto;
-            bottom: 0.9rem;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 2.6rem;
-            height: 2.6rem;
-            font-size: 0.95rem;
-        }
-        /* Must re-apply the centring translate, or hovering snaps it left. */
-        body.is-offline .btn-home:hover { transform: translateX(-50%) translateY(-2px); }
-
-        /* Bringing the button back to the bottom centre means bringing back the
-           bottom reserve that goes with it, or the card runs underneath it and
-           the home icon covers the tap target of the one action this page then
-           offers. */
-        body.is-offline .login-wrapper {
-            padding-bottom: calc(3.6rem + env(safe-area-inset-bottom));
-        }
+        /* The home button is bottom-centre at every size and in both states now
+           (see /css/auth.css), so the overrides that used to pull it back down
+           here for the offline layout are gone — there is nothing left to undo. */
 
         /* ---- Fold trims for the two step lists ---- */
         @media (max-width: 480px) {
