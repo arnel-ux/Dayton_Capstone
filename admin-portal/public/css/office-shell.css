@@ -500,7 +500,16 @@ html[data-bs-theme="dark"] .decline-panel .form-control {
     border-color: rgba(220, 38, 38, 0.45);
 }
 html[data-bs-theme="dark"] .decline-panel .form-control::placeholder { color: #6b7a90; }
-html[data-bs-theme="dark"] .empty-state { color: var(--office-ink-soft); }
+/* The empty-state card carried its own hard-coded `background: #ffffff` and
+   pale border from the light design, and nothing here overrode them — so in
+   dark mode the "No pending submissions" panel stayed a white slab, with the
+   heading below already switched to light ink and therefore near-invisible
+   on it. The surface is what was missing, not the text colours. */
+html[data-bs-theme="dark"] .empty-state {
+    color: var(--office-ink-soft);
+    background: var(--office-surface);
+    border-color: var(--office-line);
+}
 html[data-bs-theme="dark"] .empty-state h3 { color: var(--office-ink); }
 html[data-bs-theme="dark"] .empty-state .icon-wrap {
     background: rgba(91, 140, 255, 0.14);

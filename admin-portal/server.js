@@ -611,14 +611,22 @@ async function withLogicalSurveyLock(officeId, googleEmail, serviceAvailed, work
 //             non-Online incoming submission never preempts a canonical
 //             Online row, and same-source duplicates within the cooldown
 //             are still rejected as before).
-async function resolveSubmissionPrecedence(conn, officeId, googleEmail, serviceAvailed, incomingSource) {
+// `options.ignorePending` skips the "already has one awaiting review" gate
+// below. It exists for exactly one caller: the office-approval route, which
+// is REVIEWING a queued row rather than adding a new one. There, other
+// still-pending rows for the same office/account/service are siblings in
+// the very queue the office is working through — not a conflict — and
+// letting them match here made Approve resolve to 'reject_pending' and
+// decline the submission instead of approving it. Every "is a new
+// submission allowed?" caller leaves this off and keeps the gate.
+async function resolveSubmissionPrecedence(conn, officeId, googleEmail, serviceAvailed, incomingSource, options = {}) {
     const [svcRows] = await conn.query(
         'SELECT availability FROM services WHERE office_id = ? AND service_name <=> ? LIMIT 1',
         [officeId, serviceAvailed]
     );
     const availability = (svcRows && svcRows[0]) ? svcRows[0].availability : null;
 
-    const [pendRows] = await conn.query(
+    const [pendRows] = options.ignorePending ? [[]] : await conn.query(
         "SELECT id, submission_source FROM pending_survey_submissions WHERE office_id = ? AND google_email = ? AND service_availed <=> ? AND status = 'pending' LIMIT 1",
         [officeId, googleEmail, serviceAvailed]
     );
@@ -1202,6 +1210,27 @@ function analyzeViaPythonScript(comment, offline, officeHint) {
 // actual gatekeeper every comment passes through before analysis of any
 // kind — see analyzeComment below and finalizeVerifiedSurvey/
 // insertVerifiedSurveyOnConnection, which both use this too.
+// pending_survey_submissions.payload is a real MySQL JSON column, so mysql2
+// already hands it back as a parsed OBJECT — calling JSON.parse() on that
+// stringifies it to "[object Object]" first and then throws a SyntaxError.
+// That was silently emptying the payload everywhere it was read (every
+// pending row rendering as "Anonymous") and, in the approve route, throwing
+// inside the transaction so every approval failed with "Unable to process
+// the submission." Accept both shapes: an object passes through untouched,
+// a string (older rows, or a driver/column type that returns text) is
+// parsed. Never throws — an unusable payload comes back as {} so callers
+// fall back to their own defaults instead of failing the whole request.
+function parsePendingPayload(raw) {
+    if (raw === null || raw === undefined) return {};
+    if (typeof raw === 'object' && !Buffer.isBuffer(raw)) return raw;
+    try {
+        const parsed = JSON.parse(Buffer.isBuffer(raw) ? raw.toString('utf8') : String(raw));
+        return (parsed && typeof parsed === 'object') ? parsed : {};
+    } catch (e) {
+        return {};
+    }
+}
+
 const NO_FEEDBACK_PHRASES = new Set([
     'na', 'n/a', 'none', 'nil', 'no comment', 'no comments', 'not applicable'
 ]);
@@ -3520,7 +3549,7 @@ app.get('/office-approvals', ensureOfficeAuth, noCache, (req, res) => {
         (err, rows) => {
             const submissions = (!err && rows) ? rows.map(r => {
                 let payload = {};
-                try { payload = JSON.parse(r.payload); } catch (e) { /* leave payload empty on corrupt JSON */ }
+                payload = parsePendingPayload(r.payload); // {} on a corrupt/unusable payload
                 return {
                     id: r.id,
                     googleEmail: r.google_email,
@@ -3555,7 +3584,7 @@ app.get('/office-approvals/history', ensureOfficeAuth, noCache, (req, res) => {
         (err, rows) => {
             const history = (!err && rows) ? rows.map(r => {
                 let payload = {};
-                try { payload = JSON.parse(r.payload); } catch (e) { /* leave payload empty on corrupt JSON */ }
+                payload = parsePendingPayload(r.payload); // {} on a corrupt/unusable payload
                 return {
                     id: r.id,
                     googleEmail: r.google_email,
@@ -3634,7 +3663,13 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
         }
         const row = rows[0];
         googleEmail = row.google_email;
-        payload = JSON.parse(row.payload); // throws on corrupt JSON — caught below, same as before
+        payload = parsePendingPayload(row.payload);
+        if (!payload || payload.officeId === undefined || !Array.isArray(payload.sqdValues)) {
+            // A genuinely unusable payload (not merely a JSON-column vs
+            // string mismatch, which parsePendingPayload handles): fail
+            // loudly here rather than inserting a half-empty survey row.
+            throw new Error('CORRUPT_PAYLOAD');
+        }
 
         // Online-vs-Offline precedence, re-checked HERE (not just when this
         // was originally queued) — time has passed since then, and an
@@ -3661,7 +3696,8 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
             throw timeoutErr;
         }
         const precedence = await resolveSubmissionPrecedence(
-            conn, payload.officeId, googleEmail, payload.serviceAvailed, row.submission_source || 'offline_sync'
+            conn, payload.officeId, googleEmail, payload.serviceAvailed, row.submission_source || 'offline_sync',
+            { ignorePending: true }
         );
 
         if (precedence.decision === 'reject' || precedence.decision === 'reject_pending') {
@@ -3744,6 +3780,10 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
         }
         if (err.code === 'LOCK_TIMEOUT') {
             return res.redirect('/office-approvals?error=' + encodeURIComponent('The server is busy processing another submission for this survey. Please try again shortly.'));
+        }
+        if (err.message === 'CORRUPT_PAYLOAD') {
+            console.error(`❌ [Office Approval] Submission ${submissionId} has an unreadable payload — left pending.`);
+            return res.redirect('/office-approvals?error=' + encodeURIComponent("This submission's saved answers could not be read, so it was left pending. Please contact the system administrator."));
         }
         console.error("❌ [Office Approval] Error finalizing approved survey:", err);
         return res.redirect('/office-approvals?error=' + encodeURIComponent('Unable to process the submission. Please try again.'));

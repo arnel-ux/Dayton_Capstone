@@ -59,8 +59,17 @@
            BASE / LAYOUT
            ========================================================== */
         * { box-sizing: border-box; }
+        /* overflow-x must be `clip`, never `hidden`, here. `hidden` turns
+           html/body into a scroll container, and a scroll container is what
+           .topbar's `position: sticky` then sticks to instead of the
+           viewport — which is why the header scrolled away with the page.
+           `clip` cuts off the same horizontal overflow without creating
+           that scroll container, so sticky keeps working.
+           overflow-y is pinned to `visible` so the pair can never fall back
+           to the scroll-container behaviour in a browser that lacks `clip`. */
         html, body {
-            overflow-x: hidden;
+            overflow-x: clip;
+            overflow-y: visible;
         }
         body {
             background: #f0f3f9;
