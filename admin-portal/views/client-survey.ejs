@@ -2164,14 +2164,23 @@
            (gender/CC1-3/SQD0-8 are radio sets) get this custom pair instead:
            the whole container gets a restrained red border/tint — never
            individual radio options — plus one small warning line. Both
-           carry scroll-margin-top so scrollToInvalid()'s smooth-scroll never
-           leaves the target sitting underneath the sticky topbar, on mobile
+           carry scroll-margin-top so scrollToInvalid() never leaves the
+           target sitting underneath the sticky topbar, on mobile
            (106px) or desktop (72px) alike, since --topbar-h already tracks
            the right value for either. */
         .invalid-feedback { scroll-margin-top: calc(var(--topbar-h) + 12px); }
+        /* The CONTROL needs the same offset as its message: scrollToInvalid
+           targets the control, so without this a select scrolled to the top
+           of the viewport sits under the sticky header. */
+        .is-invalid { scroll-margin-top: calc(var(--topbar-h) + 12px); }
         .answer-group-invalid {
             scroll-margin-top: calc(var(--topbar-h) + 12px);
         }
+        /* focusInvalid() gives these containers tabindex="-1" so focus can
+           land on them; they already carry a red border saying where the
+           user is, so the browser's default focus ring on top of it would
+           be noise. Leaf controls keep their own ring untouched. */
+        .answer-group-invalid:focus { outline: none; }
         .qa-block.answer-group-invalid {
             border-color: #dc3545 !important;
             border-left-color: #dc3545 !important;
@@ -5855,20 +5864,62 @@ function updateProgressStepper(stage) {
 // missed is instead shown ON THE PAGE, at the field itself (see
 // markLeafInvalid/markGroupInvalid below) — the user finds out what they
 // missed from the form, not from the alert text.
+//
+// The alert does carry HOW MANY were missed (see buildIncompleteAlert) —
+// that is a single number, not the list this was changed to remove, and
+// without it someone who skipped four SQD questions couldn't tell they had
+// four left rather than one.
 const validationMessages = {
     en: {
         terms: "Please check the box to agree to the Terms & Conditions and Privacy Policy before proceeding.",
         requiredIncomplete: "Please complete the required information before proceeding.",
         fieldRequired: "This field is required.",
-        answerRequired: "Please select an answer."
+        answerRequired: "Please select an answer.",
+        // {n} is substituted with the count. Still no list of WHICH ones —
+        // that stays on the page, at each question.
+        countTitleOne: "1 item left",
+        countTitleMany: "{n} items left",
+        answersMissingOne: "1 question has not been answered yet. It is marked below — answer it to continue.",
+        answersMissingMany: "{n} questions have not been answered yet. They are marked below — answer them to continue.",
+        fieldsMissingOne: "1 required field is still empty. It is marked below — fill it in to continue.",
+        fieldsMissingMany: "{n} required fields are still empty. They are marked below — fill them in to continue."
     },
     tl: {
         terms: "Paki-check ang kahon para sumang-ayon sa Terms & Conditions at Privacy Policy bago magpatuloy.",
         requiredIncomplete: "Pakikumpleto ang mga kinakailangang impormasyon bago magpatuloy.",
         fieldRequired: "Kinakailangan ang impormasyong ito.",
-        answerRequired: "Pumili ng sagot."
+        answerRequired: "Pumili ng sagot.",
+        countTitleOne: "1 ang natitira",
+        countTitleMany: "{n} ang natitira",
+        answersMissingOne: "May 1 tanong na hindi pa nasasagutan. Nakamarka ito sa ibaba — sagutan ito para makatuloy.",
+        answersMissingMany: "May {n} tanong na hindi pa nasasagutan. Nakamarka ang mga ito sa ibaba — sagutan ang mga ito para makatuloy.",
+        fieldsMissingOne: "May 1 kinakailangang impormasyon na wala pang laman. Nakamarka ito sa ibaba — punan ito para makatuloy.",
+        fieldsMissingMany: "May {n} kinakailangang impormasyon na wala pang laman. Nakamarka ang mga ito sa ibaba — punan ang mga ito para makatuloy."
     }
 };
+
+// Builds the count-carrying alert for a failed stage. The COUNT is the point:
+// skipping 3 or 4 SQD questions used to produce the same one sentence as
+// skipping one, so the user had no way of knowing how many were left and had
+// to hunt them down one at a time. The number goes in the title, where it
+// reads at a glance next to the warning icon, with the sentence underneath.
+// Which ones were missed still lives on the page at each question (the red
+// border + "Please select an answer"), never as a list inside the popup.
+// `kind` is 'answers' for question groups (CC/SQD) and 'fields' for the
+// profile inputs, so the wording matches what the user is actually looking
+// at. A count of 0 can't happen on this path, but falls back to the old
+// generic sentence rather than saying "0 items left" if it ever did.
+function buildIncompleteAlert(kind, count) {
+    const t = validationMessages[currentLang] || validationMessages.en;
+    const n = Math.max(0, count || 0);
+    if (!n) return { title: undefined, text: t.requiredIncomplete };
+    const many = n > 1;
+    const title = (many ? t.countTitleMany : t.countTitleOne).replace('{n}', String(n));
+    const key = kind === 'fields'
+        ? (many ? 'fieldsMissingMany' : 'fieldsMissingOne')
+        : (many ? 'answersMissingMany' : 'answersMissingOne');
+    return { title: title, text: (t[key] || t.requiredIncomplete).replace('{n}', String(n)) };
+}
 
 // ---- Inline required-field marking ----
 // Two shapes of "required thing" on this survey: a leaf control (text/select/
@@ -5932,10 +5983,98 @@ function clearGroupInvalid(container, messageTarget) {
 // scrolling it into view is enough per spec.
 function scrollToInvalid(el) {
     if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') {
-        try { el.focus({ preventScroll: true }); } catch (e) { try { el.focus(); } catch (e2) {} }
+    // Centering is right for a normal field, but a question block taller
+    // than the viewport (CC1 with its five long options on a phone, an SQD
+    // card in portrait) gets its TOP cut off when centred — which is the
+    // half carrying the question text and the red "Please select an answer"
+    // line. Anything over ~80% of the viewport is aligned to its top
+    // instead, so the user lands on the question itself rather than on its
+    // tail. scroll-margin-top on the invalid classes keeps either alignment
+    // clear of the sticky header, on any screen size.
+    let block = 'center';
+    try {
+        const h = el.getBoundingClientRect().height;
+        const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+        if (vh && h > vh * 0.8) block = 'start';
+    } catch (e) { /* keep 'center' */ }
+    // behavior:'auto', not 'smooth'. A smooth scroll is still animating for
+    // hundreds of ms after this returns, and any other programmatic scroll
+    // in that window (the closing modal restoring its own position) cancels
+    // it outright — which is exactly how the user ended up looking at the
+    // bottom of the page instead of the question. An instant landing has no
+    // such window: the page is on the field before anything else can run.
+    el.scrollIntoView({ behavior: 'auto', block: block });
+    focusInvalid(el);
+}
+
+// Focus has to land on the missed field too, not just the scroll position:
+// with the alert's own focus-restore turned off (see reportStageInvalid),
+// whatever gets focused here is where a keyboard user's next Tab, and a
+// screen reader's cursor, resumes from. A form control takes focus
+// directly. A question GROUP (a <div>/<tr> holding a radio set) isn't
+// focusable on its own, so it's given tabindex="-1" — programmatically
+// focusable, never reachable by tabbing, standard practice for exactly
+// this. preventScroll everywhere, so focusing never fights the scroll above.
+function focusInvalid(el) {
+    if (!el || typeof el.focus !== 'function') return;
+    if (el.tagName !== 'INPUT' && el.tagName !== 'SELECT' && el.tagName !== 'TEXTAREA') {
+        if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
     }
+    try { el.focus({ preventScroll: true }); } catch (e) { try { el.focus(); } catch (e2) {} }
+}
+
+// Holds the page on the missed field for a short window after the scroll.
+// Closing a modal can move the scroll on its own — SweetAlert2 restores the
+// body scroll position it saved when it opened (and its iOS body-fixed
+// workaround does the same on iPhone/iPad), and either can land after our
+// scroll. Re-asserting the position for ~700ms outlasts every one of those
+// without the survey needing to know which engine, browser or device is in
+// play. It gives up the moment the user scrolls, touches, or uses the
+// keyboard — if they choose to look elsewhere, the page must not drag them
+// back.
+const REVEAL_HOLD_MS = 700;
+function holdScrollOn(el) {
+    if (!el || typeof requestAnimationFrame !== 'function') return;
+    const start = Date.now();
+    let cancelled = false;
+    const cancel = () => {
+        cancelled = true;
+        ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach((evt) => {
+            window.removeEventListener(evt, cancel, { capture: true });
+        });
+    };
+    ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach((evt) => {
+        window.addEventListener(evt, cancel, { capture: true, passive: true });
+    });
+    // The position we landed on, as an offset from the top of the viewport.
+    // Re-asserting against THIS (rather than against "is it still on screen
+    // somewhere") is what catches a restore that scrolls the page only part
+    // of a screen — enough to leave the user staring at the tail of the
+    // question instead of the question, while the element technically stayed
+    // in view. Any drift past a few pixels is put straight back.
+    // Captured synchronously, not on the first animation frame: a scroll
+    // restore landing in between would otherwise be recorded AS the anchor,
+    // and the hold would then faithfully hold the wrong position. Callers
+    // run this immediately after scrollToInvalid, so "now" is the position
+    // we actually want.
+    let anchorTop = null;
+    try { anchorTop = el.getBoundingClientRect().top; } catch (e) { anchorTop = null; }
+    const DRIFT_PX = 8;
+    const tick = () => {
+        if (cancelled) return;
+        if (Date.now() - start > REVEAL_HOLD_MS) { cancel(); return; }
+        try {
+            const rect = el.getBoundingClientRect();
+            if (anchorTop === null) {
+                anchorTop = rect.top;
+            } else if (Math.abs(rect.top - anchorTop) > DRIFT_PX) {
+                const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+                el.scrollIntoView({ behavior: 'auto', block: (vh && rect.height > vh * 0.8) ? 'start' : 'center' });
+            }
+        } catch (e) { cancel(); return; }
+        requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
 }
 
 // Shakes EVERY still-unanswered field (not just the first), so one glance
@@ -5987,17 +6126,40 @@ function shakeInvalid(elements) {
 // The single path every stage takes when it fails validation: show the alert,
 // and only once the user has acknowledged it (OK/dismiss/Esc alike — hence
 // both promise branches) scroll to the first missed field and shake them all.
-// Scrolling is smooth, so the shake waits for it to settle; otherwise the
-// field would be shaking while still travelling up the screen. If AppAlert
-// can't hand back a promise (no SweetAlert, native-alert fallback), the
-// reveal still runs — it just runs immediately.
-function reportStageInvalid(message, firstInvalid, invalidEls) {
+// The shake trails the scroll slightly so the field isn't already moving as
+// it arrives. If AppAlert can't hand back a promise (no SweetAlert, native-
+// alert fallback), the reveal still runs — it just runs immediately.
+function reportStageInvalid(message, firstInvalid, invalidEls, title) {
+    // The promise can settle while the popup is still animating out, and
+    // its teardown (body scroll restore, iOS body-fixed undo, focus
+    // handling) runs after that. Waiting a frame plus the close animation
+    // means this scroll is the LAST one to run, rather than the first of
+    // several; holdScrollOn then covers anything that still slips through.
     const reveal = () => {
-        scrollToInvalid(firstInvalid);
-        setTimeout(() => shakeInvalid(invalidEls), 320);
+        const run = () => {
+            scrollToInvalid(firstInvalid);
+            holdScrollOn(firstInvalid);
+            setTimeout(() => shakeInvalid(invalidEls), 160);
+        };
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => setTimeout(run, 160));
+        } else {
+            setTimeout(run, 180);
+        }
     };
     let result;
-    try { result = AppAlert.warning(message); } catch (e) { result = null; }
+    try {
+        // returnFocus:false — otherwise the alert hands focus back to the
+        // "Next" button that opened it, and focusing a button at the bottom
+        // of the stage scrolls the page down to it, dropping the user past
+        // the question they actually missed. AppAlert honours this on both
+        // of its engines (SweetAlert2 online, the dependency-free fallback
+        // offline), so the behavior is identical either way; focus is moved
+        // onto the missed field by focusInvalid() instead.
+        // `title` undefined keeps AppAlert's own default ("Warning"); the
+        // count-carrying stages pass their own ("3 items left").
+        result = AppAlert.warning(message, title, { returnFocus: false });
+    } catch (e) { result = null; }
     if (result && typeof result.then === 'function') result.then(reveal, reveal);
     else reveal();
 }
@@ -6100,7 +6262,8 @@ function validateStage(stageNum, scroll) {
             // (with scroll) right after navigating to it — one real
             // validation failure must produce exactly one alert.
             if (scroll) {
-                reportStageInvalid(t.requiredIncomplete, firstInvalid, invalidEls);
+                const a = buildIncompleteAlert('fields', invalidEls.length);
+                reportStageInvalid(a.text, firstInvalid, invalidEls, a.title);
             }
             return false;
         }
@@ -6129,7 +6292,8 @@ function validateStage(stageNum, scroll) {
             // (with scroll) right after navigating to it — one real
             // validation failure must produce exactly one alert.
             if (scroll) {
-                reportStageInvalid(t.requiredIncomplete, firstInvalid, invalidEls);
+                const a = buildIncompleteAlert('answers', invalidEls.length);
+                reportStageInvalid(a.text, firstInvalid, invalidEls, a.title);
             }
             return false;
         }
@@ -6159,7 +6323,8 @@ function validateStage(stageNum, scroll) {
             // (with scroll) right after navigating to it — one real
             // validation failure must produce exactly one alert.
             if (scroll) {
-                reportStageInvalid(t.requiredIncomplete, firstInvalid, invalidEls);
+                const a = buildIncompleteAlert('answers', invalidEls.length);
+                reportStageInvalid(a.text, firstInvalid, invalidEls, a.title);
             }
             return false;
         }

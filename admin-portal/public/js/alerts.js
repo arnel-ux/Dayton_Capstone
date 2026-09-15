@@ -60,10 +60,21 @@ const AppAlert = {
         close() {
             if (this._open && this._open.parentNode) this._open.parentNode.removeChild(this._open);
             this._open = null;
-            if (this._restoreFocus && typeof this._restoreFocus.focus === 'function') {
-                try { this._restoreFocus.focus(); } catch (e) { /* element may be gone */ }
+            // preventScroll — restoring focus must never MOVE the page. The
+            // element that opened the dialog is usually a button at the
+            // bottom of a long form (a "Next"/"Submit"), so a plain focus()
+            // yanked the user back down to it on close, undoing wherever the
+            // caller had just sent them. `_returnFocus === false` opts out
+            // entirely, for callers that focus something themselves after
+            // the dialog closes (see AppAlert.warning's `returnFocus`).
+            if (this._returnFocus !== false && this._restoreFocus && typeof this._restoreFocus.focus === 'function') {
+                try { this._restoreFocus.focus({ preventScroll: true }); }
+                catch (e) {
+                    try { this._restoreFocus.focus(); } catch (e2) { /* element may be gone */ }
+                }
             }
             this._restoreFocus = null;
+            this._returnFocus = undefined;
         },
 
         // Returns a Promise<boolean>: true only when the confirm button was
@@ -154,6 +165,7 @@ const AppAlert = {
 
                 container.appendChild(popup);
                 self._restoreFocus = document.activeElement;
+                self._returnFocus = o.returnFocus;
                 (document.body || document.documentElement).appendChild(container);
                 self._open = container;
 
@@ -172,7 +184,11 @@ const AppAlert = {
                 title,
                 text: message,
                 confirmText: 'OK',
-                timer: (extra && extra.timer) || undefined
+                timer: (extra && extra.timer) || undefined,
+                // Forwarded so the offline fallback and SweetAlert2 honour
+                // `returnFocus: false` identically — a caller that manages
+                // focus itself must get the same behavior either way.
+                returnFocus: extra ? extra.returnFocus : undefined
             });
         }
         return Swal.fire(Object.assign({
@@ -198,8 +214,14 @@ const AppAlert = {
         return this._modal('info', message, title);
     },
 
-    warning(message, title = 'Warning') {
-        return this._modal('warning', message, title);
+    // `extra` is passed straight through to the underlying engine (and the
+    // relevant parts of it to the offline fallback). Existing two-argument
+    // callers are unaffected. The option that matters here is
+    // `returnFocus: false`, for a caller that moves focus itself once the
+    // alert is dismissed — e.g. form validation focusing the field the user
+    // missed, which the default focus-restore would otherwise fight.
+    warning(message, title = 'Warning', extra) {
+        return this._modal('warning', message, title, extra);
     },
 
     // Resolves to true only if the user confirms.
