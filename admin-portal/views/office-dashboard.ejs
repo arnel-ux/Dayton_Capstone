@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script>
+        // New-tab auto-login guard: office sessions ride the same hand-rolled
+        // admin-session cookie as admin logins, so a brand new tab that merely
+        // inherited that cookie (typed the URL, duplicated the tab, opened a
+        // bookmark) would otherwise land here fully "logged in" without ever
+        // having submitted office credentials in THAT tab. sessionStorage is
+        // scoped per tab (never copied to a freshly opened one), so it's used
+        // here purely as a "did this tab actually authenticate" marker: /office-login's
+        // redirect tags the very next page load with ?loggedin=1, which this
+        // script converts into the marker before the URL is cleaned up. Same
+        // pattern as /office-approvals, /office-approvals/history, the admin
+        // dashboard (layout/header.ejs) and /client-survey.
+        // Note: this is a client-side UX guard, not a security boundary — the
+        // page markup briefly reaches the browser before this (first) script
+        // redirects it away, so it doesn't stop someone with devtools/view-source
+        // open on that same already-logged-in machine.
+        (function () {
+            try {
+                var params = new URLSearchParams(window.location.search);
+                if (params.has('loggedin')) {
+                    sessionStorage.setItem('cqa_office_tab_ok', '1');
+                    params.delete('loggedin');
+                    var cleanedSearch = params.toString();
+                    var cleanedUrl = window.location.pathname + (cleanedSearch ? '?' + cleanedSearch : '') + window.location.hash;
+                    window.history.replaceState({}, '', cleanedUrl);
+                } else if (sessionStorage.getItem('cqa_office_tab_ok') !== '1') {
+                    window.location.replace('/office-login?error=' + encodeURIComponent('Please log in to continue.'));
+                }
+            } catch (e) { /* sessionStorage unavailable (privacy mode, etc.) — fail open */ }
+        })();
+    </script>
+    <%- include('layout/header') %>
+    <title>Dashboard — CQA Office Portal</title>
+    <style>
+        * { box-sizing: border-box; }
+        html, body { overflow-x: hidden; }
+        body {
+            background: #f0f3f9;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            min-height: 100vh;
+            color: #0f172a;
+        }
+        .content-wrap { max-width: 1140px; margin: 0 auto; padding: 0 1.25rem 3rem; }
+
+        /* ---- Stat tiles ----
+           Counts only, deliberately. This page answers "how much has come
+           through this office, and how much is waiting" — nothing else. No
+           respondent names, no email addresses, no answers: anything that
+           identifies a respondent stays behind the approval screens, which is
+           where someone has a reason to see it. */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 1rem;
+        }
+        .stat-card {
+            background: #fff;
+            border: 1px solid rgba(15,23,42,0.07);
+            border-radius: 16px;
+            padding: 1.25rem 1.35rem;
+            box-shadow: 0 10px 26px -20px rgba(15,23,42,0.5);
+            display: flex;
+            align-items: flex-start;
+            gap: 0.95rem;
+        }
+        .stat-card .stat-icon {
+            width: 46px; height: 46px; border-radius: 13px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+        }
+        .stat-card .stat-body { min-width: 0; }
+        .stat-card .stat-num {
+            font-size: 1.9rem; font-weight: 800; line-height: 1.1; color: #0f172a;
+            font-variant-numeric: tabular-nums;
+        }
+        .stat-card .stat-label {
+            font-size: 0.76rem; font-weight: 700; letter-spacing: 0.06em;
+            text-transform: uppercase; color: #64748b; margin-top: 0.2rem;
+        }
+        .stat-card .stat-hint { font-size: 0.78rem; color: #94a3b8; margin-top: 0.35rem; line-height: 1.35; }
+        .stat-card.is-total .stat-icon { background: rgba(37,84,199,0.12); color: #2554c7; }
+        .stat-card.is-pending .stat-icon { background: rgba(217,119,6,0.14); color: #b45309; }
+        .stat-card.is-approved .stat-icon { background: rgba(22,163,74,0.14); color: #15803d; }
+        .stat-card.is-declined .stat-icon { background: rgba(220,38,38,0.12); color: #dc2626; }
+
+        .section-head {
+            display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+            margin: 2rem 0 0.9rem;
+        }
+        .section-head h3 { font-size: 1.05rem; font-weight: 800; margin: 0; color: #0f172a; }
+        .section-head .section-note { font-size: 0.78rem; color: #94a3b8; }
+
+        /* ---- Respondents-per-month chart ----
+           One series, so no legend: the section heading names it. The line is
+           2px with round joins, the points are 8px with a 2px surface ring so
+           they stay legible where they sit on the line, and the gridlines are
+           hairline and recessive — they are scaffolding, not data. The only
+           number printed on the plot is the latest month's, at the end of the
+           line; every other value is in the tooltip and in the table below,
+           rather than as a label on every point. */
+        .chart-card {
+            position: relative;
+            background: #fff;
+            border: 1px solid rgba(15,23,42,0.07);
+            border-radius: 16px;
+            padding: 1rem 1rem 0.65rem;
+            box-shadow: 0 10px 26px -20px rgba(15,23,42,0.5);
+        }
+        .chart-plot { width: 100%; display: block; touch-action: pan-y; }
+        .chart-plot:focus-visible { outline: 2px solid #2554c7; outline-offset: 3px; border-radius: 10px; }
+        .chart-line { fill: none; stroke: #2554c7; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+        .chart-area { fill: url(#respArea); }
+        .chart-grid { stroke: rgba(15,23,42,0.10); stroke-width: 1; }
+        .chart-axis-text { fill: #94a3b8; font-size: 11px; font-weight: 600; }
+        .chart-dot { fill: #2554c7; stroke: #fff; stroke-width: 2; }
+        .chart-end-label { fill: #0f172a; font-size: 12px; font-weight: 800; }
+        .chart-crosshair { stroke: rgba(15,23,42,0.28); stroke-width: 1; }
+        .chart-hit { fill: transparent; }
+
+        /* Draw-on: the line is dashed by exactly its own length and the gap is
+           pulled back to zero, so it appears to be drawn rather than to fade
+           in. The area and the points follow it. Everything here is skipped
+           under prefers-reduced-motion — see the block below. */
+        @keyframes chartDraw { to { stroke-dashoffset: 0; } }
+        @keyframes chartFade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes chartDotIn { from { opacity: 0; transform: scale(0.2); } to { opacity: 1; transform: scale(1); } }
+        .is-animated .chart-line { animation: chartDraw 900ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
+        .is-animated .chart-area { opacity: 0; animation: chartFade 700ms ease-out 420ms forwards; }
+        .is-animated .chart-dot {
+            opacity: 0;
+            transform-box: fill-box;
+            transform-origin: center;
+            animation: chartDotIn 320ms cubic-bezier(0.34, 1.3, 0.64, 1) forwards;
+        }
+        .is-animated .chart-end-label { opacity: 0; animation: chartFade 300ms ease-out 900ms forwards; }
+        @media (prefers-reduced-motion: reduce) {
+            .is-animated .chart-line,
+            .is-animated .chart-area,
+            .is-animated .chart-dot,
+            .is-animated .chart-end-label { animation: none; opacity: 1; stroke-dashoffset: 0; transform: none; }
+        }
+
+        .chart-tooltip {
+            position: absolute;
+            top: 0; left: 0;
+            transform: translate(-50%, -115%);
+            background: #0f172a;
+            color: #fff;
+            border-radius: 10px;
+            padding: 0.45rem 0.65rem;
+            font-size: 0.78rem;
+            line-height: 1.25;
+            white-space: nowrap;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            box-shadow: 0 10px 24px -12px rgba(15,23,42,0.8);
+            z-index: 2;
+        }
+        .chart-tooltip.is-visible { opacity: 1; }
+        .chart-tooltip .tt-value { font-weight: 800; font-size: 0.95rem; display: block; }
+        .chart-tooltip .tt-label { color: #b9c2d4; }
+
+        /* The same numbers as text. Present for anyone the plot does not serve
+           — screen readers, printouts, a browser that never ran the script —
+           so no value in this section exists only inside the SVG. */
+        .chart-table-toggle {
+            margin: 0.35rem 0 0;
+            border-top: 1px solid rgba(15,23,42,0.06);
+        }
+        .chart-table-toggle > summary {
+            cursor: pointer;
+            list-style: none;
+            padding: 0.6rem 0.3rem 0.5rem;
+            font-size: 0.79rem;
+            font-weight: 700;
+            color: #64748b;
+        }
+        .chart-table-toggle > summary::-webkit-details-marker { display: none; }
+        .chart-table-toggle > summary::before { content: 'B8'; margin-right: 0.4rem; }
+        .chart-table-toggle[open] > summary::before { content: 'BE'; }
+        .chart-table { width: 100%; border-collapse: collapse; margin-bottom: 0.5rem; }
+        .chart-table th, .chart-table td {
+            text-align: left; padding: 0.4rem 0.5rem; font-size: 0.82rem;
+            border-top: 1px solid rgba(15,23,42,0.06);
+        }
+        .chart-table th { color: #64748b; font-weight: 700; }
+        .chart-table td:last-child, .chart-table th:last-child {
+            text-align: right; font-variant-numeric: tabular-nums; font-weight: 700;
+        }
+
+        .privacy-note {
+            display: flex; align-items: flex-start; gap: 0.6rem;
+            margin-top: 1.5rem; padding: 0.85rem 1rem;
+            background: rgba(37,84,199,0.06);
+            border: 1px solid rgba(37,84,199,0.16);
+            border-radius: 12px;
+            font-size: 0.82rem; color: #334155; line-height: 1.45;
+        }
+        .privacy-note i { color: #2554c7; margin-top: 0.15rem; }
+
+        .empty-period { padding: 1.4rem 1rem; text-align: center; color: #94a3b8; font-size: 0.86rem; }
+
+        @media (max-width: 576px) {
+            .content-wrap { padding: 0 0.85rem 2.5rem; }
+            .stat-card { padding: 1rem 1.05rem; gap: 0.75rem; }
+            .stat-card .stat-icon { width: 38px; height: 38px; font-size: 1rem; }
+            .stat-card .stat-num { font-size: 1.55rem; }
+            .chart-card { padding: 0.85rem 0.75rem 0.5rem; }
+        }
+    </style>
+    <!-- After the block above on purpose: this file is the portal's shared
+         shell (header + sidebar), and loading it last is what lets it override
+         whatever each page still defines for those parts. -->
+    <link rel="stylesheet" href="/css/office-shell.css">
+</head>
+<body data-connection-alerts>
+
+    <%- include('layout/office-shell', {
+            officeName: officeName,
+            activeNav: 'dashboard',
+            pendingCount: (pendingCount || 0),
+            historyCount: (historyCount || 0)
+        }) %>
+
+    <div class="content-wrap">
+
+        <div class="office-page-title">
+            <span class="opt-icon"><i class="fas fa-chart-simple"></i></span>
+            <div class="opt-text">
+                <h1 class="opt-name">Dashboard</h1>
+                <p class="opt-sub"><%= officeName %> — <%= semesterLabel %>: <%= semesterRange %>.</p>
+            </div>
+        </div>
+
+        <div class="stat-grid">
+            <div class="stat-card is-total">
+                <div class="stat-icon"><i class="fas fa-users"></i></div>
+                <div class="stat-body">
+                    <div class="stat-num"><%= totalRespondents %></div>
+                    <div class="stat-label">Respondents</div>
+                    <div class="stat-hint">This semester. <%= totalRespondentsAllTime %> since this office started.</div>
+                </div>
+            </div>
+            <div class="stat-card is-pending">
+                <div class="stat-icon"><i class="fas fa-hourglass-half"></i></div>
+                <div class="stat-body">
+                    <div class="stat-num"><%= pendingCount %></div>
+                    <div class="stat-label">Pending Approvals</div>
+                    <div class="stat-hint">Waiting for review — including any left from last semester.</div>
+                </div>
+            </div>
+            <div class="stat-card is-approved">
+                <div class="stat-icon"><i class="fas fa-circle-check"></i></div>
+                <div class="stat-body">
+                    <div class="stat-num"><%= approvedCount %></div>
+                    <div class="stat-label">Approved</div>
+                    <div class="stat-hint">This semester. <%= approvedAllTime %> all time.</div>
+                </div>
+            </div>
+            <div class="stat-card is-declined">
+                <div class="stat-icon"><i class="fas fa-circle-xmark"></i></div>
+                <div class="stat-body">
+                    <div class="stat-num"><%= declinedCount %></div>
+                    <div class="stat-label">Declined</div>
+                    <div class="stat-hint">This semester. <%= declinedAllTime %> all time.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-head">
+            <h3>Respondents per month</h3>
+            <span class="section-note"><%= semesterLabel %> · <%= semesterRange %></span>
+        </div>
+        <div class="chart-card" id="respondentsChart" data-series="<%= JSON.stringify((monthly || []).map(function (m) { return { label: m.label, count: m.count }; })) %>">
+            <% if (!monthly || monthly.length === 0) { %>
+                <div class="empty-period">No surveys recorded for this office this semester.</div>
+            <% } else { %>
+                <!-- The plot is drawn by the script below, which needs the real
+                     pixel width to place the points; it is also redrawn on
+                     resize. Everything it draws is a count — the same numbers
+                     as the table underneath, which is always present so the
+                     data never lives only inside the SVG. -->
+                <div class="chart-plot-wrap"></div>
+                <div class="chart-tooltip" id="respTooltip" role="status" aria-live="polite"></div>
+                <details class="chart-table-toggle">
+                    <summary>View as table</summary>
+                    <table class="chart-table">
+                        <thead><tr><th scope="col">Month</th><th scope="col">Respondents</th></tr></thead>
+                        <tbody>
+                            <% monthly.forEach(function (m) { %>
+                                <tr><td><%= m.label %></td><td><%= m.count %></td></tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
+                </details>
+            <% } %>
+        </div>
+
+        <div class="privacy-note">
+            <i class="fas fa-shield-halved"></i>
+            <span>These are totals only. Respondent names, email addresses and survey answers are never shown on this page — individual submissions stay on the Pending and History screens. Counts follow the semester (January–June and July–December); nothing is deleted when a semester ends, the totals simply start again for the new one.</span>
+        </div>
+
+    </div>
+
+    <%- include('layout/footer') %>
+    <%- include('layout/theme-toggle') %>
+    <script>
+        (function () {
+            // "Viewing offline" pill — same pattern as the other office pages.
+            function updateOfflineIndicator() {
+                var pill = document.getElementById('offlineIndicator');
+                if (pill) pill.classList.toggle('is-visible', !navigator.onLine);
+            }
+            window.addEventListener('online', updateOfflineIndicator);
+            window.addEventListener('offline', updateOfflineIndicator);
+            updateOfflineIndicator();
+
+            // Sidebar drawer (phones/tablets; from 992px up it is a permanent
+            // column and the toggle button is hidden by CSS). Same open/close
+            // contract as the other office pages.
+            var sidebar = document.getElementById('officeSidebar');
+            var backdrop = document.getElementById('sidebarBackdrop');
+            var toggleBtn = document.getElementById('sidebarToggleBtn');
+            var closeBtn = document.getElementById('sidebarCloseBtn');
+            function openSidebar() {
+                if (!sidebar) return;
+                sidebar.classList.add('show');
+                if (backdrop) backdrop.classList.add('show');
+                if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
+            }
+            function closeSidebar() {
+                if (!sidebar) return;
+                sidebar.classList.remove('show');
+                if (backdrop) backdrop.classList.remove('show');
+                if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+            }
+            if (toggleBtn) toggleBtn.addEventListener('click', function () {
+                if (sidebar && sidebar.classList.contains('show')) closeSidebar();
+                else openSidebar();
+            });
+            if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
+            if (backdrop) backdrop.addEventListener('click', closeSidebar);
+            document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSidebar(); });
+        })();
+    </script>
+    <script>
+        // =====================================================================
+        // RESPONDENTS-PER-MONTH CHART
+        // =====================================================================
+        // Inline SVG drawn here rather than pulled from a charting library:
+        // these office pages load no chart CDN today, this portal is used on
+        // slow connections, and one six-point line does not justify a 60KB
+        // import. The data it draws is counts only — the same month/number
+        // pairs the table under the chart prints, nothing identifying.
+        (function () {
+            var card = document.getElementById('respondentsChart');
+            if (!card) return;
+            var wrap = card.querySelector('.chart-plot-wrap');
+            var tooltip = document.getElementById('respTooltip');
+            if (!wrap) return;
+
+            var series = [];
+            try { series = JSON.parse(card.dataset.series || '[]'); } catch (e) { series = []; }
+            if (!series.length) return;
+
+            var PAD = { top: 22, right: 18, bottom: 26, left: 34 };
+            var HEIGHT = 230;
+            var hasAnimated = false;
+            var points = [];
+            var svg = null;
+            var activeIndex = -1;
+
+            // A "nice" axis top. Counts are whole numbers, so the top gridline
+            // is rounded up to a number a person would pick (2, 5, 10, 20…)
+            // instead of sitting exactly on the peak with a label like 37.
+            function niceMax(peak) {
+                if (peak <= 1) return 2;
+                if (peak <= 4) return peak + (peak % 2);
+                // Fine-grained multipliers, not just 1/2/5/10: with the coarse
+                // set a peak of 120 rounded up to 200 and the line then lived
+                // in the bottom half of an otherwise empty plot.
+                var step = Math.pow(10, Math.floor(Math.log(peak) / Math.LN10));
+                var mults = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+                for (var i = 0; i < mults.length; i++) {
+                    var candidate = step * mults[i];
+                    if (candidate >= peak) return Math.ceil(candidate);
+                }
+                return Math.ceil(peak);
+            }
+
+            // Monotone cubic interpolation (Fritsch-Carlson). A plain
+            // Catmull-Rom spline overshoots coming down off a spike and dips
+            // BELOW the axis — drawing a negative number of respondents, which
+            // is data the office never had. This keeps every segment inside the
+            // two values it connects, so the curve is smooth without inventing
+            // anything.
+            function smoothPath(pts) {
+                var n = pts.length;
+                if (n < 2) return n ? 'M' + pts[0].x + ',' + pts[0].y : '';
+                var dx = [], dy = [], slope = [], m = [], i;
+                for (i = 0; i < n - 1; i++) {
+                    dx[i] = pts[i + 1].x - pts[i].x;
+                    dy[i] = pts[i + 1].y - pts[i].y;
+                    slope[i] = dy[i] / dx[i];
+                }
+                m[0] = slope[0];
+                for (i = 1; i < n - 1; i++) {
+                    if (slope[i - 1] * slope[i] <= 0) {
+                        m[i] = 0;
+                    } else {
+                        var w1 = 2 * dx[i] + dx[i - 1], w2 = dx[i] + 2 * dx[i - 1];
+                        m[i] = (w1 + w2) / (w1 / slope[i - 1] + w2 / slope[i]);
+                    }
+                }
+                m[n - 1] = slope[n - 2];
+                var d = 'M' + pts[0].x.toFixed(2) + ',' + pts[0].y.toFixed(2);
+                for (i = 0; i < n - 1; i++) {
+                    var c1x = pts[i].x + dx[i] / 3, c1y = pts[i].y + m[i] * dx[i] / 3;
+                    var c2x = pts[i + 1].x - dx[i] / 3, c2y = pts[i + 1].y - m[i + 1] * dx[i] / 3;
+                    d += 'C' + c1x.toFixed(2) + ',' + c1y.toFixed(2) + ' ' +
+                         c2x.toFixed(2) + ',' + c2y.toFixed(2) + ' ' +
+                         pts[i + 1].x.toFixed(2) + ',' + pts[i + 1].y.toFixed(2);
+                }
+                return d;
+            }
+
+            function esc(v) {
+                return String(v).replace(/[&<>"]/g, function (c) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+                });
+            }
+
+            function render() {
+                var width = Math.max(wrap.clientWidth || card.clientWidth || 320, 260);
+                var plotW = width - PAD.left - PAD.right;
+                var plotH = HEIGHT - PAD.top - PAD.bottom;
+                var peak = series.reduce(function (a, d) { return Math.max(a, d.count); }, 0);
+                var top = niceMax(peak);
+                var stepX = series.length > 1 ? plotW / (series.length - 1) : 0;
+
+                points = series.map(function (d, i) {
+                    return {
+                        x: PAD.left + stepX * i,
+                        y: PAD.top + plotH - (d.count / top) * plotH,
+                        label: d.label,
+                        count: d.count
+                    };
+                });
+
+                var linePath = smoothPath(points);
+                var baseY = (PAD.top + plotH).toFixed(2);
+                var areaPath = linePath +
+                    'L' + points[points.length - 1].x.toFixed(2) + ',' + baseY +
+                    'L' + points[0].x.toFixed(2) + ',' + baseY + 'Z';
+
+                // Three gridlines (0, middle, top): enough to read the scale,
+                // few enough to stay scaffolding rather than pattern.
+                var gridSvg = [0, top / 2, top].map(function (t) {
+                    var y = PAD.top + plotH - (t / top) * plotH;
+                    return '<line class="chart-grid" x1="' + PAD.left + '" y1="' + y.toFixed(1) +
+                           '" x2="' + (PAD.left + plotW).toFixed(1) + '" y2="' + y.toFixed(1) + '"></line>' +
+                           '<text class="chart-axis-text" x="' + (PAD.left - 8) + '" y="' + (y + 4).toFixed(1) +
+                           '" text-anchor="end">' + (Math.round(t) === t ? t : t.toFixed(1)) + '</text>';
+                }).join('');
+
+                // Month labels thin out on a narrow card instead of colliding.
+                var everyOther = plotW / series.length < 54;
+                var xLabels = points.map(function (pt, i) {
+                    var isLast = i === points.length - 1;
+                    if (everyOther && !isLast && i % 2 !== 0) return '';
+                    var anchor = i === 0 ? 'start' : (isLast ? 'end' : 'middle');
+                    var x = i === 0 ? PAD.left - 2 : (isLast ? pt.x + 2 : pt.x);
+                    return '<text class="chart-axis-text" x="' + x.toFixed(1) + '" y="' + (HEIGHT - 6) +
+                           '" text-anchor="' + anchor + '">' + esc(pt.label) + '</text>';
+                }).join('');
+
+                var dots = points.map(function (pt, i) {
+                    return '<circle class="chart-dot" cx="' + pt.x.toFixed(2) + '" cy="' + pt.y.toFixed(2) +
+                           '" r="4.5" style="animation-delay:' + (420 + i * 70) + 'ms"></circle>';
+                }).join('');
+
+                // One number on the plot, at the end of the line — the current
+                // month. Every other value is in the tooltip and the table.
+                var last = points[points.length - 1];
+                var endLabel = '<text class="chart-end-label" x="' + (last.x - 2).toFixed(2) +
+                               '" y="' + Math.max(PAD.top - 6, last.y - 12).toFixed(2) +
+                               '" text-anchor="end">' + last.count + '</text>';
+
+                var summary = 'Respondents per month this semester: ' +
+                    series.map(function (d) { return d.label + ', ' + d.count; }).join('; ') + '.';
+
+                wrap.innerHTML =
+                    '<svg class="chart-plot" viewBox="0 0 ' + width + ' ' + HEIGHT + '" width="' + width +
+                    '" height="' + HEIGHT + '" role="img" tabindex="0" aria-label="' + esc(summary) + '">' +
+                        '<defs><linearGradient id="respArea" x1="0" y1="0" x2="0" y2="1">' +
+                            '<stop offset="0%" stop-color="#2554c7" stop-opacity="0.22"></stop>' +
+                            '<stop offset="100%" stop-color="#2554c7" stop-opacity="0"></stop>' +
+                        '</linearGradient></defs>' +
+                        gridSvg +
+                        '<path class="chart-area" d="' + areaPath + '"></path>' +
+                        '<path class="chart-line" d="' + linePath + '"></path>' +
+                        '<line class="chart-crosshair" x1="0" y1="' + PAD.top + '" x2="0" y2="' +
+                            (PAD.top + plotH).toFixed(1) + '" style="display:none"></line>' +
+                        dots + endLabel + xLabels +
+                    '</svg>';
+
+                svg = wrap.querySelector('svg');
+                var line = wrap.querySelector('.chart-line');
+                if (line && line.getTotalLength) {
+                    // Dash the path by exactly its own length, so the draw-on
+                    // animation has something to pull back from.
+                    var len = line.getTotalLength();
+                    line.style.strokeDasharray = len;
+                    line.style.strokeDashoffset = hasAnimated ? 0 : len;
+                }
+                if (!hasAnimated) {
+                    card.classList.add('is-animated');
+                    hasAnimated = true;
+                }
+                bindHover();
+            }
+
+            // ---- Crosshair + tooltip --------------------------------------
+            // The pointer only has to be CLOSEST to a month, never on top of
+            // its 9px dot: the whole plot is the hit area and the nearest point
+            // in x wins. Keyboard users get the same readout with the arrows.
+            function showAt(index) {
+                if (!svg || index < 0 || index >= points.length) return;
+                activeIndex = index;
+                var pt = points[index];
+                var cross = svg.querySelector('.chart-crosshair');
+                if (cross) {
+                    cross.setAttribute('x1', pt.x.toFixed(2));
+                    cross.setAttribute('x2', pt.x.toFixed(2));
+                    cross.style.display = '';
+                }
+                if (!tooltip) return;
+                // textContent, not innerHTML — the labels come from the server
+                // but the tooltip never needs markup, so it never parses any.
+                tooltip.textContent = '';
+                var value = document.createElement('span');
+                value.className = 'tt-value';
+                value.textContent = pt.count;
+                var label = document.createElement('span');
+                label.className = 'tt-label';
+                label.textContent = pt.label;
+                tooltip.appendChild(value);
+                tooltip.appendChild(label);
+                var rect = svg.getBoundingClientRect();
+                var scale = (svg.viewBox.baseVal.width ? rect.width / svg.viewBox.baseVal.width : 1) || 1;
+                // The tooltip is positioned against the CARD (its offset
+                // parent) while the point's coordinates are inside the SVG, so
+                // the plot's own offset has to be added — without it the
+                // tooltip sits a padding's width up and to the left of the
+                // point it is labelling.
+                tooltip.style.left = (wrap.offsetLeft + pt.x * scale) + 'px';
+                tooltip.style.top = (wrap.offsetTop + pt.y * scale) + 'px';
+                tooltip.classList.add('is-visible');
+            }
+            function hide() {
+                activeIndex = -1;
+                if (!svg) return;
+                var cross = svg.querySelector('.chart-crosshair');
+                if (cross) cross.style.display = 'none';
+                if (tooltip) tooltip.classList.remove('is-visible');
+            }
+            function nearestIndex(clientX) {
+                var rect = svg.getBoundingClientRect();
+                var scale = (rect.width ? svg.viewBox.baseVal.width / rect.width : 1) || 1;
+                var x = (clientX - rect.left) * scale;
+                var best = 0, bestDist = Infinity;
+                points.forEach(function (pt, i) {
+                    var dist = Math.abs(pt.x - x);
+                    if (dist < bestDist) { bestDist = dist; best = i; }
+                });
+                return best;
+            }
+            function bindHover() {
+                if (!svg) return;
+                svg.addEventListener('pointermove', function (e) { showAt(nearestIndex(e.clientX)); });
+                svg.addEventListener('pointerleave', hide);
+                svg.addEventListener('blur', hide);
+                svg.addEventListener('focus', function () { showAt(points.length - 1); });
+                svg.addEventListener('keydown', function (e) {
+                    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                    e.preventDefault();
+                    var from = activeIndex < 0 ? points.length - 1 : activeIndex;
+                    var next = e.key === 'ArrowLeft' ? from - 1 : from + 1;
+                    showAt(Math.min(points.length - 1, Math.max(0, next)));
+                });
+            }
+
+            render();
+
+            // Redraw at the new width rather than letting one viewBox stretch:
+            // stretching would thicken the stroke unevenly and shrink the axis
+            // text on a phone. Redrawing keeps both at their intended size.
+            if (typeof ResizeObserver === 'function') {
+                var lastWidth = wrap.clientWidth;
+                var pending = null;
+                new ResizeObserver(function () {
+                    if (Math.abs(wrap.clientWidth - lastWidth) < 2) return;
+                    lastWidth = wrap.clientWidth;
+                    clearTimeout(pending);
+                    pending = setTimeout(function () { hide(); render(); }, 120);
+                }).observe(wrap);
+            }
+        })();
+    </script>
+
+</body>
+</html>

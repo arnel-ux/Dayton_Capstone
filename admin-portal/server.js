@@ -3243,10 +3243,13 @@ app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
                 email_address: office.email_address,
                 type: 'office'
             };
-            // ?loggedin=1 lets office-approvals.ejs's new-tab guard mark THIS tab
-            // (via sessionStorage) as one that actually authenticated, matching the
+            // Straight to the Dashboard: an office opening the panel wants the
+            // state of its work first (how many waiting, how many this
+            // period), and Pending is one tap away in the sidebar.
+            // ?loggedin=1 lets the page's new-tab guard mark THIS tab (via
+            // sessionStorage) as one that actually authenticated, matching the
             // same pattern used for the admin dashboard and /client-survey.
-            return res.redirect('/office-approvals?loggedin=1');
+            return res.redirect('/office-dashboard?loggedin=1');
         });
     }
     }
@@ -3278,11 +3281,11 @@ app.get('/client-login', noCache, (req, res) => {
 // submission is replayed into survey_responses). Reuses the same hand-rolled
 // admin-session cookie/store as admin logins (see ensureOfficeAuth above).
 // Always renders the login form, even with a valid office session already on
-// the request — same as admin's /login. This page is exactly where the
-// office-approvals new-tab guard sends a freshly-pasted-URL tab that hasn't
+// the request — same as admin's /login. This page is exactly where the office
+// pages' new-tab guard sends a freshly-pasted-URL tab that hasn't
 // authenticated in THAT tab yet; if this route bounced an already-logged-in
-// session straight back to /office-approvals, that page's guard would bounce
-// it right back here, forever (a visible infinite-reload freeze).
+// session straight back into the panel, that page's guard would bounce it
+// right back here, forever (a visible infinite-reload freeze).
 app.get('/office-login', noCache, (req, res) => {
     res.render('office-login');
 });
@@ -3322,10 +3325,8 @@ app.post('/office-login', loginRateLimiter('/office-login'), (req, res) => {
             email_address: office.email_address,
             type: 'office'
         };
-        // ?loggedin=1 lets office-approvals.ejs's new-tab guard mark THIS tab
-        // (via sessionStorage) as one that actually authenticated, matching the
-        // same pattern used for the admin dashboard and /client-survey.
-        res.redirect('/office-approvals?loggedin=1');
+        // Straight to the Dashboard — see the same redirect above.
+        res.redirect('/office-dashboard?loggedin=1');
     });
 });
 
@@ -3361,6 +3362,155 @@ function getOfficePendingCount(officeId, callback) {
         (err, rows) => callback((!err && rows && rows[0]) ? rows[0].c : 0)
     );
 }
+
+// ---------------------------------------------------------------------------
+// OFFICE DASHBOARD — counts only
+// ---------------------------------------------------------------------------
+// Aggregate activity for the signed-in office: how many surveys it has
+// received in total, and how many submissions are pending / approved /
+// declined. Every query below is a COUNT or a GROUP BY count — no respondent
+// name, email address, or answer is selected at all, so there is nothing
+// identifying for the page to leak even by accident. Office staff already see
+// individual submissions on Pending/History; this page is deliberately the
+// "how many", not the "who" or the "what".
+app.get('/office-dashboard', ensureOfficeAuth, noCache, (req, res) => {
+    const officeId = req.adminSession.user.id;
+    const officeName = req.adminSession.user.office_name;
+
+    // ---- The reporting period is a SEMESTER, not a rolling six months ----
+    // The College's terms run January–June and July–December, and the record
+    // starts over with each one, so a window that slid month by month would
+    // straddle two semesters and mix a finished term's numbers into the
+    // current one. The period is therefore the six calendar months of
+    // whichever semester today falls in: January–June for months 0-5,
+    // July–December for 6-11.
+    const now = new Date();
+    const year = now.getFullYear();
+    const isFirstSem = now.getMonth() < 6;
+    const semStartMonth = isFirstSem ? 0 : 6;
+    // Shown as "Period Covered" rather than "1st/2nd Semester": the page
+    // states the months it is counting, and those months are what the reader
+    // actually needs to check a number against.
+    const semesterLabel = 'Period Covered';
+    const semesterRange = (isFirstSem ? 'January–June ' : 'July–December ') + year;
+
+    // Inclusive start, exclusive end — the first day of the month AFTER the
+    // semester. Comparing against '< the next period's start' rather than
+    // '<= the last day' is what keeps a submission made at 11:40pm on the
+    // final day inside the semester it belongs to.
+    const pad = (n) => String(n).padStart(2, '0');
+    const semStart = year + '-' + pad(semStartMonth + 1) + '-01';
+    const semEnd = (semStartMonth === 0)
+        ? year + '-07-01'
+        : (year + 1) + '-01-01';
+
+    // All six months of the semester, always — including ones still ahead of
+    // today. They read as "nothing yet this month", which is true; dropping
+    // them would make a semester in progress look like a complete one.
+    const months = [];
+    for (let i = 0; i < 6; i++) {
+        const d = new Date(year, semStartMonth + i, 1);
+        months.push({
+            key: d.getFullYear() + '-' + pad(d.getMonth() + 1),
+            label: d.toLocaleDateString('en-PH', { month: 'short', year: 'numeric' }),
+            count: 0
+        });
+    }
+
+    const render = (stats) => {
+        res.render('office-dashboard', Object.assign({
+            officeName,
+            semesterLabel,
+            semesterRange,
+            totalRespondents: 0,
+            totalRespondentsAllTime: 0,
+            pendingCount: 0,
+            approvedCount: 0,
+            approvedAllTime: 0,
+            declinedCount: 0,
+            declinedAllTime: 0,
+            historyCount: 0,
+            monthly: months
+        }, stats));
+    };
+
+    // Respondents: this semester, and all time. Both are counts — no
+    // respondent column is selected anywhere on this page.
+    db.query(
+        'SELECT COUNT(*) AS allTime, ' +
+        'SUM(CASE WHEN created_at >= ? AND created_at < ? THEN 1 ELSE 0 END) AS semester ' +
+        'FROM survey_responses WHERE office_id = ?',
+        [semStart, semEnd, officeId],
+        (errTotal, totalRows) => {
+            const totalRow = (!errTotal && totalRows && totalRows[0]) ? totalRows[0] : {};
+            const totalRespondentsAllTime = Number(totalRow.allTime || 0);
+            const totalRespondents = Number(totalRow.semester || 0);
+
+            // One pass over the submission statuses rather than a COUNT query
+            // per status, each status counted twice: within the semester and
+            // all time.
+            db.query(
+                'SELECT status, COUNT(*) AS allTime, ' +
+                'SUM(CASE WHEN created_at >= ? AND created_at < ? THEN 1 ELSE 0 END) AS semester ' +
+                'FROM pending_survey_submissions WHERE office_id = ? GROUP BY status',
+                [semStart, semEnd, officeId],
+                (errStatus, statusRows) => {
+                    let pendingCount = 0;
+                    let approvedCount = 0, approvedAllTime = 0;
+                    let declinedCount = 0, declinedAllTime = 0;
+                    if (!errStatus && statusRows) {
+                        statusRows.forEach((row) => {
+                            if (row.status === 'pending') {
+                                // Pending is deliberately NOT semester-scoped:
+                                // it is a live work queue, and a submission
+                                // left over from last semester still needs
+                                // reviewing. Hiding it behind a date range
+                                // would hide work, not old news.
+                                pendingCount = Number(row.allTime || 0);
+                            } else if (row.status === 'approved') {
+                                approvedAllTime = Number(row.allTime || 0);
+                                approvedCount = Number(row.semester || 0);
+                            } else if (row.status === 'declined') {
+                                declinedAllTime = Number(row.allTime || 0);
+                                declinedCount = Number(row.semester || 0);
+                            }
+                        });
+                    }
+
+                    db.query(
+                        "SELECT DATE_FORMAT(created_at, '%Y-%m') AS ym, COUNT(*) AS c " +
+                        'FROM survey_responses ' +
+                        'WHERE office_id = ? AND created_at >= ? AND created_at < ? ' +
+                        'GROUP BY ym',
+                        [officeId, semStart, semEnd],
+                        (errMonthly, monthlyRows) => {
+                            if (!errMonthly && monthlyRows) {
+                                monthlyRows.forEach((row) => {
+                                    const slot = months.find((m) => m.key === row.ym);
+                                    if (slot) slot.count = Number(row.c || 0);
+                                });
+                            }
+                            render({
+                                totalRespondents,
+                                totalRespondentsAllTime,
+                                pendingCount,
+                                approvedCount,
+                                approvedAllTime,
+                                declinedCount,
+                                declinedAllTime,
+                                // The sidebar's History badge counts every
+                                // reviewed submission, not just this term's —
+                                // it badges a page that lists all of them.
+                                historyCount: approvedAllTime + declinedAllTime,
+                                monthly: months
+                            });
+                        }
+                    );
+                }
+            );
+        }
+    );
+});
 
 app.get('/office-approvals', ensureOfficeAuth, noCache, (req, res) => {
     const officeId = req.adminSession.user.id;
@@ -3420,10 +3570,16 @@ app.get('/office-approvals/history', ensureOfficeAuth, noCache, (req, res) => {
             }) : [];
 
             getOfficePendingCount(officeId, (pendingCount) => {
-                res.render('office-history', {
-                    officeName: req.adminSession.user.office_name,
-                    history,
-                    pendingCount
+                // The real reviewed-submission count, not history.length: the
+                // list above is capped at 50 rows, so for a busy office the
+                // sidebar badge would otherwise sit at "50" forever.
+                getOfficeHistoryCount(officeId, (historyCount) => {
+                    res.render('office-history', {
+                        officeName: req.adminSession.user.office_name,
+                        history,
+                        pendingCount,
+                        historyCount
+                    });
                 });
             });
         }

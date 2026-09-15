@@ -1,0 +1,88 @@
+<%
+/* Office portal shell — topbar + sidebar, shared by Dashboard, Pending and
+   History so the three can never drift apart again (they were three copies of
+   the same markup).
+
+   Locals:
+     officeName    – the signed-in office. Shown in BOTH the header and the
+                     sidebar: it is what tells the staffer which office this
+                     account is, so it is never dropped.
+     activeNav     – 'dashboard' | 'pending' | 'history'
+     pendingCount  – badge on the Pending link
+     historyCount  – badge on the History link
+
+   The element IDs below (officeSidebar, sidebarBackdrop, sidebarToggleBtn,
+   sidebarCloseBtn) and the `.show` class contract are deliberately unchanged
+   from the old per-page markup, so each page's existing toggle script keeps
+   working with no edit at all.
+*/
+    var _officeName = (typeof officeName !== 'undefined' && officeName) ? officeName : 'Office';
+    var _active = (typeof activeNav !== 'undefined' && activeNav) ? activeNav : '';
+    var _pending = (typeof pendingCount !== 'undefined' && pendingCount) ? pendingCount : 0;
+    var _history = (typeof historyCount !== 'undefined' && historyCount) ? historyCount : 0;
+%>
+<header class="topbar">
+    <div class="topbar-side topbar-side-start">
+        <button type="button" class="topbar-hamburger" id="sidebarToggleBtn" aria-label="Toggle sidebar menu" aria-expanded="false" aria-controls="officeSidebar">
+            <i class="fas fa-bars"></i>
+        </button>
+    </div>
+
+    <div class="topbar-brand">
+        <div class="topbar-brand-logo-wrap">
+            <img src="/images/cspc-logo.png" alt="CSPC Logo">
+        </div>
+        <div class="topbar-brand-text">
+            <!-- Two spellings of the same name, CSS picks one (no JS, so no
+                 flash of the wrong one, and it re-picks on a rotate/resize).
+                 The header has the room for the full name now that Logout has
+                 moved out of it; a phone header still does not. -->
+            <div class="t1">
+                <span class="brand-cqa-full">Center for Quality Assurance</span><span class="brand-cqa-short">CQA</span> Office Portal
+            </div>
+            <div class="t2" title="<%= _officeName %>"><%= _officeName %></div>
+        </div>
+    </div>
+
+    <div class="topbar-side topbar-side-end">
+        <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — showing the last data loaded while you were connected.">
+            <span class="dot"></span><span class="label">Offline</span>
+        </span>
+    </div>
+</header>
+
+<div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+<aside class="office-sidebar" id="officeSidebar">
+    <div class="sidebar-brand">
+        <div class="sidebar-brand-logo-wrap">
+            <img src="/images/cspc-logo.png" alt="CSPC Logo">
+        </div>
+        <div class="sidebar-brand-text">
+            <div class="t1">CQA Office Portal</div>
+            <div class="t2"><%= _officeName %></div>
+        </div>
+        <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" aria-label="Close sidebar menu">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <nav class="sidebar-nav">
+        <a href="/office-dashboard" class="sidebar-link<%= _active === 'dashboard' ? ' active' : '' %>">
+            <i class="fas fa-chart-simple"></i> Dashboard
+        </a>
+        <a href="/office-approvals" class="sidebar-link<%= _active === 'pending' ? ' active' : '' %>">
+            <i class="fas fa-hourglass-half"></i> Pending
+            <span class="sidebar-count"><%= _pending %></span>
+        </a>
+        <a href="/office-approvals/history" class="sidebar-link<%= _active === 'history' ? ' active' : '' %>">
+            <i class="fas fa-clock-rotate-left"></i> History
+            <span class="sidebar-count"><%= _history %></span>
+        </a>
+    </nav>
+
+    <div class="sidebar-footer">
+        <span class="signed-in-office"><i class="fas fa-building me-1"></i><%= _officeName %></span>
+        <a href="/office-logout" class="btn-logout-side"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </div>
+</aside>

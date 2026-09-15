@@ -32,18 +32,8 @@
             } catch (e) { /* sessionStorage unavailable (privacy mode, etc.) — fail open */ }
         })();
     </script>
-    <%- include('layout/header', { forceLightMode: true }) %>
+    <%- include('layout/header') %>
     <%
-        // Office names are sometimes stored as "Full Name (CODE)". Pull the
-        // parenthesized short code, when present, for a small office badge.
-        // Falls back to nothing (no badge) when the office name has no code.
-        function extractOfficeCode(name) {
-            if (!name) return null;
-            var match = String(name).match(/\(([^)]+)\)\s*$/);
-            return match ? match[1].trim() : null;
-        }
-
-        var officeCode = extractOfficeCode(typeof officeName !== 'undefined' ? officeName : null);
     %>
     <style>
         /* ==========================================================
@@ -60,224 +50,6 @@
             color: #0f172a;
         }
 
-        /* ==========================================================
-           SIDEBAR (off-canvas, toggled from the topbar's upper-left
-           hamburger button — Pending / History live on separate pages,
-           navigated between via this sidebar)
-           ========================================================== */
-        .sidebar-toggle-btn {
-            width: 40px;
-            height: 40px;
-            flex: 0 0 auto;
-            border-radius: 10px;
-            background: rgba(255,255,255,0.12);
-            border: 1px solid rgba(255,255,255,0.22);
-            color: #ffffff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.05rem;
-            cursor: pointer;
-            transition: background 0.15s ease;
-        }
-        .sidebar-toggle-btn:hover { background: rgba(255,255,255,0.22); }
-        .sidebar-toggle-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-
-        .sidebar-backdrop {
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.45);
-            z-index: 29;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.2s ease, visibility 0.2s ease;
-        }
-        .sidebar-backdrop.show { opacity: 1; visibility: visible; }
-
-        .office-sidebar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 100vh;
-            width: 270px;
-            max-width: 82vw;
-            background: #ffffff;
-            z-index: 30;
-            box-shadow: 10px 0 32px -12px rgba(15, 23, 42, 0.35);
-            transform: translateX(-100%);
-            transition: transform 0.25s ease;
-            display: flex;
-            flex-direction: column;
-        }
-        .office-sidebar.show { transform: translateX(0); }
-
-        .sidebar-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.75rem;
-            padding: 1.15rem 1.25rem;
-            background: linear-gradient(135deg, #1e1738, #2d1f57 55%, #241a44);
-            color: #ffffff;
-            flex: 0 0 auto;
-        }
-        .sidebar-header .sidebar-title {
-            font-weight: 800;
-            font-size: 0.92rem;
-            letter-spacing: 0.2px;
-        }
-        .sidebar-close-btn {
-            width: 32px;
-            height: 32px;
-            border-radius: 8px;
-            background: rgba(255,255,255,0.12);
-            border: 1px solid rgba(255,255,255,0.25);
-            color: #ffffff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            flex: 0 0 auto;
-        }
-        .sidebar-close-btn:hover { background: rgba(255,255,255,0.24); }
-        .sidebar-close-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-
-        .sidebar-nav {
-            padding: 0.9rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.35rem;
-        }
-        .sidebar-link {
-            display: flex;
-            align-items: center;
-            gap: 0.65rem;
-            padding: 0.75rem 0.9rem;
-            border-radius: 10px;
-            color: #475569;
-            font-weight: 700;
-            font-size: 0.87rem;
-            text-decoration: none;
-            transition: background 0.15s ease, color 0.15s ease;
-        }
-        .sidebar-link i:first-child { width: 18px; text-align: center; color: #7c6bb0; flex: 0 0 auto; }
-        .sidebar-link:hover { background: #f4f4fd; color: #2d1f57; }
-        .sidebar-link.active { background: linear-gradient(135deg, #2d1f57, #4b3a86); color: #fff; }
-        .sidebar-link.active i:first-child { color: #fff; }
-        .sidebar-count {
-            margin-left: auto;
-            font-size: 0.66rem;
-            font-weight: 700;
-            background: #eef2ff;
-            color: #3730a3;
-            padding: 0.1rem 0.55rem;
-            border-radius: 50px;
-            flex: 0 0 auto;
-        }
-        .sidebar-link.active .sidebar-count { background: rgba(255,255,255,0.25); color: #fff; }
-
-        /* ==========================================================
-           TOPBAR
-           ========================================================== */
-        .topbar {
-            background: linear-gradient(135deg, #1e1738, #2d1f57 55%, #241a44);
-            color: #ffffff;
-            padding: 0.9rem 1.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-            box-shadow: 0 4px 18px -6px rgba(0,0,0,0.35);
-            position: sticky;
-            top: 0;
-            z-index: 20;
-        }
-        .topbar-left {
-            display: flex;
-            align-items: flex-start;
-            gap: 0.75rem;
-            min-width: 0;
-        }
-        .topbar-icon {
-            width: 42px;
-            height: 42px;
-            flex: 0 0 auto;
-            margin-top: 0.1rem;
-            border-radius: 12px;
-            background: rgba(255,255,255,0.12);
-            border: 1px solid rgba(255,255,255,0.18);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.05rem;
-        }
-        .topbar-titles { min-width: 0; }
-        .topbar h1 {
-            font-size: 0.72rem;
-            font-weight: 700;
-            letter-spacing: 0.6px;
-            text-transform: uppercase;
-            margin: 0 0 0.2rem;
-            line-height: 1.2;
-            color: #b7aee6;
-        }
-        .topbar .sub {
-            font-size: 0.98rem;
-            font-weight: 700;
-            color: #ffffff;
-            line-height: 1.3;
-            overflow-wrap: break-word;
-            max-width: 100%;
-        }
-        .office-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.35rem;
-            font-size: 0.68rem;
-            font-weight: 700;
-            letter-spacing: 0.3px;
-            color: #d9d4f2;
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
-            padding: 0.18rem 0.6rem;
-            border-radius: 50px;
-            margin-top: 0.35rem;
-            white-space: nowrap;
-        }
-        .office-badge .dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: #a78bfa;
-            flex: 0 0 auto;
-        }
-        .topbar-right {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            flex: 0 0 auto;
-        }
-        .portal-status {
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-            font-size: 0.72rem;
-            font-weight: 600;
-            color: #d9d4f2;
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.16);
-            padding: 0.35rem 0.7rem;
-            border-radius: 50px;
-            white-space: nowrap;
-        }
-        .portal-status .dot {
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: #34d399;
-            box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25);
-        }
-
         /* "Viewing offline" pill — same amber style, font-size and padding
            as index.ejs / login.ejs / office-approvals.ejs for a consistent
            look across the whole system. Its own centered row under the
@@ -285,42 +57,7 @@
            overlaps or covers those on narrow screens. */
         .offline-pill-row { text-align: center; background: #f0f3f9; }
         .offline-pill-row:has(.offline-pill.is-visible) { padding: 0.6rem 1rem 0; }
-        .offline-pill {
-            display: none;
-            align-items: center;
-            gap: 0.4rem;
-            padding: 0.35rem 0.85rem;
-            border-radius: 50px;
-            background: #fef3c7;
-            color: #92400e;
-            border: 1px solid #fde68a;
-            font-size: 0.78rem;
-            font-weight: 700;
-            white-space: nowrap;
-        }
-        .offline-pill.is-visible { display: inline-flex; }
-        .offline-pill .dot {
-            width: 7px; height: 7px; border-radius: 50%; background: #d97706; flex: none;
-            animation: offlinePulse 1.6s ease-in-out infinite;
-        }
         @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-        .btn-logout {
-            background: rgba(255,255,255,0.12);
-            border: 1px solid rgba(255,255,255,0.35);
-            color: #fff;
-            border-radius: 50px;
-            padding: 0.45rem 1.1rem;
-            font-size: 0.82rem;
-            font-weight: 600;
-            text-decoration: none;
-            white-space: nowrap;
-            transition: background 0.15s ease, transform 0.15s ease;
-        }
-        .btn-logout:hover { background: rgba(255,255,255,0.24); color: #fff; transform: translateY(-1px); }
-        .btn-logout:focus-visible {
-            outline: 2px solid #fff;
-            outline-offset: 2px;
-        }
 
         /* ==========================================================
            PAGE HEADER
@@ -556,13 +293,6 @@
            RESPONSIVE
            ========================================================== */
         @media (max-width: 767px) {
-            .topbar { padding: 0.75rem 1rem; align-items: flex-start; }
-            .topbar-left { flex: 1 1 auto; min-width: 0; }
-            .topbar h1 { font-size: 0.66rem; }
-            .topbar .sub { font-size: 0.86rem; }
-            .topbar-right { flex: 0 0 auto; padding-top: 0.1rem; gap: 0.5rem; }
-            .portal-status { display: none; }
-            .btn-logout { padding: 0.4rem 0.85rem; font-size: 0.78rem; }
             .content-wrap { padding: 0 0.85rem 2.5rem; }
             .page-header { padding-top: 1.25rem; gap: 0.85rem; }
             .page-header h2 { font-size: 1.3rem; }
@@ -673,59 +403,22 @@
                 margin-bottom: 0.3rem;
             }
         }
-
-        @media (max-width: 420px) {
-            .topbar-icon { width: 36px; height: 36px; font-size: 0.9rem; }
-        }
     </style>
+    <!-- After the block above on purpose: this file is the portal's shared
+         shell (header + sidebar), and loading it last is what lets it override
+         whatever each page still defines for those parts. -->
+    <link rel="stylesheet" href="/css/office-shell.css">
 </head>
 <body data-connection-alerts>
 
-    <div class="topbar">
-        <div class="topbar-left">
-            <button type="button" class="sidebar-toggle-btn" id="sidebarToggleBtn" aria-label="Toggle sidebar menu" aria-expanded="false" aria-controls="officeSidebar">
-                <i class="fas fa-bars"></i>
-            </button>
-            <div class="topbar-icon"><i class="fas fa-clipboard-check"></i></div>
-            <div class="topbar-titles">
-                <h1>Survey Approvals</h1>
-                <div class="sub" data-bs-toggle="tooltip" data-bs-placement="bottom" title="<%= officeName %>"><%= officeName %></div>
-                <% if (officeCode) { %>
-                    <span class="office-badge"><span class="dot"></span> OFFICE: <%= officeCode %></span>
-                <% } %>
-            </div>
-        </div>
-        <div class="topbar-right">
-            <span class="portal-status"><span class="dot"></span> Approval Portal</span>
-            <a href="/office-logout" class="btn-logout" id="officeLogoutBtn"><i class="fas fa-sign-out-alt me-1"></i> Logout</a>
-        </div>
-    </div>
+    <%- include('layout/office-shell', {
+            officeName: officeName,
+            activeNav: 'history',
+            pendingCount: (pendingCount || 0),
+            historyCount: (typeof historyCount !== 'undefined' ? historyCount : (history ? history.length : 0))
+        }) %>
 
-    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
-    <aside class="office-sidebar" id="officeSidebar">
-        <div class="sidebar-header">
-            <span class="sidebar-title">Menu</span>
-            <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" aria-label="Close sidebar menu">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <nav class="sidebar-nav">
-            <a href="/office-approvals" class="sidebar-link">
-                <i class="fas fa-hourglass-half"></i> Pending
-                <span class="sidebar-count"><%= pendingCount || 0 %></span>
-            </a>
-            <a href="/office-approvals/history" class="sidebar-link active">
-                <i class="fas fa-clock-rotate-left"></i> History
-                <span class="sidebar-count"><%= history ? history.length : 0 %></span>
-            </a>
-        </nav>
-    </aside>
 
-    <div class="offline-pill-row">
-        <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — showing the last data loaded while you were connected.">
-            <span class="dot"></span><span class="label">Viewing Offline</span>
-        </span>
-    </div>
 
     <div class="content-wrap">
 
@@ -824,6 +517,7 @@
     </div>
 
     <%- include('layout/footer') %>
+    <%- include('layout/theme-toggle') %>
     <script>
         (function () {
             var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
