@@ -1262,6 +1262,29 @@
         .profile-password-card .password-toggle:hover { color: var(--brand); background: var(--ring); }
         .profile-password-card .password-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 
+        /* The rules above only reach the Profile view's change-password card.
+           The OFFLINE survey's password field (#offlinePasswordInput) is a
+           bare .form-control with no .input-group around it, so alerts.js
+           takes its other path: it wraps the input in a relatively
+           positioned span and appends a .password-toggle-floating button,
+           expecting public/css/style.css to position it — and this page
+           never loads that stylesheet. With nothing positioning it, the
+           button fell out of the field and rendered as a default grey box
+           below it. These rules are deliberately NOT scoped to a view, so
+           any password field on this page is covered, offline or online,
+           whichever path alerts.js takes for it. */
+        .password-toggle-floating {
+            position: absolute; top: 50%; right: 0.4rem; transform: translateY(-50%);
+            display: flex; align-items: center; justify-content: center;
+            width: 2.3rem; height: 2.3rem; padding: 0;
+            border: 0; background: transparent; color: var(--ink-600);
+            border-radius: 8px; font-size: 1rem; line-height: 1; cursor: pointer;
+            transition: color .15s ease, background-color .15s ease;
+        }
+        .password-toggle-floating:hover { color: var(--brand); background: var(--ring); }
+        .password-toggle-floating:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+        .password-toggle-floating:active { transform: translateY(-50%) scale(0.94); }
+
         .profile-password-card .pw-strength {
             margin-top: 0.5rem; overflow: hidden; max-height: 5rem; opacity: 1;
             transition: max-height .25s ease, opacity .25s ease, margin-top .25s ease;
