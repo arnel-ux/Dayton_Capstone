@@ -329,7 +329,7 @@
             position: absolute;
             right: calc(100% + 0.8rem);
             top: 50%; transform: translateY(-50%);
-            width: 54px; height: 54px; flex-shrink: 0;
+            width: 64px; height: 64px; flex-shrink: 0;
             display: flex; align-items: center; justify-content: center;
         }
         .topbar-brand img { width: 100%; height: 100%; object-fit: contain; display: block; }
@@ -1771,10 +1771,15 @@
                measured --topbar-h above still holds; the logo is sized to
                the 38px row-1 buttons beside it so it can't grow the row. */
             .topbar-brand { min-width: 0; flex: 1 1 auto; gap: 0.5rem; }
-            /* Tighter gap to the text than desktop: the logo hangs out of
-               the flow towards the hamburger, and on a 360px screen there
-               are only a few pixels to spare between the two. */
-            .topbar-brand-logo-wrap { width: 36px; height: 36px; right: calc(100% + 0.5rem); }
+            /* Mobile is where this size is CONSTRAINED, not chosen: the logo
+               hangs leftwards out of the flow from centred text, so every
+               pixel it grows is a pixel closer to the hamburger. Measured on
+               a real 412px-wide phone at 36px, the gap between the two was
+               only ~8px — so 40px (plus a slightly tighter gap to the text,
+               0.5rem → 0.4rem, which buys back ~2px) is about as large as it
+               goes here while still clearing the button. Desktop has room to
+               spare and takes 64px. */
+            .topbar-brand-logo-wrap { width: 40px; height: 40px; right: calc(100% + 0.4rem); }
             .topbar-brand-text .t1 { font-size: 1.05rem; line-height: 1.2; }
             .topbar-brand-text .t2 { font-size: 0.75rem; line-height: 1.2; margin-top: 0.05rem; }
             .topbar-icon-group { gap: 0.4rem; flex-shrink: 0; }
