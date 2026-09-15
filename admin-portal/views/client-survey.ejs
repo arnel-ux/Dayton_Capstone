@@ -2199,6 +2199,44 @@
         .answer-group-msg::before { content: '\26A0'; font-size: 0.9rem; }
         #sqd-body td.text-start .answer-group-msg { margin-top: 0.4rem; }
 
+        /* ---- Shake-on-acknowledge ----
+           The alert fires FIRST and the page stays put behind it; only after
+           the user dismisses it does the form scroll to the first thing they
+           missed and shake every still-empty field, so the movement happens
+           where they're actually looking instead of behind a modal.
+
+           Runs on EVERY device. Which element actually carries the animation
+           is decided in JS from the live computed display (see
+           shakeTargets()), not from a width breakpoint here — an SQD <tr> is
+           a real table-row on wide screens (transform on a table-row isn't
+           reliable across browsers, so its cells move) and a display:block
+           card on narrow ones (the card is overflow:hidden, so the row
+           itself has to move). Reading the computed style keeps that correct
+           at any width, zoom level, orientation or split-screen size,
+           instead of only on the side of 700px the CSS happened to assume.
+
+           Reduced-motion devices still get a cue: phones on battery saver
+           and anyone with "reduce motion" on used to get nothing at all
+           here. They get the same timing as a colour pulse instead of
+           sliding movement. */
+        @keyframes validationShake {
+            0%, 100% { transform: translateX(0); }
+            15%  { transform: translateX(-7px); }
+            30%  { transform: translateX(6px); }
+            45%  { transform: translateX(-5px); }
+            60%  { transform: translateX(4px); }
+            75%  { transform: translateX(-2px); }
+        }
+        @keyframes validationPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(220,53,69,0); }
+            35%      { box-shadow: 0 0 0 4px rgba(220,53,69,0.45); }
+            70%      { box-shadow: 0 0 0 2px rgba(220,53,69,0.28); }
+        }
+        .validation-shake { animation: validationShake 0.5s ease-in-out; }
+        @media (prefers-reduced-motion: reduce) {
+            .validation-shake { animation: validationPulse 0.6s ease-in-out; }
+        }
+
         /* ---- Citizen's Charter (CC1/CC2/CC3) on phones ----
            .qa-block (24px padding, unmodified since desktop) and .option-card
            (16-18px padding, Bootstrap default h4/p sizes above them) were
@@ -5900,6 +5938,70 @@ function scrollToInvalid(el) {
     }
 }
 
+// Shakes EVERY still-unanswered field (not just the first), so one glance
+// down the stage shows all of them. The class is removed and re-added after
+// a forced reflow so a second failed "Next" re-runs the animation instead of
+// doing nothing because the class is already on the element.
+const SHAKE_CLASS = 'validation-shake';
+const SHAKE_MS = 700; // covers the longer reduced-motion pulse too
+
+// Picks what actually moves, per element, on whatever device is running:
+// a <tr> laid out as a real table-row can't be transformed reliably, so its
+// cells move; the SAME <tr> as a display:block card (narrow screens) moves
+// as one piece, because that card is overflow:hidden and would clip cells
+// sliding around inside it. Asking for the computed display means phones,
+// tablets, desktops, landscape/portrait flips, browser zoom and split-screen
+// windows all get the right target without this code knowing any breakpoint.
+// getComputedStyle can throw / return null on a detached node, so it falls
+// back to shaking the element itself.
+function shakeTargets(el) {
+    if (!el || el.tagName !== 'TR') return [el];
+    let display = '';
+    try {
+        const cs = window.getComputedStyle(el);
+        display = cs ? cs.display : '';
+    } catch (e) { display = ''; }
+    if (display === 'table-row' || display === 'table-row-group') {
+        // el.children (not a :scope selector) — the cells are always direct
+        // children, and this works on the older Android WebViews some
+        // clients fill this survey in on.
+        const cells = Array.prototype.filter.call(el.children, (c) => c.tagName === 'TD' || c.tagName === 'TH');
+        if (cells.length) return cells;
+    }
+    return [el];
+}
+
+function shakeInvalid(elements) {
+    (elements || []).forEach((el) => {
+        if (!el || !el.classList) return;
+        shakeTargets(el).forEach((target) => {
+            if (!target || !target.classList) return;
+            target.classList.remove(SHAKE_CLASS);
+            void target.offsetWidth;
+            target.classList.add(SHAKE_CLASS);
+            setTimeout(() => target.classList.remove(SHAKE_CLASS), SHAKE_MS + 60);
+        });
+    });
+}
+
+// The single path every stage takes when it fails validation: show the alert,
+// and only once the user has acknowledged it (OK/dismiss/Esc alike — hence
+// both promise branches) scroll to the first missed field and shake them all.
+// Scrolling is smooth, so the shake waits for it to settle; otherwise the
+// field would be shaking while still travelling up the screen. If AppAlert
+// can't hand back a promise (no SweetAlert, native-alert fallback), the
+// reveal still runs — it just runs immediately.
+function reportStageInvalid(message, firstInvalid, invalidEls) {
+    const reveal = () => {
+        scrollToInvalid(firstInvalid);
+        setTimeout(() => shakeInvalid(invalidEls), 320);
+    };
+    let result;
+    try { result = AppAlert.warning(message); } catch (e) { result = null; }
+    if (result && typeof result.then === 'function') result.then(reveal, reveal);
+    else reveal();
+}
+
 const REQUIRED_STAGE2_SELECTORS = [
     'select[name="client_type"]',
     'select[name="gender"]',
@@ -5969,8 +6071,7 @@ function validateStage(stageNum, scroll) {
             // silent detection pass (scroll=false) must not raise this before
             // its own second, post-navigate call does — one failure, one alert.
             if (scroll) {
-                AppAlert.warning(t.terms);
-                scrollToInvalid(terms);
+                reportStageInvalid(t.terms, terms, [terms]);
             }
             return false;
         }
@@ -5980,10 +6081,12 @@ function validateStage(stageNum, scroll) {
 
     if (stageNum === 2) {
         let firstInvalid = null;
+        const invalidEls = [];
         REQUIRED_STAGE2_SELECTORS.forEach((sel) => {
             const el = document.querySelector(sel);
             if (!el || !el.value || !el.value.trim()) {
                 markLeafInvalid(el, t.fieldRequired);
+                if (el) invalidEls.push(el);
                 if (!firstInvalid) firstInvalid = el;
             } else {
                 clearLeafInvalid(el);
@@ -5997,8 +6100,7 @@ function validateStage(stageNum, scroll) {
             // (with scroll) right after navigating to it — one real
             // validation failure must produce exactly one alert.
             if (scroll) {
-                AppAlert.warning(t.requiredIncomplete);
-                scrollToInvalid(firstInvalid);
+                reportStageInvalid(t.requiredIncomplete, firstInvalid, invalidEls);
             }
             return false;
         }
@@ -6007,11 +6109,13 @@ function validateStage(stageNum, scroll) {
 
     if (stageNum === 3) {
         let firstInvalid = null;
+        const invalidEls = [];
         for (const name of ['cc1', 'cc2', 'cc3']) {
             const anyOption = document.querySelector(`input[name="${name}"]`);
             const block = anyOption ? anyOption.closest('.qa-block') : null;
             if (!document.querySelector(`input[name="${name}"]:checked`)) {
                 markGroupInvalid(block, t.answerRequired);
+                if (block) invalidEls.push(block);
                 if (!firstInvalid) firstInvalid = block;
             } else {
                 clearGroupInvalid(block);
@@ -6025,8 +6129,7 @@ function validateStage(stageNum, scroll) {
             // (with scroll) right after navigating to it — one real
             // validation failure must produce exactly one alert.
             if (scroll) {
-                AppAlert.warning(t.requiredIncomplete);
-                scrollToInvalid(firstInvalid);
+                reportStageInvalid(t.requiredIncomplete, firstInvalid, invalidEls);
             }
             return false;
         }
@@ -6035,12 +6138,14 @@ function validateStage(stageNum, scroll) {
 
     if (stageNum === 4) {
         let firstInvalid = null;
+        const invalidEls = [];
         for (let i = 0; i <= 8; i++) {
             const anyOption = document.querySelector(`input[name="sqd${i}"]`);
             const row = anyOption ? anyOption.closest('tr') : null;
             const msgTarget = row ? row.querySelector('td.text-start') : null;
             if (!document.querySelector(`input[name="sqd${i}"]:checked`)) {
                 markGroupInvalid(row, t.answerRequired, msgTarget);
+                if (row) invalidEls.push(row);
                 if (!firstInvalid) firstInvalid = row;
             } else {
                 clearGroupInvalid(row, msgTarget);
@@ -6054,8 +6159,7 @@ function validateStage(stageNum, scroll) {
             // (with scroll) right after navigating to it — one real
             // validation failure must produce exactly one alert.
             if (scroll) {
-                AppAlert.warning(t.requiredIncomplete);
-                scrollToInvalid(firstInvalid);
+                reportStageInvalid(t.requiredIncomplete, firstInvalid, invalidEls);
             }
             return false;
         }
