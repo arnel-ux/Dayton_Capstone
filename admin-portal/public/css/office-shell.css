@@ -449,12 +449,57 @@ html[data-bs-theme="dark"] .approvals-table td {
 }
 html[data-bs-theme="dark"] .approvals-table tbody tr.data-row:nth-child(4n+1) { background: rgba(255, 255, 255, 0.02); }
 html[data-bs-theme="dark"] .approvals-table tbody tr.data-row:hover { background: rgba(91, 140, 255, 0.08); }
-html[data-bs-theme="dark"] .pending-pill,
+/* Pills and badges use OPAQUE tints, not translucent ones. A see-through
+   chip on these cards let the row's own border line show straight through the
+   middle of the word — the "PENDING" chip read as struck through. */
+html[data-bs-theme="dark"] .pending-pill {
+    background: #3b2c10; color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);
+}
 html[data-bs-theme="dark"] .time-pill {
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--office-ink-soft);
+    background: #1b2440; color: #a5bcff; border-color: rgba(91, 140, 255, 0.32);
+}
+html[data-bs-theme="dark"] .caught-up-badge {
+    background: #10301f; color: #6ee7a8; border-color: rgba(22, 163, 74, 0.4);
+}
+
+/* ---- Text that was written for a white card ----
+   These were the invisible ones: near-black ink (#14102b, #1a1436) on a dark
+   card. Enumerated from every colour declaration in the two pages rather than
+   from what happened to be noticed on one screen. */
+html[data-bs-theme="dark"] .respondent-name { color: var(--office-ink); }
+html[data-bs-theme="dark"] .cell-value { color: var(--office-ink); }
+html[data-bs-theme="dark"] .cell-sub,
+html[data-bs-theme="dark"] .cell-label-inline,
+html[data-bs-theme="dark"] .decline-reason-note,
+html[data-bs-theme="dark"] .toggle-chevron,
+html[data-bs-theme="dark"] .approvals-table td[data-label]::before,
+html[data-bs-theme="dark"] .pending-table .col-order-email .cell-value,
+html[data-bs-theme="dark"] .history-table .col-order-email .cell-value { color: var(--office-ink-soft); }
+html[data-bs-theme="dark"] tr.data-row.expanded .toggle-chevron { color: var(--office-accent); }
+html[data-bs-theme="dark"] .approvals-table thead th i { color: var(--office-accent); }
+html[data-bs-theme="dark"] .empty-state .icon-wrap i { color: var(--office-accent); }
+html[data-bs-theme="dark"] .empty-state p { color: var(--office-ink-soft); }
+
+/* The mobile layout turns each row into its own card with its own white
+   background and border — separate declarations from the desktop table's, and
+   they need their own dark values. */
+html[data-bs-theme="dark"] .approvals-table tbody tr.data-row {
+    background: var(--office-surface);
     border-color: var(--office-line);
 }
+html[data-bs-theme="dark"] .approvals-table td,
+html[data-bs-theme="dark"] .pending-table tr.data-row.expanded .col-order-respondent,
+html[data-bs-theme="dark"] .history-table tr.data-row.expanded .col-order-respondent { border-color: var(--office-line) !important; }
+
+/* Decline: the panel, its label and its input were all pale-red on white. */
+html[data-bs-theme="dark"] .btn-decline[aria-expanded="true"] { background: rgba(220, 38, 38, 0.24); }
+html[data-bs-theme="dark"] .decline-panel-label { color: #fca5a5; }
+html[data-bs-theme="dark"] .decline-panel .form-control {
+    background: #0e1726;
+    color: var(--office-ink);
+    border-color: rgba(220, 38, 38, 0.45);
+}
+html[data-bs-theme="dark"] .decline-panel .form-control::placeholder { color: #6b7a90; }
 html[data-bs-theme="dark"] .empty-state { color: var(--office-ink-soft); }
 html[data-bs-theme="dark"] .empty-state h3 { color: var(--office-ink); }
 html[data-bs-theme="dark"] .empty-state .icon-wrap {
@@ -475,10 +520,10 @@ html[data-bs-theme="dark"] .decline-panel input {
 /* Status and action colours keep their meaning; only their surface changes,
    from a pale tint built for white to a translucent one that reads on dark. */
 html[data-bs-theme="dark"] .status-badge.approved {
-    background: rgba(22, 163, 74, 0.18); color: #6ee7a8; border-color: rgba(22, 163, 74, 0.35);
+    background: #10301f; color: #6ee7a8; border-color: rgba(22, 163, 74, 0.4);
 }
 html[data-bs-theme="dark"] .status-badge.declined {
-    background: rgba(220, 38, 38, 0.18); color: #fca5a5; border-color: rgba(220, 38, 38, 0.35);
+    background: #3a1620; color: #fca5a5; border-color: rgba(220, 38, 38, 0.4);
 }
 html[data-bs-theme="dark"] .btn-decline {
     background: rgba(220, 38, 38, 0.14); color: #fca5a5; border-color: rgba(220, 38, 38, 0.35);

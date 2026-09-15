@@ -179,8 +179,8 @@
             color: #64748b;
         }
         .chart-table-toggle > summary::-webkit-details-marker { display: none; }
-        .chart-table-toggle > summary::before { content: 'B8'; margin-right: 0.4rem; }
-        .chart-table-toggle[open] > summary::before { content: 'BE'; }
+        .chart-table-toggle > summary::before { content: '▸'; margin-right: 0.4rem; }
+        .chart-table-toggle[open] > summary::before { content: '▾'; }
         .chart-table { width: 100%; border-collapse: collapse; margin-bottom: 0.5rem; }
         .chart-table th, .chart-table td {
             text-align: left; padding: 0.4rem 0.5rem; font-size: 0.82rem;
@@ -467,15 +467,40 @@
                            '" text-anchor="end">' + (Math.round(t) === t ? t : t.toFixed(1)) + '</text>';
                 }).join('');
 
-                // Month labels thin out on a narrow card instead of colliding.
-                var everyOther = plotW / series.length < 54;
+                // EVERY month is labelled. The axis IS the reporting period, so a
+                // month without a label reads as a month that is not counted.
+                // They are shortened and shrunk to fit rather than dropped: the
+                // previous version showed every other one PLUS the last, which
+                // put two adjacent labels side by side and overlapped them
+                // ("Nov 2026" over "Dec 2026"). "Jul 2026" becomes "Jul" once
+                // the slots get tight — the year is already in the heading over
+                // the chart ("Period Covered: July–December 2026"), so nothing
+                // is lost by dropping it from every tick.
+                // Width is ESTIMATED from the text rather than compared against
+                // a magic number: ~0.58em per character for this font at these
+                // weights. The +14 is headroom for the gap between labels and
+                // for the first/last being anchored inwards (start/end), which
+                // shifts them by up to half a label towards their neighbour —
+                // the reason a threshold that only compared bare label width
+                // still let "Jul 2026" and "Aug 2026" touch on a 412px phone.
+                var labelSize = 11;
+                var longest = series.reduce(function (a, d) { return Math.max(a, String(d.label).length); }, 0);
+                var estFull = 0.58 * labelSize * longest;
+                // 1.5x, not 1x: the first and last labels are anchored inwards
+                // (start/end), which pushes each up to HALF a label towards its
+                // neighbour, so a gap of one label width is not enough — with
+                // plain +headroom the pair still overlapped at ~390px of card.
+                var useShort = stepX < estFull * 1.5 + 6;
+                if (useShort && stepX < 0.58 * labelSize * 3 * 1.5 + 6) labelSize = 10;
                 var xLabels = points.map(function (pt, i) {
                     var isLast = i === points.length - 1;
-                    if (everyOther && !isLast && i % 2 !== 0) return '';
+                    var text = useShort ? String(pt.label).split(' ')[0] : pt.label;
+                    // First and last are anchored inwards so neither can hang
+                    // off the edge of the card.
                     var anchor = i === 0 ? 'start' : (isLast ? 'end' : 'middle');
                     var x = i === 0 ? PAD.left - 2 : (isLast ? pt.x + 2 : pt.x);
                     return '<text class="chart-axis-text" x="' + x.toFixed(1) + '" y="' + (HEIGHT - 6) +
-                           '" text-anchor="' + anchor + '">' + esc(pt.label) + '</text>';
+                           '" font-size="' + labelSize + '" text-anchor="' + anchor + '">' + esc(text) + '</text>';
                 }).join('');
 
                 var dots = points.map(function (pt, i) {
