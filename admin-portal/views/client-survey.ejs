@@ -100,13 +100,12 @@
             --line-soft: #edf1f7;
             --ring: rgba(37, 84, 199, 0.15);
             --sidebar-w: 272px;
-            /* 54px brand logo + 0.6rem padding top and bottom = ~73px, so the
-               old 72px would have been slightly under the real rendered
-               height. Sticky offsets (.review-doc-header, the notification
+            /* 64px brand logo + 0.6rem padding top and bottom (19.2px) =
+               ~83px. Sticky offsets (.review-doc-header, the notification
                panel, scroll-margin-top) are measured from this, and erring
                high only adds a few px of clearance, while erring low tucks
-               content under the header. */
-            --topbar-h: 80px;
+               content under the header — so it is rounded up, not down. */
+            --topbar-h: 84px;
             /* The navigation shell's colour, shared by the sidebar and the
                header so the two can never drift apart. Literal #0f172a, not
                var(--ink-900): --ink-900 INVERTS in dark mode (it's the text
@@ -1704,7 +1703,15 @@
                wrap into 3-4 lines at any width where the drawer/hamburger
                is active — it truncates with an ellipsis instead, which is a
                graceful, single-line degradation rather than a tall header. */
-            .topbar-brand { min-width: 0; flex: 1 1 auto; }
+            /* flex:0 1 auto, NOT 1 1 auto. With flex-grow:1 this box
+               stretched across all the space between the side zones; the
+               text still looked centred (it is text-align:center inside),
+               but the logo is positioned against the BOX's left edge, so it
+               was thrown all the way out next to the hamburger instead of
+               sitting beside the words. Hugging the text puts the logo back
+               where it belongs, and frees the room on the left that the
+               larger logo below needs. */
+            .topbar-brand { min-width: 0; flex: 0 1 auto; }
             .topbar-brand-text { min-width: 0; }
             /* Acronym from here down — the full name would either truncate to
                an ellipsis or crowd out the buttons on a phone header. */
@@ -1770,16 +1777,14 @@
             /* Same two text lines as before at the same sizes, so the
                measured --topbar-h above still holds; the logo is sized to
                the 38px row-1 buttons beside it so it can't grow the row. */
-            .topbar-brand { min-width: 0; flex: 1 1 auto; gap: 0.5rem; }
-            /* Mobile is where this size is CONSTRAINED, not chosen: the logo
-               hangs leftwards out of the flow from centred text, so every
-               pixel it grows is a pixel closer to the hamburger. Measured on
-               a real 412px-wide phone at 36px, the gap between the two was
-               only ~8px — so 40px (plus a slightly tighter gap to the text,
-               0.5rem → 0.4rem, which buys back ~2px) is about as large as it
-               goes here while still clearing the button. Desktop has room to
-               spare and takes 64px. */
-            .topbar-brand-logo-wrap { width: 40px; height: 40px; right: calc(100% + 0.4rem); }
+            .topbar-brand { min-width: 0; flex: 0 1 auto; }
+            /* 46px in a 62px-tall header — as large as it goes without
+               crowding the bar itself. It sits beside the text now (the
+               flex fix above), which is what made the room: on a 412px
+               phone the words start around x=126, so a 46px logo ending
+               8px before them runs 70→118, clearing the hamburger's 48px
+               by roughly 22px rather than touching it. */
+            .topbar-brand-logo-wrap { width: 46px; height: 46px; right: calc(100% + 0.5rem); }
             .topbar-brand-text .t1 { font-size: 1.05rem; line-height: 1.2; }
             .topbar-brand-text .t2 { font-size: 0.75rem; line-height: 1.2; margin-top: 0.05rem; }
             .topbar-icon-group { gap: 0.4rem; flex-shrink: 0; }
