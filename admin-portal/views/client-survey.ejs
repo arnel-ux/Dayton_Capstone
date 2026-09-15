@@ -107,6 +107,13 @@
                high only adds a few px of clearance, while erring low tucks
                content under the header. */
             --topbar-h: 80px;
+            /* The navigation shell's colour, shared by the sidebar and the
+               header so the two can never drift apart. Literal #0f172a, not
+               var(--ink-900): --ink-900 INVERTS in dark mode (it's the text
+               colour), which would have turned this light. The dark theme
+               gets its own value below instead. */
+            --nav-bg: linear-gradient(190deg, #131c30 0%, #0f172a 55%, #0c1424 100%);
+            --nav-bg-solid: #131c30;
             --shadow-soft: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.10);
             --shadow-lift: 0 4px 10px -4px rgba(15,23,42,.10), 0 24px 48px -20px rgba(15,23,42,.18);
         }
@@ -147,7 +154,7 @@
         .sidebar {
             width: var(--sidebar-w);
             flex-shrink: 0;
-            background: linear-gradient(190deg, #131c30 0%, var(--ink-900) 55%, #0c1424 100%);
+            background: var(--nav-bg);
             color: #e2e8f0;
             display: flex;
             flex-direction: column;
@@ -162,7 +169,8 @@
                unit instead of clipping on a short landscape phone. */
             overflow-y: auto;
         }
-        [data-bs-theme="dark"] .sidebar { background: linear-gradient(190deg, #0d1524 0%, #0a101c 55%, #070c16 100%); }
+        /* Dark theme: both the sidebar and the header follow --nav-bg, set
+           for this theme near the other dark tokens. */
 
         .sidebar-brand {
             display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.85rem;
@@ -235,15 +243,52 @@
         .app-shell.sidebar-collapsed .sidebar { transform: translateX(-100%); }
         .app-shell.sidebar-collapsed .main-content { margin-left: 0; }
 
+        /* Same colour as the sidebar, in BOTH themes — the header and the
+           sidebar are one navigation shell, so in light mode the header is
+           dark too rather than a white bar sitting against a dark sidebar.
+           Everything inside it is therefore styled for a dark surface at all
+           times (see the .topbar overrides below), not from the light/dark
+           ink tokens, which would go black-on-black in light mode. */
         .topbar {
             position: sticky; top: 0; z-index: 1020;
             min-height: var(--topbar-h);
-            background: var(--surface);
-            border-bottom: 1px solid var(--line-soft);
-            box-shadow: 0 1px 0 rgba(15,23,42,0.02), 0 6px 18px -14px rgba(15,23,42,0.25);
+            background: var(--nav-bg);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 6px 18px -14px rgba(0,0,0,0.6);
             display: flex; align-items: center; gap: 1.1rem;
             padding: 0.6rem 1.5rem;
-            backdrop-filter: saturate(1.1);
+        }
+        /* Header text: white name, muted second line — the same two colours
+           .sidebar-brand-text uses, so the two headers read as one. */
+        .topbar .topbar-brand-text .t1 { color: #fff; }
+        .topbar .topbar-brand-text .t2 { color: #8996ac; }
+        /* Icon buttons on the dark header. The base rules for these (below)
+           paint them as light chips — surface fill, --ink-800 glyph — which
+           would be invisible here in light mode. */
+        .topbar .topbar-hamburger,
+        .topbar .btn-sidebar-toggle,
+        .topbar .btn-fullscreen {
+            border-color: rgba(255,255,255,0.16);
+            background: rgba(255,255,255,0.07);
+            color: #e2e8f0;
+        }
+        .topbar .topbar-hamburger:hover,
+        .topbar .btn-sidebar-toggle:hover,
+        .topbar .btn-fullscreen:hover {
+            border-color: rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+        }
+        /* The badge's ring punches a hole in whatever it sits on — that is
+           the header now, not the page. */
+        .topbar .notif-unread-badge { box-shadow: 0 0 0 2px var(--nav-bg-solid); }
+        /* The offline chip's dark-theme palette, applied on the dark header
+           in both themes: the light-mode chip (pale amber fill) was drawn
+           for a white bar. */
+        .topbar .offline-pill {
+            background: rgba(245,158,11,0.16);
+            color: #fbbf24;
+            border-color: rgba(245,158,11,0.35);
         }
         .topbar-hamburger, .btn-sidebar-toggle {
             display: none; align-items: center; justify-content: center;
@@ -268,11 +313,22 @@
            them give way before the brand does when space runs out. */
         .topbar-side { display: flex; align-items: center; gap: 0.7rem; flex: 1 1 0; min-width: 0; }
         .topbar-side-end { justify-content: flex-end; }
+        /* The TEXT is what gets centred, not the logo-plus-text group. With
+           both in the flow, the group's centre sits between them, which
+           pushes the words right of the header's middle by half the logo's
+           width — visibly off-centre against the page content below. The
+           logo is therefore taken out of the flow and hung to the left of
+           the text: this box is then only as wide as the text, so centring
+           it centres the words themselves. */
         .topbar-brand {
-            display: flex; align-items: center; gap: 0.8rem; min-width: 0;
+            position: relative;
+            display: flex; align-items: center; min-width: 0;
             flex: 0 1 auto; justify-content: center;
         }
         .topbar-brand-logo-wrap {
+            position: absolute;
+            right: calc(100% + 0.8rem);
+            top: 50%; transform: translateY(-50%);
             width: 54px; height: 54px; flex-shrink: 0;
             display: flex; align-items: center; justify-content: center;
         }
@@ -1666,6 +1722,19 @@
             .sidebar-footer .btn-logout-side { padding: 0.75rem; min-height: 44px; }
         }
 
+        /* Narrowest phones (~320px). The logo hangs out of the flow towards
+           the hamburger, so the tighter the screen, the closer the two get:
+           with the text centred at 320px the logo would reach under the
+           hamburger button. It is dropped there rather than allowed to
+           collide, or allowed to push the text back off-centre — the text
+           stays centred, which is the point of the layout, and the logo is
+           still on screen in the sidebar header. Placed BEFORE the 576px
+           block so that block's width/offset tweaks can't resurrect it:
+           display:none isn't undone by either. */
+        @media (max-width: 360px) {
+            .topbar-brand-logo-wrap { display: none; }
+        }
+
         @media (max-width: 576px) {
             /* ---- Mobile header, single row ----
                The header carried two rows on phones only because the
@@ -1702,7 +1771,10 @@
                measured --topbar-h above still holds; the logo is sized to
                the 38px row-1 buttons beside it so it can't grow the row. */
             .topbar-brand { min-width: 0; flex: 1 1 auto; gap: 0.5rem; }
-            .topbar-brand-logo-wrap { width: 36px; height: 36px; }
+            /* Tighter gap to the text than desktop: the logo hangs out of
+               the flow towards the hamburger, and on a 360px screen there
+               are only a few pixels to spare between the two. */
+            .topbar-brand-logo-wrap { width: 36px; height: 36px; right: calc(100% + 0.5rem); }
             .topbar-brand-text .t1 { font-size: 1.05rem; line-height: 1.2; }
             .topbar-brand-text .t2 { font-size: 0.75rem; line-height: 1.2; margin-top: 0.05rem; }
             .topbar-icon-group { gap: 0.4rem; flex-shrink: 0; }
@@ -2550,6 +2622,11 @@
             --ink-600: #94a3b8;
             --ink-400: #64748b;
             --ring: rgba(96, 141, 255, 0.25);
+            /* Navigation shell (sidebar + header) — the darker of the two
+               palettes, exactly the gradient the sidebar carried before this
+               became a shared token. */
+            --nav-bg: linear-gradient(190deg, #0d1524 0%, #0a101c 55%, #070c16 100%);
+            --nav-bg-solid: #0d1524;
         }
         [data-bs-theme="dark"] body { color: var(--ink-800); }
         [data-bs-theme="dark"] .survey-card { box-shadow: 0 24px 48px -16px rgba(0, 0, 0, 0.5); }
