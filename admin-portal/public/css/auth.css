@@ -434,10 +434,11 @@ html, body {
 
    Only the POSITIONING differs, and deliberately. Elsewhere the chip is fixed
    below a header BAR. These pages have no bar; their header is the hero text
-   block, and a fixed chip at the top of the viewport would land straight on
-   top of "Office Of Center For Quality Assurance". So here it stays in the
-   flow, immediately under that hero block and above the card — still centred,
-   still directly under the header, and nothing can cover it. */
+   block, and a fixed chip at the top of the viewport would land straight on top
+   of "Office Of Center For Quality Assurance". So here it stays in the flow, as
+   the first element of the centred column — above the hero header rather than
+   wedged between it and the card, which read as an interruption in the middle
+   of the page. Centred, first thing on screen, nothing able to cover it. */
 .login-wrapper .offline-pill {
     position: static;
     transform: none;
@@ -611,7 +612,7 @@ html, body {
         width: calc(100% - 24px);
         margin-inline: 12px;
         height: auto;
-        padding: 0.85rem 0.9rem;
+        padding-inline: 0.9rem;
         border-radius: 22px;
     }
     .card-custom .cqa-logo { width: 40px; }
@@ -637,7 +638,7 @@ html, body {
     .field-hint { font-size: 0.74rem; margin-top: 0.3rem; line-height: 1.3; }
 
     .btn-login, .btn-google {
-        padding: 0.6rem 1rem;
+        padding-inline: 1rem;
         font-size: 0.95rem;
         min-height: 40px;
     }
@@ -653,11 +654,28 @@ html, body {
     .btn-home { width: 2.6rem; height: 2.6rem; font-size: 0.95rem; bottom: 0.8rem; }
 }
 
-/* Short viewports — a 360x740-class phone, or a desktop window dragged down.
-   Width queries alone cannot catch these (a short phone is the same WIDTH as a
-   tall one), so this is keyed on height: one more compression step on the hero
-   block, the card's own rhythm and the field gaps. */
-@media (max-height: 780px) {
+/* The compact step — for a viewport under 900px tall (a laptop screen, a
+   desktop window that is not full height, a landscape phone) OR for any
+   phone-width screen at all.
+
+   900px, not 780px: a 1280x800 browser window has ~800px of viewport and was
+   overflowing by ~78px, because it cleared the old 780px cutoff and got the
+   full desktop rhythm it has no room for. Anything with real room to spare —
+   a maximised window on a 1080p display or larger — is above 900 and keeps it.
+
+   That second half is the important one and it was missing. This used to be
+   keyed on height alone, on the assumption that a tall screen has room to
+   spare. A phone does not: a 412x900 handset is 120px too tall to match
+   `max-height: 780px`, so it got the roomy desktop rhythm and the login card
+   ran straight off the bottom — while the SAME page fitted fine on a shorter
+   phone, which is exactly the confusing part. Width and height each catch a
+   case the other misses, so the query asks for either.
+
+   Because it now also applies to narrow screens, every declaration in here is
+   VERTICAL. Anything that also set a horizontal value (card and button side
+   padding) would otherwise override the phone-width block above it and widen
+   the card back out on a 360px screen. */
+@media (max-height: 900px), (max-width: 480px) {
     .login-wrapper {
         padding-top: clamp(0.4rem, 1.2vh, 0.9rem);
         padding-bottom: calc(1rem + env(safe-area-inset-bottom));
@@ -667,7 +685,7 @@ html, body {
     .sub-title { font-size: 0.76rem; margin-bottom: 0.3rem; }
     .portal-text { min-height: 28px; font-size: 0.64rem; padding: 0.25rem 0.8rem; }
 
-    .card-custom { padding: 0.9rem 1.75rem; }
+    .card-custom { padding-block: 0.9rem; }
     .card-custom .cqa-logo { width: 36px; }
     .card-custom h4 { font-size: 0.95rem; }
     .card-custom p.text-xsmall { font-size: 0.72rem; }
@@ -682,13 +700,13 @@ html, body {
     .field-label { margin-bottom: 0.2rem; }
     .field-hint { font-size: 0.66rem; margin-top: 0.2rem; }
     .divider-or { margin: 0.3rem 0; }
-    .btn-login, .btn-google { padding: 0.5rem 1rem; }
+    .btn-login, .btn-google { padding-block: 0.5rem; }
 
     .auth-notice,
     .offline-login-notice,
     .pending-logout-notice,
     .sent-notice,
-    .verified-notice { padding: 0.5rem 0.7rem; font-size: 0.76rem; margin-bottom: 0.55rem; }
+    .verified-notice { padding-block: 0.5rem; font-size: 0.76rem; margin-bottom: 0.55rem; }
 
     /* The wrapper stops reserving ~52px of bottom padding for the home button
        (that reserve was the biggest single chunk of the overflow), so the
@@ -709,20 +727,70 @@ html, body {
     .btn-home:hover { transform: translateY(-2px); }
 }
 
-/* Very short viewports (<=680px tall) — a 1024x640-class laptop screen, or a
-   browser window dragged to roughly half a 1080p display. The 780px step gets
-   those within ~20px of fitting; this is the last squeeze that closes the gap,
-   kept separate so the 700-780px range isn't compressed more than it needs. */
-@media (max-height: 680px) {
+/* The last squeeze — a very short viewport (a 1024x640-class laptop screen, a
+   browser window dragged to half a 1080p display) OR one of the narrowest
+   phones still in use (320-360px: an SE-class handset, a folded phone's cover
+   screen). Same reasoning as the step above: those small phones are not SHORT,
+   they are narrow, so everything on them wraps onto more lines and the card
+   ends up taller than it does on a roomier phone. Kept separate from that step
+   so the ordinary 700-780px / 361-480px range isn't compressed more than it
+   has to be. */
+@media (max-height: 680px), (max-width: 360px) {
+    /* At this size the secondary explanatory lines are what has to give — the
+       same call the compact step already makes for .auth-steps-foot. The
+       fields, their labels and every tap target stay exactly as they are; a
+       hint that repeats what the placeholder says is worth more as the space
+       that keeps the submit button on screen. */
+    .field-hint { display: none; }
+
     .login-wrapper { padding-top: 0.3rem; padding-bottom: calc(0.5rem + env(safe-area-inset-bottom)); }
     .header-container { margin-bottom: 0.25rem; }
     .main-title { font-size: 1rem; }
     .sub-title { font-size: 0.72rem; }
     .portal-text { min-height: 24px; }
-    .card-custom { padding: 0.7rem 1.5rem; }
+    .card-custom { padding-block: 0.7rem; }
     .card-custom .cqa-logo { width: 30px; }
     .field-group { margin-bottom: 0.3rem; }
     .field-hint { line-height: 1.25; margin-top: 0.15rem; }
     .divider-or { margin: 0.2rem 0; }
-    .btn-login, .btn-google { padding: 0.45rem 1rem; }
+    .btn-login, .btn-google { padding-block: 0.45rem; }
+    .sub-title { margin-bottom: 0.2rem; line-height: 1.25; }
+    .portal-text { min-height: 22px; font-size: 0.62rem; }
+}
+
+/* ---------- The home button and the hero title, on a phone ----------
+   The compact step above moves the home button out of the bottom centre and
+   into the top-left corner, to stop it reserving ~52px at the foot of a short
+   viewport. On a DESKTOP window that is free real estate: the hero title is
+   centred and nowhere near the corner. On a phone it is not — the title spans
+   the full width, so the button landed on its first word.
+
+   So on phone widths the column starts below the button rather than beside it.
+   It costs ~35px, which the trims above have already made room for, and it is
+   the only arrangement where both stay fully readable. Kept at the end of the
+   file so it lands after the compact step it is correcting. */
+@media (max-width: 480px) {
+    .btn-home {
+        top: 0.5rem;
+        left: 0.5rem;
+        width: 2.3rem;
+        height: 2.3rem;
+        font-size: 0.9rem;
+    }
+    .login-wrapper { padding-top: 3.1rem; }
+}
+
+/* ---------- Small AND short phones (e.g. 360x640) ----------
+   Deliberately an AND, not another OR step: this is the one combination where
+   neither of the ladders above is enough on its own — a narrow screen wraps
+   every line onto more rows, and a short one has no rows to spare. A tall 360px
+   phone and a short desktop window each keep their subtitle; only this corner
+   case gives it up, along with the extra top padding that keeps the hero clear
+   of the corner home button (at this size the title is small enough to sit
+   beside it). */
+@media (max-width: 480px) and (max-height: 700px) {
+    .login-wrapper { padding-top: 2.5rem; }
+    .header-container { margin-bottom: 0.2rem; }
+    .sub-title { display: none; }
+    .main-title { font-size: 0.95rem; }
 }

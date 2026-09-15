@@ -36,7 +36,13 @@
             display: inline-flex;
             align-items: center;
             gap: 0.4rem;
-            margin: 0.75rem 0 0;
+            /* Clears the floating "Viewing Offline" chip. The chip is fixed just
+               under the header and this button starts at exactly the same
+               height, so the chip landed right on top of it — hiding the one
+               action this page offers while offline. The two always appear
+               together (both are driven by navigator.onLine), so the clearance
+               is unconditional: ~46px of chip + its gap. */
+            margin: 3.5rem 0 0;
             padding: 0.55rem 1.1rem;
             border-radius: 10px;
             background: #251d3a;

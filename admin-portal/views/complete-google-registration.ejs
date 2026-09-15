@@ -46,8 +46,24 @@
             .reg-progress { gap: 0.3rem; margin-bottom: 0.7rem; }
             .reg-progress-step { font-size: 0.68rem; padding: 0.28rem 0.6rem; }
         }
-        @media (max-height: 780px) {
-            .reg-progress { margin-bottom: 0.55rem; }
+        /* Same "short viewport OR phone" pairing as /css/auth.css. This card is
+           the tallest of the auth set — two read-only fields, two password
+           fields and the progress chips — so it needs the last few pixels
+           trimmed here to clear a 360x740 phone without scrolling. */
+        @media (max-height: 900px), (max-width: 480px) {
+            .reg-progress { margin-bottom: 0.5rem; }
+            .reg-progress-step { font-size: 0.66rem; padding: 0.25rem 0.55rem; }
+            /* The "you'll use this password next time" footnote — kept, but it
+               does not need a full 1rem of air above it on a phone. */
+            #completeRegistrationForm p.text-xsmall { margin-top: 0.55rem !important; font-size: 0.7rem; }
+        }
+
+        /* Tightest sizes: the footnote goes. It restates what the Register tab
+           on /login already said before the user got here, and it is the only
+           block on this card that is not a field, a label or a button. */
+        @media (max-height: 680px), (max-width: 360px) {
+            #completeRegistrationForm p.text-xsmall { display: none; }
+            .reg-progress { margin-bottom: 0.4rem; }
         }
     </style>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">

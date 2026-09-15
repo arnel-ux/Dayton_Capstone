@@ -40,6 +40,19 @@
             }
         }
 
+        /* The tightest combinations left — a 360x640-class handset, or a browser
+           window dragged very short. The widget is Google's, so the only lever
+           is its scale; below this it stops being comfortably tappable, which is
+           why the ladder ends here. */
+        @media (max-height: 680px), (max-width: 360px) {
+            .g-recaptcha {
+                transform: scale(0.64);
+                transform-origin: 0 0;
+                width: 195px;
+                height: 50px;
+            }
+        }
+
         /* ---- Login / Register switch ----
            This one card serves two flows, so the control has to read as a
            SWITCH (a track with a sliding thumb) rather than as two plain
@@ -269,7 +282,9 @@
             .btn-register-google { font-size: 0.88rem; }
         }
 
-        @media (max-height: 780px) {
+        /* Same "short viewport OR phone" pairing as /css/auth.css — see the
+           note there on why height alone was not enough. */
+        @media (max-height: 900px), (max-width: 480px) {
             /* The steps are the point of the Register panel and stay; the
                footnote is reassurance, and it is the one block here that can go
                when the fold gets tight — the same trade the rest of the card's
@@ -280,15 +295,34 @@
             .auth-switch { margin-bottom: 0.5rem; padding: 3px; }
             .auth-switch-thumb { top: 3px; left: 3px; bottom: 3px; width: calc(50% - 3px); }
             .auth-switch-btn { min-height: 34px; font-size: 0.72rem; }
-            .btn-register-google { min-height: 40px; padding: 0.5rem 1rem; }
+            .btn-register-google { min-height: 40px; padding-block: 0.5rem; }
             .auth-swap-hint { margin-top: 0.5rem; font-size: 0.72rem; }
         }
 
-        @media (max-height: 680px) {
-            .auth-switch { margin-bottom: 0.4rem; }
+        @media (max-height: 680px), (max-width: 360px) {
+            .auth-switch { margin-bottom: 0.3rem; }
             .auth-switch-btn { min-height: 30px; }
             .reg-emails { margin-bottom: 0.45rem; }
-            .btn-register-google { min-height: 38px; padding: 0.45rem 1rem; }
+            .btn-register-google { min-height: 38px; padding-block: 0.45rem; }
+            /* This card carries the most of any auth page — switch, two fields,
+               reCAPTCHA, two buttons — so the last few pixels come out of the
+               spacing between them rather than out of any control. */
+            .card-custom h4 { font-size: 0.9rem; }
+            .card-custom .divider-soft { margin: 0.2rem auto 0.25rem; }
+            .field-group { margin-bottom: 0.25rem; }
+            /* "Sign in to your account" / "Sign up first with your CSPC or
+               personal email" — the switch sitting directly beneath it already
+               says which of the two modes you are in, so at this size the line
+               is the most repeated thing on the card and the least missed. */
+            #cardSubtitle { display: none; }
+        }
+        /* Smallest phones — narrow (<=360px) or small-and-short. The two email
+           chips stack full-width here, two rows for a point step 1 makes in the
+           same breath ("your CSPC email or a personal email"). They are the
+           cheapest thing on the panel to drop and the only one that is a pure
+           restatement. */
+        @media (max-width: 360px), (max-width: 480px) and (max-height: 700px) {
+            .reg-emails { display: none; }
         }
     </style>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
@@ -305,17 +339,17 @@
 
     <div class="login-wrapper">
 
+        <!-- Above the header, centred: the first thing in the column, so it is
+             the first thing read and nothing can sit on it. -->
+        <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection.">
+            <span class="dot"></span><span class="label">Viewing Offline</span>
+        </span>
+
         <div class="header-container">
             <h1 class="main-title">Office Of Center For Quality Assurance (CQA)</h1>
             <p class="sub-title">Digital Client Satisfaction Survey of Camarines Sur Polytechnic Colleges</p>
             <h2 class="portal-text" id="portalBadge">Login Portal</h2>
         </div>
-
-        <!-- Centred directly under the header block, above the card — see the
-             positioning note in /css/auth.css. -->
-        <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection.">
-            <span class="dot"></span><span class="label">Viewing Offline</span>
-        </span>
 
         <div class="card-custom">
 
@@ -418,7 +452,7 @@
                         <input type="text" name="username" id="usernameInput" class="form-control" placeholder="Enter your username or email" required title="Username or Email" autocomplete="off" list="usernameSuggestions">
                         <datalist id="usernameSuggestions"></datalist>
                     </div>
-                    <p class="field-hint mb-0">Registered clients: enter the email and password you set up when you first signed in with Google.</p>
+                    <p class="field-hint mb-0">Use the password you set when you registered.</p>
                 </div>
 
                 <div class="field-group">
@@ -464,11 +498,6 @@
                 <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google">
                 Sign in with Google
             </a>
-
-            <p class="auth-swap-hint mb-0">
-                No account yet?
-                <button type="button" data-auth-goto="register" title="Switch to the Register tab">Register here</button>
-            </p>
 
             </div><!-- /#loginPanel -->
 
@@ -516,11 +545,6 @@
                     <span class="g-badge"><img src="https://developers.google.com/identity/images/g-logo.png" alt=""></span>
                     Sign up with Email (Google)
                 </a>
-
-                <p class="auth-swap-hint mb-0">
-                    Already registered?
-                    <button type="button" data-auth-goto="login" title="Switch to the Login tab">Log in instead</button>
-                </p>
 
             </div><!-- /#registerPanel -->
 
