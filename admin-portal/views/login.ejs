@@ -301,6 +301,101 @@
         @media (max-width: 360px), (max-width: 480px) and (max-height: 700px) {
             .reg-emails { display: none; }
         }
+
+        /* Short desktop windows — see the matching tiers at the foot of
+           /css/auth.css. The widget is the most obvious casualty of the phone
+           trims on a wide screen: at 64% it renders as a fuzzy miniature beside
+           full-size inputs. There is width to spare here, so it goes back to the
+           size Google draws it at — ~28px of what those tiers reclaim, spent on
+           the one element that actually looked broken. */
+        @media (min-width: 768px) and (max-height: 820px) {
+            .g-recaptcha {
+                transform: none;
+                width: auto;
+                height: auto;
+            }
+            #cardSubtitle { display: block; }
+            .reg-emails { display: flex; }
+        }
+
+        @media (min-width: 768px) and (max-height: 700px) {
+            /* The switch keeps its full 4px track and a real tap height even in
+               the tightest desktop tier — it is the control that tells a new
+               visitor Register exists, and a squashed one reads as a label. */
+            .auth-switch { margin-bottom: 0.7rem; padding: 4px; }
+            .auth-switch-thumb { top: 4px; left: 4px; bottom: 4px; width: calc(50% - 4px); }
+            .auth-switch-btn { min-height: 38px; font-size: 0.74rem; }
+            .auth-steps { padding: 0.65rem 0.8rem; margin-bottom: 0.7rem; }
+            .auth-step p { font-size: 0.78rem; }
+            .auth-step + .auth-step { margin-top: 0.5rem; }
+            .reg-emails { margin-bottom: 0.6rem; }
+            .reg-email-chip { font-size: 0.7rem; padding: 0.3rem 0.65rem; }
+            .btn-register-google { min-height: 42px; padding-block: 0.55rem; }
+        }
+
+        @media (min-width: 768px) and (min-height: 701px) and (max-height: 780px) {
+            .auth-switch { margin-bottom: 0.85rem; padding: 4px; }
+            .auth-switch-thumb { top: 4px; left: 4px; bottom: 4px; width: calc(50% - 4px); }
+            .auth-switch-btn { min-height: 40px; font-size: 0.76rem; }
+            .auth-steps { padding: 0.75rem 0.85rem; margin-bottom: 0.85rem; }
+            .auth-step p { font-size: 0.8rem; }
+            .btn-register-google { min-height: 44px; padding-block: 0.6rem; }
+        }
+
+        @media (min-width: 768px) and (min-height: 781px) and (max-height: 900px) {
+            .auth-switch { margin-bottom: 1rem; padding: 4px; }
+            .auth-switch-thumb { top: 4px; left: 4px; bottom: 4px; width: calc(50% - 4px); }
+            .auth-switch-btn { min-height: 40px; font-size: 0.78rem; }
+            .auth-steps { padding: 0.75rem 0.85rem; margin-bottom: 0.85rem; }
+            .auth-step p { font-size: 0.82rem; }
+            .auth-steps-foot { display: flex; }
+            .btn-register-google { min-height: 44px; padding-block: 0.6rem; }
+        }
+
+        /* ---- Desktop breathing room for "How registration works" ----
+           The three steps inherit a rhythm that is sized for a phone fold, and
+           on a wide screen that reads as one dense block: the numbers, the
+           lines and the panel edge all sit a couple of pixels apart. The air
+           goes back INSIDE the block — padding, the gap after the heading, the
+           gap between steps and the line-height — while the outer
+           margin-bottom moves only slightly, so the button under it and the
+           fixed home button keep the clearance the density ladder gives them.
+
+           Bounded by min-width: 768px (no phone or tablet sees it) and split by
+           height for the same reason every tier above is: a 1366x768 laptop has
+           no pixels to spare, so tier 1 (<=700px) is deliberately left exactly
+           as it was. Each tier below adds only what its own budget allows, and
+           the Register panel is the shorter of the two panels anyway — it has
+           no reCAPTCHA, no fields and no second button — so this spends slack
+           the fold already had rather than borrowing from it. */
+        @media (min-width: 768px) and (min-height: 701px) and (max-height: 780px) {
+            .reg-emails { margin-bottom: 0.7rem; }
+            .auth-steps { padding: 0.85rem 0.9rem; margin-bottom: 0.9rem; }
+            .auth-steps-title { margin-bottom: 0.65rem; }
+            .auth-step { gap: 0.65rem; }
+            .auth-step + .auth-step { margin-top: 0.6rem; }
+            .auth-step p { line-height: 1.45; }
+        }
+
+        @media (min-width: 768px) and (min-height: 781px) and (max-height: 900px) {
+            .reg-emails { margin-bottom: 0.8rem; }
+            .auth-steps { padding: 0.95rem 1rem; margin-bottom: 0.95rem; }
+            .auth-steps-title { margin-bottom: 0.75rem; }
+            .auth-step { gap: 0.7rem; }
+            .auth-step + .auth-step { margin-top: 0.7rem; }
+            .auth-step p { line-height: 1.5; }
+            .auth-steps-foot { margin-top: 0.8rem; padding-top: 0.7rem; }
+        }
+
+        @media (min-width: 768px) and (min-height: 901px) {
+            .reg-emails { margin-bottom: 0.85rem; }
+            .auth-steps { padding: 1.05rem 1.1rem; margin-bottom: 1rem; }
+            .auth-steps-title { margin-bottom: 0.85rem; }
+            .auth-step { gap: 0.75rem; }
+            .auth-step + .auth-step { margin-top: 0.85rem; }
+            .auth-step p { line-height: 1.55; }
+            .auth-steps-foot { margin-top: 0.9rem; padding-top: 0.8rem; }
+        }
     </style>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <link rel="stylesheet" href="/css/alerts.css">

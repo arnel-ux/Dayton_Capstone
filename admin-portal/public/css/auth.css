@@ -179,11 +179,17 @@ html, body {
 
 /* ---------- 4. Card ---------- */
 .card-custom {
+    /* The travelling border (see below) hangs off this box, so the card has to
+       be a positioning context and has to publish its own corner radius — the
+       ring sits 2px outside the card and needs to round by exactly that much
+       more, at every breakpoint, or the colour cuts across the corners. */
+    position: relative;
+    --auth-card-radius: 1.75rem;
     background: rgba(255, 255, 255, 0.94);
     backdrop-filter: blur(18px) saturate(160%);
     -webkit-backdrop-filter: blur(18px) saturate(160%);
     border: 1px solid rgba(255, 255, 255, 0.6);
-    border-radius: 1.75rem;
+    border-radius: var(--auth-card-radius);
     box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
     /* Widened from a fixed 400px: the reCAPTCHA widget alone is 304px, so at
        400px minus the card's own side padding the form sat in a ~310px column
@@ -204,6 +210,82 @@ html, body {
     margin-bottom: 0;
     opacity: 0;
     animation: fadeSlideUp 0.7s ease-out 0.15s forwards;
+}
+
+/* ---------- Travelling border ----------
+   A band of colour that runs continuously around the edge of the card, on
+   every auth page and every device. It is a conic gradient rotated by an
+   animated angle and then masked down to a 2px ring, so what moves is the
+   colour, not the card: nothing is laid out, painted or resized on any frame,
+   which is why this is safe to leave running forever on a phone.
+
+   Two things make it degrade instead of break:
+   - @supports: the mask is what turns the gradient into a RING. Without
+     mask-composite the same element would be a solid colour rectangle sitting
+     over the whole card, so on a browser that lacks it the ring is simply
+     never created and the card keeps its plain border.
+   - @property: only the ANIMATION needs it (a custom property is otherwise
+     interpolated as a string, i.e. it jumps rather than sweeps). A browser
+     without it still paints the full-colour ring, just without the travel.
+
+   z-index keeps it above the card's own background but it is only ever a 2px
+   band at the very edge, and pointer-events: none means it can never take a
+   tap meant for the field underneath it. */
+@property --auth-ring-angle {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 0deg;
+}
+
+@keyframes authRingSpin {
+    to { --auth-ring-angle: 360deg; }
+}
+
+@supports ((-webkit-mask-composite: xor) or (mask-composite: exclude)) {
+    .card-custom::before {
+        content: "";
+        position: absolute;
+        inset: -2px;
+        z-index: 2;
+        border-radius: calc(var(--auth-card-radius) + 2px);
+        padding: 2px;
+        pointer-events: none;
+        /* Mostly transparent, with one bright arc: a single highlight running
+           round the edge reads as movement, where an evenly coloured ring just
+           looks like a rainbow border sitting still. The colours are the
+           card's own — indigo into the gold from the divider and the portal
+           badge — so it belongs to the page rather than decorating it. */
+        background: conic-gradient(from var(--auth-ring-angle),
+            rgba(99, 102, 241, 0) 0deg,
+            rgba(99, 102, 241, 0.15) 35deg,
+            rgba(99, 102, 241, 0.85) 85deg,
+            #ffcc00 135deg,
+            #ffffff 160deg,
+            #ffcc00 185deg,
+            rgba(99, 102, 241, 0.85) 235deg,
+            rgba(99, 102, 241, 0.15) 290deg,
+            rgba(99, 102, 241, 0) 360deg);
+        /* Paint the padding box, knock out the content box: what is left is
+           the 2px frame between them. */
+        -webkit-mask:
+            linear-gradient(#000 0 0) content-box,
+            linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+        mask:
+            linear-gradient(#000 0 0) content-box,
+            linear-gradient(#000 0 0);
+        mask-composite: exclude;
+        /* The 0.85s delay lets the card's own fade-and-slide entrance finish
+           first — the ring is part of the card, so it should not be sweeping
+           past a frame the card has not arrived in yet. */
+        animation: authRingSpin 6s linear 0.85s infinite;
+    }
+
+    /* Reduced motion: the ring stays, the travel stops. The border still reads
+       as a deliberate part of the design, it just holds still. */
+    @media (prefers-reduced-motion: reduce) {
+        .card-custom::before { animation: none; }
+    }
 }
 
 .card-custom .cqa-logo {
@@ -603,7 +685,7 @@ html, body {
         margin-inline: 12px;
         height: auto;
         padding-inline: 0.9rem;
-        border-radius: 22px;
+        --auth-card-radius: 22px;
     }
     .card-custom .cqa-logo { width: 40px; }
     .card-custom h4 { font-size: 1.15rem; }
@@ -757,4 +839,122 @@ html, body {
     .main-title { font-size: 0.95rem; }
     /* The chip's pop-up clearance, tightened to match the smaller hero. */
     .login-wrapper:has(.offline-pill.is-visible) { padding-top: 2.7rem; }
+}
+
+/* ==========================================================================
+   SHORT DESKTOP WINDOWS — putting the air back where the width says there is
+   room for it.
+
+   The ladder above is keyed on height as well as width, so a 1365x650 desktop
+   window matched the same steps a 360px phone does: right about the height it
+   has, wrong about everything else. The card came out at its absolute tightest
+   — hints hidden, subtitle gone, 4px between fields, the reCAPTCHA scaled down
+   to 64% beside full-size inputs — because those trims are sized for a phone's
+   much narrower column, where every line wraps onto two or three.
+
+   What this cannot do is invent height: at 650px of viewport, a comfortable
+   card plus the hero plus the home button genuinely does not fit. So the air
+   comes out of the two things that are not the form — the hero block (on a wide
+   screen its words fit on one line, so it costs little) and the foot, which now
+   reserves only what the button actually needs — and all of it goes to the
+   card: first to the reCAPTCHA, which is what looks broken at 64%, then to the
+   gaps between fields, which is what reads as cramped.
+
+   Three tiers, each sized for the SHORTEST window it serves, because a 650px
+   window and an 810px one have very different budgets. All bounded by
+   min-width: 768px so no phone ever sees them, and placed last in the file so
+   they land after every step they correct.
+   ========================================================================== */
+
+/* Tier 1 — a 1366x768 laptop with browser chrome (~650px of viewport), or a
+   window dragged to about that. The tightest desktop case that still has to fit
+   without scrolling. */
+@media (min-width: 768px) and (max-height: 700px) {
+    .login-wrapper {
+        padding-top: 0.35rem;
+        padding-bottom: calc(2.3rem + env(safe-area-inset-bottom));
+    }
+    .btn-home { width: 2.2rem; height: 2.2rem; font-size: 0.85rem; bottom: 0.45rem; }
+
+    .header-container { margin-bottom: 0.2rem; }
+    .main-title { font-size: 0.92rem; margin-bottom: 0.12rem; }
+    .sub-title { display: block; font-size: 0.68rem; margin-bottom: 0.18rem; }
+    .portal-text { min-height: 20px; font-size: 0.6rem; padding: 0.18rem 0.75rem; }
+
+    .card-custom { padding-block: 1rem; padding-inline: 1.9rem; }
+    .card-custom .cqa-logo { width: 36px; }
+    .card-custom h4 { font-size: 1.02rem; }
+    .card-custom p.text-xsmall { display: block; font-size: 0.72rem; }
+    .card-custom .divider-soft { margin: 0.25rem auto 0.35rem; }
+    .card-custom .text-center.mb-2 { margin-bottom: 0.45rem !important; }
+
+    .field-group { margin-bottom: 0.6rem; }
+    .field-label { font-size: 0.66rem; margin-bottom: 0.22rem; }
+    .field-hint { display: block; font-size: 0.68rem; margin-top: 0.3rem; }
+    .btn-login, .btn-google { padding-block: 0.55rem; }
+    .divider-or { margin: 0.45rem 0; }
+}
+
+/* Tier 2 — roughly 700-780px of viewport. */
+@media (min-width: 768px) and (min-height: 701px) and (max-height: 780px) {
+    .login-wrapper {
+        padding-top: 0.5rem;
+        padding-bottom: calc(2.6rem + env(safe-area-inset-bottom));
+    }
+    .btn-home { width: 2.5rem; height: 2.5rem; font-size: 0.92rem; bottom: 0.6rem; }
+
+    .header-container { margin-bottom: 0.3rem; }
+    .main-title { font-size: 1rem; margin-bottom: 0.18rem; }
+    .sub-title { display: block; font-size: 0.74rem; margin-bottom: 0.25rem; }
+    .portal-text { min-height: 23px; font-size: 0.64rem; padding: 0.25rem 0.8rem; }
+
+    .card-custom { padding-block: 1.2rem; padding-inline: 2rem; }
+    .card-custom .cqa-logo { width: 40px; }
+    .card-custom h4 { font-size: 1rem; }
+    .card-custom p.text-xsmall { display: block; font-size: 0.76rem; }
+    .card-custom .divider-soft { margin: 0.3rem auto 0.45rem; }
+    .card-custom .text-center.mb-2 { margin-bottom: 0.3rem !important; }
+
+    .field-group { margin-bottom: 0.7rem; }
+    .field-label { font-size: 0.68rem; margin-bottom: 0.26rem; }
+    .field-hint { display: block; font-size: 0.7rem; margin-top: 0.35rem; }
+    .btn-login, .btn-google { padding-block: 0.6rem; }
+    .divider-or { margin: 0.55rem 0; }
+}
+
+/* Tier 3 — roughly 780-900px of viewport: nearly the full desktop rhythm.
+   It runs all the way to 900 because that is where the compact step above stops:
+   without this, a window between 820 and 900 fell back to that phone-shaped step
+   and the card visibly SHRANK as the window got taller. */
+@media (min-width: 768px) and (min-height: 781px) and (max-height: 900px) {
+    .login-wrapper {
+        padding-top: 0.6rem;
+        padding-bottom: calc(3rem + env(safe-area-inset-bottom));
+    }
+    .btn-home { width: 2.6rem; height: 2.6rem; font-size: 0.95rem; bottom: 0.7rem; }
+
+    .header-container { margin-bottom: 0.6rem; }
+    .main-title { font-size: 1.3rem; margin-bottom: 0.2rem; }
+    .sub-title { display: block; font-size: 0.78rem; margin-bottom: 0.4rem; }
+    .portal-text { min-height: 28px; font-size: 0.66rem; padding: 0.3rem 0.85rem; }
+
+    .card-custom { padding-block: 1.4rem; padding-inline: 2.1rem; }
+    .card-custom .cqa-logo { width: 46px; }
+    .card-custom h4 { font-size: 1.05rem; }
+    .card-custom p.text-xsmall { display: block; font-size: 0.78rem; }
+    .card-custom .divider-soft { margin: 0.35rem auto 0.5rem; }
+    .card-custom .text-center.mb-2 { margin-bottom: 0.7rem !important; }
+
+    .field-group { margin-bottom: 0.85rem; }
+    .field-label { font-size: 0.7rem; margin-bottom: 0.3rem; }
+    .field-hint { display: block; font-size: 0.7rem; margin-top: 0.35rem; }
+    .input-modern .form-control { padding-block: 0.65rem; }
+    .btn-login, .btn-google { padding-block: 0.7rem; }
+    .divider-or { margin: 0.85rem 0; }
+
+    .auth-notice,
+    .offline-login-notice,
+    .pending-logout-notice,
+    .sent-notice,
+    .verified-notice { padding-block: 0.6rem; font-size: 0.8rem; margin-bottom: 0.75rem; }
 }
