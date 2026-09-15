@@ -100,7 +100,13 @@
             --line-soft: #edf1f7;
             --ring: rgba(37, 84, 199, 0.15);
             --sidebar-w: 272px;
-            --topbar-h: 72px;
+            /* 54px brand logo + 0.6rem padding top and bottom = ~73px, so the
+               old 72px would have been slightly under the real rendered
+               height. Sticky offsets (.review-doc-header, the notification
+               panel, scroll-margin-top) are measured from this, and erring
+               high only adds a few px of clearance, while erring low tucks
+               content under the header. */
+            --topbar-h: 80px;
             --shadow-soft: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.10);
             --shadow-lift: 0 4px 10px -4px rgba(15,23,42,.10), 0 24px 48px -20px rgba(15,23,42,.18);
         }
@@ -247,25 +253,140 @@
         }
         .btn-sidebar-toggle { display: inline-flex; }
         .btn-sidebar-toggle:hover { border-color: var(--brand); color: var(--brand); background: var(--ring); }
-        .topbar-title { font-weight: 700; color: var(--ink-900); font-size: 1.05rem; margin: 0; letter-spacing: -.01em; }
-        .topbar-title small { display: block; font-weight: 500; font-size: 0.72rem; color: var(--ink-600); margin-top: 0.1rem; }
-        /* Notification bell + fullscreen. margin-left:auto pushes this (and
-           everything after it — .topbar-row2's contents-promoted children,
-           see below) to the topbar's right edge, same as the old
-           .topbar-actions did. On mobile this group stays put on row 1 —
-           it's the one thing that must never drop to row 2 (see the
-           ≤576px rules), so nothing there overrides its position, only its
-           icon sizing. */
-        .topbar-icon-group { margin-left: auto; display: flex; align-items: center; gap: 0.7rem; }
-        /* Desktop/default: behaves as if its children (offline pill, language
-           toggle) were direct topbar items — i.e. exactly the pre-existing
-           desktop look, just reachable through one wrapper instead of two
-           separate siblings. Only the ≤576px rule below turns this into a
-           real second row. */
-        .topbar-row2 { display: contents; }
-        .lang-toggle-group { display: flex; gap: 0.4rem; background: var(--page-bg); border: 1px solid var(--line-soft); padding: 0.25rem; border-radius: 50px; }
-        .lang-toggle-group .btn { border-radius: 50px !important; padding: 0.35rem 0.9rem; }
-        .lang-toggle-group .lang-btn-short { display: none; }
+        /* ---- Topbar brand ----
+           The header now carries the SAME identity as the sidebar's header
+           (logo + "CQA Client Portal" + "CSPC Nabua, Cam. Sur") instead of
+           the name of whichever view is open, so the app reads as one
+           portal from every screen. Same content and same order as
+           .sidebar-brand; laid out in a row (the topbar is a 72px strip,
+           not a 272px column) and coloured with the ink tokens, since this
+           sits on the light surface rather than the sidebar's dark panel.
+           Where the view's name went: into that view's own container, as
+           .view-page-title. */
+        /* The two side zones flex equally, so whatever they hold, the brand
+           between them lands in the header's true centre. min-width:0 lets
+           them give way before the brand does when space runs out. */
+        .topbar-side { display: flex; align-items: center; gap: 0.7rem; flex: 1 1 0; min-width: 0; }
+        .topbar-side-end { justify-content: flex-end; }
+        .topbar-brand {
+            display: flex; align-items: center; gap: 0.8rem; min-width: 0;
+            flex: 0 1 auto; justify-content: center;
+        }
+        .topbar-brand-logo-wrap {
+            width: 54px; height: 54px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .topbar-brand img { width: 100%; height: 100%; object-fit: contain; display: block; }
+        /* text-align:center centres the second line under the first: both
+           are block children of this box, which is only as wide as the
+           longer line (the name), so "CSPC Nabua, Cam. Sur" sits centred
+           beneath it rather than starting at its left edge. Holds at every
+           width, including where the name shortens to "CQA". Matches how
+           .sidebar-brand-text already centres the same two lines. */
+        .topbar-brand-text { line-height: 1.3; min-width: 0; text-align: center; }
+        .topbar-brand-text .t1 {
+            font-size: 1.24rem; font-weight: 800; color: var(--ink-900); letter-spacing: 0.2px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .topbar-brand-text .t2 {
+            font-size: 0.86rem; font-weight: 500; color: var(--ink-600); margin-top: 0.1rem;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        /* Desktop spells the name out; the ≤991px rule below (the width where
+           the sidebar becomes a drawer and the header gets tight) swaps in the
+           acronym. */
+        .topbar-brand-text .brand-cqa-short { display: none; }
+
+        /* ---- Language switch (survey title row) ----
+           One switch, two labels: EN — [ track with flag ] — TL. The active
+           side's label is ink and semibold, the inactive one is muted, so
+           the current language is legible without relying on the flag (and
+           without relying on colour alone). The track carries BOTH flags
+           stacked; only the active one is opaque, so switching crossfades
+           the flag while the knob slides across it. */
+        .lang-switch { display: flex; align-items: center; gap: 0.5rem; flex: 0 0 auto; }
+        .lang-switch-label {
+            font-size: 0.86rem; font-weight: 800; letter-spacing: 0.06em;
+            color: var(--ink-400); transition: color 0.2s ease;
+            user-select: none;
+        }
+        .lang-switch-label.is-active { color: var(--ink-900); }
+        .lang-switch-track {
+            position: relative; flex-shrink: 0;
+            width: 68px; height: 34px; padding: 0; border: 0;
+            border-radius: 999px; overflow: hidden; cursor: pointer;
+            background: var(--page-bg);
+            box-shadow: 0 1px 3px rgba(15,23,42,0.22), inset 0 0 0 1px rgba(15,23,42,0.08);
+            -webkit-tap-highlight-color: transparent;
+        }
+        .lang-switch-track:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+        .lang-switch-flag {
+            position: absolute; inset: 0;
+            opacity: 0; transition: opacity 0.25s ease;
+        }
+        .lang-switch-flag svg {
+            width: 100%; height: 100%; display: block;
+            /* An inline <svg> is not a replaced element, so object-fit does
+               nothing to it — the "cover" behaviour comes from
+               preserveAspectRatio="xMidYMid slice" on the element itself
+               (see the markup). The track is 2:1 and the flags' viewBox is
+               2:1, so nothing is actually cropped at either size; slice is
+               there so a future track ratio fills rather than letterboxes. */
+        }
+        .lang-switch-track[aria-checked="false"] .lang-switch-flag.is-en,
+        .lang-switch-track[aria-checked="true"] .lang-switch-flag.is-tl { opacity: 1; }
+        .lang-switch-knob {
+            position: absolute; top: 3px; left: 3px;
+            width: 28px; height: 28px; border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 2px 6px rgba(15,23,42,0.35), 0 0 0 1px rgba(15,23,42,0.06);
+            transition: transform 0.28s cubic-bezier(0.4, 0.0, 0.2, 1);
+        }
+        .lang-switch-track[aria-checked="true"] .lang-switch-knob { transform: translateX(34px); }
+        @media (prefers-reduced-motion: reduce) {
+            .lang-switch-knob, .lang-switch-flag { transition: none; }
+        }
+        [data-bs-theme="dark"] .lang-switch-track {
+            background: rgba(255,255,255,0.08);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.12);
+        }
+        [data-bs-theme="dark"] .lang-switch-knob { background: #e9edf5; }
+
+        /* ---- Per-view page title ----
+           The view's name ("Home", "Client Satisfaction Survey", "My
+           Profile", "Survey History") now lives at the top of that view's
+           own card, where it labels the content under it instead of the
+           whole window. One component for all four, so switching views
+           changes the words and the icon and nothing else about the shape
+           of the page. */
+        .view-page-title {
+            display: flex; align-items: center; gap: 0.85rem;
+            padding-bottom: 1.15rem; margin-bottom: 1.6rem;
+            border-bottom: 1px solid var(--line-soft);
+        }
+        /* Anything after the title text (today: the language switch) is
+           pushed to the right end of the same line. flex-shrink:0 on the
+           switch plus min-width:0 on the text means a long title wraps
+           within its own column instead of squeezing the control. */
+        .view-page-title > .lang-switch { margin-left: auto; }
+        .view-page-title .vpt-icon {
+            width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.25rem; background: var(--ring); color: var(--brand);
+        }
+        .view-page-title .vpt-text { min-width: 0; flex: 1 1 auto; }
+        .view-page-title .vpt-name {
+            font-size: 1.4rem; font-weight: 700; color: var(--ink-900);
+            margin: 0; letter-spacing: -.01em; line-height: 1.25;
+        }
+        .view-page-title .vpt-sub {
+            font-size: 0.86rem; color: var(--ink-600); margin: 0.18rem 0 0; line-height: 1.35;
+        }
+        /* Offline pill + notification bell + fullscreen. It's the header's
+           right-hand zone (.topbar-side-end does the alignment), so no
+           margin-left:auto here — that would fight the equal side zones the
+           centred brand depends on. */
+        .topbar-icon-group { display: flex; align-items: center; gap: 0.7rem; }
 
         .btn-fullscreen {
             display: inline-flex; align-items: center; justify-content: center;
@@ -959,12 +1080,6 @@
             }
         }
 
-        .view-header { text-align: center; padding-bottom: 1.5rem; margin-bottom: 2rem; border-bottom: 1px solid var(--line-soft); }
-        .view-header .view-icon {
-            width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 1rem;
-            display: flex; align-items: center; justify-content: center; font-size: 1.5rem;
-            background: var(--ring); color: var(--brand);
-        }
 
         /* ---- Profile view ---- */
         .profile-view-card { overflow: hidden; }
@@ -1234,19 +1349,20 @@
         /* ---- View Profile + Survey History on phones ----
            A second visual pass found these two still reading as oversized
            even with .content-body / card padding fixed elsewhere: the
-           shared .view-header (History's title block) had NO mobile
-           override at all — a 56px icon plus 1.5rem/2rem of
-           padding-bottom/margin-bottom below it, before a single history
-           row is even reached — and each .profile-info-card/.history-item
+           shared title block above History's list had NO mobile override at
+           all — a 56px icon plus 1.5rem/2rem of padding-bottom/margin-bottom
+           below it, before a single history row is even reached (that block
+           is now .view-page-title, which carries its own mobile sizing) —
+           and each .profile-info-card/.history-item
            carried desktop padding, a 40px icon, and a full 1rem grid gap
            for what's ultimately one line of text per field/row. Compacted
            without touching the underlying markup, data, or click/edit
            behavior — only sizing. */
         @media (max-width: 575.98px) {
-            .view-header { padding-bottom: 0.7rem; margin-bottom: 0.9rem; }
-            .view-header .view-icon { width: 34px; height: 34px; font-size: 1rem; margin-bottom: 0.5rem; border-radius: 10px; }
-            .view-header h3 { font-size: 1.02rem; margin-bottom: 0.15rem !important; }
-            .view-header p { font-size: 0.78rem; }
+            .view-page-title { gap: 0.7rem; padding-bottom: 0.85rem; margin-bottom: 1.1rem; }
+            .view-page-title .vpt-icon { width: 38px; height: 38px; border-radius: 11px; font-size: 1.05rem; }
+            .view-page-title .vpt-name { font-size: 1.12rem; }
+            .view-page-title .vpt-sub { font-size: 0.79rem; }
             #view-history > .card > .card-body { padding: 0.9rem 0.75rem !important; }
 
             /* This block used to shrink the avatar to 44px on phones, back
@@ -1532,8 +1648,12 @@
                wrap into 3-4 lines at any width where the drawer/hamburger
                is active — it truncates with an ellipsis instead, which is a
                graceful, single-line degradation rather than a tall header. */
-            .topbar-title { min-width: 0; flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .topbar-title small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .topbar-brand { min-width: 0; flex: 1 1 auto; }
+            .topbar-brand-text { min-width: 0; }
+            /* Acronym from here down — the full name would either truncate to
+               an ellipsis or crowd out the buttons on a phone header. */
+            .topbar-brand-text .brand-cqa-full { display: none; }
+            .topbar-brand-text .brand-cqa-short { display: inline; }
             /* Tight topbar real estate on mobile — the label used to be
                hidden outright to avoid crowding the fullscreen button,
                leaving just a bare dot with no visible word. Dropping only
@@ -1544,119 +1664,65 @@
             .sidebar-nav { gap: 0.4rem; padding: 1.25rem 0.85rem; }
             .sidebar-nav .nav-item-link { padding: 0.85rem 0.95rem; min-height: 44px; }
             .sidebar-footer .btn-logout-side { padding: 0.75rem; min-height: 44px; }
-            .lang-toggle-group .btn { padding: 0.5rem 1rem; min-height: 40px; }
         }
 
         @media (max-width: 576px) {
-            /* ---- Mobile header, revised two-row layout ----
-               Previous iteration put the bell/fullscreen on row 2 with the
-               language toggle, and used abbreviated "EN"/"TL" labels. Per
-               updated direction: the bell + fullscreen must always stay on
-               row 1, to the right of the title (never a second row), and
-               the language toggle now shows full "English"/"Tagalog" labels
-               instead of the 2-letter short form — so it needs its own row
-               (row 2) together with the offline/online pill, rather than
-               sharing row 2 with the icon buttons.
+            /* ---- Mobile header, single row ----
+               The header carried two rows on phones only because the
+               language toggle needed somewhere to live: row 1 was
+               [hamburger][title][bell][fullscreen] and row 2 was the
+               offline pill plus the English/Tagalog buttons. That toggle
+               now sits in the survey card beside the survey's own title,
+               and the offline pill has joined the right-hand zone, so one
+               row holds everything again:
 
-                 Row 1: [hamburger]  [title, truncates]  [bell][fullscreen]
-                 Row 2: [Offline pill]  ...space-between...  [English][Tagalog]
+                 [hamburger]   [logo + CQA Client Portal]   [pill][bell][fs]
 
-               .topbar-icon-group is a direct topbar child now (see markup)
-               so it's a normal row-1 flex item and is NEVER pushed to row 2
-               by anything here. .topbar-row2 (also a direct topbar child,
-               wrapping the offline pill + language toggle) is what gets
-               forced onto its own line via flex-basis:100%. */
-            /* Measured via real browser render (headless Chromium), not
-               hand-calculated — the language toggle's full-word buttons on
-               row 2 make this taller than a first-pass estimate suggested. */
-            /* --topbar-h recomputed empirically (Playwright, 375px, real
-               rendered .topbar rect) after the title/subtitle type scale
-               below was brought UP into the 18-20px/12-14px target range
-               (was 0.9rem/0.6rem — under the target, not over it): measured
-               ~113-114px even after the padding/row-gap trims below, since
-               the bigger two-line title (18px + 12.8px subtitle, each with
-               their own line-height) costs more than the trimmed padding
-               saves. Down slightly from the previous 106px's actual (was
-               under-measured before this pass) — kept at a real measured
-               value rather than guessed, since var(--topbar-h) drives sticky
-               offsets (.review-doc-header, notif panel, scroll-margin-top)
-               that break if it doesn't match the true rendered height. */
-            /* Density pass: was 114px (two-line title block at 18px/12.8px
-               with default 1.5 line-height taller than the 40px row-1
-               buttons, plus a full 36px-button language row) — well past
-               the 56-64px (row 1) + ~42-46px (row 2) targets. Tightened
-               line-heights so the title block no longer out-grows the
-               buttons, shrunk row-1 buttons to 38px, and tightened the
-               language row below — recomputed total. */
-            :root { --topbar-h: 98px; }
+               Height is now set by the 44px brand logo rather than by a
+               wrapped second row: 44px + 0.4rem padding top and bottom
+               (12.8px) = ~57px, rounded up to 62px for the pill's line-box
+               and sub-pixel rounding. This is a calculated value, not one
+               measured in a real browser like the 98px it replaces — it is
+               deliberately rounded UP, because every consumer of
+               --topbar-h (sticky offsets, scroll-margin-top, the
+               notification panel's top) degrades gracefully into a little
+               extra clearance if it is high, and tucks content underneath
+               the header if it is low. */
+            :root { --topbar-h: 62px; }
             .topbar {
-                flex-wrap: wrap;
-                align-content: flex-start;
-                padding: 0.4rem 0.65rem 0.4rem;
-                row-gap: 0.25rem;
+                flex-wrap: nowrap;
+                padding: 0.4rem 0.65rem;
                 column-gap: 0.4rem;
             }
 
             /* Row 1 items — 38px keeps row-1 icon buttons within the 36-40px
                target while still comfortably tappable. */
             .topbar-hamburger { width: 38px; height: 38px; font-size: 1.15rem; }
-            .topbar-title {
-                min-width: 0; flex: 1 1 auto; font-size: 1.1rem; line-height: 1.2;
-                white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-            }
-            .topbar-title small {
-                font-size: 0.75rem; line-height: 1.2; margin-top: 0.05rem;
-                white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-            }
+            /* Same two text lines as before at the same sizes, so the
+               measured --topbar-h above still holds; the logo is sized to
+               the 38px row-1 buttons beside it so it can't grow the row. */
+            .topbar-brand { min-width: 0; flex: 1 1 auto; gap: 0.5rem; }
+            .topbar-brand-logo-wrap { width: 36px; height: 36px; }
+            .topbar-brand-text .t1 { font-size: 1.05rem; line-height: 1.2; }
+            .topbar-brand-text .t2 { font-size: 0.75rem; line-height: 1.2; margin-top: 0.05rem; }
             .topbar-icon-group { gap: 0.4rem; flex-shrink: 0; }
             .topbar-icon-group .btn-fullscreen { width: 38px; height: 38px; font-size: 1.15rem; }
 
-            /* Row 2: .topbar-row2 stops being display:contents and becomes
-               the full-width second row itself, splitting its two (each
-               independently optional) children to opposite ends.
-               Language toggle now leads (order:-1) on the LEFT, under the
-               title — the offline pill (only ever shown while genuinely
-               offline) takes whatever's left via margin-left:auto, so it
-               still reads as the right-side item on the rare occasion both
-               are visible at once, without needing its own flex order
-               rule. Neither child depends on the other being present:
-               .lang-toggle-group's own margin-left:0/justify-content:
-               flex-start (below) is what actually pins it left when it's
-               the row's only visible child, which is the common case. */
-            .topbar-row2 {
-                display: flex; flex-basis: 100%; width: 100%;
-                align-items: center; justify-content: flex-start;
-                gap: 0.4rem;
-            }
-            .offline-pill.is-visible { flex: 0 0 auto; padding: 0.25rem 0.55rem; font-size: 0.68rem; margin-left: auto; }
+            /* The offline pill is a right-zone item now (it used to be the
+               other half of the removed second row). Kept compact so it,
+               the bell and the fullscreen button all fit beside the brand
+               on a 360px screen. */
+            .offline-pill.is-visible { flex: 0 0 auto; padding: 0.25rem 0.55rem; font-size: 0.68rem; }
 
-            /* Full "English"/"Tagalog" words now shown at every width (the
-               .lang-btn-short/.lang-btn-full swap below is removed) — row 2
-               has the full topbar width available, so abbreviating to
-               "EN"/"TL" is no longer necessary. Moved to the LEFT (was
-               right, via margin-left:auto) so it reads as associated with
-               the page title/content area instead of sitting far from it
-               next to the offline pill. */
-            .lang-toggle-group {
-                order: -1;
-                flex: 0 0 auto;
-                margin-left: 0;
-                justify-content: flex-start;
-                padding: 0.15rem; gap: 0.25rem;
-                border-radius: 18px;
-                box-shadow: none;
-            }
-            /* Container height target 34-38px, button 32-36px: base desktop
-               rule (border-radius:50px, padding:0.35rem 0.9rem) reads as an
-               oversized "pill" once wrapped in this compact row-2 — capped
-               the radius and re-tuned padding/min-height to land in range.
-               Bootstrap's own shadow-sm on these buttons is neutralized too
-               (much lighter shadow requirement — none reads cleanest here). */
-            .lang-toggle-group .btn {
-                padding: 0.32rem 0.9rem; font-size: 0.88rem; min-height: 34px;
-                border-radius: 18px !important;
-                box-shadow: none !important;
-            }
+            /* Language switch at phone size: the track keeps a 28px knob and
+               a 44px-tall tap area is provided by the row it sits in, so it
+               stays comfortably tappable while taking less width next to a
+               wrapped survey title. */
+            .lang-switch { gap: 0.4rem; }
+            .lang-switch-label { font-size: 0.8rem; }
+            .lang-switch-track { width: 60px; height: 30px; }
+            .lang-switch-knob { width: 24px; height: 24px; top: 3px; left: 3px; }
+            .lang-switch-track[aria-checked="true"] .lang-switch-knob { transform: translateX(30px); }
 
             /* Client Profile header + Autofill switch: stay a single row
                (title left, switch right) at every width — the earlier
@@ -2659,21 +2725,50 @@
     <div class="main-content">
 
         <header class="topbar">
+            <!-- Three zones, so the brand sits in the TRUE centre of the
+                 header: the two side zones each take flex:1, which makes
+                 them equal regardless of how many buttons are in either,
+                 leaving the brand exactly in the middle. -->
+            <div class="topbar-side topbar-side-start">
             <button type="button" class="topbar-hamburger" onclick="toggleSidebar()" aria-label="Toggle menu">
                 <i class="bi bi-list"></i>
             </button>
             <button type="button" id="btn-sidebar-collapse" class="btn-sidebar-toggle" onclick="toggleSidebarCollapse()" title="Collapse sidebar — focus on the survey" aria-label="Collapse sidebar">
                 <i class="bi bi-list"></i>
             </button>
-            <div class="topbar-title">
-                Home
-                <small data-i18n="gov_rep">Republic of the Philippines</small>
             </div>
-            <!-- Notification bell + fullscreen: a direct topbar child (not nested
-                 inside topbar-row2 below) so it ALWAYS stays on row 1, to the
-                 right of the title — on every width, including mobile. This is
-                 the one group that must never drop to a second row. -->
-            <div class="topbar-icon-group">
+            <!-- Identical identity to the sidebar's header, on every view and
+                 every device — the header states WHERE YOU ARE (the portal),
+                 the view's own card states WHAT YOU'RE LOOKING AT. The view
+                 name used to live here and changed on every switch; it is now
+                 .view-page-title inside each view. -->
+            <div class="topbar-brand">
+                <div class="topbar-brand-logo-wrap">
+                    <img src="/images/cspc-logo.png" alt="CSPC Logo">
+                </div>
+                <div class="topbar-brand-text">
+                    <!-- Same line, two spellings of the same name: desktop has
+                         the room to say "Center for Quality Assurance" in full,
+                         a phone header does not, so it keeps the acronym the
+                         office is known by. Both are in the markup and CSS
+                         picks one, so there is no JS, no flash of the wrong
+                         one on load, and it re-picks on a rotate or resize. -->
+                    <div class="t1">
+                        <span class="brand-cqa-full">Center for Quality Assurance</span><span class="brand-cqa-short">CQA</span> Client Portal
+                    </div>
+                    <div class="t2">CSPC Nabua, Cam. Sur</div>
+                </div>
+            </div>
+            <!-- Right-hand zone: the offline pill now lives in here with the
+                 bell + fullscreen, so the header is a single row at every
+                 width. It used to sit in a .topbar-row2 wrapper that became
+                 a real second row on phones, together with the language
+                 toggle — and that toggle has moved into the survey card
+                 itself, leaving nothing that needs a second row. -->
+            <div class="topbar-icon-group topbar-side topbar-side-end">
+                <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — your answers are saved on this device and will sync automatically once you're back online.">
+                    <span class="dot"></span><span class="label"><span class="label-full">Viewing </span>Offline</span>
+                </span>
                 <% if (!offlineMode) { %>
                 <!-- Authenticated only — an anonymous /survey-offline visitor has no
                      account session to fetch notifications for. -->
@@ -2721,26 +2816,6 @@
                     <i class="bi bi-arrows-fullscreen"></i>
                 </button>
             </div>
-            <!-- Offline status + language toggle: on desktop this behaves exactly
-                 like a normal topbar item (display:contents — see CSS), same as
-                 before. On mobile (≤576px) it becomes a real second row, since
-                 neither of these belongs next to the bell/fullscreen anymore —
-                 see the ≤576px topbar rules. Either child can independently be
-                 hidden (offline pill only shown while offline; language toggle
-                 only shown on the survey view) without leaving a lopsided row. -->
-            <div class="topbar-row2">
-                <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — your answers are saved on this device and will sync automatically once you're back online.">
-                    <span class="dot"></span><span class="label"><span class="label-full">Viewing </span>Offline</span>
-                </span>
-                <div class="lang-toggle-group d-none" id="lang-toggle-group">
-                    <button id="btn-en" type="button" onclick="setLanguage('en')" class="btn btn-primary btn-sm fw-semibold shadow-sm" aria-label="English" title="English">
-                        <span class="lang-btn-full">English</span><span class="lang-btn-short">EN</span>
-                    </button>
-                    <button id="btn-tl" type="button" onclick="setLanguage('tl')" class="btn bg-transparent border btn-sm fw-semibold shadow-sm text-body" aria-label="Tagalog" title="Tagalog">
-                        <span class="lang-btn-full">Tagalog</span><span class="lang-btn-short">TL</span>
-                    </button>
-                </div>
-            </div>
         </header>
 
         <div class="content-body">
@@ -2749,6 +2824,13 @@
         <div class="app-view active" id="view-home">
         <div class="card border-0 view-card home-card">
         <div class="card-body p-4 p-md-5">
+
+            <div class="view-page-title">
+                <span class="vpt-icon"><i class="bi bi-house-door-fill"></i></span>
+                <div class="vpt-text">
+                    <h1 class="vpt-name">Home</h1>
+                </div>
+            </div>
 
             <div class="home-hero text-center mb-5">
                 <div class="brand-intro">
@@ -2798,6 +2880,46 @@
         <div class="app-view" id="view-survey">
         <div class="card border-0 survey-card">
         <div class="card-body p-4 p-md-5 position-relative">
+
+            <div class="view-page-title">
+                <span class="vpt-icon"><i class="bi bi-clipboard2-check-fill"></i></span>
+                <div class="vpt-text">
+                    <h1 class="vpt-name">Client Satisfaction Survey</h1>
+                </div>
+
+                <!-- Language switch — moved out of the app header and onto this
+                     line, because it only ever affects THIS form's wording. It
+                     now sits where what it changes is: beside the survey's own
+                     title. Being inside the survey view also means it appears
+                     and disappears with that view on its own, with no JS
+                     showing/hiding it per view.
+
+                     One control, not two buttons: a switch reads as "one of
+                     two", which is what a language choice is. The flag in the
+                     track is the language currently in effect, so the control
+                     says which language you are reading in even before you
+                     read the labels; the knob's side says the same thing again
+                     for anyone who can't rely on the flag colours. Flags are
+                     inline SVG, not an icon font or a CDN image, so they still
+                     render with no network — this form is used offline. -->
+                <div class="lang-switch" id="lang-toggle-group">
+                    <span class="lang-switch-label is-active" id="lang-label-en" aria-hidden="true">EN</span>
+                    <button type="button" class="lang-switch-track" id="langSwitchTrack"
+                            role="switch" aria-checked="false"
+                            aria-label="Survey language — English or Tagalog"
+                            title="Switch survey language (English / Tagalog)"
+                            onclick="setLanguage(currentLang === 'en' ? 'tl' : 'en')">
+                        <span class="lang-switch-flag is-en" aria-hidden="true">
+                            <svg viewBox="0 0 60 30" preserveAspectRatio="xMidYMid slice" focusable="false"><defs><clipPath id="langFlagUkClip"><path d="M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z"/></clipPath></defs><path d="M0,0 v30 h60 v-30 z" fill="#012169"/><path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/><path d="M0,0 L60,30 M60,0 L0,30" clip-path="url(#langFlagUkClip)" stroke="#C8102E" stroke-width="4"/><path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/><path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/></svg>
+                        </span>
+                        <span class="lang-switch-flag is-tl" aria-hidden="true">
+                            <svg viewBox="0 0 60 30" preserveAspectRatio="xMidYMid slice" focusable="false"><path d="M0,0 h60 v15 h-60 z" fill="#0038A8"/><path d="M0,15 h60 v15 h-60 z" fill="#CE1126"/><path d="M0,0 L25.98,15 L0,30 Z" fill="#fff"/><circle cx="7.6" cy="15" r="3.1" fill="#FCD116"/><path d="M7.6,8.7 L8.7,13.1 L12.6,10.8 L10.3,14.7 L14.7,15 L10.3,15.3 L12.6,19.2 L8.7,16.9 L7.6,21.3 L6.5,16.9 L2.6,19.2 L4.9,15.3 L0.5,15 L4.9,14.7 L2.6,10.8 L6.5,13.1 Z" fill="#FCD116"/><path d="M3.20,2.00L3.56,3.11L4.72,3.11L3.78,3.79L4.14,4.89L3.20,4.21L2.26,4.89L2.62,3.79L1.68,3.11L2.84,3.11Z" fill="#FCD116"/><path d="M3.20,24.80L3.56,25.91L4.72,25.91L3.78,26.59L4.14,27.69L3.20,27.01L2.26,27.69L2.62,26.59L1.68,25.91L2.84,25.91Z" fill="#FCD116"/><path d="M21.40,13.40L21.76,14.51L22.92,14.51L21.98,15.19L22.34,16.29L21.40,15.61L20.46,16.29L20.82,15.19L19.88,14.51L21.04,14.51Z" fill="#FCD116"/></svg>
+                        </span>
+                        <span class="lang-switch-knob"></span>
+                    </button>
+                    <span class="lang-switch-label" id="lang-label-tl" aria-hidden="true">TL</span>
+                </div>
+            </div>
 
             <div class="survey-hero text-center mb-5">
                 <div class="survey-hero-logo-wrap">
@@ -3290,14 +3412,25 @@
             <div class="card border-0 view-card profile-view-card">
                 <div class="card-body p-0">
 
+                    <!-- The card body is p-0 (the hero below runs edge to edge),
+                         so this one strip carries its own horizontal padding. -->
+                    <div class="view-page-title px-4 pt-4 px-md-5 pt-md-4 mb-0">
+                        <span class="vpt-icon"><i class="bi bi-person-fill"></i></span>
+                        <div class="vpt-text">
+                            <h1 class="vpt-name">My Profile</h1>
+                        </div>
+                    </div>
+
                     <!-- Centered, portrait-style hero. The old layout was a small
-                         60px avatar beside an <h3>My Profile</h3> — but the app
-                         header already renders "My Profile" as this view's title
-                         (VIEW_TITLES.profile), so that heading was the same words
-                         twice on one screen. The avatar now carries the top of the
-                         card on its own, and the identity underneath it (the
+                         60px avatar beside an <h3>My Profile</h3> — dropped back
+                         then because the app header was rendering "My Profile" as
+                         this view's title, making it the same words twice. The
+                         title now lives in this card (the strip above) and the
+                         header carries the portal's identity instead, so there is
+                         still exactly one "My Profile" on screen. The avatar
+                         carries the hero, and the identity underneath it (the
                          person's actual name and email) is the part that isn't
-                         already stated anywhere else on the page. -->
+                         stated anywhere else on the page. -->
                     <div class="profile-hero">
                         <div class="profile-hero-avatar" id="pf-avatar"><i class="bi bi-person-fill"></i></div>
                         <div class="profile-hero-text">
@@ -3455,10 +3588,16 @@
         <div class="app-view" id="view-history">
             <div class="card border-0 view-card">
                 <div class="card-body p-4 p-md-5">
-                    <div class="view-header">
-                        <div class="view-icon"><i class="bi bi-clock-history"></i></div>
-                        <h3 class="fw-semibold text-heading mb-1">Survey History</h3>
-                        <p class="text-secondary mb-0">Every satisfaction survey you've completed so far.</p>
+                    <!-- Was a centered .view-header block with the same icon,
+                         title and line. Switched to the shared strip so all four
+                         views label themselves the same way; nothing was lost —
+                         the subtitle is the strip's optional second line. -->
+                    <div class="view-page-title">
+                        <span class="vpt-icon"><i class="bi bi-clock-history"></i></span>
+                        <div class="vpt-text">
+                            <h1 class="vpt-name">Survey History</h1>
+                            <p class="vpt-sub">Every satisfaction survey you've completed so far.</p>
+                        </div>
                     </div>
 
                     <div id="historyLoading" class="spinner-block">
@@ -5294,16 +5433,21 @@ function switchView(view) {
     const navLink = document.querySelector(`.sidebar-nav .nav-item-link[data-view="${view}"]`);
     if (navLink) navLink.classList.add('active');
 
-    const titleEl = document.querySelector('.topbar-title');
-    if (titleEl && titleEl.firstChild) titleEl.firstChild.textContent = (VIEW_TITLES[view] || '') + ' ';
+    // The header no longer renames itself per view — it carries the portal's
+    // identity, the same one the sidebar header shows, and each view states
+    // its own name inside its card (.view-page-title). The view name still
+    // goes somewhere useful: the browser tab/history entry, which is where a
+    // per-view name actually helps once several tabs are open.
+    const viewTitle = VIEW_TITLES[view] || '';
+    document.title = viewTitle ? viewTitle + ' — CQA Client Portal' : 'CQA Client Portal';
 
     if (view === 'profile' && !profileLoaded) loadProfileView();
     if (view === 'history' && !historyLoaded) loadHistoryView();
 
-    // The English/Tagalog toggle only affects the Take Survey form's wording,
-    // so only show it while that view is active.
-    const langToggle = document.getElementById('lang-toggle-group');
-    if (langToggle) langToggle.classList.toggle('d-none', view !== 'survey');
+    // (The English/Tagalog switch used to be shown/hidden from here, back
+    // when it lived in the app header and had to be suppressed on every
+    // view but this one. It now sits inside the survey card itself, so it
+    // comes and goes with that view and needs no handling here.)
 
     // Auto-hide the sidebar while taking the survey (topbar stays visible);
     // auto-restore it on Profile/History. Desktop-only persistent-collapse
@@ -6824,8 +6968,17 @@ function updateTranslations() {
 
 function setLanguage(lang) {
     currentLang = lang;
-    document.getElementById('btn-en').className = lang === 'en' ? 'btn btn-primary btn-sm fw-semibold shadow-sm' : 'btn bg-transparent border btn-sm fw-semibold shadow-sm text-body';
-    document.getElementById('btn-tl').className = lang === 'tl' ? 'btn btn-primary btn-sm fw-semibold shadow-sm' : 'btn bg-transparent border btn-sm fw-semibold shadow-sm text-body';
+    // The switch renders entirely from aria-checked (knob position, which
+    // flag is visible) — the state a screen reader reads IS the state the
+    // CSS draws, so the two can't drift apart. The labels either side are
+    // aria-hidden: the switch's own aria-label names the control, and
+    // announcing a stray "EN"/"TL" beside it would only repeat it.
+    const track = document.getElementById('langSwitchTrack');
+    if (track) track.setAttribute('aria-checked', lang === 'tl' ? 'true' : 'false');
+    const enLabel = document.getElementById('lang-label-en');
+    const tlLabel = document.getElementById('lang-label-tl');
+    if (enLabel) enLabel.classList.toggle('is-active', lang === 'en');
+    if (tlLabel) tlLabel.classList.toggle('is-active', lang === 'tl');
     updateTranslations();
     renderSQD();
     renderTermsPoints();
