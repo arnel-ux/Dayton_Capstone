@@ -268,7 +268,9 @@ document.addEventListener("DOMContentLoaded", function() {
             profilePreview.src = data.url + '?t=' + Date.now();
         } catch (err) {
             console.error('Error uploading profile photo:', err);
-            AppAlert.error('Network error while uploading photo.');
+            // fromError picks the offline wording when the device is
+            // actually offline, instead of blaming the server for it.
+            AppAlert.fromError(err, 'Could not upload your photo. Please try again.');
         } finally {
             btnChangePhoto.disabled = false;
             btnChangePhoto.innerHTML = originalBtnHtml;

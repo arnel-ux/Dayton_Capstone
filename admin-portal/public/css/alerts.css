@@ -58,7 +58,28 @@ html[data-bs-theme="dark"] {
    Fluid sizing: never wider than 92% of the viewport, never wider than
    30rem, so on a phone it lands at ~330-390px instead of overflowing.
    --------------------------------------------------------------------- */
-.swal2-container { padding: 1rem; }
+/* An alert is, by definition, the topmost thing on screen — it is asking a
+   question that blocks whatever is underneath. SweetAlert2 ships with
+   z-index 1060, which is only just above a Bootstrap modal (1055) and BELOW
+   several of this app's own overlays:
+
+     9999  dashboard.ejs   .modal-report-overlay (report preview)
+     2000  client-survey   .offline-transition-overlay ("You're Offline")
+     1100  sidebar.ejs     the account flyout menu
+     1080  theme-toggle    the floating theme button
+
+   The offline overlay was the visible breakage: its "Back to Dashboard" /
+   "Go to Offline Survey" / "Login" buttons call confirmLeaveOfflineSurvey(),
+   which preventDefault()s the link and waits on AppAlert.confirm. That
+   confirm opened at 1060 — behind an opaque, blurred 2000 backdrop — so the
+   dialog was invisible, the click appeared to do nothing at all, and the
+   navigation never ran because nothing could ever answer the prompt.
+
+   20000 matches .appalert-fallback-container below, so the SweetAlert2 and
+   fallback engines stack identically. Anything in this app that must appear
+   ABOVE an alert would be a bug, so nothing should ever be given a higher
+   value than this. */
+.swal2-container { padding: 1rem; z-index: 20000; }
 .swal2-container.swal2-backdrop-show { background: var(--alert-backdrop); }
 
 .swal2-popup {

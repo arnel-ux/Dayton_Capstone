@@ -420,6 +420,23 @@
             window.history.replaceState({}, document.title, window.location.pathname);
         }
 
+        // Semantic session states, mirroring login.ejs's STATUS_MESSAGES so
+        // the office side explains itself the same way the admin/client side
+        // does. Before this, '/office-logout' redirected to '/login' and an
+        // office user got no confirmation here at all — and being bounced
+        // here by ensureOfficeAuth said nothing about why.
+        const officeLoginStatus = officeLoginParams.get('status');
+        const OFFICE_STATUS_MESSAGES = {
+            logged_out: { type: 'success', title: 'Logged Out', text: 'You have been logged out successfully.' },
+            session_expired: { type: 'warning', title: 'Session Expired', text: 'Your session has expired. Please log in again.' },
+            login_required: { type: 'info', title: 'Login Required', text: 'Please log in to your office account to continue.' }
+        };
+        if (officeLoginStatus && OFFICE_STATUS_MESSAGES[officeLoginStatus]) {
+            const s = OFFICE_STATUS_MESSAGES[officeLoginStatus];
+            AppAlert.toast(s.type, s.text, { title: s.title });
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+
         // "Viewing offline" pill — same pattern as index.ejs/login.ejs.
         function updateOfflineIndicator() {
             const pill = document.getElementById('offlineIndicator');

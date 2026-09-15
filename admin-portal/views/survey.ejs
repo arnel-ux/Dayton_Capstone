@@ -413,7 +413,10 @@
             }
         } catch(err) {
             console.error(err);
-            await AppAlert.error("Database Error.");
+            // "Database Error." was wrong twice over: the request never
+            // reached the database (it never left the browser), and offline
+            // it blamed the server for the user's own lost connection.
+            await AppAlert.fromError(err, "Hindi na-save ang pagbabago. Pakisubukan ulit.");
         }
     }
 
@@ -440,7 +443,10 @@
             }
         } catch(err) {
             console.error(err);
-            await AppAlert.error("Database Error.");
+            // "Database Error." was wrong twice over: the request never
+            // reached the database (it never left the browser), and offline
+            // it blamed the server for the user's own lost connection.
+            await AppAlert.fromError(err, "Hindi na-save ang pagbabago. Pakisubukan ulit.");
         }
     }
 
@@ -467,7 +473,10 @@
             }
         } catch(err) {
             console.error(err);
-            await AppAlert.error("Database Error.");
+            // "Database Error." was wrong twice over: the request never
+            // reached the database (it never left the browser), and offline
+            // it blamed the server for the user's own lost connection.
+            await AppAlert.fromError(err, "Hindi na-save ang pagbabago. Pakisubukan ulit.");
         }
     }
 </script>

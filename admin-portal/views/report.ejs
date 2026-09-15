@@ -321,7 +321,7 @@
 
         } catch (err) {
             console.error("Error generating report:", err);
-            AppAlert.error("Failed to fetch report data.");
+            AppAlert.fromError(err, "Could not load the report data. Please try again.");
         }
     }
 

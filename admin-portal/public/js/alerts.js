@@ -370,12 +370,23 @@ const AppAlert = {
         return this.toast('warning', message, { title, autoClose: false });
     },
 
-    // Call from a catch block around any fetch(). Picks the offline
-    // wording or the server-error wording automatically, so no caller has
-    // to re-implement that check.
+    // Call from a catch block around any fetch(). Picks the offline wording
+    // or the server-error wording automatically, so no caller has to
+    // re-implement that check.
+    //
+    // Deliberately does NOT surface err.message by default: a fetch() that
+    // fails because the network died rejects with a TypeError whose message
+    // is "Failed to fetch" / "NetworkError when attempting to fetch
+    // resource" — browser-internal wording that means nothing to a survey
+    // respondent. The caller's own fallbackMessage describes what the user
+    // was actually trying to do, so that wins. An error carrying an
+    // explicit `userMessage` (set by us, already user-facing) is preferred
+    // over both.
     fromError(err, fallbackMessage = 'Something went wrong. Please try again.') {
-        if (!this.isOnline) return this.offline();
-        const message = (err && err.message) ? err.message : fallbackMessage;
+        if (!this.isOnline) {
+            return this.offline('You appear to be offline, so this could not be saved. Please check your connection and try again.');
+        }
+        const message = (err && err.userMessage) ? err.userMessage : fallbackMessage;
         return this.toast('error', message, { autoClose: false });
     },
 

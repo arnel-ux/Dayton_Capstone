@@ -3658,17 +3658,21 @@
                  nothing to "restore" here; the autosave below only matters
                  for a refresh/reopen while this stays hidden. -->
             <button type="button" id="continueSurveyBtn" class="btn btn-primary fw-semibold" onclick="dismissOfflineTransitionForContinue()" hidden>Continue Survey</button>
-            <!-- Reuses confirmLeaveOfflineSurvey (already defined below, and
-                 already used by /survey-offline's own equivalent choices) —
-                 it warns before navigating away if the survey form has
-                 unsaved progress, otherwise just navigates. None of these
-                 three destinations require a live session: '/' and
-                 '/survey-offline' are both precached by the service worker
-                 for exactly this situation, and '/login' works offline too
-                 (it just can't complete a sign-in without connectivity). -->
-            <a href="/" class="btn btn-outline-primary fw-semibold" onclick="return confirmLeaveOfflineSurvey('/', event);">Back to Dashboard</a>
-            <a href="/survey-offline" id="offlineTransitionGoOfflineSurveyBtn" class="btn btn-primary fw-semibold" onclick="return confirmLeaveOfflineSurvey('/survey-offline', event);">Go to Offline Survey</a>
-            <a href="/login" class="btn btn-outline-secondary fw-semibold" onclick="return confirmLeaveOfflineSurvey('/login', event);">Login</a>
+            <!-- leaveFromOfflineOverlay (defined below), NOT the general
+                 confirmLeaveOfflineSurvey: these three go straight to their
+                 destination with no extra prompt. showOfflineTransition()
+                 has already run autosaveActiveSurveyDraftNow() before this
+                 overlay was ever shown, which is exactly what the green note
+                 above promises — so asking "this may discard the unfinished
+                 form" here contradicted that note and was simply untrue.
+                 None of these three destinations require a live session:
+                 '/' and '/survey-offline' are both precached by the service
+                 worker for exactly this situation, and '/login' works
+                 offline too (it just can't complete a sign-in without
+                 connectivity). -->
+            <a href="/" class="btn btn-outline-primary fw-semibold" onclick="return leaveFromOfflineOverlay('/', event);">Back to Dashboard</a>
+            <a href="/survey-offline" id="offlineTransitionGoOfflineSurveyBtn" class="btn btn-primary fw-semibold" onclick="return leaveFromOfflineOverlay('/survey-offline', event);">Go to Offline Survey</a>
+            <a href="/login" class="btn btn-outline-secondary fw-semibold" onclick="return leaveFromOfflineOverlay('/login', event);">Login</a>
         </div>
     </div>
 </div>
@@ -4882,20 +4886,50 @@ function hasUnsavedSurveyProgress() {
 function confirmLeaveOfflineSurvey(url, event) {
     if (event) event.preventDefault();
     (async () => {
-        if (hasUnsavedSurveyProgress()) {
-            let confirmed;
-            if (window.AppAlert && typeof AppAlert.confirm === 'function') {
-                confirmed = await AppAlert.confirm(
-                    'You have unfinished survey information. Leaving this page may discard the unfinished form.',
-                    { title: 'Leave Offline Survey?', confirmText: 'Leave' }
-                );
-            } else {
-                confirmed = window.confirm('You have unfinished survey information. Leaving this page may discard the unfinished form.');
+        try {
+            if (hasUnsavedSurveyProgress()) {
+                let confirmed;
+                if (window.AppAlert && typeof AppAlert.confirm === 'function') {
+                    confirmed = await AppAlert.confirm(
+                        'You have unfinished survey information. Leaving this page may discard the unfinished form.',
+                        { title: 'Leave Offline Survey?', confirmText: 'Leave' }
+                    );
+                } else {
+                    confirmed = window.confirm('You have unfinished survey information. Leaving this page may discard the unfinished form.');
+                }
+                if (!confirmed) return;
             }
-            if (!confirmed) return;
+        } catch (err) {
+            // The click already had its default navigation cancelled above,
+            // so a throw anywhere in the prompt would leave the user on a
+            // dead button with no way forward and nothing on screen. Failing
+            // open (navigating anyway) is the safe direction here: the draft
+            // is autosaved to IndexedDB either way.
+            console.error('[Offline Nav] Leave confirmation failed, navigating anyway:', err);
         }
         window.location.href = url;
     })();
+    return false;
+}
+
+// The "You're Offline" overlay's own navigation (Back to Dashboard / Go to
+// Offline Survey / Login). Separate from confirmLeaveOfflineSurvey above on
+// purpose: by the time that overlay is on screen, showOfflineTransition()
+// has ALREADY autosaved the in-progress draft, so there is nothing left to
+// warn about and the user has already made their choice by picking one of
+// four clearly-labelled buttons. Adding a second prompt on top of that both
+// contradicted the overlay's own "your progress has been saved" note and —
+// because the confirm rendered underneath the overlay's own backdrop — made
+// these buttons look completely dead.
+function leaveFromOfflineOverlay(url, event) {
+    if (event) event.preventDefault();
+    // Defensive re-save: cheap, idempotent, and guarantees the very latest
+    // answers are on disk even if something was typed between the overlay
+    // opening and this click.
+    try { autosaveActiveSurveyDraftNow(); } catch (err) {
+        console.error('[Offline Nav] Draft autosave before leaving failed:', err);
+    }
+    window.location.href = url;
     return false;
 }
 

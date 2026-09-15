@@ -872,7 +872,10 @@ function ensureOfficeAuth(req, res, next) {
     if (req.is('application/json') || req.xhr) {
         return res.status(401).json({ success: false, message: "Please log in as your office first." });
     }
-    return res.redirect(302, '/office-login');
+    // status=login_required so the office login page can say WHY it is
+    // asking, the same way '/login' does for the admin/client flows —
+    // an unexplained bounce back to a login form reads as a failure.
+    return res.redirect(302, '/office-login?status=login_required');
 }
 
 // Tells the browser (and any proxy/CDN in front of it) to never cache a restricted
@@ -3327,8 +3330,16 @@ app.post('/office-login', loginRateLimiter('/office-login'), (req, res) => {
 });
 
 app.get('/office-logout', noCache, (req, res) => {
+    // Back to the OFFICE login page, not '/login' (the admin/client one).
+    // ensureOfficeAuth sends an unauthenticated office visitor to
+    // '/office-login', so logging out has to land in the same place — it
+    // used to drop office staff on the admin login form, which cannot
+    // accept their credentials at all. status=logged_out gives them the
+    // same "You have been logged out successfully" confirmation the admin
+    // and client flows get from '/logout' below.
+    const hadSession = !!(req.adminSession && req.adminSession.user && req.adminSession.user.type === 'office');
     destroyAdminSession(req, res);
-    res.redirect('/login');
+    res.redirect(302, hadSession ? '/office-login?status=logged_out' : '/office-login');
 });
 
 // Approval/decline history count only — used to show a badge on the sidebar's

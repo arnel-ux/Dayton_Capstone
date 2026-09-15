@@ -30,7 +30,7 @@
             <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#adminLogsModal"><i class="fas fa-history fa-sm me-2 text-muted"></i> Admin Logs</a></li>
 
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item text-danger" href="/logout?scope=admin"><i class="fas fa-sign-out-alt fa-sm me-2"></i> Logout</a></li>
+            <li><a class="dropdown-item text-danger" href="/logout?scope=admin" id="adminLogoutBtn"><i class="fas fa-sign-out-alt fa-sm me-2"></i> Logout</a></li>
         </ul>
     </div>
 </nav>
@@ -146,4 +146,31 @@
         downloadLink.click();
         document.body.removeChild(downloadLink);
     }
+
+    // Confirm before logging an admin out. This was the only one of the
+    // app's three logout buttons with NO confirmation — the office panel
+    // (office-approvals/office-history) and the client survey both ask
+    // first, so a single stray click in this dropdown ended an admin's
+    // session outright while the same click elsewhere did not.
+    //
+    // Bound on DOMContentLoaded because this partial is rendered in the
+    // body but alerts.js is loaded by layout/footer.ejs further down, so
+    // AppAlert does not exist yet at parse time. The link keeps its real
+    // href, so if this script never runs the button still works — it just
+    // logs out without asking, exactly as it did before.
+    document.addEventListener('DOMContentLoaded', function () {
+        var adminLogoutBtn = document.getElementById('adminLogoutBtn');
+        if (!adminLogoutBtn || !window.AppAlert) return;
+        adminLogoutBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            var href = adminLogoutBtn.getAttribute('href');
+            AppAlert.confirm('Are you sure you want to logout?', {
+                title: 'Logout?',
+                confirmText: 'Yes, logout',
+                danger: false
+            }).then(function (confirmed) {
+                if (confirmed) window.location.href = href;
+            });
+        });
+    });
 </script>
