@@ -354,6 +354,14 @@
     .sidebar-backdrop { display: none !important; }
     .topbar-hamburger { display: none; }
     .sidebar-close-btn { display: none; }
+
+    /* The whole page is pushed right by the sidebar here, but the floating
+       offline chip is position:fixed and was centring on the VIEWPORT — so it
+       came out half a sidebar (136px) to the left of the header it is meant to
+       hang under, clearly off-centre against everything around it. Half the
+       sidebar width puts it back over the middle of the content column.
+       /css/offline-pill.css reads this. */
+    :root { --offline-pill-shift: calc(var(--office-sidebar-w) / 2); }
 }
 
 /* ---- Phones ------------------------------------------------------------- */

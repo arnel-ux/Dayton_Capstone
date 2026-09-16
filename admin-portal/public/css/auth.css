@@ -105,9 +105,19 @@ html, body {
        5rem bottom reserve it pushed the card past the bottom edge, which is
        what forced these pages to scroll. Both ends pulled in. */
     padding-top: clamp(0.5rem, 1.8vh, 1.25rem);
-    /* Only enough to clear the floating home button (3rem tall, 1.25rem from
-       the bottom) instead of a flat 5rem. */
-    padding-bottom: calc(3.25rem + env(safe-area-inset-bottom));
+    /* Clearance for the floating home button, and NOTHING more. The button is
+       position: fixed, so it is not in this column and cannot push the card off
+       it — this reserve is the only thing keeping the two apart, which is why it
+       is derived from the button's own measurements rather than typed in as a
+       round number beside them. It used to be: every tier had a hand-picked
+       padding-bottom that had drifted away from the button size in the same
+       tier, all four of them short (this one by 16px, the three short-desktop
+       tiers by 5-8px each), so at 1440x820 the card finished 5px BELOW the top
+       of the button and sat on it. --auth-foot is now set wherever .btn-home is
+       resized, right next to it, and it is always height + offset + a little
+       air. */
+    --auth-foot: calc(3rem + 1.25rem + 0.35rem);
+    padding-bottom: calc(var(--auth-foot) + env(safe-area-inset-bottom));
     z-index: 1;
     /* Safety fallback ONLY: on a normal phone portrait viewport the content
        now fits and this never engages. It stays `auto` (not `hidden`) so a
@@ -116,6 +126,60 @@ html, body {
        off with no way back. */
     overflow-y: auto;
     overscroll-behavior: contain;
+}
+
+/* ---------- The drop ----------
+   How far down the screen the [hero + card] column starts.
+
+   The column was pinned hard to the top of the viewport, which is right on a
+   viewport with nothing to spare and wrong on every other one: on a 1080p
+   desktop the card finished around two thirds of the way down and left a band
+   of empty backdrop below it roughly a third of the screen tall, so the whole
+   page read as having slid up off centre. A modern phone has the same problem
+   for the same reason — a 412x915 handset has a couple of hundred spare pixels
+   once the compact ladder below has done its work.
+
+   It is a SHRINKABLE SPACER, not padding, and that distinction is the whole
+   design. .header-container and .card-custom are both flex-shrink: 0, so this
+   pseudo-element is the only thing in the column that can give: the moment the
+   content would overflow the fold, the browser takes the space back from here
+   first, down to zero, before anything else is touched. So a generous drop on a
+   roomy screen cannot push the submit button off a cramped one — the file's one
+   rule still holds at every size, with no media query needed to enforce it.
+   The tiers below only set --auth-drop; they never have to prove it fits. */
+.login-wrapper::before {
+    content: "";
+    display: block;
+    width: 0;
+    flex: 0 1 auto;
+    /* max() of the two, and deliberately NOT min-height. min-height is a floor
+       the flex algorithm may not cross, so expressing the offline chip's
+       clearance that way reintroduced the very fault it was meant to replace:
+       on a 1366x650 window the column was pinned 46px down with no room to pin
+       it, and the page scrolled. Folded into the height, the clearance is a
+       preference like the drop itself and the spacer still collapses to zero
+       under real pressure. */
+    height: max(var(--auth-drop, 0px), var(--auth-drop-min, 0px));
+    min-height: 0;
+}
+
+/* Tall desktop / large tablet — the roomiest case and the one that looked most
+   obviously top-heavy. ~9vh lands the column a little above true centre, which
+   is where a sign-in form wants to sit: dead centre reads as slightly low once
+   the home button is counted at the foot. */
+.login-wrapper { --auth-drop: clamp(1.5rem, 9vh, 7.5rem); }
+
+/* The chip is a pop-up and reserves no space, so the column keeps its resting
+   position and only has to get out of the way while the chip is actually up.
+   It asks the spacer for a MINIMUM rather than adding to it, which is the
+   difference between this and the hard padding-top it replaces: that one shifted
+   the column down by its full 3.1rem even where there was no room to give, and
+   on a tall screen it stacked on top of the drop and pushed the card down twice
+   over. Asked as a minimum it does neither — where the drop is already bigger,
+   nothing moves at all, and where nothing fits, it gives way like everything
+   else here. */
+.login-wrapper:has(.offline-pill.is-visible) {
+    --auth-drop-min: calc(2.9rem + env(safe-area-inset-top, 0px));
 }
 
 /* ---------- Entrance animation ---------- */
@@ -590,9 +654,8 @@ html, body {
    extra class for a page's script to remember to set. */
 :root { --offline-pill-top: 0.5rem; }
 
-.login-wrapper:has(.offline-pill.is-visible) {
-    padding-top: calc(3.1rem + env(safe-area-inset-top, 0px));
-}
+/* The clearance itself is the spacer's min-height, next to the drop it has to
+   cooperate with — see .login-wrapper::before near the top of this file. */
 
 /* ---------- In-card notices ----------
    One notice design for every auth page. The legacy per-page class names are
@@ -822,7 +885,14 @@ html, body {
            button that no longer exists. */
         padding-top: calc(0.3rem + env(safe-area-inset-top, 0px));
         /* 2.5rem button + 0.7rem from the edge + a little air. */
-        padding-bottom: calc(3.5rem + env(safe-area-inset-bottom));
+        --auth-foot: calc(2.5rem + 0.7rem + 0.35rem);
+        /* A modern handset (412x915, 393x852) still has a couple of hundred
+           spare pixels once everything below has been trimmed, and the column
+           sat at the very top of all of it. Smaller than the desktop drop
+           because a phone's card is proportionally much taller, and the spacer
+           gives it all back automatically on the phones that have nothing to
+           spare. */
+        --auth-drop: clamp(0.5rem, 9vh, 5.5rem);
     }
     .header-container { margin-bottom: 0.7rem; }
     .main-title { font-size: 1.08rem; margin-bottom: 0.2rem; }
@@ -878,7 +948,14 @@ html, body {
        that keeps the submit button on screen. */
     .field-hint { display: none; }
 
-    .login-wrapper { padding-top: 0.25rem; padding-bottom: calc(3.1rem + env(safe-area-inset-bottom)); }
+    .login-wrapper {
+        padding-top: 0.25rem;
+        --auth-foot: calc(2.2rem + 0.5rem + 0.35rem);
+        /* Barely a nudge: at this size the fold is the whole budget. Kept
+           non-zero only so the column does not sit flush against the very top
+           edge of the screen. */
+        --auth-drop: clamp(0.25rem, 2vh, 1rem);
+    }
     .btn-home { width: 2.2rem; height: 2.2rem; font-size: 0.85rem; bottom: 0.5rem; }
     .header-container { margin-bottom: 0.45rem; }
     .main-title { font-size: 1rem; }
@@ -901,12 +978,14 @@ html, body {
    phone and a short desktop window each keep their subtitle; only this corner
    case gives it up. */
 @media (max-width: 480px) and (max-height: 700px) {
-    .login-wrapper { padding-top: 0.25rem; }
+    .login-wrapper { padding-top: 0.25rem; --auth-drop: clamp(0.25rem, 4vh, 1.75rem); }
     .header-container { margin-bottom: 0.4rem; }
     .sub-title { display: none; }
     .main-title { font-size: 0.95rem; }
     /* The chip's pop-up clearance, tightened to match the smaller hero. */
-    .login-wrapper:has(.offline-pill.is-visible) { padding-top: 2.7rem; }
+    .login-wrapper:has(.offline-pill.is-visible) {
+        --auth-drop-min: calc(2.5rem + env(safe-area-inset-top, 0px));
+    }
 }
 
 /* ==========================================================================
@@ -939,10 +1018,21 @@ html, body {
    without scrolling. */
 @media (min-width: 768px) and (max-height: 700px) {
     .login-wrapper {
-        padding-top: 0.25rem;
-        padding-bottom: calc(2.3rem + env(safe-area-inset-bottom));
+        /* Zero, not 0.25rem: at ~650px of viewport this tier is 4px away from
+           overflowing, and 4px of scroll on the tightest window the file claims
+           to fit is not a rounding error, it is the rule being broken. The top
+           edge is the cheapest place to find it — the hero is centred text, so
+           nothing reads differently for starting 4px higher. */
+        padding-top: 0;
+        /* Same footprint rule as every other tier, but with the air trimmed to
+           the minimum that still reads as a gap rather than a collision, since
+           this is the one tier with nothing spare. */
+        --auth-foot: calc(2.2rem + 0.4rem + 0.25rem);
+        /* The tightest desktop case there is — this tier exists because the
+           card only just fits. Nothing to drop by. */
+        --auth-drop: 0px;
     }
-    .btn-home { width: 2.2rem; height: 2.2rem; font-size: 0.85rem; bottom: 0.45rem; }
+    .btn-home { width: 2.2rem; height: 2.2rem; font-size: 0.85rem; bottom: 0.4rem; }
 
     .header-container { margin-bottom: 0.45rem; }
     .main-title { font-size: 0.92rem; margin-bottom: 0.12rem; }
@@ -967,7 +1057,8 @@ html, body {
 @media (min-width: 768px) and (min-height: 701px) and (max-height: 780px) {
     .login-wrapper {
         padding-top: 0.3rem;
-        padding-bottom: calc(2.6rem + env(safe-area-inset-bottom));
+        --auth-foot: calc(2.5rem + 0.6rem + 0.35rem);
+        --auth-drop: clamp(0px, 2.5vh, 1.25rem);
     }
     .btn-home { width: 2.5rem; height: 2.5rem; font-size: 0.92rem; bottom: 0.6rem; }
 
@@ -997,7 +1088,11 @@ html, body {
 @media (min-width: 768px) and (min-height: 781px) and (max-height: 900px) {
     .login-wrapper {
         padding-top: 0.35rem;
-        padding-bottom: calc(3rem + env(safe-area-inset-bottom));
+        --auth-foot: calc(2.6rem + 0.7rem + 0.35rem);
+        /* Nearly the full desktop rhythm, so nearly the full drop — but capped
+           well under the tall tier's, since this window is up to 140px shorter
+           and the card below is very nearly the same height. */
+        --auth-drop: clamp(0.5rem, 5vh, 3rem);
     }
     .btn-home { width: 2.6rem; height: 2.6rem; font-size: 0.95rem; bottom: 0.7rem; }
 

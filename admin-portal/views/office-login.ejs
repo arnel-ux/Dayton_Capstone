@@ -3,6 +3,12 @@
 <head>
     <%- include('layout/header', { forceLightMode: true }) %>
     <link rel="stylesheet" href="/css/auth.css">
+    <!-- The page renders an .offline-pill below, and this is the stylesheet that
+         makes it one. Without it the chip had no `display: none` to start from,
+         so "Viewing Offline" sat at the top of this page as unstyled black text
+         permanently — online, offline, every visit — and the .is-visible class
+         the script below toggles did nothing at all. -->
+    <link rel="stylesheet" href="/css/offline-pill.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <link rel="stylesheet" href="/css/alerts.css">
 </head>
@@ -11,15 +17,22 @@
     <div class="bg-blurred" style="--auth-hero-image: url('<%- heroImageUrl %>')"></div>
     <div class="bg-overlay"></div>
 
-    <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — signing in needs an internet connection to verify your account.">
-        <span class="dot"></span><span class="label">Viewing Offline</span>
-    </span>
-
     <a href="/" class="btn-home" title="Return to Home Page" aria-label="Return to Home Page">
         <i class="fas fa-home"></i>
     </a>
 
     <div class="login-wrapper">
+
+        <!-- Inside .login-wrapper, exactly as on /login and /client-login. The
+             chip is position:fixed either way, so this is not about where it
+             draws — it is that auth.css keeps the hero clear of the chip with
+             `.login-wrapper:has(.offline-pill.is-visible)`, and :has() only
+             looks at DESCENDANTS. Out here as a sibling of the wrapper it could
+             never match, so this was the one auth page whose title still got
+             sat on. -->
+        <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — signing in needs an internet connection to verify your account.">
+            <span class="dot"></span><span class="label">Viewing Offline</span>
+        </span>
 
         <div class="header-container">
             <h1 class="main-title">Office Of Center For Quality Assurance (CQA)</h1>

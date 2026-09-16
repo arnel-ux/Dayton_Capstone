@@ -282,14 +282,12 @@
         /* The badge's ring punches a hole in whatever it sits on — that is
            the header now, not the page. */
         .topbar .notif-unread-badge { box-shadow: 0 0 0 2px var(--nav-bg-solid); }
-        /* The offline chip's dark-theme palette, applied on the dark header
-           in both themes: the light-mode chip (pale amber fill) was drawn
-           for a white bar. */
-        .topbar .offline-pill {
-            background: rgba(245,158,11,0.16);
-            color: #fbbf24;
-            border-color: rgba(245,158,11,0.35);
-        }
+        /* The old `.topbar .offline-pill` palette override lived here. The chip
+           is a direct child of <body> now (see #offlineIndicator's comment), so
+           that selector could never match again — and if it somehow did, it
+           would repaint the solid amber chip back to the pale fill that was the
+           reason it was moved out of the header in the first place. Removed
+           rather than left to rot. */
         .topbar-hamburger, .btn-sidebar-toggle {
             display: none; align-items: center; justify-content: center;
             width: 40px; height: 40px; border-radius: 11px; border: 1px solid var(--line);
@@ -461,6 +459,19 @@
            not an error state. Only its offset from the top is set here, since
            only this page knows how tall its own header is. */
         :root { --offline-pill-top: calc(var(--topbar-h) + 10px); }
+
+        /* From 992px up the sidebar is permanent and .main-content is pushed
+           right by --sidebar-w, but the chip is position:fixed and was centring
+           on the VIEWPORT — landing half a sidebar to the left of the header it
+           hangs under. Half the sidebar width re-centres it over the column the
+           reader is looking at. When the sidebar is collapsed away the content
+           reclaims the full width, so the shift goes back to zero — keyed off
+           the same .sidebar-collapsed class the toggle already sets, so there is
+           nothing extra for the script to remember. */
+        @media (min-width: 992px) {
+            :root { --offline-pill-shift: calc(var(--sidebar-w) / 2); }
+            body:has(.app-shell.sidebar-collapsed) { --offline-pill-shift: 0px; }
+        }
 
         /* The back-online notice is no longer an inline banner — it reuses
            .offline-transition-overlay/.offline-transition-card below (with

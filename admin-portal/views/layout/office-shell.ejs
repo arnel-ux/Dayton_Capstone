@@ -87,6 +87,13 @@
 
     <div class="sidebar-footer">
         <span class="signed-in-office"><i class="fas fa-building me-1"></i><%= _officeName %></span>
-        <a href="/office-logout" class="btn-logout-side"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        <!-- id is load-bearing: office-approvals.ejs and office-history.ejs both
+             look up #officeLogoutBtn to hang the "Are you sure you want to
+             logout?" confirmation on it. When the three pages' duplicated
+             markup was folded into this shell the id was dropped, and because
+             both scripts guard with `if (logoutBtn)` the confirmation did not
+             error — it just silently stopped existing, and Logout became a
+             one-click, no-questions-asked action on both pages. -->
+        <a href="/office-logout" id="officeLogoutBtn" class="btn-logout-side"><i class="fas fa-sign-out-alt"></i> Logout</a>
     </div>
 </aside>

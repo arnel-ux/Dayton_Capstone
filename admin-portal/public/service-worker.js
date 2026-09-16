@@ -108,8 +108,17 @@ importScripts('/js/offline-db.js');
 // shells are exactly the pages a device sees while OFFLINE, and without this
 // file the one message those pages exist to show ("you are offline") renders as
 // unstyled text in the corner. Bumped so v35-or-earlier installs re-fetch them.
-const STATIC_CACHE = 'cspc-static-v36';
-const RUNTIME_CACHE = 'cspc-runtime-v36';
+// v37: layout fixes to the same two precached stylesheets. /css/auth.css now
+// starts the login column lower down the screen instead of pinned to the top
+// edge, and /css/offline-pill.css re-centres the offline chip over the content
+// column, drops it below the navigation drawer, and stops two chips printing on
+// top of each other. Both files are precached and served cache-first, so
+// WITHOUT this bump a device that already installed v36 would keep serving its
+// stored copies and would never see any of it — the precached '/login' and
+// '/client-login' shells least of all, since those are cache-first too. Bumped
+// so v36-or-earlier installs discard both and re-fetch.
+const STATIC_CACHE = 'cspc-static-v37';
+const RUNTIME_CACHE = 'cspc-runtime-v37';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.

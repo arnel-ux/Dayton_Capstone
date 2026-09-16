@@ -38,12 +38,20 @@
        the office portal's chip ended up back on top of its header. As a
        fallback it only ever applies when the page sets nothing at all. */
     top: calc(var(--offline-pill-top, 0.75rem) + env(safe-area-inset-top, 0px));
-    left: 50%;
+    /* Centred on the CONTENT, not always on the viewport. A page whose desktop
+       layout is pushed right by a permanent sidebar (the office portal and the
+       client survey both are, by --office-sidebar-w / --sidebar-w) sets
+       --offline-pill-shift to half that width, and the chip sits over the
+       middle of the column the reader is actually looking at instead of half a
+       sidebar to the left of it. Every other page leaves it at 0. */
+    left: calc(50% + var(--offline-pill-shift, 0px));
     transform: translateX(-50%);
-    /* Above sticky headers (1020) and the survey's sidebar, below modals and
-       the offline overlay — it must never cover a dialog the user has to act
-       on. */
-    z-index: 1090;
+    /* Above sticky headers (1020), BELOW the mobile drawer and its backdrop
+       (1035/1040) and below modals and the offline overlay. It was 1090, which
+       floated the chip on top of an open navigation drawer — the one thing
+       already covering the whole screen and demanding an answer. It must never
+       cover something the user has to act on. */
+    z-index: 1030;
 
     display: none;
     align-items: center;
@@ -71,6 +79,27 @@
 .offline-pill.is-visible {
     display: inline-flex;
     animation: offlinePillIn 0.28s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* TWO chips up at once. The landing page carries two of these — "you are
+   offline" and the red/amber server-reachability notice — and they are both
+   fixed at the same top, so whenever both were showing they printed exactly on
+   top of each other and neither could be read. They are rare together (a drop
+   mid-health-check), but "rare" is not "never", so the second one steps down
+   instead of overlapping. Written as a general sibling rule so it holds for any
+   page that ever shows two, in source order, with no extra class to set.
+
+   The step is a fixed 2.85rem because a fixed element cannot be offset by the
+   measured height of another one in CSS alone. That clears a ONE-LINE chip
+   (~30px) comfortably, which is what the first chip always is here — the short
+   "Viewing Offline" label. The long, wrapping message is always the second one,
+   and nothing is stacked under it. If a page ever puts a wrapping chip FIRST,
+   this needs a flex container instead of an offset. */
+.offline-pill.is-visible ~ .offline-pill.is-visible {
+    top: calc(var(--offline-pill-top, 0.75rem) + 2.85rem + env(safe-area-inset-top, 0px));
+}
+.offline-pill.is-visible ~ .offline-pill.is-visible ~ .offline-pill.is-visible {
+    top: calc(var(--offline-pill-top, 0.75rem) + 5.7rem + env(safe-area-inset-top, 0px));
 }
 
 /* The centring translate has to be carried through every keyframe, or the chip

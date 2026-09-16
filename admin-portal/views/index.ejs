@@ -1256,12 +1256,22 @@
         function syncHeaderSpacer() {
             const header = document.getElementById('siteHeader');
             const spacer = document.getElementById('header-spacer');
-            spacer.style.height = header.offsetHeight + 'px';
+            if (!header) return;
+            if (spacer) spacer.style.height = header.offsetHeight + 'px';
             // The floating offline chip sits just under that same header, and
             // this header's height changes with the viewport (the nav wraps),
             // so it is measured here rather than guessed at in CSS.
             document.documentElement.style.setProperty('--offline-pill-top', (header.offsetHeight + 10) + 'px');
         }
+        // Run NOW, not only on `load`. This script is at the foot of the body so
+        // the header already exists, and both connectivity checks below can put
+        // a chip on screen long before `load` fires (they run immediately, and
+        // `load` waits on every image and remote script on the page). Until this
+        // had run, --offline-pill-top was unset and the chip fell back to 0.75rem
+        // — i.e. straight onto the fixed header. The `load` pass is kept because
+        // that is when the web fonts have settled and the measurement is final.
+        syncHeaderSpacer();
+        window.addEventListener('DOMContentLoaded', syncHeaderSpacer);
         window.addEventListener('load', syncHeaderSpacer);
         window.addEventListener('resize', syncHeaderSpacer);
 
@@ -2613,6 +2623,20 @@
             }
         }
         window.addEventListener('online', checkServerHealth);
+        // Going offline clears it. checkServerHealth() already refuses to run
+        // while offline, but that only stops a NEW check — it never withdrew a
+        // notice that was already up. The gap: a health check is in flight when
+        // the connection drops, the fetch rejects, and the catch above posts the
+        // amber "slow connection" chip at the same moment the `offline` event
+        // posts the "Viewing Offline" chip. Both are .offline-pill, both fixed
+        // at the same top, so they printed one on top of the other and neither
+        // could be read — and the stale one then sat there for as long as the
+        // connection stayed down, since nothing was left running to retract it.
+        // (The stacking rule in /css/offline-pill.css is the belt to this
+        // braces: if two ever do show together, they step down instead of
+        // overlapping.) "No network at all" is the more specific message of the
+        // two, so it is the one that stays.
+        window.addEventListener('offline', function () { setServerNotice(null); });
         checkServerHealth();
 
         // Finishes a server-side logout that couldn't complete while the
