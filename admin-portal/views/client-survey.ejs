@@ -838,14 +838,118 @@
             box-shadow: 0 24px 48px -16px rgba(0, 0, 0, 0.5);
         }
 
-        /* ---- Home view — landing screen shown right after login ---- */
-        .home-card { max-width: 1100px; position: relative; overflow: hidden; }
-        .home-card::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 6px;
-            background: linear-gradient(90deg, var(--brand-dark), var(--brand), var(--accent), var(--brand-light));
-            background-size: 200% 100%; animation: heroBarShift 8s linear infinite;
+        /* ---------- Travelling border ----------
+           The same lit, moving frame the login page puts around its card
+           (public/css/auth.css), brought onto the portal's four containers so
+           signing in and then landing here feels like one product rather than
+           two. One conic gradient rotated by an animated angle and masked down
+           to a ring: what moves is the colour, not the card, so no frame costs
+           a layout or a resize.
+
+           Drawn by a real <span class="card-ring"> rather than a pseudo-
+           element, for two reasons. The home and survey cards already spend
+           ::before on their accent bar and ::after on the colour orb, and both
+           of those cards are overflow: hidden — so a ring hung OUTSIDE the box
+           (the way the login card does it) would be clipped away on exactly
+           the two screens people see most. Sitting on the inside edge instead,
+           it renders identically on all four.
+
+           The ring's own glow is what carries it on these dark surfaces: the
+           2px edge alone reads as a hairline, and the blurred copy under it is
+           what makes the border visible without being loud. */
+        @property --portal-ring-angle {
+            syntax: "<angle>";
+            inherits: false;
+            initial-value: 0deg;
         }
-        @media (prefers-reduced-motion: reduce) { .home-card::before { animation: none; } }
+
+        @keyframes portalRingSpin { to { --portal-ring-angle: 360deg; } }
+
+        /* profile and history cards are not positioned on their own; home and
+           survey already are (for their bar and orb), and repeating it is
+           harmless. */
+        .view-card, .survey-card { position: relative; }
+
+        /* The mask is what turns the gradient into a RING — without
+           mask-composite the same element would be a solid rectangle laid over
+           the whole card, so where it is unsupported the ring is simply never
+           created and the cards keep their plain borders. */
+        @supports ((-webkit-mask-composite: xor) or (mask-composite: exclude)) {
+            .card-ring {
+                position: absolute;
+                inset: 0;
+                z-index: 3;
+                pointer-events: none;
+                /* Follows whatever radius the card currently has, including the
+                   16px it drops to on a phone — no second list to keep in sync. */
+                border-radius: inherit;
+                /* The spin runs HERE, on the element that owns the gradient
+                   variable: --portal-ring-paint is substituted at computed-value
+                   time on this element, so an animation on the ::before would
+                   advance that pseudo's own copy of the angle and never reach
+                   the gradient the pseudos inherit — the ring would sit frozen.
+                   One clock also means the edge and its glow cannot drift. */
+                animation: portalRingSpin 5s linear infinite;
+                --portal-ring-paint: conic-gradient(from var(--portal-ring-angle),
+                    rgba(77, 124, 232, 0.22) 0deg,
+                    rgba(77, 124, 232, 0.22) 20deg,
+                    var(--brand-light) 52deg,
+                    #ffffff 70deg,
+                    var(--accent) 88deg,
+                    rgba(77, 124, 232, 0.22) 135deg,
+                    rgba(77, 124, 232, 0.22) 200deg,
+                    var(--brand-light) 232deg,
+                    #ffffff 250deg,
+                    var(--accent) 268deg,
+                    rgba(77, 124, 232, 0.22) 315deg,
+                    rgba(77, 124, 232, 0.22) 360deg);
+            }
+
+            .card-ring::before,
+            .card-ring::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                border-radius: inherit;
+                background: var(--portal-ring-paint);
+                /* Paint the padding box, knock out the content box: what is
+                   left is the frame between them. */
+                -webkit-mask:
+                    linear-gradient(#000 0 0) content-box,
+                    linear-gradient(#000 0 0);
+                -webkit-mask-composite: xor;
+                mask:
+                    linear-gradient(#000 0 0) content-box,
+                    linear-gradient(#000 0 0);
+                mask-composite: exclude;
+            }
+
+            /* The glow, under the edge. Held well back so it lights the border
+               without washing over the text that starts a few pixels inside. */
+            .card-ring::after {
+                padding: 8px;
+                filter: blur(6px);
+                opacity: 0.55;
+            }
+
+            /* The edge itself. */
+            .card-ring::before { padding: 2px; }
+
+            /* A light card needs less glow to show an edge, and more of it
+               would read as a smudge against white. */
+            [data-bs-theme="light"] .card-ring::after { opacity: 0.4; }
+
+            @media (prefers-reduced-motion: reduce) {
+                .card-ring { animation: none; }
+            }
+        }
+
+        /* ---- Home view — landing screen shown right after login ---- */
+        /* The 6px gradient bar that used to sit across the top of this card is
+           gone: the travelling border now runs the whole way round it, and two
+           moving gradients meeting at the same top edge read as clutter rather
+           than as one deliberate frame. */
+        .home-card { max-width: 1100px; position: relative; overflow: hidden; }
         .home-hero { padding-bottom: 1.75rem; border-bottom: 1px solid var(--line-soft); }
         .home-hero .survey-hero-logo { width: 72px; height: 72px; }
 
@@ -2091,21 +2195,18 @@
         }
         .app-shell.survey-inprogress .survey-card > .card-body { max-width: 1100px; }
 
-        /* ---- Decorative accent bar + soft color orbs on the card shell ---- */
+        /* ---- Soft colour orb on the card shell ----
+           The 6px gradient bar that ran across the top of this card is gone for
+           the same reason it is gone from the home card: the travelling border
+           now lights the whole edge, and the bar was a second animation
+           competing with it along the top. */
         .survey-card { position: relative; overflow: hidden; }
-        .survey-card::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 6px;
-            background: linear-gradient(90deg, var(--brand-dark), var(--brand), var(--accent), var(--brand-light));
-            background-size: 200% 100%; animation: heroBarShift 8s linear infinite;
-        }
-        @keyframes heroBarShift { 0% { background-position: 0% 0; } 100% { background-position: 200% 0; } }
         .survey-card::after {
             content: ''; position: absolute; top: -120px; right: -120px; width: 320px; height: 320px;
             border-radius: 50%; background: radial-gradient(circle, rgba(37,84,199,0.16), transparent 70%);
             pointer-events: none; z-index: 0;
         }
         .survey-card > .card-body { position: relative; z-index: 1; }
-        @media (prefers-reduced-motion: reduce) { .survey-card::before { animation: none; } }
 
         /* ---- Survey hero header (logo + institution + form title) ---- */
         .survey-hero { padding-bottom: 1.75rem; border-bottom: 1px solid var(--line-soft); }
@@ -2916,6 +3017,7 @@
 
         <div class="app-view active" id="view-home">
         <div class="card border-0 view-card home-card">
+            <span class="card-ring" aria-hidden="true"></span>
         <div class="card-body p-4 p-md-5">
 
             <div class="view-page-title">
@@ -2972,6 +3074,7 @@
 
         <div class="app-view" id="view-survey">
         <div class="card border-0 survey-card">
+            <span class="card-ring" aria-hidden="true"></span>
         <div class="card-body p-4 p-md-5 position-relative">
 
             <div class="view-page-title">
@@ -3503,6 +3606,7 @@
         <!-- ================= PROFILE VIEW ================= -->
         <div class="app-view" id="view-profile">
             <div class="card border-0 view-card profile-view-card">
+            <span class="card-ring" aria-hidden="true"></span>
                 <div class="card-body p-0">
 
                     <!-- The card body is p-0 (the hero below runs edge to edge),
@@ -3680,6 +3784,7 @@
         <!-- ================= HISTORY VIEW ================= -->
         <div class="app-view" id="view-history">
             <div class="card border-0 view-card">
+            <span class="card-ring" aria-hidden="true"></span>
                 <div class="card-body p-4 p-md-5">
                     <!-- Was a centered .view-header block with the same icon,
                          title and line. Switched to the shared strip so all four
