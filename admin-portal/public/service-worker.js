@@ -117,8 +117,25 @@ importScripts('/js/offline-db.js');
 // stored copies and would never see any of it — the precached '/login' and
 // '/client-login' shells least of all, since those are cache-first too. Bumped
 // so v36-or-earlier installs discard both and re-fetch.
-const STATIC_CACHE = 'cspc-static-v37';
-const RUNTIME_CACHE = 'cspc-runtime-v37';
+// v38: two fixes, and BOTH land in resources that are precached cache-first,
+// so neither reaches an existing install without this bump.
+//   1. /css/auth.css — the auth pages' vertical rhythm. The header block is no
+//      longer dropped a tenth of the way down the screen to make the card look
+//      centred; the card centres itself in the space below the header instead
+//      (auto margins), and the drop shrank at every tier to what the header
+//      alone needs. This file is in CRITICAL_PRECACHE_URLS, and '/login' and
+//      '/client-login' are precached SHELLS — an offline device serves both the
+//      page and the stylesheet from its own cache and would otherwise keep the
+//      old spacing indefinitely.
+//   2. client-survey.ejs — the full-screen toggle in the topbar is now hidden
+//      where the browser has no Fullscreen API to honour it (iPhone Safari has
+//      none for ordinary elements, only <video>, so the button took the tap and
+//      did nothing). That page is served at '/survey-offline', which is in
+//      CRITICAL_PRECACHE_URLS, so the dead button is baked into the snapshot a
+//      v37 install already stored.
+// Bumped so v37-or-earlier installs discard both and re-fetch.
+const STATIC_CACHE = 'cspc-static-v38';
+const RUNTIME_CACHE = 'cspc-runtime-v38';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.

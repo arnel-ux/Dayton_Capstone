@@ -129,15 +129,19 @@ html, body {
 }
 
 /* ---------- The drop ----------
-   How far down the screen the [hero + card] column starts.
+   How far below the top of the viewport the HEADER starts — and, since the
+   card now centres itself in what is left (see .card-custom's auto margins),
+   that is ALL it decides. It is a header offset, not a column offset.
 
-   The column was pinned hard to the top of the viewport, which is right on a
-   viewport with nothing to spare and wrong on every other one: on a 1080p
-   desktop the card finished around two thirds of the way down and left a band
-   of empty backdrop below it roughly a third of the screen tall, so the whole
-   page read as having slid up off centre. A modern phone has the same problem
-   for the same reason — a 412x915 handset has a couple of hundred spare pixels
-   once the compact ladder below has done its work.
+   That split is why every tier below got smaller. While the column was packed
+   flex-start, this one number also set where the card came to rest, so it was
+   being paid to solve the wrong problem: the card finishing high on a roomy
+   screen was fixed by dropping the whole column ~9vh, which cured the card and
+   bought a slab of empty backdrop above the title — about 85px of it on the
+   412x915 phone this was reported on, before the title's first line. The card
+   holds its own middle now, so the drop is free to be what the header actually
+   wants: a small, steady margin that keeps the title clear of the status bar
+   and no larger.
 
    It is a SHRINKABLE SPACER, not padding, and that distinction is the whole
    design. .header-container and .card-custom are both flex-shrink: 0, so this
@@ -163,11 +167,11 @@ html, body {
     min-height: 0;
 }
 
-/* Tall desktop / large tablet — the roomiest case and the one that looked most
-   obviously top-heavy. ~9vh lands the column a little above true centre, which
-   is where a sign-in form wants to sit: dead centre reads as slightly low once
-   the home button is counted at the foot. */
-.login-wrapper { --auth-drop: clamp(1.5rem, 9vh, 7.5rem); }
+/* Tall desktop / large tablet — the roomiest case, and the one where the old
+   9vh drop was most visible as dead sky above the title. The cap matters more
+   than the vh term here: on a 1440x900 window 9vh was 81px of nothing, and the
+   card was going to centre itself below the header regardless. */
+.login-wrapper { --auth-drop: clamp(0.75rem, 2.5vh, 2rem); }
 
 /* The chip is a pop-up and reserves no space, so the column keeps its resting
    position and only has to get out of the way while the chip is actually up.
@@ -276,11 +280,36 @@ html, body {
     flex-direction: column;
     justify-content: center;
     padding: 1.5rem 2.25rem;
-    /* public/css/style.css gives every .card-custom a 1.5rem bottom margin —
+    /* AUTO on both ends, and this is what centres the card.
+
+       --auth-drop above only decides where the HEADER starts; it used to have
+       to decide where the card ended up too, because the column was packed
+       flex-start and everything below the header simply followed it down. That
+       is one spacer doing two jobs with one number, and it could only ever get
+       one of them right: dropping the column far enough to stop the card
+       finishing high left a slab of empty backdrop above the title, and taking
+       that slab back dragged the card down onto the home button.
+
+       Split in two, each end gets its own answer. The header is pinned near the
+       top by a small drop, and the card claims the free space that is left and
+       splits it equally above and below itself — so it sits in the middle of the
+       band between the header and the foot reserve no matter how tall that
+       page's card happens to be. A short card (forgot-password) and a tall one
+       (login, with its reCAPTCHA) both land centred in their own leftover space,
+       with no per-page tuning.
+
+       It also holds the file's one rule for free: auto margins are only paid out
+       of POSITIVE free space. The moment the content would overflow the fold
+       there is none, both margins resolve to zero, and the layout falls back to
+       exactly the packed column it used to be — before ::before has even begun
+       to shrink. Nothing here can push the submit button off a cramped screen.
+
+       (public/css/style.css gives every .card-custom a 1.5rem bottom margin —
        right for the stacked cards on the dashboard pages it was written for,
-       but here it's a single centred card and that 24px was dead space
-       counted against the fold. */
-    margin-bottom: 0;
+       dead space counted against the fold here. No auth page links that file
+       any more, but these two lines still override it if one ever does.) */
+    margin-top: auto;
+    margin-bottom: auto;
     opacity: 0;
     animation: fadeSlideUp 0.7s ease-out 0.15s forwards;
 }
@@ -886,13 +915,13 @@ html, body {
         padding-top: calc(0.3rem + env(safe-area-inset-top, 0px));
         /* 2.5rem button + 0.7rem from the edge + a little air. */
         --auth-foot: calc(2.5rem + 0.7rem + 0.35rem);
-        /* A modern handset (412x915, 393x852) still has a couple of hundred
-           spare pixels once everything below has been trimmed, and the column
-           sat at the very top of all of it. Smaller than the desktop drop
-           because a phone's card is proportionally much taller, and the spacer
-           gives it all back automatically on the phones that have nothing to
-           spare. */
-        --auth-drop: clamp(0.5rem, 9vh, 5.5rem);
+        /* The tier a modern handset lands in (412x915, 393x852). This was
+           9vh — about 70px on one of those once the browser chrome is out of
+           the viewport — which, on top of the padding-top above it, began the
+           title a tenth of the way down the screen with nothing in the band.
+           The card no longer depends on this to find its resting place, so what
+           is left is just the title's own margin from the status bar. */
+        --auth-drop: clamp(0.4rem, 2vh, 1.5rem);
     }
     .header-container { margin-bottom: 0.7rem; }
     .main-title { font-size: 1.08rem; margin-bottom: 0.2rem; }
@@ -954,7 +983,7 @@ html, body {
         /* Barely a nudge: at this size the fold is the whole budget. Kept
            non-zero only so the column does not sit flush against the very top
            edge of the screen. */
-        --auth-drop: clamp(0.25rem, 2vh, 1rem);
+        --auth-drop: clamp(0.25rem, 1.2vh, 0.75rem);
     }
     .btn-home { width: 2.2rem; height: 2.2rem; font-size: 0.85rem; bottom: 0.5rem; }
     .header-container { margin-bottom: 0.45rem; }
@@ -978,7 +1007,7 @@ html, body {
    phone and a short desktop window each keep their subtitle; only this corner
    case gives it up. */
 @media (max-width: 480px) and (max-height: 700px) {
-    .login-wrapper { padding-top: 0.25rem; --auth-drop: clamp(0.25rem, 4vh, 1.75rem); }
+    .login-wrapper { padding-top: 0.25rem; --auth-drop: clamp(0.25rem, 1.5vh, 0.9rem); }
     .header-container { margin-bottom: 0.4rem; }
     .sub-title { display: none; }
     .main-title { font-size: 0.95rem; }
@@ -1058,7 +1087,7 @@ html, body {
     .login-wrapper {
         padding-top: 0.3rem;
         --auth-foot: calc(2.5rem + 0.6rem + 0.35rem);
-        --auth-drop: clamp(0px, 2.5vh, 1.25rem);
+        --auth-drop: clamp(0px, 1.5vh, 0.75rem);
     }
     .btn-home { width: 2.5rem; height: 2.5rem; font-size: 0.92rem; bottom: 0.6rem; }
 
@@ -1092,7 +1121,7 @@ html, body {
         /* Nearly the full desktop rhythm, so nearly the full drop — but capped
            well under the tall tier's, since this window is up to 140px shorter
            and the card below is very nearly the same height. */
-        --auth-drop: clamp(0.5rem, 5vh, 3rem);
+        --auth-drop: clamp(0.4rem, 2vh, 1.25rem);
     }
     .btn-home { width: 2.6rem; height: 2.6rem; font-size: 0.95rem; bottom: 0.7rem; }
 

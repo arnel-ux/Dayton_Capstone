@@ -59,6 +59,45 @@
         })();
     </script>
 
+    <!-- Is there a Fullscreen API on this browser at all?
+         #btn-fullscreen is hidden by default in the CSS below and only revealed
+         by the .fs-capable class this sets. The default is "hidden" on purpose:
+         a control that cannot do its job should not be on screen, and the one
+         browser that cannot is not a rare one — iPhone Safari has no Fullscreen
+         API for ordinary elements, only for <video>. There, toggleFullscreen()
+         reached `if (!request) return;` and returned, so the button was drawn,
+         took the tap, highlighted on press and did nothing at all. Nothing in
+         the UI said why, so it read as a broken page rather than a missing
+         platform feature.
+
+         This runs in the <head>, before the header is parsed, so the button is
+         never painted and then removed — an iPhone user sees a topbar that
+         simply has one fewer icon, not one that flickers.
+
+         Feature detection, NOT a user-agent test, because the answer is not
+         "is this an iPhone": iPad Safari DOES have webkitRequestFullscreen and
+         keeps its button, an iPhone in some future iOS that gains the API gets
+         its button back with no change here, and a page framed in an <iframe>
+         without allowfullscreen is correctly treated as incapable even on a
+         browser that otherwise supports it. That last case is what
+         fullscreenEnabled reports and the method's existence does not. -->
+    <script>
+        (function () {
+            try {
+                var el = document.documentElement;
+                var canRequest = !!(el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen);
+                // Undefined on browsers too old to report it — those are
+                // covered by canRequest alone, so treat "not reported" as
+                // permitted rather than hiding a button that would work.
+                var permitted = document.fullscreenEnabled;
+                if (permitted === undefined) permitted = document.webkitFullscreenEnabled;
+                if (permitted === undefined) permitted = document.msFullscreenEnabled;
+                if (permitted === undefined) permitted = true;
+                if (canRequest && permitted) el.classList.add('fs-capable');
+            } catch (e) { /* leave the button hidden — the safe end of the guess */ }
+        })();
+    </script>
+
     <!-- Deliberately no <link rel="manifest">: this project must stay a
          plain website, never an installable PWA (no "Add to Home Screen" /
          install prompt). The service worker below still provides offline
@@ -450,6 +489,22 @@
         }
         .btn-fullscreen:hover { border-color: var(--brand); color: var(--brand); transform: translateY(-1px); background: var(--ring); }
         .btn-fullscreen:active { transform: translateY(0) scale(0.94); }
+
+        /* The full-screen toggle is the ONE button here that depends on a
+           platform feature that may not exist, so it is the one button that has
+           to earn its place on the screen. Hidden unless the <head> probe found
+           a working Fullscreen API and added .fs-capable — see the comment on
+           that script for why iPhone Safari is the case that matters.
+
+           Targeted by #btn-fullscreen, never by .btn-fullscreen: that class is
+           the shared icon-button skin and the notification bell wears it too.
+           Hiding by class would take the bell down with it on every iPhone.
+
+           The centred brand does not move when this disappears. Both side zones
+           are flex: 1 1 0, so they are equal by basis rather than by content,
+           and the right-hand zone is simply one icon lighter. */
+        #btn-fullscreen { display: none; }
+        .fs-capable #btn-fullscreen { display: inline-flex; }
 
         /* The "you're viewing offline" chip is /css/offline-pill.css — a fixed,
            centred chip floating just under this header. It used to be a child
