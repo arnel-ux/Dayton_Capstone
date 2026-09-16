@@ -212,7 +212,7 @@ html, body {
     --auth-drop: clamp(0.75rem, 2.5vh, 2rem);
     /* Roomy screens can afford a real gap; the vh term keeps it proportional so
        it does not read as a hairline on a 1440-tall monitor. */
-    --auth-gap-max: clamp(2rem, 6vh, 5rem);
+    --auth-gap-max: clamp(1.5rem, 4vh, 3.5rem);
 }
 
 /* The chip is a pop-up and reserves no space, so the column keeps its resting
@@ -951,12 +951,19 @@ html, body {
            The card no longer depends on this to find its resting place, so what
            is left is just the title's own margin from the status bar. */
         --auth-drop: clamp(0.4rem, 2vh, 1.5rem);
-        /* 3rem = 48px, and that number is not arbitrary: it is what /login's
-           gap measured on a 412x800 handset back when the card centred itself
-           and had ~95px of slack to halve. Capping here reproduces that exact
-           spacing on /login and hands the same spacing to every shorter card
-           on the same screen, which is the whole point of the cap. */
-        --auth-gap-max: clamp(1.25rem, 6vh, 3rem);
+        /* 1.75rem = 28px, which with .header-container's own 0.7rem below it
+           puts ~39px between the badge and the top of the card on a 412x800
+           handset.
+
+           The cap was first set at 3rem, to reproduce what /login's gap
+           happened to measure when the card still centred itself. That was the
+           wrong thing to aim at: it was never a chosen value, just whatever
+           half of /login's leftover space came to, and once every page was
+           pinned to it the card read as sitting low — the heading at the top of
+           the screen with a band of backdrop under it, rather than the two
+           reading as one block. Tightened to a value picked for how it looks
+           instead of inherited from what the old layout produced. */
+        --auth-gap-max: clamp(1rem, 3.5vh, 1.75rem);
     }
     .header-container { margin-bottom: 0.7rem; }
     .main-title { font-size: 1.08rem; margin-bottom: 0.2rem; }
@@ -1019,7 +1026,7 @@ html, body {
            non-zero only so the column does not sit flush against the very top
            edge of the screen. */
         --auth-drop: clamp(0.25rem, 1.2vh, 0.75rem);
-        --auth-gap-max: clamp(0.75rem, 4vh, 1.75rem);
+        --auth-gap-max: clamp(0.5rem, 2.5vh, 1.25rem);
     }
     .btn-home { width: 2.2rem; height: 2.2rem; font-size: 0.85rem; bottom: 0.5rem; }
     .header-container { margin-bottom: 0.45rem; }
@@ -1046,7 +1053,7 @@ html, body {
     .login-wrapper {
         padding-top: 0.25rem;
         --auth-drop: clamp(0.25rem, 1.5vh, 0.9rem);
-        --auth-gap-max: clamp(0.75rem, 4vh, 2rem);
+        --auth-gap-max: clamp(0.5rem, 2.5vh, 1.25rem);
     }
     .header-container { margin-bottom: 0.4rem; }
     .sub-title { display: none; }
@@ -1100,7 +1107,7 @@ html, body {
         /* The tightest desktop case there is — this tier exists because the
            card only just fits. Nothing to drop by. */
         --auth-drop: 0px;
-        --auth-gap-max: clamp(0.5rem, 3vh, 1.5rem);
+        --auth-gap-max: clamp(0.4rem, 2vh, 1rem);
     }
     .btn-home { width: 2.2rem; height: 2.2rem; font-size: 0.85rem; bottom: 0.4rem; }
 
@@ -1129,7 +1136,7 @@ html, body {
         padding-top: 0.3rem;
         --auth-foot: calc(2.5rem + 0.6rem + 0.35rem);
         --auth-drop: clamp(0px, 1.5vh, 0.75rem);
-        --auth-gap-max: clamp(1rem, 4vh, 2.5rem);
+        --auth-gap-max: clamp(0.75rem, 2.5vh, 1.75rem);
     }
     .btn-home { width: 2.5rem; height: 2.5rem; font-size: 0.92rem; bottom: 0.6rem; }
 
@@ -1164,7 +1171,7 @@ html, body {
            well under the tall tier's, since this window is up to 140px shorter
            and the card below is very nearly the same height. */
         --auth-drop: clamp(0.4rem, 2vh, 1.25rem);
-        --auth-gap-max: clamp(1.25rem, 5vh, 3.5rem);
+        --auth-gap-max: clamp(1rem, 3vh, 2.25rem);
     }
     .btn-home { width: 2.6rem; height: 2.6rem; font-size: 0.95rem; bottom: 0.7rem; }
 

@@ -146,8 +146,16 @@ importScripts('/js/offline-db.js');
 // (CRITICAL_PRECACHE_URLS) and the precached '/login' and '/client-login'
 // shells, all served cache-first, so a v38 install would otherwise keep the old
 // spacing. Bumped so v38-or-earlier installs discard them and re-fetch.
-const STATIC_CACHE = 'cspc-static-v39';
-const RUNTIME_CACHE = 'cspc-runtime-v39';
+// v40: /css/auth.css only — the gap v39 capped is now capped TIGHTER, at every
+// density tier. v39 set the cap to what /login's gap happened to measure under
+// the old centring layout, which made every auth page consistent but consistent
+// at a value nothing had chosen: ~56px on a 412x800 handset, low enough that
+// the heading and the card read as two separate things with backdrop between
+// them. Now ~39px there, and proportionally less on shorter viewports. The file
+// is in CRITICAL_PRECACHE_URLS and the '/login' and '/client-login' shells that
+// use it are precached cache-first, so bumped to make v39 installs re-fetch.
+const STATIC_CACHE = 'cspc-static-v40';
+const RUNTIME_CACHE = 'cspc-runtime-v40';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
