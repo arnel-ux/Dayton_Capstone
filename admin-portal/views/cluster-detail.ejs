@@ -121,6 +121,7 @@
         .bg-neg { background-color: #fee2e2 !important; color: #991b1b !important; -webkit-print-color-adjust: exact; }
         .bg-neu { background-color: #f1f5f9 !important; color: #334155 !important; -webkit-print-color-adjust: exact; }
         .topic-pill { background-color: #e8f0fe !important; color: #0056b3 !important; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; -webkit-print-color-adjust: exact; }
+
         .signature-section { display: flex; justify-content: space-between; margin-top: 18px; font-size: 13px; }
         .sig-block { width: 45%; }
         .noted-block { margin-top: 14px; font-size: 13px; }
@@ -930,7 +931,11 @@
         function updateOfficeReportComments(comments) {
             const tbody = document.getElementById('officeReportCommentsBody');
 
-            if (!comments || comments.length === 0) {
+            // Written comments only — same rule as /report, and as
+            // HAS_REAL_COMMENT_SQL which already excludes these server-side.
+            comments = (comments || []).filter(c => c && c.sentiment && c.topic);
+
+            if (comments.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">NO WRITTEN COMMENTS AND SUGGESTIONS REFLECTED IN ANY OF THE INSTRUMENTS</td></tr>';
                 document.getElementById('off_aiPos').innerText = '0';
                 document.getElementById('off_aiNeu').innerText = '0';
@@ -944,17 +949,19 @@
             let rows = '';
 
             comments.forEach((c, index) => {
-                const sentiment = c.sentiment || 'Neutral';
+                // Real analyzed comments only — see the filter above.
+                const sentiment = c.sentiment;
+                const topic = c.topic;
+
                 if (sentiment === 'Positive') pos++;
                 else if (sentiment === 'Negative') neg++;
                 else neu++;
 
-                const topic = c.topic || 'General Feedback';
                 topics[topic] = (topics[topic] || 0) + 1;
 
                 let badgeClass = 'bg-neu';
                 if (sentiment === 'Positive') badgeClass = 'bg-pos';
-                if (sentiment === 'Negative') badgeClass = 'bg-neg';
+                else if (sentiment === 'Negative') badgeClass = 'bg-neg';
 
                 rows += `<tr>
                     <td class="text-center">${index + 1}</td>

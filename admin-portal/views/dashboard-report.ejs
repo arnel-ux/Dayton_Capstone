@@ -50,6 +50,9 @@
         .pill-neu { background: #f1f5f9; color: #334155; }
         .pill-neg { background: #fee2e2; color: #991b1b; }
         .badge-sentiment { padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; text-transform: uppercase; -webkit-print-color-adjust: exact; }
+        /* No AI result — blank/"N/A" comment. Printed flat and dashed so it
+           can't be mistaken for a Neutral rating on paper. */
+        .pill-none { background-color: #f8fafc; color: #94a3b8; border: 1px dashed #cbd5e1; -webkit-print-color-adjust: exact; }
 
         .signature-section { display: flex; justify-content: space-between; margin-top: 40px; font-size: 14px; }
         .sig-block { width: 45%; }
@@ -251,9 +254,11 @@
                         <tbody>
                             <% if (typeof recentSubmissions !== 'undefined' && recentSubmissions.length > 0) { %>
                                 <% recentSubmissions.forEach((r, i) => {
-                                    let badgeClass = 'pill-neu';
-                                    if (r.sentiment === 'Positive') badgeClass = 'pill-pos';
-                                    if (r.sentiment === 'Negative') badgeClass = 'pill-neg';
+                                    // r.sentimentTone is the server's own classification
+                                    // (see sentimentTone in server.js) — 'none' for a
+                                    // response the AI never analyzed.
+                                    const toneClass = { positive: 'pill-pos', negative: 'pill-neg', none: 'pill-none', neutral: 'pill-neu' };
+                                    const badgeClass = toneClass[r.sentimentTone] || 'pill-neu';
                                 %>
                                     <tr>
                                         <td class="text-center"><%= i + 1 %></td>

@@ -60,6 +60,7 @@
         .bg-neu { background-color: #f1f5f9 !important; color: #334155 !important; -webkit-print-color-adjust: exact; }
         .topic-pill { background-color: #e8f0fe !important; color: #0056b3 !important; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; -webkit-print-color-adjust: exact; }
 
+
         .text-center { text-align: center; }
         .fw-bold { font-weight: bold; }
         
@@ -374,7 +375,15 @@
         let pos = 0, neu = 0, neg = 0;
         let topics = {};
 
-        if (!comments || comments.length === 0) {
+        // Only written comments belong in this report. A blank or "N/A"
+        // comment is already excluded server-side (see HAS_REAL_COMMENT_SQL);
+        // this repeats the rule so the table stays correct even if the API is
+        // called directly, and so a page whose comments are ALL "N/A" falls
+        // through to the empty-state message below instead of printing rows
+        // with nothing in them.
+        comments = (comments || []).filter(c => c && c.sentiment && c.topic);
+
+        if (comments.length === 0) {
             tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-muted">NO WRITTEN COMMENTS AND SUGGESTIONS REFLECTED IN ANY OF THE INSTRUMENTS</td></tr>`;
             document.getElementById('aiPos').innerText = '0';
             document.getElementById('aiNeu').innerText = '0';
@@ -382,19 +391,23 @@
             document.getElementById('aiDomTopic').innerText = 'N/A';
         } else {
             comments.forEach((c, index) => {
-                // Tally AI Analytics
-                let aiSentiment = c.sentiment || 'Neutral';
+                // Every row here is a real, AI-analyzed comment — the filter
+                // above guarantees it, so no '|| Neutral' / '|| General
+                // Feedback' fallback is needed (those used to invent a result
+                // for comments the AI never analyzed).
+                const aiSentiment = c.sentiment;
+                const aiTopic = c.topic;
+
                 if (aiSentiment === 'Positive') pos++;
                 else if (aiSentiment === 'Negative') neg++;
                 else neu++;
 
-                let aiTopic = c.topic || 'General Feedback';
                 topics[aiTopic] = (topics[aiTopic] || 0) + 1;
 
                 // Set Badge Colors
                 let badgeClass = 'bg-neu';
                 if (aiSentiment === 'Positive') badgeClass = 'bg-pos';
-                if (aiSentiment === 'Negative') badgeClass = 'bg-neg';
+                else if (aiSentiment === 'Negative') badgeClass = 'bg-neg';
 
                 tbody.innerHTML += `<tr>
                     <td class="text-center">${index + 1}</td>

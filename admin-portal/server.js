@@ -39,6 +39,81 @@ const EFFECTIVE_TOPIC_SQL = `
 `;
 const EFFECTIVE_SENTIMENT_SQL = `COALESCE(s.sentiment_override, s.sentiment)`;
 
+// A survey whose comment was blank or an "N/A"/"none"-style placeholder is
+// stored with topic = NULL and sentiment = NULL (see isNoFeedbackComment and
+// insertVerifiedSurveyOnConnection) — there was genuinely nothing for the AI
+// to read, so it produced no result. /survey-records has always rendered
+// those as "No feedback" with no sentiment and no topic; every other report
+// instead substituted a fabricated 'Neutral'/'General Feedback' of its own,
+// which inflated the Neutral counts and could hand the dominant-topic line to
+// a "topic" no respondent ever wrote about. The two expressions below are
+// /survey-records' rule at the SQL level so every report agrees with it.
+//
+// s.topic IS NOT NULL is the whole test, checked on the RAW ai column rather
+// than the COALESCEd effective one on purpose: an admin override saved
+// against a no-feedback row must not quietly promote that row back into the
+// analyzed counts, which is exactly how /survey-records treats it too.
+const NO_FEEDBACK_LABEL = 'No feedback';
+
+// The AI's own "there is nothing here to classify" verdict, as stored: a
+// comment the classifier read and found meaningless (keyboard mash like
+// "asdfasdf", emoji or punctuation only, a bare "hello po") comes back from
+// detect_junk_topic as the topic "No Feedback - No Feedback" — a real string,
+// not NULL, which is precisely why a NULL-only test used to miss it.
+// "Unclassified" is the same verdict under its older name (see
+// shared/topicTaxonomy.js, which still maps it) and is matched for legacy rows.
+//
+// Checked on the EFFECTIVE topic, not the raw one, so it cuts both ways: an
+// admin who reclassifies a wrongly-flagged comment to a real topic puts it
+// back into the reports, and an admin who marks a genuinely meaningless
+// comment as "No Feedback" from /survey-records takes it out — the manual
+// remedy for any mash the detector doesn't catch on its own.
+const NO_AI_RESULT_TOPIC_SQL = `(
+    LOWER(COALESCE(${EFFECTIVE_TOPIC_SQL}, '')) LIKE 'no feedback%'
+    OR LOWER(COALESCE(${EFFECTIVE_TOPIC_SQL}, '')) LIKE 'unclassified%'
+)`;
+
+// s.topic IS NOT NULL stays keyed to the RAW column (an override must never
+// resurrect a survey whose respondent wrote nothing at all); the junk-topic
+// test above is the part that honours overrides.
+const HAS_AI_ANALYSIS_SQL = `(s.topic IS NOT NULL AND NOT ${NO_AI_RESULT_TOPIC_SQL})`;
+const REPORT_TOPIC_SQL = `CASE WHEN ${HAS_AI_ANALYSIS_SQL} THEN (${EFFECTIVE_TOPIC_SQL}) ELSE NULL END`;
+const REPORT_SENTIMENT_SQL = `CASE WHEN ${HAS_AI_ANALYSIS_SQL} THEN (${EFFECTIVE_SENTIMENT_SQL}) ELSE NULL END`;
+
+// Only a survey that carries a REAL written comment belongs in the comments
+// report — "the report is the comments", so a respondent who left the box
+// blank or typed "N/A" simply isn't part of it (they're still counted in every
+// respondent/SQD total, which is where they do belong).
+//
+// Two conditions, because they catch different rows:
+//   - s.topic IS NOT NULL is the authoritative modern test (a no-feedback
+//     comment is stored with NULL topic AND NULL sentiment — see
+//     insertVerifiedSurveyOnConnection), and
+//   - the text test below is a SQL mirror of isNoFeedbackComment for LEGACY
+//     rows written before that rule existed, which can hold a literal "N/A"
+//     comment alongside a fabricated 'General Feedback' topic. Matches
+//     isNoFeedbackComment's own normalization: trim, drop "." and "-", lower.
+const HAS_REAL_COMMENT_SQL = `
+    s.comments IS NOT NULL
+    AND TRIM(s.comments) <> ''
+    AND ${HAS_AI_ANALYSIS_SQL}
+    AND LOWER(REPLACE(REPLACE(TRIM(s.comments), '.', ''), '-', '')) NOT IN
+        ('', 'na', 'n/a', 'none', 'nil', 'no comment', 'no comments', 'not applicable')
+`;
+
+// Bare tone token ('positive' | 'negative' | 'neutral' | 'none') for a
+// sentiment value, so each view can prefix it with its own class naming
+// (bg-sentiment-* on the dashboard, pill-* in the printable report) and still
+// colour a given response identically everywhere. A missing sentiment is
+// 'none' — never silently folded into 'neutral'.
+function sentimentTone(sentiment) {
+    const value = (sentiment || '').toLowerCase();
+    if (!value || value === NO_FEEDBACK_LABEL.toLowerCase()) return 'none';
+    if (value.includes('positive')) return 'positive';
+    if (value.includes('negative')) return 'negative';
+    return 'neutral';
+}
+
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -1924,6 +1999,171 @@ function sendSurveyApprovedEmail(toEmail, details) {
     });
 }
 
+// The decline-side counterpart to sendSurveyApprovedEmail above. Personal
+// (non-@cspc.edu.ph) accounts are the only ones whose submissions ever sit in
+// pending_survey_submissions at all — see isCspcEmail — so every caller of
+// this is by construction a personal-email client, and Gmail is the only
+// place they'd otherwise never hear about the outcome: before this, a decline
+// only produced an in-app notification (createClientNotification), which a
+// client who never signs back in would simply never see.
+// Deliberately does NOT echo the SQD/CC answers back the way the approval
+// email does — nothing was recorded, so there is no "result" to show; what
+// the client actually needs is the office, the service, the reason, and what
+// to do next. Fire-and-forget, same reasoning as sendSurveyApprovedEmail: a
+// slow or failed send must never affect the office's decline response.
+function sendSurveyDeclinedEmail(toEmail, details) {
+    if (!mailTransporter || !toEmail || toEmail === 'Not Specified') return;
+
+    const detailRow = (label, value) => `
+        <tr>
+            <td style="padding:10px 0;border-bottom:1px solid #eef1f6;font-size:13px;font-weight:700;color:#64748b;width:42%;vertical-align:top;">${label}</td>
+            <td style="padding:10px 0;border-bottom:1px solid #eef1f6;font-size:14px;font-weight:600;color:#0f172a;vertical-align:top;">${value}</td>
+        </tr>`;
+
+    const hasLogo = fs.existsSync(RECEIPT_LOGO_PATH);
+    const logoHtml = hasLogo
+        ? `<img src="cid:cspc-logo" alt="CSPC Logo" width="72" style="display:block;margin:0 auto 12px;max-width:72px;width:72px;height:auto;">`
+        : '';
+
+    // A blank decline_reason is normal — the office isn't required to type
+    // one — so fall back to a neutral sentence instead of an empty red box.
+    const reasonText = (details.reason && String(details.reason).trim())
+        ? String(details.reason).trim()
+        : 'No specific reason was provided by the office.';
+
+    const serviceLine = (details.serviceAvailed && details.serviceAvailed !== 'Not specified')
+        ? ` for <strong>${escapeHtml(details.serviceAvailed)}</strong>`
+        : '';
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your Survey Was Not Approved</title>
+<style>
+    body { margin:0; padding:0; background:#eef1f6; }
+    table { border-collapse:collapse; }
+    .receipt-wrap { width:100%; max-width:600px; margin:0 auto; }
+    .receipt-outer { padding:24px 16px; }
+    @media only screen and (max-width:600px) {
+        .receipt-outer { padding:16px 8px !important; }
+        .receipt-card { border-radius:0 !important; }
+        .receipt-header { padding:24px 20px !important; }
+        .receipt-body { padding:20px !important; }
+        .receipt-header h1 { font-size:18px !important; }
+        .receipt-header p { font-size:12px !important; }
+    }
+</style>
+</head>
+<body>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6;">
+        <tr>
+            <td class="receipt-outer" align="center">
+                <table role="presentation" class="receipt-wrap" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td class="receipt-card" style="background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;font-family:Arial,Helvetica,sans-serif;">
+
+                            <!-- Header -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td class="receipt-header" style="background:#251d3a;padding:32px 28px;text-align:center;">
+                                        ${logoHtml}
+                                        <p style="margin:0 0 2px;color:#dbe4fb;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;">Republic of the Philippines</p>
+                                        <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">Camarines Sur Polytechnic Colleges</h1>
+                                        <p style="margin:6px 0 0;color:#dbe4fb;font-size:13px;">Client Satisfaction Measurement (CSM) Survey</p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Declined banner -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="padding:18px 28px;border-bottom:1px dashed #cbd5e1;background:#fef2f2;text-align:center;">
+                                        <span style="display:inline-block;width:36px;height:36px;line-height:36px;border-radius:50%;background:#fee2e2;color:#dc2626;font-size:20px;font-weight:700;margin-bottom:6px;">&#33;</span>
+                                        <div style="font-size:15px;font-weight:700;color:#991b1b;">Your survey was not approved</div>
+                                        <div style="font-size:11px;color:#64748b;letter-spacing:.04em;text-transform:uppercase;margin-top:4px;">Submission Ref. PSS-${details.submissionId}</div>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Body -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td class="receipt-body" style="padding:28px;color:#1e293b;">
+                                        <p style="margin:0 0 8px;font-size:15px;">Hi <strong>${escapeHtml(details.name)}</strong>,</p>
+                                        <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6;"><strong>${escapeHtml(details.officeName)}</strong> reviewed the CSM survey you submitted${serviceLine} and did <strong>not</strong> approve it, so your answers were not added to the office's records.</p>
+
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+                                            ${detailRow('Name', escapeHtml(details.name))}
+                                            ${detailRow('Office Visited', escapeHtml(details.officeName))}
+                                            ${detailRow('Service Availed', escapeHtml(details.serviceAvailed))}
+                                            ${detailRow('Date Reviewed', details.reviewedAt)}
+                                            ${detailRow('Status', '<span style="color:#b91c1c;">Not Approved</span>')}
+                                        </table>
+
+                                        <h3 style="margin:0 0 10px;font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:.03em;">Reason From The Office</h3>
+                                        <p style="margin:0 0 24px;padding:14px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;font-size:13.5px;color:#7f1d1d;line-height:1.6;">${escapeHtml(reasonText)}</p>
+
+                                        <h3 style="margin:0 0 10px;font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:.03em;">What You Can Do Next</h3>
+                                        <p style="margin:0;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;font-size:13.5px;color:#334155;line-height:1.6;">If you believe this was a mistake, you may answer the CSM survey again for this office and service, or contact the office directly to confirm your visit before re-submitting.</p>
+
+                                        <p style="margin:24px 0 0;font-size:11.5px;color:#94a3b8;line-height:1.6;">This is an automated message from the CSPC Center for Quality Assurance. Please do not reply to this email.</p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>`;
+
+    const attachments = hasLogo ? [{
+        filename: 'cspc-logo.png',
+        path: RECEIPT_LOGO_PATH,
+        cid: 'cspc-logo',
+        contentDisposition: 'inline'
+    }] : [];
+
+    mailTransporter.sendMail({
+        from: process.env.MAIL_FROM || `"CSPC Center for Quality Assurance" <${process.env.MAIL_USER}>`,
+        to: toEmail,
+        subject: `Your CSM Survey Was Not Approved — ${details.officeName}`,
+        html,
+        attachments
+    }).then(() => {
+        console.log(`✅ [Mail] Decline notification sent to ${toEmail}`);
+    }).catch((err) => {
+        console.error(`❌ [Mail] Failed to send decline notification to ${toEmail}:`, err.message);
+    });
+}
+
+// Looks up the office name for a declined submission and sends the decline
+// email — shared by BOTH decline paths (the office's own
+// /office-approvals/:id/decline, and the approve route's
+// superseded-by-an-online-submission branch, which also ends in a decline) so
+// the client gets the same Gmail message either way. Kept as a callback query
+// rather than an awaited one because both call sites fire it AFTER their
+// response has already been sent, and neither may block on it.
+function notifyClientOfDecline(toEmail, officeId, details) {
+    if (!mailTransporter || !toEmail) return;
+    db.query('SELECT office_name FROM offices WHERE id = ? LIMIT 1', [officeId], (officeErr, officeRows) => {
+        const office = (!officeErr && officeRows && officeRows[0]) ? officeRows[0] : null;
+        sendSurveyDeclinedEmail(toEmail, {
+            name: details.name || 'Client',
+            officeName: office ? office.office_name : 'Selected Office',
+            serviceAvailed: details.serviceAvailed || 'Not specified',
+            reviewedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
+            reason: details.reason,
+            submissionId: details.submissionId
+        });
+    });
+}
+
 // Sends a client a one-time password-reset link (see /forgot-password below).
 // Fire-and-forget, same reasoning as sendSurveyReceiptEmail — a slow/failed
 // send should never surface as an error to the person requesting the reset
@@ -3737,6 +3977,16 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
                 pendingSubmissionId: submissionId,
                 dedupeKey: 'pending-superseded:' + submissionId
             });
+
+            // This branch writes status='declined' too, so the client gets the
+            // same Gmail notice as a hand-declined submission — with the
+            // superseded reason, which is exactly what was stored on the row.
+            notifyClientOfDecline(googleEmail, payload.officeId, {
+                name: payload.respondentName,
+                serviceAvailed: payload.serviceAvailed,
+                reason: 'Superseded by a later online submission for this service.',
+                submissionId
+            });
             return;
         }
 
@@ -3846,6 +4096,13 @@ app.post('/office-approvals/:id/decline', ensureOfficeAuth, async (req, res) => 
     const conn = await db.promise().getConnection();
     let googleEmail = null;
     let declined = false;
+    // Captured inside the transaction, used only AFTER it commits — the
+    // decline email needs the respondent's name and the service they answered
+    // for, and both live in the pending row's payload, which nothing else on
+    // this path had any reason to read before.
+    let declinedPayload = {};
+    let declinedServiceAvailed = null;
+    let submissionOfficeId = officeId;
     try {
         await conn.beginTransaction();
 
@@ -3856,8 +4113,13 @@ app.post('/office-approvals/:id/decline', ensureOfficeAuth, async (req, res) => 
         // office, doesn't exist) still reports success, unchanged from
         // before. `declined` (from that UPDATE's own affectedRows) only
         // gates whether a notification fires below — never the response.
-        const [rows] = await conn.query('SELECT google_email FROM pending_survey_submissions WHERE id = ? LIMIT 1', [submissionId]);
+        const [rows] = await conn.query('SELECT google_email, service_availed, office_id, payload FROM pending_survey_submissions WHERE id = ? LIMIT 1', [submissionId]);
         googleEmail = (rows && rows[0]) ? rows[0].google_email : null;
+        if (rows && rows[0]) {
+            declinedPayload = parsePendingPayload(rows[0].payload);
+            declinedServiceAvailed = rows[0].service_availed || declinedPayload.serviceAvailed || null;
+            submissionOfficeId = rows[0].office_id || officeId;
+        }
 
         const [declineResult] = await conn.query(
             "UPDATE pending_survey_submissions SET status = 'declined', reviewed_at = NOW(), decline_reason = ? WHERE id = ? AND office_id = ? AND status = 'pending'",
@@ -3889,6 +4151,18 @@ app.post('/office-approvals/:id/decline', ensureOfficeAuth, async (req, res) => 
             message: 'Your survey response was not approved by the selected office.',
             pendingSubmissionId: submissionId,
             dedupeKey: 'pending-rejected:' + submissionId
+        });
+
+        // The in-app notification above only ever reaches a client who signs
+        // back in. Everything held in pending_survey_submissions comes from a
+        // personal (non-@cspc.edu.ph) account, so Gmail is where these clients
+        // actually read their outcome — mirrors the approve route, which has
+        // emailed its result all along.
+        notifyClientOfDecline(googleEmail, submissionOfficeId, {
+            name: declinedPayload.respondentName,
+            serviceAvailed: declinedServiceAvailed,
+            reason,
+            submissionId
         });
     }
 });
@@ -5917,7 +6191,7 @@ function loadDashboardData(req, callback) {
                         const topOffices = rankedOffices.slice(0, 5);
                         const bottomOffices = rankedOffices.slice(-5).reverse().filter(o => !topOffices.includes(o));
 
-                        const sentimentQuery = `SELECT ${EFFECTIVE_SENTIMENT_SQL} AS sentiment, COUNT(*) AS c FROM survey_responses s${dateWhere} GROUP BY ${EFFECTIVE_SENTIMENT_SQL}`;
+                        const sentimentQuery = `SELECT ${REPORT_SENTIMENT_SQL} AS sentiment, COUNT(*) AS c FROM survey_responses s${dateWhere} GROUP BY ${REPORT_SENTIMENT_SQL}`;
                         db.query(sentimentQuery, dateParams, (err, sentimentRows) => {
                             logErr('sentiment breakdown')(err);
                             const sentimentBreakdown = { Positive: 0, Neutral: 0, Negative: 0 };
@@ -5929,10 +6203,10 @@ function loadDashboardData(req, callback) {
                             const sentimentTotal = sentimentBreakdown.Positive + sentimentBreakdown.Neutral + sentimentBreakdown.Negative;
 
                             const topicsQuery = `
-                                SELECT ${EFFECTIVE_TOPIC_SQL} AS topic, COUNT(*) AS c
+                                SELECT ${REPORT_TOPIC_SQL} AS topic, COUNT(*) AS c
                                 FROM survey_responses s
-                                ${dateWhere ? `${dateWhere} AND` : 'WHERE'} (s.topic_override IS NOT NULL OR (s.topic IS NOT NULL AND s.topic <> ''))
-                                GROUP BY ${EFFECTIVE_TOPIC_SQL} ORDER BY c DESC LIMIT 6
+                                ${dateWhere ? `${dateWhere} AND` : 'WHERE'} (${HAS_AI_ANALYSIS_SQL} AND s.topic <> '')
+                                GROUP BY ${REPORT_TOPIC_SQL} ORDER BY c DESC LIMIT 6
                             `;
 
                             db.query(topicsQuery, dateParams, (err, topicRows) => {
@@ -5945,7 +6219,7 @@ function loadDashboardData(req, callback) {
                                 }));
 
                                 const recentQuery = `
-                                    SELECT s.id, o.office_name, o.cluster_name, ${EFFECTIVE_SENTIMENT_SQL} AS sentiment, ${EFFECTIVE_TOPIC_SQL} AS topic, s.created_at
+                                    SELECT s.id, o.office_name, o.cluster_name, ${REPORT_SENTIMENT_SQL} AS sentiment, ${REPORT_TOPIC_SQL} AS topic, s.created_at
                                     FROM survey_responses s
                                     JOIN offices o ON o.id = s.office_id
                                     ${dateWhere}
@@ -5957,8 +6231,12 @@ function loadDashboardData(req, callback) {
                                     const recentSubmissions = (recentRows || []).map(r => ({
                                         officeName: r.office_name,
                                         cluster: r.cluster_name || 'Unassigned Cluster',
-                                        sentiment: r.sentiment || 'Neutral',
-                                        topic: r.topic || 'General Feedback',
+                                        // No AI result means none is shown — the old
+                                        // '|| Neutral' / '|| General Feedback' here
+                                        // invented one for every N/A comment.
+                                        sentiment: r.sentiment || NO_FEEDBACK_LABEL,
+                                        sentimentTone: sentimentTone(r.sentiment),
+                                        topic: r.topic || NO_FEEDBACK_LABEL,
                                         date: r.created_at
                                     }));
 
@@ -6292,7 +6570,11 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
         const commentsWhere = conditions.length
             ? ` AND ${conditions.join(' AND ')}`
             : '';
-        const commentsQuery = `SELECT s.comments, ${EFFECTIVE_SENTIMENT_SQL} AS sentiment, ${EFFECTIVE_TOPIC_SQL} AS topic FROM survey_responses s LEFT JOIN offices o ON s.office_id = o.id WHERE s.comments IS NOT NULL AND TRIM(s.comments) != ''${commentsWhere}`;
+        // HAS_REAL_COMMENT_SQL, not just a non-empty check: an "N/A"-style comment
+        // is non-empty text, so a plain TRIM() <> '' test used to let it through and
+        // the report listed it as a comment nobody wrote. The report is the written
+        // comments, so those rows never leave the database now.
+        const commentsQuery = `SELECT s.comments, ${REPORT_SENTIMENT_SQL} AS sentiment, ${REPORT_TOPIC_SQL} AS topic FROM survey_responses s LEFT JOIN offices o ON s.office_id = o.id WHERE ${HAS_REAL_COMMENT_SQL}${commentsWhere}`;
 
         db.query(commentsQuery, queryParams, (err, commentsResult) => {
             res.json({

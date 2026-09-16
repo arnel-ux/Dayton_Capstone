@@ -383,6 +383,10 @@
         .bg-sentiment-positive { background-color: #dcfce7; color: #15803d; }
         .bg-sentiment-negative { background-color: #fee2e2; color: #b91c1c; }
         .bg-sentiment-neutral { background-color: #e2e8f0; color: #334155; }
+        /* No AI result at all — the comment was blank or an "N/A" placeholder.
+           Same dashed treatment as /survey-records, so it reads as "nothing to
+           classify" rather than as one more sentiment. */
+        .bg-sentiment-none { background-color: #f8fafc; color: #94a3b8; border: 1px dashed #cbd5e1; }
 
         .sentiment-chart-wrap { position: relative; flex-shrink: 0; width: 190px; }
         .sentiment-center-total {
@@ -1239,7 +1243,7 @@
                                 <td class="num-col"><%= i + 1 %></td>
                                 <td><%= r.officeName %></td>
                                 <td><%= r.topic %></td>
-                                <td class="text-center"><span class="sentiment-badge bg-sentiment-<%= r.sentiment.toLowerCase() %>"><%= r.sentiment %></span></td>
+                                <td class="text-center"><span class="sentiment-badge bg-sentiment-<%= r.sentimentTone %>"><%= r.sentiment %></span></td>
                                 <td class="text-center"><%= new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) %></td>
                             </tr>
                         <% }) %>

@@ -1723,6 +1723,57 @@ def _is_greeting_or_particle_only(stripped_text):
     return found_greeting and not remaining_words
 
 
+# The three QWERTY rows. Every check above is a letter-SHAPE heuristic (vowel
+# ratio, consonant runs), and the most common junk a respondent types slips
+# straight through them: "asdf" and "qwerty" are vowel-rich, and "asdasd" or
+# "aaaaaa" are perfectly pronounceable. Those are caught structurally instead
+# -- by where the letters sit on the keyboard, and by whether the token is one
+# short unit stamped out over and over.
+_KEYBOARD_ROWS = ("qwertyuiop", "asdfghjkl", "zxcvbnm")
+_KEYBOARD_RUN_MIN_LEN = 4
+
+
+def _is_keyboard_run(token, min_len=_KEYBOARD_RUN_MIN_LEN):
+    """
+    True when every letter of the token lies on ONE keyboard row in an
+    unbroken left-to-right or right-to-left run: "asdf", "qwerty", "zxcvbnm",
+    "lkjh". Real words essentially never do this at 4+ letters, which is why
+    the default minimum is deliberately that high.
+    """
+    lowered = token.lower()
+    if len(lowered) < min_len:
+        return False
+    for row in _KEYBOARD_ROWS:
+        positions = [row.find(ch) for ch in lowered]
+        if -1 in positions:
+            continue
+        steps = set(b - a for a, b in zip(positions, positions[1:]))
+        if steps == {1} or steps == {-1}:
+            return True
+    return False
+
+
+def _repeated_unit(token):
+    """
+    ("asd", 2) for "asdasd", ("a", 6) for "aaaaaa", ("asdf", 2) for "asdfasdf";
+    None when the token is not one short unit repeated end to end.
+
+    Units run to 4 letters because "asdfasdf" is one of the most common mashes
+    there is -- but a 4-letter unit is also exactly how Filipino reduplication
+    works ("halohalo", "arawaraw", "sarisari"), so the caller additionally
+    requires a 4-letter unit to be a keyboard run before condemning it. None of
+    those three words is one.
+    """
+    lowered = token.lower()
+    for size in (1, 2, 3, 4):
+        if len(lowered) < size * 2 or len(lowered) % size:
+            continue
+        unit = lowered[:size]
+        if unit * (len(lowered) // size) == lowered:
+            return unit, len(lowered) // size
+    return None
+
+
 def _max_consonant_run(lowered_letters):
     best = current = 0
     for ch in lowered_letters:
@@ -1746,6 +1797,34 @@ def _is_suspicious_token(token):
         return True
     if len(lowered) >= _SUSPICIOUS_TOKEN_MIN_LEN and _max_consonant_run(lowered) >= _SUSPICIOUS_TOKEN_MIN_CONSONANT_RUN:
         return True
+
+    # Straight keyboard mash: "asdf", "qwertyuiop", "zxcvbnm".
+    if _is_keyboard_run(lowered):
+        return True
+
+    repeated = _repeated_unit(lowered)
+    if repeated:
+        unit, reps = repeated
+        unit_has_vowel = any(c in _VOWELS for c in unit)
+        # The thresholds below are deliberately uneven, because Tagalog/Bikol
+        # reduplication is real and must survive: "mama"/"papa" are a 2-letter
+        # unit twice, and "dagdag"/"pagpag" a 3-letter unit twice. So neither
+        # shape may condemn a token on repetition alone.
+        #   - a 1-2 letter unit needs 4+ repetitions ("aaaaaa", "tatatata"), or
+        #     3+ when the unit has no vowel to form a syllable with ("ghghgh")
+        #     or is itself adjacent keys ("opopop");
+        #   - a 3- or 4-letter unit counts at 2 repetitions only when the unit
+        #     is itself a keyboard run ("asdasd", "asdfasdf"), which "dagdag"
+        #     and "halohalo" are not.
+        if len(unit) <= 2 and reps >= 4:
+            return True
+        if len(unit) <= 2 and reps >= 3 and (not unit_has_vowel or _is_keyboard_run(unit, 2)):
+            return True
+        if len(unit) == 3 and reps >= 2 and _is_keyboard_run(unit, 3):
+            return True
+        if len(unit) == 4 and reps >= 2 and _is_keyboard_run(unit, 4):
+            return True
+
     return False
 
 

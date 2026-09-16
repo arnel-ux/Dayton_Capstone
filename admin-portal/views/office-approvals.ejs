@@ -262,6 +262,28 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+        /* The same reference number the client is shown in their emailed
+           decline notice (see sendSurveyDeclinedEmail in server.js). Printed
+           here so a client who quotes "PSS-42" can actually be looked up —
+           without it the number in that email matched nothing anywhere in
+           this system. "PSS" = pending survey submission; it is the
+           pending_survey_submissions row id, NOT the CSM reference, which
+           only exists once a submission is approved and inserted into
+           survey_responses. */
+        .submission-ref {
+            flex: 0 0 auto;
+            align-self: flex-start;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.66rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            color: #64748b;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 5px;
+            padding: 0.08rem 0.35rem;
+            white-space: nowrap;
+        }
         .cell-value {
             max-width: 100%;
             overflow: hidden;
@@ -704,6 +726,7 @@
                                                 <div class="respondent-name" data-bs-toggle="tooltip" data-bs-placement="top" title="<%= sub.respondentName %>">
                                                     <%= sub.respondentName %>
                                                 </div>
+                                                <span class="submission-ref" data-bs-toggle="tooltip" data-bs-placement="top" title="Reference number for this submission — the client is shown this same number if you decline it.">PSS-<%= sub.id %></span>
                                             </div>
                                         </td>
                                         <td data-label="Service Availed" class="collapsible-detail col-order-service">
