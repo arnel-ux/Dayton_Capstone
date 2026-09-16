@@ -134,8 +134,20 @@ importScripts('/js/offline-db.js');
 //      CRITICAL_PRECACHE_URLS, so the dead button is baked into the snapshot a
 //      v37 install already stored.
 // Bumped so v37-or-earlier installs discard both and re-fetch.
-const STATIC_CACHE = 'cspc-static-v38';
-const RUNTIME_CACHE = 'cspc-runtime-v38';
+// v39: follow-up to v38's auth-page spacing. v38 let the card centre itself in
+// the space under the header, which reads correctly only when the card is tall
+// enough to leave little space to centre in: /login has a reCAPTCHA and looked
+// right, while /forgot-password's much shorter card halved a much larger
+// remainder and hung ~130px below the heading with an empty band between them.
+// The gap is now a capped spacer (.auth-gap, new element in all six auth
+// views), so every auth page holds the SAME distance from the heading no matter
+// how tall its card is — including /login's OFFLINE state, whose card is
+// shorter than its online one and drifted the same way. Touches /css/auth.css
+// (CRITICAL_PRECACHE_URLS) and the precached '/login' and '/client-login'
+// shells, all served cache-first, so a v38 install would otherwise keep the old
+// spacing. Bumped so v38-or-earlier installs discard them and re-fetch.
+const STATIC_CACHE = 'cspc-static-v39';
+const RUNTIME_CACHE = 'cspc-runtime-v39';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.

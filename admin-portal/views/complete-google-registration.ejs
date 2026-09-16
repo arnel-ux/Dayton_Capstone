@@ -98,6 +98,13 @@
             <h2 class="portal-text">Finish Registration</h2>
         </div>
 
+        <!-- The gap between the heading and the card. An element rather than a
+             margin because it has to GROW into spare space and STOP at a cap —
+             see .auth-gap in /css/auth.css for why a plain margin (too tight on
+             a roomy screen) and an auto margin (too loose on a short card)
+             each got one of those two halves wrong. Presentational only. -->
+        <div class="auth-gap" aria-hidden="true"></div>
+
         <div class="card-custom">
 
             <div class="reg-progress" aria-label="Registration progress">
