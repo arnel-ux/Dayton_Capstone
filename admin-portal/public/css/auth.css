@@ -213,24 +213,35 @@ html, body {
 }
 
 /* ---------- Travelling border ----------
-   A band of colour that runs continuously around the edge of the card, on
-   every auth page and every device. It is a conic gradient rotated by an
-   animated angle and then masked down to a 2px ring, so what moves is the
-   colour, not the card: nothing is laid out, painted or resized on any frame,
-   which is why this is safe to leave running forever on a phone.
+   A band of light that runs continuously around the edge of the card, on every
+   auth page and every device. It is built from ONE conic gradient rotated by an
+   animated angle and then masked down to a ring, so what moves is the colour,
+   not the card: nothing is laid out or resized on any frame.
+
+   Two layers, both driven by the same --auth-ring-angle so they can never drift
+   apart:
+     1. the halo (::after) — a wider, blurred, dimmer copy that spills light
+        onto the dark backdrop. This is what makes the border READ from across
+        the room instead of being a hairline you have to look for.
+     2. the edge (::before) — the crisp 3px ring itself, sitting on top.
+
+   The gradient keeps a constant indigo tint all the way round and carries TWO
+   bright sweeps (white core into gold) 180deg apart. The tint means the card
+   always has a deliberate lit frame rather than a plain border with something
+   occasionally passing over it; two sweeps mean one is almost always on a side
+   you are looking at, which is what sells the movement.
 
    Two things make it degrade instead of break:
    - @supports: the mask is what turns the gradient into a RING. Without
-     mask-composite the same element would be a solid colour rectangle sitting
-     over the whole card, so on a browser that lacks it the ring is simply
-     never created and the card keeps its plain border.
+     mask-composite the same element would be a solid colour rectangle over the
+     whole card, so where it is unsupported neither layer is created at all and
+     the card keeps its plain border.
    - @property: only the ANIMATION needs it (a custom property is otherwise
      interpolated as a string, i.e. it jumps rather than sweeps). A browser
-     without it still paints the full-colour ring, just without the travel.
+     without it still paints the full lit frame, just without the travel.
 
-   z-index keeps it above the card's own background but it is only ever a 2px
-   band at the very edge, and pointer-events: none means it can never take a
-   tap meant for the field underneath it. */
+   Both layers are pointer-events: none and live at the very edge of the card,
+   so neither can ever take a tap meant for the field underneath. */
 @property --auth-ring-angle {
     syntax: "<angle>";
     inherits: false;
@@ -242,31 +253,46 @@ html, body {
 }
 
 @supports ((-webkit-mask-composite: xor) or (mask-composite: exclude)) {
-    .card-custom::before {
+    .card-custom {
+        /* The spin runs HERE, on the card, not on the two pseudo-elements.
+           --auth-ring-paint below is substituted at computed-value time on this
+           element, so the angle it reads is this element's: an animation on
+           ::before would advance that pseudo's own copy of the angle and never
+           reach the gradient the pseudos actually inherit, leaving the ring
+           frozen. Driving it from the card also means the two layers cannot
+           drift apart — there is only one clock. The entrance animation is
+           restated because this is a shorthand and would otherwise drop it. */
+        animation:
+            fadeSlideUp 0.7s ease-out 0.15s forwards,
+            authRingSpin 5s linear 0.85s infinite;
+        --auth-ring-width: 3px;
+        --auth-ring-glow: 9px;
+        /* One gradient, used by both layers. The stops are spaced so each
+           sweep ramps up over ~30deg and falls away over ~45deg — a hard edge
+           reads as a spinning object, a long tail reads as light. */
+        --auth-ring-paint: conic-gradient(from var(--auth-ring-angle),
+            rgba(129, 140, 248, 0.28) 0deg,
+            rgba(129, 140, 248, 0.28) 20deg,
+            rgba(167, 139, 250, 0.95) 52deg,
+            #ffffff 70deg,
+            #ffd84d 88deg,
+            rgba(129, 140, 248, 0.28) 135deg,
+            rgba(129, 140, 248, 0.28) 200deg,
+            rgba(167, 139, 250, 0.95) 232deg,
+            #ffffff 250deg,
+            #ffd84d 268deg,
+            rgba(129, 140, 248, 0.28) 315deg,
+            rgba(129, 140, 248, 0.28) 360deg);
+    }
+
+    .card-custom::before,
+    .card-custom::after {
         content: "";
         position: absolute;
-        inset: -2px;
-        z-index: 2;
-        border-radius: calc(var(--auth-card-radius) + 2px);
-        padding: 2px;
         pointer-events: none;
-        /* Mostly transparent, with one bright arc: a single highlight running
-           round the edge reads as movement, where an evenly coloured ring just
-           looks like a rainbow border sitting still. The colours are the
-           card's own — indigo into the gold from the divider and the portal
-           badge — so it belongs to the page rather than decorating it. */
-        background: conic-gradient(from var(--auth-ring-angle),
-            rgba(99, 102, 241, 0) 0deg,
-            rgba(99, 102, 241, 0.15) 35deg,
-            rgba(99, 102, 241, 0.85) 85deg,
-            #ffcc00 135deg,
-            #ffffff 160deg,
-            #ffcc00 185deg,
-            rgba(99, 102, 241, 0.85) 235deg,
-            rgba(99, 102, 241, 0.15) 290deg,
-            rgba(99, 102, 241, 0) 360deg);
+        background: var(--auth-ring-paint);
         /* Paint the padding box, knock out the content box: what is left is
-           the 2px frame between them. */
+           the frame between them. */
         -webkit-mask:
             linear-gradient(#000 0 0) content-box,
             linear-gradient(#000 0 0);
@@ -275,16 +301,49 @@ html, body {
             linear-gradient(#000 0 0) content-box,
             linear-gradient(#000 0 0);
         mask-composite: exclude;
-        /* The 0.85s delay lets the card's own fade-and-slide entrance finish
-           first — the ring is part of the card, so it should not be sweeping
-           past a frame the card has not arrived in yet. */
-        animation: authRingSpin 6s linear 0.85s infinite;
     }
 
-    /* Reduced motion: the ring stays, the travel stops. The border still reads
-       as a deliberate part of the design, it just holds still. */
+    /* The halo. Blurred and held at 0.75, so on the dark backdrop it is a glow
+       and on the card's own white it is nothing — which is why it can spill
+       inwards over the corner without touching legibility. Deliberately the
+       only blurred thing here: it is one small composited layer around a card
+       that is already running a backdrop-filter, and widening it is the first
+       thing to reconsider if a low-end phone ever struggles. */
+    .card-custom::after {
+        inset: calc(-1 * var(--auth-ring-glow));
+        z-index: 1;
+        border-radius: calc(var(--auth-card-radius) + var(--auth-ring-glow));
+        padding: var(--auth-ring-glow);
+        filter: blur(7px);
+        opacity: 0.75;
+    }
+
+    /* The edge itself. */
+    .card-custom::before {
+        inset: calc(-1 * var(--auth-ring-width));
+        z-index: 2;
+        border-radius: calc(var(--auth-card-radius) + var(--auth-ring-width));
+        padding: var(--auth-ring-width);
+    }
+
+    /* Phones get the same treatment — this is the one element on the page that
+       is supposed to look expensive, and hiding it on the device most people
+       will actually sign in from would defeat the point. Only the numbers come
+       down, in proportion with the card's smaller corner radius, so a 3px ring
+       on a 480px-wide card does not read as a 3px ring on a 360px one. */
+    @media (max-width: 480px) {
+        .card-custom {
+            --auth-ring-width: 2.5px;
+            --auth-ring-glow: 7px;
+        }
+        .card-custom::after { filter: blur(6px); opacity: 0.8; }
+    }
+
+    /* Reduced motion: the lit frame stays, the travel stops. The border still
+       reads as a deliberate part of the design, it just holds still. The card
+       keeps its entrance — that one is a single short movement, not a loop. */
     @media (prefers-reduced-motion: reduce) {
-        .card-custom::before { animation: none; }
+        .card-custom { animation: fadeSlideUp 0.7s ease-out 0.15s forwards; }
     }
 }
 
