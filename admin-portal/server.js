@@ -114,6 +114,21 @@ function sentimentTone(sentiment) {
     return 'neutral';
 }
 
+// In production nginx sits in front of this process and forwards to
+// 127.0.0.1 (see deploy/nginx-cqa.conf). Without this, Express reports that
+// loopback address as req.ip for EVERY visitor — so the per-IP login throttle
+// was not per-IP at all, it was one shared bucket for the whole institution,
+// and the college's eleventh sign-in of any ten-minute window was refused no
+// matter whose it was or whether the password was right.
+//
+// 'loopback' rather than `true`: it trusts the X-Forwarded-For header only
+// when the connection itself came from 127.0.0.1/::1, which is exactly the
+// nginx-on-the-same-host shape. Trusting every proxy would let anyone on the
+// internet set that header themselves and hand themselves a fresh rate-limit
+// bucket per request, which is worse than having no limiter at all.
+// TRUST_PROXY overrides it for a different topology (a CDN in front, say).
+app.set('trust proxy', process.env.TRUST_PROXY || 'loopback');
+
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -3225,19 +3240,45 @@ const loginAttempts = new Map(); // ip -> { count, windowStart }
 const LOGIN_RATE_LIMIT_MAX = 10;
 const LOGIN_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
+// FAILED attempts only — this used to count every attempt, successful ones
+// included, and that was a real lockout: ten people signing in correctly from
+// one address exhausted the window for everyone behind it, and the eleventh
+// was told "too many login attempts" while typing the right password. An
+// office shares a building, a network and often a single public address, so
+// this was reached on ordinary mornings, not under attack.
+//
+// Counting failures loses nothing defensively: guessing a password IS failing
+// at it, so a brute-force run fills this bucket just as fast as before, while
+// a room full of staff logging in normally never touches it.
+//
+// The middleware only READS the bucket. The route handler is what knows
+// whether the credentials were good, so it reports the outcome back through
+// the two helpers hung on `req` below.
 function loginRateLimiter(redirectPath) {
     return (req, res, next) => {
         const ip = req.ip;
         const now = Date.now();
-        let entry = loginAttempts.get(ip);
-        if (!entry || now - entry.windowStart > LOGIN_RATE_LIMIT_WINDOW_MS) {
-            entry = { count: 0, windowStart: now };
-            loginAttempts.set(ip, entry);
-        }
-        entry.count++;
-        if (entry.count > LOGIN_RATE_LIMIT_MAX) {
+        const entry = loginAttempts.get(ip);
+        const live = entry && now - entry.windowStart <= LOGIN_RATE_LIMIT_WINDOW_MS ? entry : null;
+        if (!live) loginAttempts.delete(ip);
+
+        if (live && live.count >= LOGIN_RATE_LIMIT_MAX) {
             return res.redirect(redirectPath + '?error=' + encodeURIComponent('Too many login attempts. Please try again in a few minutes.'));
         }
+
+        req.noteLoginFailure = () => {
+            const at = Date.now();
+            let e = loginAttempts.get(ip);
+            if (!e || at - e.windowStart > LOGIN_RATE_LIMIT_WINDOW_MS) e = { count: 0, windowStart: at };
+            e.count++;
+            loginAttempts.set(ip, e);
+        };
+        // A correct password is proof this address is not the one being
+        // guessed against, so its failures are forgiven — otherwise a single
+        // typo earlier in the morning would still be held against every
+        // colleague signing in from the same office an hour later.
+        req.clearLoginFailures = () => { loginAttempts.delete(ip); };
+
         next();
     };
 }
@@ -3343,18 +3384,28 @@ const offlineVerifyLimiter = jsonRateLimiter('offline-verify', { windowMs: 15 * 
 // the identifier typed into the login form, lowercased so 'Admin' and
 // 'admin' share one counter.
 const failedLoginsByAccount = new Map(); // identifier -> { count, firstAttempt, lockedUntil }
-const ACCOUNT_LOCKOUT_THRESHOLD = 2;
+// Five, not the two this was set to. Two is one typo and one retry — the
+// most ordinary thing a person does at a login form — and it cost them a
+// five-minute lockout on a password they knew. Five still stops guessing
+// cold (a real attacker needs thousands of tries, not five), and it is the
+// account-level limit that does the actual work here now that the per-IP one
+// only counts failures.
+const ACCOUNT_LOCKOUT_THRESHOLD = 5;
 const ACCOUNT_LOCKOUT_WINDOW_MS = 5 * 60 * 1000; // failed attempts older than this no longer count
 const ACCOUNT_LOCKOUT_DURATION_MS = 5 * 60 * 1000; // how long the account stays locked once tripped
 
 // Returns the active lockout entry for this identifier, or null if it isn't
 // currently locked (also clears it out of the Map once expired).
 function getAccountLockout(identifier) {
-    // TEMPORARILY DISABLED — was blocking real logins during testing (see
-    // conversation with the admin). Tracking below still runs so re-enabling
-    // is just deleting this line.
-    return null;
-    // eslint-disable-next-line no-unreachable
+    // Re-enabled. This was switched off with an early `return null` because it
+    // was locking people out of correct passwords — which it was, at a
+    // threshold of 2: one typo and one retry tripped it. The cause was the
+    // threshold, not the mechanism, so the threshold is what changed (see
+    // ACCOUNT_LOCKOUT_THRESHOLD), and the guard is back on.
+    //
+    // It matters more here than in most apps: every office account is seeded
+    // with the same password, so until those are changed, an unlimited guess
+    // rate against a known office email is the whole door.
     const key = String(identifier || '').trim().toLowerCase();
     if (!key) return null;
     const entry = failedLoginsByAccount.get(key);
@@ -3447,9 +3498,11 @@ app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
             const passwordMatches = await verifyAdminPassword(admin, password);
             if (!passwordMatches) {
                 recordFailedLogin(usernameInput);
+                if (req.noteLoginFailure) req.noteLoginFailure();
                 return res.redirect('/login?error=' + encodeURIComponent('Invalid admin credentials!'));
             }
             clearFailedLogins(usernameInput);
+            if (req.clearLoginFailures) req.clearLoginFailures();
 
             const loginToken = crypto.randomUUID();
 
@@ -3557,9 +3610,11 @@ app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
         const passwordMatches = await bcrypt.compare(password, account.password);
         if (!passwordMatches) {
             recordFailedLogin(emailInput);
+            if (req.noteLoginFailure) req.noteLoginFailure();
             return res.redirect('/login?error=' + encodeURIComponent('Invalid email or password.'));
         }
         clearFailedLogins(emailInput);
+        if (req.clearLoginFailures) req.clearLoginFailures();
 
         // Regenerate before assigning identity to prevent session fixation
         // (an attacker who planted a known session id on the victim's
@@ -3586,15 +3641,20 @@ app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
             }
             const office = officeRows && officeRows[0];
             if (!office || !office.password) {
+                // Counts as a failure: an unknown address is exactly what a
+                // list of guessed emails looks like from the server's side.
+                if (req.noteLoginFailure) req.noteLoginFailure();
                 return res.redirect('/login?tab=register&error=' + encodeURIComponent('No account found for that email. Open the Register tab and sign up with your CSPC or personal email first.'));
             }
 
             const passwordMatches = await bcrypt.compare(password, office.password);
             if (!passwordMatches) {
                 recordFailedLogin(emailInput);
+                if (req.noteLoginFailure) req.noteLoginFailure();
                 return res.redirect('/login?error=' + encodeURIComponent('Invalid email or password.'));
             }
             clearFailedLogins(emailInput);
+            if (req.clearLoginFailures) req.clearLoginFailures();
 
             regenerateAdminSession(req, res);
             req.adminSession.user = {
@@ -3857,17 +3917,38 @@ app.get('/office-dashboard', ensureOfficeAuth, noCache, (req, res) => {
     );
 });
 
-// Live status for the office panel's poller (see office-shell.ejs). Answers
-// the two questions the panel asks on a timer — "how many are waiting?" and
-// "is any of them NEW since I last looked?" — and nothing else: no respondent
-// name, email or answer is selected, so the thing running every few seconds on
-// an unattended screen carries no personal data at all. The newest pending id
-// is what makes "new" detectable; a count alone cannot tell one submission
-// arriving while another is approved from nothing happening.
+// Live status for the office panel's poller (see office-shell.ejs).
+//
+// Returns a small fingerprint of everything the three office pages display,
+// so the panel can tell that what is on screen has gone out of date — not
+// just that a new submission arrived. The four numbers cover every way this
+// office's data changes:
+//
+//   pending / latestPendingId  a submission arrives, OR one is approved or
+//                              declined (here, or by a colleague on another
+//                              device, or in another tab)
+//   history                    a submission finishes review, from anywhere
+//   responses                  an approved survey lands in the office's
+//                              actual records — and also catches a survey
+//                              from a CSPC institutional account, which is
+//                              recorded directly and never becomes a pending
+//                              row at all, so nothing else here would move
+//
+// Still counts only. No respondent name, email address or answer is selected,
+// so the thing running every ten seconds on an unattended screen carries no
+// personal data. latestPendingId is what separates "something NEW arrived"
+// from "something was reviewed": a count alone cannot tell one submission
+// arriving while another is approved from nothing happening at all.
 app.get('/office-approvals/status', ensureOfficeAuth, noCache, (req, res) => {
     const officeId = req.adminSession.user.id;
+    // Pending and history come off the same table, so they are one query, not
+    // the two this used to make — this runs on a timer for every open panel.
     db.query(
-        "SELECT COUNT(*) AS pending, COALESCE(MAX(id), 0) AS latestId FROM pending_survey_submissions WHERE office_id = ? AND status = 'pending'",
+        "SELECT " +
+        "  SUM(status = 'pending') AS pending, " +
+        "  COALESCE(MAX(CASE WHEN status = 'pending' THEN id END), 0) AS latestId, " +
+        "  SUM(status IN ('approved', 'declined')) AS history " +
+        'FROM pending_survey_submissions WHERE office_id = ?',
         [officeId],
         (err, rows) => {
             if (err) {
@@ -3875,14 +3956,23 @@ app.get('/office-approvals/status', ensureOfficeAuth, noCache, (req, res) => {
                 return res.status(500).json({ success: false, message: 'Server error.' });
             }
             const row = (rows && rows[0]) || {};
-            getOfficeHistoryCount(officeId, (historyCount) => {
-                res.json({
-                    success: true,
-                    pending: Number(row.pending || 0),
-                    latestPendingId: Number(row.latestId || 0),
-                    history: Number(historyCount || 0)
-                });
-            });
+            db.query(
+                'SELECT COUNT(*) AS c FROM survey_responses WHERE office_id = ?',
+                [officeId],
+                (errResp, respRows) => {
+                    if (errResp) console.error('❌ Error counting office responses:', errResp);
+                    res.json({
+                        success: true,
+                        pending: Number(row.pending || 0),
+                        latestPendingId: Number(row.latestId || 0),
+                        history: Number(row.history || 0),
+                        // On an error this stays 0 rather than failing the whole
+                        // poll: three of the four numbers are still useful, and a
+                        // steady 0 simply means this one never reports a change.
+                        responses: Number((respRows && respRows[0] && respRows[0].c) || 0)
+                    });
+                }
+            );
         }
     );
 });

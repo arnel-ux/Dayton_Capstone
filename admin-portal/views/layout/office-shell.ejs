@@ -188,16 +188,32 @@
         // Long enough to read "a new submission is waiting" before the page
         // moves under you, short enough that it still feels immediate.
         var REFRESH_DELAY_MS = 3500;
-        // Which pages bring themselves up to date when something new lands.
-        // History is not one of them: a new PENDING submission changes nothing
-        // on a page that lists already-reviewed ones, so reloading it would
-        // only throw away the reader's place for no new information.
-        var REFRESHES = (ACTIVE === 'pending' || ACTIVE === 'dashboard');
+        // What makes THIS page out of date. Each page is refreshed on the
+        // changes it actually shows and on nothing else, so nobody loses their
+        // place to an update that would not have altered a pixel:
+        //
+        //   dashboard  every count on it moves — waiting, approved, declined,
+        //              respondents — so any change at all
+        //   pending    the queue itself: one arriving, or one leaving because
+        //              a colleague reviewed it somewhere else
+        //   history    only a finished review adds a row here; a newly
+        //              arrived submission does not belong on this page yet
+        function isStale(before, now) {
+            if (ACTIVE === 'dashboard') return signature(before) !== signature(now);
+            if (ACTIVE === 'pending') return before.pending !== now.pending || before.latestPendingId !== now.latestPendingId;
+            if (ACTIVE === 'history') return before.history !== now.history;
+            return false;
+        }
+
+        // Everything the panel draws, in one comparable string.
+        function signature(d) {
+            return [d.pending, d.latestPendingId, d.history, d.responses].join('|');
+        }
         // Survives the reload below, so the message that explains WHY the page
         // just reloaded is still there afterwards.
         var NOTICE_KEY = 'cqa_office_pending_notice';
 
-        var baseline = null;      // newest pending id as of the last look
+        var baseline = null;      // the whole picture as of the last look
         var stopped = false;
         var wantsRefresh = null;  // the message to carry through a pending refresh
         var toldAboutWait = false;
@@ -205,11 +221,19 @@
 
         function el(id) { return document.getElementById(id); }
 
-        function notify(message) {
+        // Two weights of message, because two different things happen here.
+        // A submission ARRIVING is addressed to the staffer and waits until
+        // they acknowledge it. A page merely catching up with a transaction
+        // that already completed — a colleague approving something, a survey
+        // being recorded — is not a request for attention; it only needs to
+        // explain why the page just moved, then get out of the way.
+        function notify(message, opts) {
+            opts = opts || {};
             if (window.AppAlert && AppAlert.toastInfo) {
-                // Does not auto-dismiss: this is the one notification on the
-                // page that must not be missed by someone who looked away.
-                AppAlert.toastInfo(message, { title: 'New Pending Survey', autoClose: false });
+                AppAlert.toastInfo(message, {
+                    title: opts.title || 'New Pending Survey',
+                    autoClose: opts.quiet === true
+                });
             } else if (window.console) {
                 console.info('[office] ' + message);
             }
@@ -234,8 +258,10 @@
             return true;
         }
 
-        function refreshNow(message) {
-            try { sessionStorage.setItem(NOTICE_KEY, message); } catch (e) { /* the toast is a bonus, the refresh is the point */ }
+        function refreshNow(notice) {
+            // The reload wipes the toast that was just raised, so the message
+            // is handed across to the page that comes back.
+            try { sessionStorage.setItem(NOTICE_KEY, JSON.stringify(notice)); } catch (e) { /* the toast is a bonus, the refresh is the point */ }
             window.location.reload();
         }
 
@@ -277,29 +303,42 @@
                 if (!data || data.success !== true) return;
                 paint(data);
 
-                var latest = Number(data.latestPendingId || 0);
-                if (baseline === null) { baseline = latest; return; }   // first look sets the mark, never announces
-                if (latest <= baseline) { baseline = latest; return; }
+                // The first look only sets the mark. It never announces:
+                // everything it sees is already on the page it just loaded.
+                if (baseline === null) { baseline = data; return; }
 
-                var added = data.pending;
-                baseline = latest;
-                var message = added === 1
-                    ? 'A new survey submission is waiting for your review.'
-                    : added + ' survey submissions are waiting for your review.';
+                var before = baseline;
+                if (signature(before) === signature(data)) return;   // nothing moved
+                baseline = data;
 
-                // Told FIRST, always, on every page. The refresh below is how
-                // the list catches up, but it is not how the staffer finds out:
-                // waiting for a reload to carry the news meant the alert
-                // appeared up to a minute after the submission landed, which
-                // reads exactly like it never appears on its own at all.
-                notify(message);
-                if (REFRESHES) {
-                    wantsRefresh = message;
-                    // Don't sit on it until the next poll comes round — give
-                    // the toast a moment to be read, then bring the page up to
-                    // date. tick() still owns the "is it safe yet" question.
-                    setTimeout(tick, REFRESH_DELAY_MS);
+                // A submission ARRIVING is the one event addressed to the
+                // staffer, and it is announced on every page — even History,
+                // which does not refresh for it: they still need to know a
+                // queue is forming while they read.
+                var arrived = data.latestPendingId > before.latestPendingId;
+                if (arrived) {
+                    notify(data.pending === 1
+                        ? 'A new survey submission is waiting for your review.'
+                        : data.pending + ' survey submissions are waiting for your review.');
                 }
+
+                if (!isStale(before, data)) return;   // changed, but not on THIS page
+
+                // Anything else that moved is a transaction that already
+                // finished somewhere — a colleague approving or declining, an
+                // approved survey landing in the office's records, a survey
+                // from a CSPC account recorded without ever queueing. The page
+                // is simply brought up to date, with a short note saying so,
+                // because a page that reloads for no stated reason reads as a
+                // fault rather than as being current.
+                wantsRefresh = arrived
+                    ? { text: 'A new survey submission is waiting for your review.', quiet: false }
+                    : { text: 'Updated — the records for this office changed just now.', quiet: true, title: 'Page Updated' };
+
+                // Don't sit on it until the next poll comes round — give the
+                // toast a moment to be read, then bring the page up to date.
+                // tick() still owns the "is it safe yet" question.
+                setTimeout(tick, REFRESH_DELAY_MS);
             }).catch(function () {
                 // Offline, asleep, a dropped connection: nothing to report.
                 // The next tick tries again.
@@ -310,17 +349,18 @@
             // A hidden tab is not being read, so it neither polls nor reloads
             // under someone's feet; it catches up the moment it is looked at.
             if (document.visibilityState !== 'visible') return;
-            if (wantsRefresh) {
-                if (safeToReload()) return refreshNow(wantsRefresh);
+            if (wantsRefresh && safeToReload()) return refreshNow(wantsRefresh);
+            if (wantsRefresh && !toldAboutWait) {
                 // Busy — the refresh waits, but the staffer should not: told
                 // once, here, so a long spell of typing does not hide the fact
-                // that something arrived. Every later tick just re-checks.
-                if (!toldAboutWait) {
-                    toldAboutWait = true;
-                    notify('The list updates as soon as you finish what you are doing.');
-                }
-                return;
+                // that the page has something to catch up on.
+                toldAboutWait = true;
+                notify('This page updates as soon as you finish what you are doing.', { title: 'Page Updated', quiet: true });
             }
+            // Polling continues even while a refresh is queued. Someone can
+            // spend minutes on one decline reason, and submissions arriving in
+            // that time still have to announce themselves — stopping here
+            // would have made the busiest moments the quietest ones.
             poll();
         }
 
@@ -328,8 +368,12 @@
             // Anything left over from the reload this script asked for.
             try {
                 var carried = sessionStorage.getItem(NOTICE_KEY);
-                if (carried) { sessionStorage.removeItem(NOTICE_KEY); notify(carried); }
-            } catch (e) { /* private mode — the reload still happened */ }
+                if (carried) {
+                    sessionStorage.removeItem(NOTICE_KEY);
+                    var notice = JSON.parse(carried);
+                    notify(notice.text, notice);
+                }
+            } catch (e) { /* private mode, or a notice from an older version — the reload still happened, which was the point */ }
 
             poll();
             setInterval(tick, POLL_MS);
