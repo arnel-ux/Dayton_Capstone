@@ -655,8 +655,8 @@
                                     </td>
                                     <td data-label="Reviewed" class="collapsible-detail col-order-reviewed">
                                         <div class="cell-value" data-bs-toggle="tooltip" data-bs-placement="top"
-                                             title="<%= sub.reviewedAt ? new Date(sub.reviewedAt).toLocaleString('en-PH', { dateStyle: 'full', timeStyle: 'medium' }) : '' %>">
-                                            <%= sub.reviewedAt ? new Date(sub.reviewedAt).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' }) : '—' %>
+                                             title="<%= sub.reviewedAt ? new Date(sub.reviewedAt).toLocaleString('en-PH', { dateStyle: 'full', timeStyle: 'medium', timeZone: displayTimeZone }) : '' %>">
+                                            <%= sub.reviewedAt ? new Date(sub.reviewedAt).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short', timeZone: displayTimeZone }) : '—' %>
                                         </div>
                                     </td>
                                 </tr>

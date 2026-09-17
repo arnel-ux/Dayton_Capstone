@@ -468,7 +468,7 @@ function nextEligibleTimestamp(lastEventAt, availability) {
 function nextEligibleDateText(lastEventAt, availability) {
     const ts = nextEligibleTimestamp(lastEventAt, availability);
     if (!ts) return null;
-    return new Date(ts).toLocaleDateString('en-PH', { dateStyle: 'long' });
+    return new Date(ts).toLocaleDateString('en-PH', { dateStyle: 'long', timeZone: DISPLAY_TIME_ZONE });
 }
 
 // The non-atomic SELECT-then-INSERT eligibility gate that used to live here
@@ -1732,6 +1732,66 @@ function buildSqdBucketRow(label, buckets) {
 }
 
 // ==========================================
+// DISPLAY TIME ZONE
+// ==========================================
+// Every timestamp this app shows describes something that happened on a
+// Philippine campus, so it is rendered in Philippine time no matter where the
+// server itself runs. Formatting with the server's own local zone (the default
+// for toLocaleTimeString) is only correct while the server happens to BE in
+// that zone: the same survey then reads 11:42 PM on a machine in Manila and
+// 3:42 PM on the UTC cloud VM it is deployed to.
+//
+// This changes only how stored instants are PRINTED. Nothing here rewrites
+// what is stored, and the stored value is unambiguous either way, because
+// mysql2 reads a DATETIME using the Node process's zone and MySQL writes it
+// using its own (both 'SYSTEM' on the same host) — the two always agree, so
+// the Date object is the right instant and only its presentation was wrong.
+const DISPLAY_TIME_ZONE = process.env.DISPLAY_TIME_ZONE || 'Asia/Manila';
+
+// Templates format a few timestamps inline (the office's Pending and History
+// lists), and need the same zone for the same reason.
+app.locals.displayTimeZone = DISPLAY_TIME_ZONE;
+
+// The zone's UTC offset at a given instant, derived by formatting the same
+// instant both ways and differencing them. The Philippines has no DST, so this is a
+// constant +08:00 in practice; computing it per-instant keeps the helpers
+// correct anyway if DISPLAY_TIME_ZONE is ever pointed at a zone that does.
+function zonedOffsetMs(date) {
+    const asUtc = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const asZone = new Date(date.toLocaleString('en-US', { timeZone: DISPLAY_TIME_ZONE }));
+    return asZone.getTime() - asUtc.getTime();
+}
+
+// 'YYYY-MM-DD' for the calendar day this instant falls on in the display zone.
+// en-CA is used purely because it formats as ISO, which compares as a plain
+// string — this is what decides whether two submissions group under the same
+// day heading, and whether that heading is "Today".
+function zonedDayKey(date) {
+    return date.toLocaleDateString('en-CA', { timeZone: DISPLAY_TIME_ZONE });
+}
+
+// The exact instant midnight began, in the display zone, on the day this
+// instant falls on. Used for "today"/"last 7 days" counting so those totals
+// agree with the day headings beside them instead of silently rolling over at
+// the server's midnight.
+function startOfZonedDay(date) {
+    const offset = zonedOffsetMs(date);
+    const shifted = new Date(date.getTime() + offset);
+    shifted.setUTCHours(0, 0, 0, 0);
+    return new Date(shifted.getTime() - offset);
+}
+
+function formatZonedTime(date) {
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: DISPLAY_TIME_ZONE });
+}
+
+function formatZonedDayLabel(date) {
+    return date.toLocaleDateString('en-US', {
+        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: DISPLAY_TIME_ZONE
+    });
+}
+
+// ==========================================
 // PERIOD COVERED HELPERS
 // ==========================================
 // Submission tagging stays dynamic (server date -> period string) since the
@@ -2285,7 +2345,7 @@ function notifyClientOfDecline(toEmail, officeId, details) {
             name: details.name || 'Client',
             officeName: office ? office.office_name : 'Selected Office',
             serviceAvailed: details.serviceAvailed || 'Not specified',
-            reviewedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
+            reviewedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short', timeZone: DISPLAY_TIME_ZONE }),
             reason: details.reason,
             submissionId: details.submissionId
         });
@@ -4372,7 +4432,7 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
             clusterName: office ? office.cluster_name : '',
             clientType: payload.clientType,
             serviceAvailed: payload.serviceAvailed || 'Not specified',
-            submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
+            submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short', timeZone: DISPLAY_TIME_ZONE }),
             surveyResponseId,
             cc1: payload.cc1, cc2: payload.cc2, cc3: payload.cc3,
             sqd: (payload.sqdValues || []).map((v, i) => ({ label: 'SQD' + i, value: v })),
@@ -5409,7 +5469,7 @@ app.post('/submit-survey', ensureClientAuth, async (req, res) => {
                     clusterName: office ? office.cluster_name : '',
                     clientType: finalClientType,
                     serviceAvailed: finalServiceAvailed || 'Not specified',
-                    submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
+                    submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short', timeZone: DISPLAY_TIME_ZONE }),
                     surveyResponseId,
                     cc1: fields.cc1, cc2: fields.cc2, cc3: fields.cc3,
                     sqd: sqdValues.map((v, i) => ({ label: 'SQD' + i, value: v })),
@@ -6110,7 +6170,7 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
             type: 'eligibility_conflict',
             title: 'Offline Response Not Submitted',
             message: precheck.nextEligibleAt
-                ? `Your offline response could not be submitted because the selected service is currently unavailable for another response. You may submit another response for this service after ${new Date(precheck.nextEligibleAt).toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' })}.`
+                ? `Your offline response could not be submitted because the selected service is currently unavailable for another response. You may submit another response for this service after ${new Date(precheck.nextEligibleAt).toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short', timeZone: DISPLAY_TIME_ZONE })}.`
                 : (precheck.message || 'Your offline response could not be submitted because the selected service is currently unavailable for another response.'),
             offlineSubmissionId: submissionId,
             dedupeKey: 'offline-conflict:' + submissionId
@@ -6180,7 +6240,7 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
                 type: 'eligibility_conflict',
                 title: 'Offline Response Not Submitted',
                 message: precedence.nextEligibleAt
-                    ? `Your offline response could not be submitted because the selected service is currently unavailable for another response. You may submit another response for this service after ${new Date(precedence.nextEligibleAt).toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' })}.`
+                    ? `Your offline response could not be submitted because the selected service is currently unavailable for another response. You may submit another response for this service after ${new Date(precedence.nextEligibleAt).toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short', timeZone: DISPLAY_TIME_ZONE })}.`
                     : (precedence.message || 'Your offline response could not be submitted because the selected service is currently unavailable for another response.'),
                 offlineSubmissionId: submissionId,
                 dedupeKey: 'offline-conflict:' + submissionId
@@ -6287,7 +6347,7 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
         sendOfflineSurveySyncedEmail(verifiedEmail, {
             officeName,
             serviceAvailed: finalServiceAvailed || 'Not specified',
-            submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }),
+            submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short', timeZone: DISPLAY_TIME_ZONE }),
             surveyResponseId: result.surveyResponseId
         });
         createClientNotification({
@@ -7160,11 +7220,19 @@ app.get('/user-accounts', ensureAdminAuth, noCache, (req, res) => {
     // Counted over the whole table rather than derived from the capped list
     // above, so the tiles stay truthful once there are more than
     // ACCOUNT_ACTIVITY_LIMIT submissions.
+    //
+    // The day boundaries are computed in the display zone and passed in, rather
+    // than using MySQL's CURDATE(). CURDATE() is midnight in the DATABASE's
+    // zone, which on a UTC server is 8am Manila — so between midnight and 8am
+    // the "Today" tile would count yesterday's surveys while the "Today"
+    // heading right below it listed the correct ones.
+    const startOfToday = startOfZonedDay(new Date());
+    const startOfWeek = startOfZonedDay(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000));
     const statsQuery = `
         SELECT COUNT(*) AS total_submissions,
                COUNT(DISTINCT s.google_email) AS distinct_accounts,
-               SUM(DATE(s.created_at) = CURDATE()) AS today_count,
-               SUM(s.created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)) AS week_count
+               SUM(s.created_at >= ?) AS today_count,
+               SUM(s.created_at >= ?) AS week_count
         FROM survey_responses s
         WHERE s.canonical_status = 'canonical'
     `;
@@ -7172,33 +7240,31 @@ app.get('/user-accounts', ensureAdminAuth, noCache, (req, res) => {
     db.query(activityQuery, (err, rows) => {
         if (err) console.error('\u274c [Account Activity] Error loading recent survey activity:', err);
 
-        db.query(statsQuery, (err2, statRows) => {
+        db.query(statsQuery, [startOfToday, startOfWeek], (err2, statRows) => {
             if (err2) console.error('\u274c [Account Activity] Error loading activity stats:', err2);
 
-            // Grouped by calendar day on the server, using the same clock that
-            // stamped created_at -- doing it in the browser instead would
-            // silently regroup the whole page for an admin whose machine sits
-            // in a different timezone than the server.
-            const today = new Date();
-            const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-            const todayKey = dayKey(today);
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-            const yesterdayKey = dayKey(yesterday);
+            // Grouped by calendar day on the server so every admin sees the same
+            // grouping -- doing it in the browser would regroup the page for an
+            // admin whose machine sits in another zone. The day a submission
+            // belongs to, its heading, and its printed time are all resolved in
+            // DISPLAY_TIME_ZONE rather than the server's own, so a deployment
+            // running in UTC still reports campus time.
+            const todayKey = zonedDayKey(new Date());
+            const yesterdayKey = zonedDayKey(new Date(Date.now() - 24 * 60 * 60 * 1000));
 
             const groups = [];
             let currentGroup = null;
 
             (rows || []).forEach(row => {
                 const when = row.created_at ? new Date(row.created_at) : null;
-                const key = when ? dayKey(when) : 'unknown';
+                const key = when ? zonedDayKey(when) : 'unknown';
 
                 if (!currentGroup || currentGroup.key !== key) {
                     let label = 'Unknown date';
                     if (when) {
                         if (key === todayKey) label = 'Today';
                         else if (key === yesterdayKey) label = 'Yesterday';
-                        else label = when.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+                        else label = formatZonedDayLabel(when);
                     }
                     currentGroup = { key, label, entries: [] };
                     groups.push(currentGroup);
@@ -7209,7 +7275,7 @@ app.get('/user-accounts', ensureAdminAuth, noCache, (req, res) => {
                     name: row.respondent_name || row.account_name || 'Anonymous',
                     hasName: !!(row.respondent_name || row.account_name),
                     email: row.google_email || null,
-                    timeText: when ? when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '',
+                    timeText: when ? formatZonedTime(when) : '',
                     isoTime: when ? when.toISOString() : null
                 });
             });

@@ -739,8 +739,8 @@
                                         </td>
                                         <td data-label="Submitted" class="collapsible-detail col-order-submitted">
                                             <div class="cell-value" data-bs-toggle="tooltip" data-bs-placement="top"
-                                                 title="<%= new Date(sub.createdAt).toLocaleString('en-PH', { dateStyle: 'full', timeStyle: 'medium' }) %>">
-                                                <%= new Date(sub.createdAt).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' }) %>
+                                                 title="<%= new Date(sub.createdAt).toLocaleString('en-PH', { dateStyle: 'full', timeStyle: 'medium', timeZone: displayTimeZone }) %>">
+                                                <%= new Date(sub.createdAt).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short', timeZone: displayTimeZone }) %>
                                             </div>
                                         </td>
                                         <td data-label="Google Account" class="row-summary-toggle col-order-email" role="button" tabindex="0" aria-expanded="false">
