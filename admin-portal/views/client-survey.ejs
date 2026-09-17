@@ -4108,6 +4108,21 @@
                  nothing to "restore" here; the autosave below only matters
                  for a refresh/reopen while this stays hidden. -->
             <button type="button" id="continueSurveyBtn" class="btn btn-primary fw-semibold" onclick="dismissOfflineTransitionForContinue()" hidden>Continue Survey</button>
+            <!-- HOME / PROFILE / HISTORY ONLY — see showOfflineTransition().
+                 On those three views there is no survey attempt in play, so
+                 "Continue Survey" has nothing to continue and "Go to Offline
+                 Survey" pushes the visitor into starting one they never asked
+                 for. What they were actually doing was reading their profile
+                 or their history, and the cached copy of that is still on
+                 screen behind this overlay — so the honest primary action
+                 there is simply to stay on the view they were already on.
+
+                 The offline-survey route is not lost by this: switchView()
+                 re-raises this overlay (with Go to Offline Survey back as the
+                 primary action) the moment they open the Take Survey view
+                 while still offline, which is the point at which that route
+                 is the thing they want. -->
+            <button type="button" id="offlineTransitionStayHereBtn" class="btn btn-primary fw-semibold" onclick="dismissOfflineTransitionForContinue()" hidden>Stay Here</button>
             <!-- leaveFromOfflineOverlay (defined below), NOT the general
                  confirmLeaveOfflineSurvey: these three go straight to their
                  destination with no extra prompt. showOfflineTransition()
@@ -4611,18 +4626,45 @@ function showOfflineTransition() {
     const desc = document.getElementById('offlineTransitionDesc');
     const progressNote = document.getElementById('offlineTransitionProgressNote');
     const continueBtn = document.getElementById('continueSurveyBtn');
+    const stayHereBtn = document.getElementById('offlineTransitionStayHereBtn');
     const goOfflineSurveyBtn = document.getElementById('offlineTransitionGoOfflineSurveyBtn');
     if (icon) icon.className = 'bi bi-wifi-off';
     if (title) title.textContent = "You're Offline";
-    if (desc) desc.textContent = 'Your internet connection has been lost. Online account features are temporarily unavailable.';
+
+    // WHICH VIEW THE USER WAS ON DECIDES WHAT THIS OFFERS.
+    //
+    // The survey routes ("Continue Survey", "Go to Offline Survey") only make
+    // sense to someone who is actually taking the survey. On Home, Profile
+    // and History they were offering a task the visitor never started: losing
+    // Wi-Fi while reading your own answer history is not a reason to be sent
+    // off to fill in a new offline survey. Those three views get "Stay Here"
+    // instead — the cached view behind this overlay is still perfectly
+    // readable, so staying on it is both the safe and the honest option.
+    //
+    // The Take Survey view keeps the behaviour exactly as it was: Continue
+    // Survey when there's real progress to continue, Go to Offline Survey
+    // otherwise.
+    const onSurveyView = !!document.querySelector('#view-survey.active');
+
+    if (desc) {
+        desc.textContent = onSurveyView
+            ? 'Your internet connection has been lost. Online account features are temporarily unavailable.'
+            : 'Your internet connection has been lost. Online account features are temporarily unavailable — you can keep viewing what was already loaded on this device.';
+    }
 
     // "Continue Survey" only when there's real unfinished progress (item 4)
-    // — opening the survey and answering nothing does not count.
-    const hasRealProgress = hasUnsavedSurveyProgress();
+    // — opening the survey and answering nothing does not count. Off the
+    // survey view there is by definition no attempt in progress, so neither
+    // this nor the green progress note can apply.
+    const hasRealProgress = onSurveyView && hasUnsavedSurveyProgress();
     if (progressNote) progressNote.hidden = !hasRealProgress;
     if (continueBtn) continueBtn.hidden = !hasRealProgress;
+    if (stayHereBtn) stayHereBtn.hidden = onSurveyView;
+    if (goOfflineSurveyBtn) goOfflineSurveyBtn.hidden = !onSurveyView;
     // Keep exactly one visually-primary action: Continue Survey when it's
-    // available, "Go to Offline Survey" otherwise (its original role).
+    // available, "Go to Offline Survey" otherwise (its original role) — and
+    // off the survey view, "Stay Here", which is the only one of the three
+    // still on screen there.
     if (goOfflineSurveyBtn) {
         goOfflineSurveyBtn.classList.toggle('btn-primary', !hasRealProgress);
         goOfflineSurveyBtn.classList.toggle('btn-outline-primary', hasRealProgress);
@@ -5731,6 +5773,21 @@ function switchView(view) {
     if (view !== 'survey' && backOnlinePromptSuppressed) {
         backOnlinePromptSuppressed = false;
         if (typeof showBackOnlineTransition === 'function') showBackOnlineTransition();
+    }
+
+    // Opening Take Survey while still offline is the moment the offline
+    // routes become relevant, so the overlay comes back here with "Go to
+    // Offline Survey" as its primary action — see showOfflineTransition().
+    //
+    // This is the other half of the "Stay Here" choice: on Home/Profile/
+    // History that button dismisses the overlay so the cached view stays
+    // readable, and dismissing it there must not quietly cost the visitor
+    // the offline-survey route. Re-raising it on this one view gives it back
+    // at exactly the point it is asked for, and nowhere else — navigating
+    // between Home, Profile and History after choosing Stay Here stays
+    // uninterrupted, which is the whole point of having chosen it.
+    if (view === 'survey' && !OFFLINE_MODE && !navigator.onLine) {
+        showOfflineTransition();
     }
 
     return false;

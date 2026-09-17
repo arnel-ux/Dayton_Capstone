@@ -1019,6 +1019,30 @@
         </div>
     </div>
 
+    <!-- WEAK-CONNECTION PROMPT — see showWeakConnectionPrompt() near the
+         bottom of this file, and /css/offline-pill.css for the styling.
+
+         Raised when /api/health cannot be reached while navigator.onLine is
+         still true. That combination is the case the amber chip alone handled
+         badly: the browser insists it is online, so the "Take Survey Offline"
+         button stayed hidden, yet the connection is too weak to actually
+         reach the survey — so the visitor sat on a page that looked fine and
+         got nowhere. This asks them outright instead.
+
+         Never auto-navigates: exactly like #offlineSurveyBtn above, the
+         visitor chooses the offline route themselves. -->
+    <div id="weakConnectionPrompt" class="weak-connection-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="weakConnectionTitle">
+        <div class="weak-connection-card">
+            <div class="weak-connection-icon"><i class="fas fa-wifi"></i></div>
+            <h4 id="weakConnectionTitle">Your Connection Is Weak</h4>
+            <p>Your internet is too slow or unstable to load the survey right now. You can take the survey offline instead — your answers are saved on this device and submitted automatically once your connection improves.</p>
+            <div class="weak-connection-actions">
+                <a href="/survey-offline" class="wc-btn-primary"><i class="fas fa-clipboard-list"></i> Take Offline Survey</a>
+                <button type="button" class="wc-btn-secondary" onclick="dismissWeakConnectionPrompt()">Stay Online</button>
+            </div>
+        </div>
+    </div>
+
     <div class="page-content">
 
         <!-- ================= HERO SECTION ================= -->
@@ -2570,12 +2594,48 @@
         // checkServerHealth below) is a separate, independent signal for the
         // very different "browser online but server unreachable" case, and
         // never shows or implies this button either.
+        // True once a /api/health probe has failed while navigator.onLine is
+        // still reporting "online" — i.e. a connection too weak to use, which
+        // navigator.onLine on its own can never tell us about. Cleared the
+        // moment a probe succeeds again. See checkServerHealth() below.
+        let weakConnectionDetected = false;
+        // "Stay Online" was chosen on this page load. Only suppresses the
+        // popup from re-opening by itself — the "Take Survey Offline" button
+        // in the pill row stays up for as long as the connection is unusable,
+        // so the offline route is still one click away without nagging.
+        let weakConnectionPromptDismissed = false;
+
         function updateOfflineIndicator() {
             const offline = !navigator.onLine;
             const el = document.getElementById('offlineIndicator');
             if (el) el.classList.toggle('is-visible', offline);
             const offlineSurveyBtn = document.getElementById('offlineSurveyBtn');
-            if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !offline);
+            // Shown for BOTH unusable-connection cases now, not just the
+            // navigator.onLine one: "online but nothing gets through" is the
+            // state that stranded visitors, precisely because the browser
+            // still called it online and this button stayed hidden.
+            if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !offline && !weakConnectionDetected);
+        }
+
+        function showWeakConnectionPrompt() {
+            if (weakConnectionPromptDismissed) return;
+            const prompt = document.getElementById('weakConnectionPrompt');
+            if (prompt) prompt.hidden = false;
+        }
+
+        function hideWeakConnectionPrompt() {
+            const prompt = document.getElementById('weakConnectionPrompt');
+            if (prompt) prompt.hidden = true;
+        }
+
+        // "Stay Online". Re-probes immediately so a connection that has since
+        // recovered clears the amber chip and the offline button right away,
+        // rather than leaving the page looking broken after the visitor has
+        // said they want to keep waiting.
+        function dismissWeakConnectionPrompt() {
+            weakConnectionPromptDismissed = true;
+            hideWeakConnectionPrompt();
+            checkServerHealth();
         }
         window.addEventListener('online', updateOfflineIndicator);
         window.addEventListener('offline', updateOfflineIndicator);
@@ -2615,11 +2675,31 @@
                 const res = await fetchWithTimeout('/api/health', {}, 4000);
                 if (res.ok) {
                     setServerNotice(null);
+                    // Connection is usable again: retract everything the weak
+                    // state put up, and re-arm the popup so a LATER drop on
+                    // this same page load can still ask the question.
+                    weakConnectionDetected = false;
+                    weakConnectionPromptDismissed = false;
+                    hideWeakConnectionPrompt();
+                    updateOfflineIndicator();
                 } else {
+                    // A response came back — the network is fine, the service
+                    // isn't. Not a weak connection, so no offline prompt: the
+                    // offline survey would only queue behind the same failing
+                    // server. Retract the weak state if it was up.
                     setServerNotice('error', 'The service is temporarily unavailable. Please try again shortly.');
+                    weakConnectionDetected = false;
+                    hideWeakConnectionPrompt();
+                    updateOfflineIndicator();
                 }
             } catch (err) {
                 setServerNotice('warning', 'Your internet connection is slow or unstable. Some features may take longer to load.');
+                // The whole point of the prompt: navigator.onLine still says
+                // "online" here, so nothing else on this page would have
+                // offered the offline route.
+                weakConnectionDetected = true;
+                updateOfflineIndicator();
+                showWeakConnectionPrompt();
             }
         }
         window.addEventListener('online', checkServerHealth);
@@ -2636,7 +2716,19 @@
         // braces: if two ever do show together, they step down instead of
         // overlapping.) "No network at all" is the more specific message of the
         // two, so it is the one that stays.
-        window.addEventListener('offline', function () { setServerNotice(null); });
+        // Going fully offline supersedes the weak-connection state: the
+        // "Viewing Offline" chip and #offlineSurveyBtn both cover it on
+        // navigator.onLine alone from here, and the popup's "slow or
+        // unstable" wording would be wrong for a connection that is simply
+        // gone. The dismissal flag is cleared with it so that recovering to a
+        // merely-weak connection can ask again.
+        window.addEventListener('offline', function () {
+            setServerNotice(null);
+            weakConnectionDetected = false;
+            weakConnectionPromptDismissed = false;
+            hideWeakConnectionPrompt();
+            updateOfflineIndicator();
+        });
         checkServerHealth();
 
         // Finishes a server-side logout that couldn't complete while the
