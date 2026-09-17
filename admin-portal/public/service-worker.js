@@ -169,8 +169,17 @@ importScripts('/js/offline-db.js');
 // under /office-approvals/, so ADMIN_PROTECTED_PATH_PREFIXES already keeps it
 // away from every cache — an answer to "what is waiting right now" served
 // from a cache would be worse than no answer.
-const STATIC_CACHE = 'cspc-static-v41';
-const RUNTIME_CACHE = 'cspc-runtime-v41';
+// v42: /css/alerts.css. SweetAlert2 injects its stylesheet at runtime, so it
+// always landed after alerts.css's <link> and its hard-coded white popup
+// background beat the themed one — every alert in dark mode came out as pale
+// text on white. alerts.css is in CRITICAL_PRECACHE_URLS and served
+// cache-first, so an installed PWA would keep serving the broken copy no
+// matter what the server sends; only a cache name change dislodges it. The
+// office panel's live-pending watch changed in the same pass (it now
+// announces a new submission the moment it sees one, instead of waiting for
+// the reload to carry the news).
+const STATIC_CACHE = 'cspc-static-v42';
+const RUNTIME_CACHE = 'cspc-runtime-v42';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.

@@ -181,7 +181,13 @@
     // portals a long-lived connection does not.
     (function () {
         var ACTIVE = <%- JSON.stringify(_active) %>;
-        var POLL_MS = 20000;
+        // 10s, not the 20s this started at: the gap between a survey landing
+        // and the office being told is the whole point of the feature, and two
+        // integers over an already-open connection is a cheap question to ask.
+        var POLL_MS = 10000;
+        // Long enough to read "a new submission is waiting" before the page
+        // moves under you, short enough that it still feels immediate.
+        var REFRESH_DELAY_MS = 3500;
         // Which pages bring themselves up to date when something new lands.
         // History is not one of them: a new PENDING submission changes nothing
         // on a page that lists already-reviewed ones, so reloading it would
@@ -214,7 +220,14 @@
         // When it isn't safe the refresh is not cancelled, only postponed —
         // the next poll asks again.
         function safeToReload() {
-            if (document.querySelector('.swal2-container')) return false;      // a dialog is open
+            // A MODAL is work in progress; a toast is not. Both live in a
+            // .swal2-container, so treating every container as "busy" meant the
+            // notification this very script had just raised — which does not
+            // auto-dismiss — blocked the refresh it was announcing, forever.
+            var containers = document.querySelectorAll('.swal2-container');
+            for (var i = 0; i < containers.length; i++) {
+                if (!containers[i].querySelector('.swal2-toast')) return false;
+            }
             if (document.querySelector('.decline-panel.show, .decline-panel[style*="block"]')) return false;
             var a = document.activeElement;
             if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable)) return false;
@@ -274,8 +287,19 @@
                     ? 'A new survey submission is waiting for your review.'
                     : added + ' survey submissions are waiting for your review.';
 
-                if (REFRESHES) { wantsRefresh = message; }
-                else { notify(message); }
+                // Told FIRST, always, on every page. The refresh below is how
+                // the list catches up, but it is not how the staffer finds out:
+                // waiting for a reload to carry the news meant the alert
+                // appeared up to a minute after the submission landed, which
+                // reads exactly like it never appears on its own at all.
+                notify(message);
+                if (REFRESHES) {
+                    wantsRefresh = message;
+                    // Don't sit on it until the next poll comes round — give
+                    // the toast a moment to be read, then bring the page up to
+                    // date. tick() still owns the "is it safe yet" question.
+                    setTimeout(tick, REFRESH_DELAY_MS);
+                }
             }).catch(function () {
                 // Offline, asleep, a dropped connection: nothing to report.
                 // The next tick tries again.
@@ -293,7 +317,7 @@
                 // that something arrived. Every later tick just re-checks.
                 if (!toldAboutWait) {
                     toldAboutWait = true;
-                    notify(wantsRefresh + ' The list updates as soon as you finish what you are doing.');
+                    notify('The list updates as soon as you finish what you are doing.');
                 }
                 return;
             }

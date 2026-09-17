@@ -388,3 +388,47 @@ html[data-bs-theme="dark"] .swal2-loader { border-color: var(--alert-info) trans
     .appalert-fallback-popup { animation: none; }
     .swal2-popup, .swal2-toast { animation: none !important; }
 }
+
+/* =====================================================================
+   BEATING SWEETALERT2'S OWN STYLESHEET
+   =====================================================================
+   SweetAlert2 does not ship a <link> — it injects its stylesheet into
+   <head> at runtime, which means it always lands AFTER this file. At equal
+   specificity the later rule wins, so its hard-coded `.swal2-popup {
+   background: #fff }` quietly beat the themed background set above.
+
+   In light mode the two agree, so nothing looked wrong and it went
+   unnoticed. In dark mode they do not: the surface stayed white while the
+   text stayed on the dark palette's near-white, and an alert came out as
+   pale grey on white — technically displayed, practically unreadable.
+   That is the worst way for this to fail, because the one alert that most
+   needs reading is the one announcing a new submission.
+
+   One extra class of specificity settles it permanently, for both themes
+   and for every kind of alert, without touching any of the sizing and
+   layout rules above. `.swal2-container` is the real parent element
+   SweetAlert2 renders, so this matches exactly what it already builds. */
+.swal2-container .swal2-popup {
+    background: var(--alert-bg);
+    color: var(--alert-text);
+}
+.swal2-container .swal2-popup .swal2-title { color: var(--alert-text); }
+.swal2-container .swal2-popup .swal2-html-container { color: var(--alert-muted); }
+.swal2-container .swal2-popup .swal2-close { color: var(--alert-muted); }
+
+.swal2-container .swal2-toast {
+    background: var(--alert-bg);
+    color: var(--alert-text);
+    border: 1px solid var(--alert-border);
+}
+.swal2-container .swal2-toast .swal2-title { color: var(--alert-text); }
+.swal2-container .swal2-toast .swal2-html-container { color: var(--alert-muted); }
+.swal2-container .swal2-toast .swal2-close { color: var(--alert-muted); }
+
+/* The coloured severity edge has to be re-stated at this specificity too,
+   or the shorthand border above would flatten it back to a plain border. */
+.swal2-container .swal2-toast.swal2-icon-success { border-left: 4px solid var(--alert-success); }
+.swal2-container .swal2-toast.swal2-icon-error   { border-left: 4px solid var(--alert-danger); }
+.swal2-container .swal2-toast.swal2-icon-warning { border-left: 4px solid var(--alert-warning); }
+.swal2-container .swal2-toast.swal2-icon-info,
+.swal2-container .swal2-toast.swal2-icon-question { border-left: 4px solid var(--alert-info); }
