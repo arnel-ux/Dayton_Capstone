@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <%- include('layout/header', { forceLightMode: true }) %>
+    <style>
+        /* Same token set and 4/8/12/16/20/24/32 spacing scale as
+           survey-records.ejs, so this page sits inside the admin portal's
+           existing visual language instead of inventing a second one. */
+        :root {
+            --primary-indigo: #251d3a;
+            --accent-indigo: #3452a5;
+            --bg-body: #f4f6fa;
+            --text-main: #334155;
+            --text-heading: #0f172a;
+            --text-muted: #64748b;
+            --text-faint: #94a3b8;
+            --card-bg: #ffffff;
+            --surface-subtle: #f8fafc;
+            --border-subtle: #e5e9f0;
+            --border-strong: #dde3ec;
+
+            --sp-1: 4px;
+            --sp-2: 8px;
+            --sp-3: 12px;
+            --sp-4: 16px;
+            --sp-5: 20px;
+            --sp-6: 24px;
+            --sp-8: 32px;
+
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+
+            --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+            --shadow-md: 0 6px 16px rgba(15, 23, 42, 0.06);
+        }
+
+        html[data-bs-theme="dark"] {
+            --bg-body: #0b1526;
+            --text-main: #cbd5e1;
+            --text-heading: #f1f5f9;
+            --text-muted: #94a3b8;
+            --text-faint: #64748b;
+            --card-bg: #141d30;
+            --surface-subtle: #1a2438;
+            --border-subtle: #263045;
+            --border-strong: #2c3a54;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.35);
+        }
+
+        body {
+            background-color: var(--bg-body);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: var(--text-main);
+            overflow-x: hidden;
+        }
+
+        /* --- Page header --- */
+        .page-header {
+            background: linear-gradient(135deg, #251d3a 0%, #2a2550 100%);
+            color: #fff;
+            padding: var(--sp-6);
+            border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            margin-bottom: var(--sp-6);
+        }
+        .page-header h2 { font-size: 1.4rem; letter-spacing: 0.2px; }
+        .page-header .page-subtitle { font-size: 0.85rem; color: rgba(255, 255, 255, 0.72); }
+
+        .btn-back {
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            padding: var(--sp-2) var(--sp-4);
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: background-color 0.15s ease, color 0.15s ease;
+        }
+        .btn-back:hover { background: #fff; color: var(--primary-indigo); }
+
+        /* --- Stat tiles ---
+           An auto-fit grid rather than hand-placed columns, so the four tiles
+           stay equal-width and equally spaced at every breakpoint instead of
+           one of them ending up wider than its neighbours. */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: var(--sp-4);
+            margin-bottom: var(--sp-5);
+        }
+        .stat-tile {
+            display: flex;
+            align-items: center;
+            gap: var(--sp-4);
+            background: var(--card-bg);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            padding: var(--sp-4) var(--sp-5);
+        }
+        .stat-icon {
+            flex: 0 0 auto;
+            width: 42px;
+            height: 42px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+            background: rgba(52, 82, 165, 0.1);
+            color: var(--accent-indigo);
+        }
+        html[data-bs-theme="dark"] .stat-icon { background: rgba(109, 150, 255, 0.14); color: #b9cbff; }
+        .stat-text { min-width: 0; }
+        .stat-value {
+            display: block;
+            font-size: 1.35rem;
+            font-weight: 800;
+            line-height: 1.15;
+            color: var(--text-heading);
+            font-variant-numeric: tabular-nums;
+        }
+        .stat-label {
+            display: block;
+            font-size: 0.73rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* --- Activity card --- */
+        .activity-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            margin-bottom: var(--sp-8);
+            overflow: hidden;
+        }
+
+        .activity-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: var(--sp-3) var(--sp-4);
+            padding: var(--sp-5) var(--sp-6);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .activity-toolbar-title { min-width: 0; }
+        .activity-toolbar-title h6 {
+            margin: 0;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-heading);
+        }
+        .activity-toolbar-title p {
+            margin: 3px 0 0;
+            font-size: 0.76rem;
+            color: var(--text-faint);
+        }
+
+        .search-bar {
+            display: flex;
+            align-items: center;
+            flex: 0 1 320px;
+            min-width: 220px;
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-md);
+            background: var(--card-bg);
+            padding: 0 var(--sp-3);
+        }
+        .search-bar i { color: var(--text-faint); font-size: 0.85rem; }
+        .search-bar input {
+            flex: 1 1 auto;
+            min-width: 0;
+            border: 0;
+            outline: none;
+            background: transparent;
+            color: var(--text-main);
+            font-size: 0.88rem;
+            padding: var(--sp-3) var(--sp-2);
+        }
+        .search-bar input::placeholder { color: var(--text-faint); }
+        .search-bar:focus-within {
+            border-color: var(--primary-indigo);
+            box-shadow: 0 0 0 3px rgba(37, 29, 58, 0.08);
+        }
+
+        /* --- Day group --- */
+        .day-group-label {
+            display: flex;
+            align-items: center;
+            gap: var(--sp-3);
+            padding: var(--sp-3) var(--sp-6);
+            background: var(--surface-subtle);
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+        .day-group-count {
+            margin-left: auto;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0;
+            text-transform: none;
+            color: var(--text-faint);
+        }
+
+        /* --- Activity row ---
+           One grid, three tracks: avatar / identity / time. Because the tracks
+           are declared on the row rather than sized by their contents, the
+           name column starts at the same x on every row and every timestamp
+           ends flush on the right edge, no matter how long a name or address
+           happens to be. */
+        .activity-row {
+            display: grid;
+            grid-template-columns: 40px minmax(0, 1fr) auto;
+            align-items: center;
+            column-gap: var(--sp-4);
+            padding: var(--sp-4) var(--sp-6);
+            border-bottom: 1px solid var(--border-subtle);
+            transition: background-color 0.12s ease;
+        }
+        .activity-row:last-child { border-bottom: none; }
+        .activity-row:hover { background: var(--surface-subtle); }
+
+        .activity-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #251d3a, #3452a5);
+            color: #fff;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
+        .activity-identity { min-width: 0; }
+        .activity-name {
+            margin: 0;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-heading);
+            line-height: 1.35;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .activity-name.is-unset { font-weight: 500; font-style: italic; color: var(--text-faint); }
+        .activity-email {
+            display: flex;
+            align-items: center;
+            gap: var(--sp-2);
+            margin: 2px 0 0;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            line-height: 1.35;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .activity-email i { flex: 0 0 auto; font-size: 0.72rem; color: var(--text-faint); }
+
+        .activity-time {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+        }
+
+        /* --- Empty states --- */
+        .empty-state {
+            padding: var(--sp-8) var(--sp-6);
+            text-align: center;
+            color: var(--text-faint);
+        }
+        .empty-state i { font-size: 2rem; opacity: 0.35; margin-bottom: var(--sp-3); }
+        .empty-state h5 { font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-bottom: var(--sp-1); }
+        .empty-state p { font-size: 0.82rem; margin: 0; }
+
+        .activity-foot {
+            padding: var(--sp-3) var(--sp-6);
+            border-top: 1px solid var(--border-subtle);
+            background: var(--surface-subtle);
+            font-size: 0.75rem;
+            color: var(--text-faint);
+            text-align: center;
+        }
+
+        /* On a phone the timestamp moves under the address rather than
+           competing with it for the same row -- the three-track grid becomes
+           two tracks and the identity block spans the freed column. */
+        @media (max-width: 575.98px) {
+            .page-header { padding: var(--sp-5) var(--sp-4); }
+            .activity-toolbar { padding: var(--sp-4); }
+            .search-bar { flex: 1 1 100%; }
+            .day-group-label { padding-left: var(--sp-4); padding-right: var(--sp-4); }
+            .activity-row {
+                grid-template-columns: 40px minmax(0, 1fr);
+                row-gap: var(--sp-1);
+                padding: var(--sp-4);
+            }
+            .activity-time {
+                grid-column: 2;
+                text-align: left;
+                font-weight: 500;
+                color: var(--text-faint);
+            }
+            .stat-tile { padding: var(--sp-4); }
+        }
+    </style>
+</head>
+<body data-connection-alerts>
+<div id="wrapper">
+    <%- include('layout/sidebar') %>
+
+    <div id="content">
+        <%- include('layout/navbar') %>
+        <script>document.getElementById('pageTitle').innerText = 'User Accounts';</script>
+
+        <div class="page-header">
+            <div class="container-fluid d-md-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="fw-bold mb-1 text-white"><i class="fas fa-user-clock me-2"></i>User Account Activity</h2>
+                    <p class="mb-0 page-subtitle">Recent accounts that submitted a survey on the client side</p>
+                </div>
+                <div class="mt-3 mt-md-0">
+                    <a href="/dashboard" class="btn btn-back">
+                        <i class="fas fa-chevron-left me-2"></i> Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="container-fluid px-4">
+
+            <div class="stat-grid">
+                <div class="stat-tile">
+                    <span class="stat-icon"><i class="fas fa-paper-plane"></i></span>
+                    <span class="stat-text">
+                        <span class="stat-value"><%= stats.totalSubmissions %></span>
+                        <span class="stat-label">Total Submissions</span>
+                    </span>
+                </div>
+                <div class="stat-tile">
+                    <span class="stat-icon"><i class="fas fa-user-group"></i></span>
+                    <span class="stat-text">
+                        <span class="stat-value"><%= stats.distinctAccounts %></span>
+                        <span class="stat-label">Unique Accounts</span>
+                    </span>
+                </div>
+                <div class="stat-tile">
+                    <span class="stat-icon"><i class="fas fa-calendar-day"></i></span>
+                    <span class="stat-text">
+                        <span class="stat-value"><%= stats.todayCount %></span>
+                        <span class="stat-label">Today</span>
+                    </span>
+                </div>
+                <div class="stat-tile">
+                    <span class="stat-icon"><i class="fas fa-calendar-week"></i></span>
+                    <span class="stat-text">
+                        <span class="stat-value"><%= stats.weekCount %></span>
+                        <span class="stat-label">Last 7 Days</span>
+                    </span>
+                </div>
+            </div>
+
+            <div class="activity-card">
+
+                <div class="activity-toolbar">
+                    <div class="activity-toolbar-title">
+                        <h6>Recent Survey Activity</h6>
+                        <p id="activitySummary"><%= listedCount %> <%= listedCount === 1 ? 'entry' : 'entries' %>, newest first</p>
+                    </div>
+                    <label class="search-bar" for="activitySearch">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="activitySearch" placeholder="Search by name or email..."
+                               autocomplete="off" title="Search survey activity">
+                    </label>
+                </div>
+
+                <% if (listedCount > 0) { %>
+                    <div id="activityFeed">
+                        <% activityGroups.forEach(group => { %>
+                            <div class="day-group" data-group>
+                                <div class="day-group-label">
+                                    <span><%= group.label %></span>
+                                    <span class="day-group-count" data-group-count><%= group.entries.length %> <%= group.entries.length === 1 ? 'survey' : 'surveys' %></span>
+                                </div>
+                                <% group.entries.forEach(entry => { %>
+                                    <%
+                                        // The avatar letter comes from the name when there is one
+                                        // and from the address otherwise, so a circle is never blank.
+                                        const initialSource = entry.hasName ? entry.name : (entry.email || '?');
+                                        const initial = initialSource.trim().charAt(0) || '?';
+                                        const emailText = entry.email || 'No email on record';
+                                    %>
+                                    <div class="activity-row" data-search="<%= (entry.name + ' ' + emailText).toLowerCase() %>">
+                                        <span class="activity-avatar"><%= initial %></span>
+                                        <div class="activity-identity">
+                                            <p class="activity-name<%= entry.hasName ? '' : ' is-unset' %>" title="<%= entry.name %>"><%= entry.name %></p>
+                                            <p class="activity-email" title="<%= emailText %>">
+                                                <i class="fas fa-envelope"></i><span><%= emailText %></span>
+                                            </p>
+                                        </div>
+                                        <span class="activity-time"><%= entry.timeText %></span>
+                                    </div>
+                                <% }) %>
+                            </div>
+                        <% }) %>
+                    </div>
+
+                    <div class="empty-state" id="noResults" hidden>
+                        <i class="fas fa-search d-block"></i>
+                        <h5>No matching account</h5>
+                        <p>Try a different name or email address.</p>
+                    </div>
+
+                    <% if (listedCount >= activityLimit) { %>
+                        <div class="activity-foot">
+                            Showing the <%= activityLimit %> most recent submissions.
+                        </div>
+                    <% } %>
+                <% } else { %>
+                    <div class="empty-state">
+                        <i class="fas fa-user-slash d-block"></i>
+                        <h5>No survey activity yet</h5>
+                        <p>Accounts appear here as soon as someone submits a survey.</p>
+                    </div>
+                <% } %>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('layout/footer') %>
+<script>
+    // Client-side filter over the rows already rendered -- the whole feed is
+    // on the page, so this never needs a round trip. The searchable text is
+    // precomputed server-side into data-search (name + email), so this doesn't
+    // have to walk the cells on every keystroke.
+    (function () {
+        const input = document.getElementById('activitySearch');
+        const feed = document.getElementById('activityFeed');
+        if (!input || !feed) return;
+
+        const groups = Array.from(feed.querySelectorAll('[data-group]'));
+        const summary = document.getElementById('activitySummary');
+        const noResults = document.getElementById('noResults');
+
+        function applyFilter() {
+            const query = input.value.trim().toLowerCase();
+            let visible = 0;
+
+            groups.forEach(group => {
+                let groupVisible = 0;
+                group.querySelectorAll('.activity-row').forEach(row => {
+                    const match = !query || row.dataset.search.includes(query);
+                    row.hidden = !match;
+                    if (match) groupVisible++;
+                });
+
+                // A day heading with nothing left under it is hidden too, so a
+                // filtered feed never shows an empty "Yesterday" band.
+                group.hidden = groupVisible === 0;
+                const countEl = group.querySelector('[data-group-count]');
+                if (countEl) countEl.textContent = groupVisible + (groupVisible === 1 ? ' survey' : ' surveys');
+                visible += groupVisible;
+            });
+
+            if (summary) {
+                summary.textContent = query
+                    ? visible + (visible === 1 ? ' entry' : ' entries') + ' matched'
+                    : visible + (visible === 1 ? ' entry' : ' entries') + ', newest first';
+            }
+            if (noResults) noResults.hidden = visible !== 0;
+            feed.hidden = visible === 0;
+        }
+
+        input.addEventListener('input', applyFilter);
+    })();
+</script>
+</body>
+</html>

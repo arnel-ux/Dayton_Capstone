@@ -532,7 +532,7 @@ async function insertVerifiedSurveyOnConnection(conn, googleEmail, fields, submi
     const {
         officeId, respondentName, topic, sentiment, region, cc1, cc2, cc3,
         sqdValues, comments, serviceAvailed, clientType, age, gender, officeVisitedTime, period,
-        clientSubmissionId
+        clientSubmissionId, submittedAt
     } = fields;
 
     // Same reasoning as finalizeVerifiedSurvey above — a no-feedback comment
@@ -541,23 +541,41 @@ async function insertVerifiedSurveyOnConnection(conn, googleEmail, fields, submi
     const noFeedback = isNoFeedbackComment(comments);
     const finalTopic = noFeedback ? null : (topic || 'General Feedback');
     const finalSentiment = noFeedback ? null : (sentiment || 'Neutral');
+    // `submittedAt` is WHEN THE CLIENT SUBMITTED, supplied only by a caller
+    // that is replaying an already-submitted survey — today that is the office
+    // approval route, which passes the pending row's own server-stamped
+    // created_at. Without it, created_at defaulted to the moment of the
+    // INSERT, so approving a survey silently re-dated it to the approval:
+    // the office's Pending list showed one time, the admin's records showed
+    // another, and the client's receipt agreed with neither. COALESCE keeps
+    // the ordinary live-submission path (which passes nothing) on
+    // CURRENT_TIMESTAMP exactly as before.
+    //
+    // This is the survey's time everywhere it is displayed. It is NOT what
+    // orders the admin's notification bell — that reads recorded_at below,
+    // which is always the moment the row was actually written, so a survey
+    // approved days after it was submitted still announces itself as newly
+    // arrived instead of landing silently in the past.
     const [insertResult] = await conn.query(
         `INSERT INTO survey_responses
-         (office_id, respondent_name, topic, sentiment, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email, service_availed, client_submission_id, submission_source)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (office_id, respondent_name, topic, sentiment, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email, service_availed, client_submission_id, submission_source, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`,
         [
             officeId, respondentName, finalTopic, finalSentiment, region,
             cc1, cc2, cc3,
             sqdValues[0], sqdValues[1], sqdValues[2], sqdValues[3], sqdValues[4], sqdValues[5], sqdValues[6], sqdValues[7], sqdValues[8],
-            comments || 'N/A', period, googleEmail, serviceAvailed, clientSubmissionId || null, submissionSource || 'legacy_unknown'
+            comments || 'N/A', period, googleEmail, serviceAvailed, clientSubmissionId || null, submissionSource || 'legacy_unknown',
+            submittedAt || null
         ]
     );
     const surveyResponseId = insertResult.insertId;
 
+    // Same timestamp as its survey_responses row, for the same reason — the
+    // two are one submission and must never disagree about when it happened.
     await conn.query(
-        `INSERT INTO client_profiles (survey_response_id, respondent_name, client_type, age, gender, region, email, office_visited_time)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [surveyResponseId, respondentName, clientType, age, gender, region, googleEmail, officeVisitedTime]
+        `INSERT INTO client_profiles (survey_response_id, respondent_name, client_type, age, gender, region, email, office_visited_time, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`,
+        [surveyResponseId, respondentName, clientType, age, gender, region, googleEmail, officeVisitedTime, submittedAt || null]
     );
 
     // Same reasoning as finalizeVerifiedSurvey's identical upsert above:
@@ -1758,11 +1776,15 @@ function periodNormExpr(col) {
     return `REPLACE(REPLACE(REPLACE(TRIM(${col}), 'July', 'Jul'), 'June', 'Jun'), ' to ', ' - ')`;
 }
 
+// Only the periods that have actually come around are listed here — the
+// current one and the ones already behind it. Future years used to be
+// pre-seeded (2027 was listed here), which put empty periods in front of
+// both the public landing page's dashboard and the admin filter with no
+// data to show. An admin adds the next period when it arrives, via
+// /period-covered/add (see getMergedPeriodOptions below).
 const PERIOD_COVERED_OPTIONS = [
     { value: 'Jan to June 2026', label: 'Jan to June 2026' },
-    { value: 'July to Dec 2026', label: 'July to Dec 2026' },
-    { value: 'Jan to June 2027', label: 'Jan to June 2027' },
-    { value: 'July to Dec 2027', label: 'July to Dec 2027' }
+    { value: 'July to Dec 2026', label: 'July to Dec 2026' }
 ];
 
 // Admin-added periods on top of the fixed list above, stored in the existing
@@ -2744,6 +2766,25 @@ db.query(createAdminsTableQuery, (err) => {
         // the same admin.sid cookie as wherever the newer login happened.
         db.query("ALTER TABLE admins ADD COLUMN login_token VARCHAR(255) NULL", () => {});
 
+        // Watermark for the navbar's notification bell: the moment this admin
+        // last opened the panel. Anything in survey_responses newer than this
+        // counts as unseen (see /api/admin/notifications). Kept as a column on
+        // `admins` rather than a per-survey notification row because the surveys
+        // themselves already ARE the feed — there is nothing extra to store per
+        // event, only "how far has this admin read".
+        //
+        // The backfill runs ONLY on the request that actually adds the column
+        // (a duplicate-column error on every later restart means it's already
+        // there), so an existing deployment's entire survey history doesn't
+        // land in the bell as unseen the first time an admin logs in after
+        // this deploys. An admin added afterwards gets NULL and is read as
+        // "seen everything up to when the account was created" — see the
+        // COALESCE in /api/admin/notifications.
+        db.query("ALTER TABLE admins ADD COLUMN notifications_seen_at DATETIME NULL", (alterErr) => {
+            if (alterErr) return;
+            db.query("UPDATE admins SET notifications_seen_at = NOW()", () => {});
+        });
+
         // Admin sessions live in an in-memory Map (see the admin session setup near
         // the top of this file) — a server restart wipes every one of them, including
         // req.adminSession.adminLogId, so no browser can ever close these rows via
@@ -2962,6 +3003,35 @@ db.query(createClustersTableQuery, (err) => {
                         // idx_survey_responses_office_id index and scan every row for that
                         // office, which does not scale to a 500-submission burst.
                         db.query("CREATE INDEX idx_survey_responses_logical_key ON survey_responses(office_id, google_email, service_availed, canonical_status)", () => {});
+
+                        // When this ROW was written, as opposed to created_at, which is
+                        // when the CLIENT SUBMITTED (see insertVerifiedSurveyOnConnection).
+                        // The two are the same for a live submission and differ for one
+                        // replayed later by an office approval. Splitting them is what
+                        // lets the survey keep one true submission time everywhere it is
+                        // displayed while the admin's notification bell still orders and
+                        // counts by actual arrival — otherwise approving a week-old
+                        // submission would file it a week back in the feed and never
+                        // badge it at all.
+                        //
+                        // The backfill runs ONLY on the request that actually adds the
+                        // column (a duplicate-column error on every later restart means
+                        // it is already there). It must run, because MySQL fills existing
+                        // rows with the column DEFAULT — i.e. the moment of the ALTER —
+                        // which would otherwise stamp the entire archive as having
+                        // arrived at deploy time.
+                        db.query("ALTER TABLE survey_responses ADD COLUMN recorded_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP", (recordedErr) => {
+                            if (!recordedErr) {
+                                db.query("UPDATE survey_responses SET recorded_at = created_at", (backfillErr, backfillResult) => {
+                                    if (backfillErr) console.error('\u274c Error backfilling survey_responses.recorded_at:', backfillErr);
+                                    else console.log(`\u2705 Backfilled recorded_at on ${backfillResult.affectedRows} survey_responses row(s).`);
+                                });
+                            }
+                            // Backs the notification bell's ORDER BY/range scan (see
+                            // /api/admin/notifications), which is polled every 30s by
+                            // every signed-in admin.
+                            db.query("CREATE INDEX idx_survey_responses_recorded_at ON survey_responses(canonical_status, recorded_at)", () => {});
+                        });
 
                         // Pinakahuli ang Client Profiles
                         db.query(createClientProfilesTableQuery, (err) => {
@@ -4217,7 +4287,12 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
             sentiment: payload.sentiment, region: payload.region, cc1: payload.cc1, cc2: payload.cc2, cc3: payload.cc3,
             sqdValues: payload.sqdValues, comments: payload.comments, serviceAvailed: payload.serviceAvailed,
             clientType: payload.clientType, age: payload.age, gender: payload.gender,
-            officeVisitedTime: payload.officeVisitedTime, period: payload.period
+            officeVisitedTime: payload.officeVisitedTime, period: payload.period,
+            // The submission's real time, carried over from the pending row this
+            // approval is replaying (server-stamped when the client submitted,
+            // never client-supplied) — so the response keeps the time the office
+            // saw in its Pending list instead of being re-dated to this approval.
+            submittedAt: row.created_at
         }, row.submission_source || 'offline_sync');
 
         if (precedence.supersede) {
@@ -7047,6 +7122,207 @@ app.patch('/api/admin/survey-response/:id/analysis', ensureAdminAuth, async (req
         console.error('❌ [Survey Records] Failed to save admin analysis override:', err);
         res.status(500).json({ success: false, message: 'Server error saving analysis.' });
     }
+});
+
+// ==========================================
+// SURVEY ACCOUNT ACTIVITY
+// ==========================================
+// Who has been coming in and submitting surveys on the client side, newest
+// first. One entry per submission -- the same person surveying twice is two
+// entries, because the point of this page is the activity itself, not a
+// deduplicated directory of accounts.
+//
+// Deliberately narrow: an admin sees the name on the submission and the Gmail
+// account it came from, and nothing else. Which office was rated, the ratings,
+// the comment and the demographics all stay on /survey-records where they
+// already live.
+const ACCOUNT_ACTIVITY_LIMIT = 200;
+
+app.get('/user-accounts', ensureAdminAuth, noCache, (req, res) => {
+    // respondent_name on client_accounts is the account's own Profile name,
+    // which a survey submission deliberately never writes (see the upsert in
+    // insertVerifiedSurveyOnConnection). The name given on THIS submission is
+    // what's shown, with the account's profile name as the fallback -- so a
+    // row is only ever "Anonymous" when neither actually exists.
+    const activityQuery = `
+        SELECT s.id,
+               s.respondent_name,
+               s.google_email,
+               s.created_at,
+               ca.respondent_name AS account_name
+        FROM survey_responses s
+        LEFT JOIN client_accounts ca ON ca.email = s.google_email
+        WHERE s.canonical_status = 'canonical'
+        ORDER BY s.created_at DESC, s.id DESC
+        LIMIT ${ACCOUNT_ACTIVITY_LIMIT}
+    `;
+
+    // Counted over the whole table rather than derived from the capped list
+    // above, so the tiles stay truthful once there are more than
+    // ACCOUNT_ACTIVITY_LIMIT submissions.
+    const statsQuery = `
+        SELECT COUNT(*) AS total_submissions,
+               COUNT(DISTINCT s.google_email) AS distinct_accounts,
+               SUM(DATE(s.created_at) = CURDATE()) AS today_count,
+               SUM(s.created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)) AS week_count
+        FROM survey_responses s
+        WHERE s.canonical_status = 'canonical'
+    `;
+
+    db.query(activityQuery, (err, rows) => {
+        if (err) console.error('\u274c [Account Activity] Error loading recent survey activity:', err);
+
+        db.query(statsQuery, (err2, statRows) => {
+            if (err2) console.error('\u274c [Account Activity] Error loading activity stats:', err2);
+
+            // Grouped by calendar day on the server, using the same clock that
+            // stamped created_at -- doing it in the browser instead would
+            // silently regroup the whole page for an admin whose machine sits
+            // in a different timezone than the server.
+            const today = new Date();
+            const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+            const todayKey = dayKey(today);
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayKey = dayKey(yesterday);
+
+            const groups = [];
+            let currentGroup = null;
+
+            (rows || []).forEach(row => {
+                const when = row.created_at ? new Date(row.created_at) : null;
+                const key = when ? dayKey(when) : 'unknown';
+
+                if (!currentGroup || currentGroup.key !== key) {
+                    let label = 'Unknown date';
+                    if (when) {
+                        if (key === todayKey) label = 'Today';
+                        else if (key === yesterdayKey) label = 'Yesterday';
+                        else label = when.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+                    }
+                    currentGroup = { key, label, entries: [] };
+                    groups.push(currentGroup);
+                }
+
+                currentGroup.entries.push({
+                    id: row.id,
+                    name: row.respondent_name || row.account_name || 'Anonymous',
+                    hasName: !!(row.respondent_name || row.account_name),
+                    email: row.google_email || null,
+                    timeText: when ? when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '',
+                    isoTime: when ? when.toISOString() : null
+                });
+            });
+
+            const stats = (statRows && statRows[0]) ? statRows[0] : {};
+            res.render('user-accounts', {
+                activityGroups: groups,
+                listedCount: (rows || []).length,
+                activityLimit: ACCOUNT_ACTIVITY_LIMIT,
+                stats: {
+                    totalSubmissions: Number(stats.total_submissions) || 0,
+                    distinctAccounts: Number(stats.distinct_accounts) || 0,
+                    todayCount: Number(stats.today_count) || 0,
+                    weekCount: Number(stats.week_count) || 0
+                }
+            });
+        });
+    });
+});
+
+// ==========================================
+// ADMIN NOTIFICATION BELL (INCOMING SURVEYS)
+// ==========================================
+// The feed IS survey_responses -- no per-admin notification rows are written
+// anywhere, so a survey can never exist without its notification (or a
+// notification without its survey). "Unseen" is a single per-admin watermark
+// (admins.notifications_seen_at, see its ALTER TABLE) compared against each
+// survey's created_at; NULL falls back to the admin account's own creation
+// date so a newly added admin isn't greeted by the entire archive.
+const ADMIN_NOTIFICATION_LIMIT = 20;
+
+app.get('/api/admin/notifications', ensureAdminAuth, noCache, (req, res) => {
+    const adminId = req.adminSession.user.id;
+
+    db.query(
+        'SELECT COALESCE(notifications_seen_at, created_at) AS seen_at FROM admins WHERE id = ? LIMIT 1',
+        [adminId],
+        (err, seenRows) => {
+            if (err) {
+                console.error('❌ [Admin Notifications] Error reading the seen watermark:', err);
+                return res.status(500).json({ success: false, message: 'Server error loading notifications.' });
+            }
+
+            const seenAt = (seenRows && seenRows[0]) ? seenRows[0].seen_at : null;
+
+            // Ordered and flagged by recorded_at (when the row arrived), but
+            // DISPLAYING created_at (when the client submitted) — an approval
+            // that replays a days-old submission is genuinely new to the admin,
+            // yet its time must still read the same here as it does on
+            // /survey-records and in the office's own list.
+            db.query(
+                `SELECT s.id, s.respondent_name, s.google_email, s.created_at,
+                        COALESCE(s.recorded_at, s.created_at) AS recorded_at, o.office_name
+                 FROM survey_responses s
+                 JOIN offices o ON o.id = s.office_id
+                 WHERE s.canonical_status = 'canonical'
+                 ORDER BY recorded_at DESC, s.id DESC
+                 LIMIT ${ADMIN_NOTIFICATION_LIMIT}`,
+                (err2, rows) => {
+                    if (err2) {
+                        console.error('❌ [Admin Notifications] Error loading recent surveys:', err2);
+                        return res.status(500).json({ success: false, message: 'Server error loading notifications.' });
+                    }
+
+                    // Counted separately rather than derived from `rows` so the badge
+                    // stays truthful past the 20 the panel lists (a burst of 50 reads
+                    // as 50, not 20).
+                    db.query(
+                        `SELECT COUNT(*) AS unseen
+                         FROM survey_responses
+                         WHERE canonical_status = 'canonical'
+                           AND COALESCE(recorded_at, created_at) > COALESCE(?, NOW())`,
+                        [seenAt],
+                        (err3, countRows) => {
+                            if (err3) console.error('❌ [Admin Notifications] Error counting unseen surveys:', err3);
+
+                            const seenTime = seenAt ? new Date(seenAt).getTime() : Infinity;
+                            const notifications = (rows || []).map(row => ({
+                                id: row.id,
+                                office: row.office_name || 'Unknown office',
+                                respondent: row.respondent_name || 'Anonymous',
+                                email: row.google_email || null,
+                                createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+                                isNew: row.recorded_at ? new Date(row.recorded_at).getTime() > seenTime : false
+                            }));
+
+                            res.json({
+                                success: true,
+                                notifications,
+                                unseenCount: (countRows && countRows[0]) ? Number(countRows[0].unseen) || 0 : 0
+                            });
+                        }
+                    );
+                }
+            );
+        }
+    );
+});
+
+// Moves this admin's watermark to now -- i.e. "the bell has been looked at".
+// Per-admin, so one admin clearing their own badge never clears anyone else's.
+app.post('/api/admin/notifications/seen', ensureAdminAuth, (req, res) => {
+    db.query(
+        'UPDATE admins SET notifications_seen_at = NOW() WHERE id = ?',
+        [req.adminSession.user.id],
+        (err) => {
+            if (err) {
+                console.error('❌ [Admin Notifications] Error saving the seen watermark:', err);
+                return res.status(500).json({ success: false, message: 'Server error updating notifications.' });
+            }
+            res.json({ success: true });
+        }
+    );
 });
 
 // ==========================================
