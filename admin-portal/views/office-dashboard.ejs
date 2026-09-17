@@ -8,8 +8,8 @@
         // bookmark) would otherwise land here fully "logged in" without ever
         // having submitted office credentials in THAT tab. sessionStorage is
         // scoped per tab (never copied to a freshly opened one), so it's used
-        // here purely as a "did this tab actually authenticate" marker: /office-login's
-        // redirect tags the very next page load with ?loggedin=1, which this
+        // here purely as a "did this tab actually authenticate" marker: the
+        // login redirect tags the very next page load with ?loggedin=1, which this
         // script converts into the marker before the URL is cleaned up. Same
         // pattern as /office-approvals, /office-approvals/history, the admin
         // dashboard (layout/header.ejs) and /client-survey.
@@ -27,7 +27,7 @@
                     var cleanedUrl = window.location.pathname + (cleanedSearch ? '?' + cleanedSearch : '') + window.location.hash;
                     window.history.replaceState({}, '', cleanedUrl);
                 } else if (sessionStorage.getItem('cqa_office_tab_ok') !== '1') {
-                    window.location.replace('/office-login?error=' + encodeURIComponent('Please log in to continue.'));
+                    window.location.replace('/login?error=' + encodeURIComponent('Please log in to continue.'));
                 }
             } catch (e) { /* sessionStorage unavailable (privacy mode, etc.) — fail open */ }
         })();

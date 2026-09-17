@@ -154,8 +154,23 @@ importScripts('/js/offline-db.js');
 // them. Now ~39px there, and proportionally less on shorter viewports. The file
 // is in CRITICAL_PRECACHE_URLS and the '/login' and '/client-login' shells that
 // use it are precached cache-first, so bumped to make v39 installs re-fetch.
-const STATIC_CACHE = 'cspc-static-v40';
-const RUNTIME_CACHE = 'cspc-runtime-v40';
+// v41: the separate office login page is gone — offices now sign in on the
+// same '/login' form as admins and clients, and '/office-login' survives only
+// as a redirect to it. This has to bump the cache, not just ship server-side:
+// an installed PWA keeps serving its own cached shells, so an office device
+// that ever visited the old page could keep opening a cached copy of a form
+// that can no longer log anyone in — and the precached '/login' shell itself
+// is served cache-first, so its updated copy would not arrive either. Bumping
+// makes every v40-or-earlier install drop its caches and re-fetch both.
+// The same bump carries the office portal's reworked header (the office's
+// own name, not a fixed portal name) and the history list's always-visible
+// status — both live in /css/office-shell.css, a cached static asset. The
+// office panel's live pending watch rides along too: its poll endpoint sits
+// under /office-approvals/, so ADMIN_PROTECTED_PATH_PREFIXES already keeps it
+// away from every cache — an answer to "what is waiting right now" served
+// from a cache would be worse than no answer.
+const STATIC_CACHE = 'cspc-static-v41';
+const RUNTIME_CACHE = 'cspc-runtime-v41';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
@@ -259,8 +274,13 @@ const ADMIN_PROTECTED_PATH_PREFIXES = [
     '/dashboard', '/report', '/profile', '/password', '/print',
     '/survey-records', '/offices', '/manage-admins', '/survey',
     '/cluster', '/clusters', '/services', '/admins', '/settings',
-    '/period-covered', '/office-approvals', '/office-logout'
+    '/period-covered', '/office-approvals', '/office-dashboard', '/office-logout'
 ];
+// '/office-dashboard' belongs here for the same reason as '/office-approvals':
+// it is a logged-in office page, and it is where a successful login now lands,
+// so it is the office page most likely to have been cached by a navigation.
+// Without it, a cached snapshot could be served back offline after that
+// office had logged out.
 
 function isAdminProtectedPath(pathname) {
     // Exact match or a real sub-path only — startsWith alone would also

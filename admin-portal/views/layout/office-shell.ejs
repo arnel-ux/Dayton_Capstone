@@ -4,9 +4,15 @@
    the same markup).
 
    Locals:
-     officeName    – the signed-in office. Shown in BOTH the header and the
-                     sidebar: it is what tells the staffer which office this
-                     account is, so it is never dropped.
+     officeName      – the signed-in office, spelled out in full. It is the
+                       HEADLINE of both the header and the sidebar: what the
+                       staffer needs to know at a glance is which office this
+                       account is, not which portal they are in — every page
+                       here belongs to the same portal, so a fixed portal name
+                       in that slot told them nothing.
+     officeNameShort – the same office abbreviated (usually its acronym).
+                       Used ONLY by the header, and only when the full name
+                       genuinely cannot fit — see the fit check below.
      activeNav     – 'dashboard' | 'pending' | 'history'
      pendingCount  – badge on the Pending link
      historyCount  – badge on the History link
@@ -17,6 +23,7 @@
    working with no edit at all.
 */
     var _officeName = (typeof officeName !== 'undefined' && officeName) ? officeName : 'Office';
+    var _officeShort = (typeof officeNameShort !== 'undefined' && officeNameShort) ? officeNameShort : _officeName;
     var _active = (typeof activeNav !== 'undefined' && activeNav) ? activeNav : '';
     var _pending = (typeof pendingCount !== 'undefined' && pendingCount) ? pendingCount : 0;
     var _history = (typeof historyCount !== 'undefined' && historyCount) ? historyCount : 0;
@@ -33,14 +40,19 @@
             <img src="/images/cspc-logo.png" alt="CSPC Logo">
         </div>
         <div class="topbar-brand-text">
-            <!-- Two spellings of the same name, CSS picks one (no JS, so no
-                 flash of the wrong one, and it re-picks on a rotate/resize).
-                 The header has the room for the full name now that Logout has
-                 moved out of it; a phone header still does not. -->
-            <div class="t1">
+            <!-- The office's own name is the headline; the portal it belongs
+                 to is the subtitle. Both spellings of the office name are
+                 rendered and one is hidden, rather than picking server-side:
+                 which one fits depends on the viewport, which only the
+                 browser knows, and it has to be re-decided on a rotate.
+                 The full name is the one rendered visible, so an office whose
+                 name always fits never flashes. -->
+            <div class="t1 office-title" id="officeBrandTitle" title="<%= _officeName %>">
+                <span class="office-name-full"><%= _officeName %></span><span class="office-name-short"><%= _officeShort %></span>
+            </div>
+            <div class="t2">
                 <span class="brand-cqa-full">Center for Quality Assurance</span><span class="brand-cqa-short">CQA</span> Office Portal
             </div>
-            <div class="t2" title="<%= _officeName %>"><%= _officeName %></div>
         </div>
     </div>
 
@@ -63,8 +75,12 @@
             <img src="/images/cspc-logo.png" alt="CSPC Logo">
         </div>
         <div class="sidebar-brand-text">
-            <div class="t1">CQA Office Portal</div>
-            <div class="t2"><%= _officeName %></div>
+            <!-- Never abbreviated here, whatever the screen: the drawer has
+                 the room to wrap, and this is the one place that always shows
+                 the office's whole name — including when the header above has
+                 had to fall back to the acronym. -->
+            <div class="t1"><%= _officeName %></div>
+            <div class="t2">CQA Office Portal</div>
         </div>
         <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" aria-label="Close sidebar menu">
             <i class="fas fa-times"></i>
@@ -77,11 +93,11 @@
         </a>
         <a href="/office-approvals" class="sidebar-link<%= _active === 'pending' ? ' active' : '' %>">
             <i class="fas fa-hourglass-half"></i> Pending
-            <span class="sidebar-count"><%= _pending %></span>
+            <span class="sidebar-count" id="sidebarPendingCount"><%= _pending %></span>
         </a>
         <a href="/office-approvals/history" class="sidebar-link<%= _active === 'history' ? ' active' : '' %>">
             <i class="fas fa-clock-rotate-left"></i> History
-            <span class="sidebar-count"><%= _history %></span>
+            <span class="sidebar-count" id="sidebarHistoryCount"><%= _history %></span>
         </a>
     </nav>
 
@@ -97,3 +113,213 @@
         <a href="/office-logout" id="officeLogoutBtn" class="btn-logout-side"><i class="fas fa-sign-out-alt"></i> Logout</a>
     </div>
 </aside>
+
+<script>
+    // Header office-name fit check.
+    //
+    // The rule is "desktop always shows the full name; a phone shows the full
+    // name too unless it genuinely doesn't fit, and only then the acronym."
+    // That "unless it doesn't fit" cannot be expressed as a breakpoint: it
+    // depends on how long THIS office's name is, and the names range from
+    // "Cash Unit" to "Academic Center for Continuing Enhancement Services for
+    // Students". A fixed width would either abbreviate short names that had
+    // room to spare, or keep clipping long ones. So the browser measures.
+    //
+    // The markup renders the FULL name visible and the acronym hidden, and
+    // this only ever hides the full one — so an office whose name fits never
+    // shows the wrong spelling for even a frame.
+    (function () {
+        var title = document.getElementById('officeBrandTitle');
+        if (!title) return;
+
+        var desktop = window.matchMedia('(min-width: 992px)');
+
+        function fit() {
+            // Desktop is spelled out unconditionally (the CSS pins it there
+            // too) — the sidebar is a permanent column at that width, the
+            // header is wide, and the full name is the whole point.
+            if (desktop.matches) { title.classList.remove('is-short'); return; }
+
+            // Always measure the FULL spelling, never whatever is currently
+            // displayed: once shortened, the element fits by definition, so
+            // re-measuring in that state could never decide to grow back —
+            // rotating a phone to landscape would stay stuck on the acronym.
+            title.classList.remove('is-short');
+            // +1 for sub-pixel rounding: scrollWidth/clientWidth are integers,
+            // and a name that fits exactly can otherwise report one pixel of
+            // overflow that isn't there.
+            if (title.scrollWidth > title.clientWidth + 1) title.classList.add('is-short');
+        }
+
+        fit();
+        // Layout is measured mid-parse above (so there is no flash), then
+        // confirmed once the frame has actually been laid out.
+        if (window.requestAnimationFrame) window.requestAnimationFrame(fit);
+        window.addEventListener('resize', fit);
+        window.addEventListener('orientationchange', fit);
+        // A webfont swapping in after this ran changes the text's width, which
+        // can flip the answer either way.
+        if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
+            document.fonts.ready.then(fit).catch(function () { /* measurement stays as-is */ });
+        }
+    })();
+</script>
+
+<script>
+    // Live pending watch — shared by Dashboard, Pending and History.
+    //
+    // An office staffer leaves this panel open on a desk all day. Before this,
+    // a survey submitted at 9:05 sat there unseen until somebody thought to
+    // press refresh, which is the opposite of what a queue is for. This asks
+    // the server every 20 seconds what is waiting, keeps the sidebar badges
+    // and the tab title honest, says so out loud when something new lands,
+    // and brings the page itself up to date.
+    //
+    // It deliberately polls rather than holding a socket open: this portal is
+    // a single Node process behind an ordinary host, the answer is two
+    // integers, and a poll survives the sleeps, network drops and captive
+    // portals a long-lived connection does not.
+    (function () {
+        var ACTIVE = <%- JSON.stringify(_active) %>;
+        var POLL_MS = 20000;
+        // Which pages bring themselves up to date when something new lands.
+        // History is not one of them: a new PENDING submission changes nothing
+        // on a page that lists already-reviewed ones, so reloading it would
+        // only throw away the reader's place for no new information.
+        var REFRESHES = (ACTIVE === 'pending' || ACTIVE === 'dashboard');
+        // Survives the reload below, so the message that explains WHY the page
+        // just reloaded is still there afterwards.
+        var NOTICE_KEY = 'cqa_office_pending_notice';
+
+        var baseline = null;      // newest pending id as of the last look
+        var stopped = false;
+        var wantsRefresh = null;  // the message to carry through a pending refresh
+        var toldAboutWait = false;
+        var titleBase = document.title;
+
+        function el(id) { return document.getElementById(id); }
+
+        function notify(message) {
+            if (window.AppAlert && AppAlert.toastInfo) {
+                // Does not auto-dismiss: this is the one notification on the
+                // page that must not be missed by someone who looked away.
+                AppAlert.toastInfo(message, { title: 'New Pending Survey', autoClose: false });
+            } else if (window.console) {
+                console.info('[office] ' + message);
+            }
+        }
+
+        // A reload in the middle of something destroys work: a half-typed
+        // decline reason, an open confirmation, an expanded row being read.
+        // When it isn't safe the refresh is not cancelled, only postponed —
+        // the next poll asks again.
+        function safeToReload() {
+            if (document.querySelector('.swal2-container')) return false;      // a dialog is open
+            if (document.querySelector('.decline-panel.show, .decline-panel[style*="block"]')) return false;
+            var a = document.activeElement;
+            if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable)) return false;
+            return true;
+        }
+
+        function refreshNow(message) {
+            try { sessionStorage.setItem(NOTICE_KEY, message); } catch (e) { /* the toast is a bonus, the refresh is the point */ }
+            window.location.reload();
+        }
+
+        function setBadge(node, value) {
+            if (node && node.textContent !== String(value)) node.textContent = String(value);
+        }
+
+        function paint(data) {
+            setBadge(el('sidebarPendingCount'), data.pending);
+            setBadge(el('sidebarHistoryCount'), data.history);
+            // The tab itself carries the count, so a staffer working in another
+            // tab still sees that something is waiting.
+            document.title = data.pending > 0 ? '(' + data.pending + ') ' + titleBase : titleBase;
+        }
+
+        function poll() {
+            if (stopped || !navigator.onLine) return;
+
+            fetch('/office-approvals/status', {
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' },
+                cache: 'no-store'
+            }).then(function (res) {
+                // An expired office session does not answer with JSON — it
+                // answers with a redirect to the login page. Following that
+                // silently would leave this polling a login form forever, so
+                // the watch stops and the staffer is sent to log back in.
+                if (res.redirected) {
+                    stopped = true;
+                    window.location.href = '/login?status=session_expired';
+                    return null;
+                }
+                if (!res.ok) return null;
+                // Anything that is not JSON is not an answer to this question
+                // — a captive portal's sign-in page, say. Ignored, not parsed.
+                if ((res.headers.get('content-type') || '').indexOf('application/json') === -1) return null;
+                return res.json().catch(function () { return null; });
+            }).then(function (data) {
+                if (!data || data.success !== true) return;
+                paint(data);
+
+                var latest = Number(data.latestPendingId || 0);
+                if (baseline === null) { baseline = latest; return; }   // first look sets the mark, never announces
+                if (latest <= baseline) { baseline = latest; return; }
+
+                var added = data.pending;
+                baseline = latest;
+                var message = added === 1
+                    ? 'A new survey submission is waiting for your review.'
+                    : added + ' survey submissions are waiting for your review.';
+
+                if (REFRESHES) { wantsRefresh = message; }
+                else { notify(message); }
+            }).catch(function () {
+                // Offline, asleep, a dropped connection: nothing to report.
+                // The next tick tries again.
+            });
+        }
+
+        function tick() {
+            // A hidden tab is not being read, so it neither polls nor reloads
+            // under someone's feet; it catches up the moment it is looked at.
+            if (document.visibilityState !== 'visible') return;
+            if (wantsRefresh) {
+                if (safeToReload()) return refreshNow(wantsRefresh);
+                // Busy — the refresh waits, but the staffer should not: told
+                // once, here, so a long spell of typing does not hide the fact
+                // that something arrived. Every later tick just re-checks.
+                if (!toldAboutWait) {
+                    toldAboutWait = true;
+                    notify(wantsRefresh + ' The list updates as soon as you finish what you are doing.');
+                }
+                return;
+            }
+            poll();
+        }
+
+        function start() {
+            // Anything left over from the reload this script asked for.
+            try {
+                var carried = sessionStorage.getItem(NOTICE_KEY);
+                if (carried) { sessionStorage.removeItem(NOTICE_KEY); notify(carried); }
+            } catch (e) { /* private mode — the reload still happened */ }
+
+            poll();
+            setInterval(tick, POLL_MS);
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible') tick();
+            });
+            // Back from a dead connection: ask immediately rather than waiting
+            // out the rest of the interval.
+            window.addEventListener('online', tick);
+        }
+
+        // AppAlert lives in layout/footer.ejs, which is parsed after this —
+        // DOMContentLoaded is the first moment it is safe to call.
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+        else start();
+    })();
+</script>

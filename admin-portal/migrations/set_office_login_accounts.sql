@@ -1,4 +1,4 @@
--- Sets each office's /office-login account: email_address = acronym@cspc.edu.ph,
+-- Sets each office's login account (used on the main /login page): email_address = acronym@cspc.edu.ph,
 -- password = "12345" (bcrypt hash below, cost factor 10 — matches the app's
 -- bcryptjs.hash(password, 10) in server.js's /offices/add and /offices/edit).
 -- Safe to run on both the local dev database and the Clever Cloud production

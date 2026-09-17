@@ -129,7 +129,7 @@ app.use((req, res, next) => {
 });
 
 // Exposes the landing page's hero background photo to EVERY view, so every
-// page that paints a photo backdrop (login, office-login, client-login,
+// page that paints a photo backdrop (login, client-login,
 // forgot/reset-password, complete-google-registration, client-survey) shows
 // the same image as index.ejs instead of each one hardcoding
 // '/images/campus-monument.jpg'. Admins can change the hero image from the
@@ -943,22 +943,113 @@ function ensureAdminAuth(req, res, next) {
     return res.redirect(302, '/login?status=login_required');
 }
 
-// Ensures only a logged-in office account (set at /office-login) can view/use the
+// Ensures only a logged-in office account (set at /auth-login) can view/use the
 // office approval panel. Reuses the same hand-rolled admin-session infra as
 // ensureAdminAuth (req.adminSession/'admin.sid' cookie) with a distinct
 // user.type so an office login can never be mistaken for an admin login (or
 // vice versa) even though they share a session store and cookie.
+// Two spellings of the signed-in office's own name, for the portal header.
+//
+// `offices` stores the name two different ways depending on the office, and
+// both have to end up looking the same in the header:
+//   - office_name spelled out, full_name NULL   ("Student Testing and Admission")
+//   - office_name as the acronym, full_name spelled out ("CCS" / "College of
+//     Computer Studies") — see migrations/add_office_full_name.sql
+// So the FULL spelling is full_name when it exists and office_name otherwise,
+// and the SHORT spelling is office_name when it is already the acronym, and a
+// derived one when it is not.
+const OFFICE_ACRONYM_STOPWORDS = new Set(['and', 'of', 'for', 'the', 'in', 'on', 'at', 'to', 'a', 'an', '&']);
+
+// Some office names carry their own acronym in the name itself — "National
+// Service Training Program (NSTP)". That trailing "(NSTP)" is the SHORT
+// spelling wearing the long one's clothes: printed inside the full name it
+// says the same thing twice, in the one place there is already least room for
+// it. So the full spelling drops it, and it is used only where the short
+// spelling is wanted.
+//
+// Only an acronym-shaped parenthetical is removed — no spaces, 2-15
+// characters — so a name that uses parentheses for actual words keeps them,
+// and a name that is NOTHING but a parenthetical keeps itself.
+function stripParentheticalAcronym(name) {
+    const raw = String(name || '').trim();
+    const stripped = raw.replace(/\s*\(([^)\s]{2,15})\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+    return stripped || raw;
+}
+
+function deriveOfficeShortName(officeName, fullName) {
+    const stored = String(officeName || '').trim();
+    const full = String(fullName || '').trim();
+    if (!stored) return '';
+
+    // full_name is only ever filled in for an office whose office_name is
+    // ALREADY the acronym staff use day to day, so that stored value is the
+    // short form — no need to invent one.
+    if (full && full.toLowerCase() !== stored.toLowerCase()) return stored;
+
+    // An acronym the name carries in its own parentheses beats a derived one,
+    // because it is the office's own choice of abbreviation — e.g. "Center for
+    // Gender and Development (CGAD)" is known as CGAD, not CFGAD.
+    const parenthesized = stored.match(/\(([^)]{2,15})\)/);
+    if (parenthesized) return parenthesized[1].trim();
+
+    // Otherwise build initials from the words that carry meaning. Dropping the
+    // linking words is what makes these match the acronyms the offices already
+    // use elsewhere: "Student Testing and Admission" -> STA and "Student
+    // Registration and Records Office" -> SRRO are exactly the acronyms in
+    // those two offices' own email addresses (sta@, srro@).
+    const words = stored
+        .replace(/\([^)]*\)/g, ' ')
+        .split(/[\s/,\-]+/)
+        .filter(Boolean)
+        .filter((w) => !OFFICE_ACRONYM_STOPWORDS.has(w.toLowerCase()));
+    const initials = words.map((w) => w.charAt(0).toUpperCase()).join('');
+
+    // A single initial is not a name — a one-word office keeps its word.
+    return initials.length >= 2 ? initials : stored;
+}
+
+// What the office pages pass to the shell. officeName stays the key the three
+// views already use, so it keeps meaning "the name to show", now always the
+// full one; officeNameShort is the fallback the header swaps in when the full
+// one cannot fit (see office-shell.ejs).
+function officeHeaderNames(user) {
+    const stored = String((user && user.office_name) || '').trim();
+    const full = String((user && user.full_name) || '').trim() || stored;
+    return {
+        // Spelled out and nothing else: no acronym tacked on the end, on any
+        // screen. The acronym is a fallback for when this cannot fit, not a
+        // decoration to carry alongside it.
+        officeName: stripParentheticalAcronym(full),
+        officeNameShort: deriveOfficeShortName(stored, user && user.full_name)
+    };
+}
+
 function ensureOfficeAuth(req, res, next) {
     if (req.adminSession && req.adminSession.user && req.adminSession.user.type === 'office') {
+        // Sessions opened before offices started carrying full_name have no
+        // copy of it, and the header needs it to spell the office out. Fill it
+        // in once, here, so an office already signed in on some device gets
+        // the proper header without having to log out and back in first.
+        // `null` is a filled-in answer (this office has no full_name);
+        // `undefined` is the only value that means "never looked".
+        if (typeof req.adminSession.user.full_name === 'undefined') {
+            return db.query('SELECT full_name FROM offices WHERE id = ? LIMIT 1', [req.adminSession.user.id], (err, rows) => {
+                if (err) console.error('❌ Error loading this office full name:', err);
+                req.adminSession.user.full_name = (rows && rows[0] && rows[0].full_name) || null;
+                return next();
+            });
+        }
         return next();
     }
     if (req.is('application/json') || req.xhr) {
         return res.status(401).json({ success: false, message: "Please log in as your office first." });
     }
-    // status=login_required so the office login page can say WHY it is
-    // asking, the same way '/login' does for the admin/client flows —
+    // status=login_required so the login page can say WHY it is asking —
     // an unexplained bounce back to a login form reads as a failure.
-    return res.redirect(302, '/office-login?status=login_required');
+    // Offices sign in through the SAME '/login' form as admins and clients
+    // (see handleOfficeLogin in /auth-login); there is no separate office
+    // login page any more.
+    return res.redirect(302, '/login?status=login_required');
 }
 
 // Tells the browser (and any proxy/CDN in front of it) to never cache a restricted
@@ -2703,7 +2794,7 @@ db.query(createClustersTableQuery, (err) => {
             } else {
                 console.log('✅ offices table verified/created successfully!');
                 db.query("ALTER TABLE offices ADD COLUMN is_archived TINYINT(1) NOT NULL DEFAULT 0", () => {});
-                // Office-side login for the approval panel (see /office-login) — bcrypt
+                // Office-side login for the approval panel (offices sign in at /login) — bcrypt
                 // hash, set by the super admin via /offices/add or /offices/edit. NULL
                 // means this office has no login set up yet.
                 db.query("ALTER TABLE offices ADD COLUMN password VARCHAR(255) NULL", () => {});
@@ -3121,7 +3212,7 @@ function isBcryptHash(value) {
 }
 
 // Simple in-memory login-attempt throttle — neither /auth-login nor
-// /office-login had any brute-force/credential-stuffing protection before
+// the old /office-login had any brute-force/credential-stuffing protection before
 // this (reCAPTCHA only covers /auth-login, and only blocks scripted
 // automation, not slow/manual guessing). Not a substitute for a proper
 // distributed rate limiter behind a load balancer, but this admin portal
@@ -3450,9 +3541,10 @@ app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
         if (err) {
             return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
         }
-        // Not a client account either — try offices before giving up, since
-        // office staff naturally try this same main login form (in addition to
-        // the dedicated /office-login page) with their office's email/password.
+        // Not a client account either — try offices before giving up. This is
+        // where office staff sign in: '/login' is the single login page for
+        // admins, clients AND offices, so an office's email/password has to be
+        // accepted here or it has nowhere left to authenticate.
         if (!rows || rows.length === 0) {
             return handleOfficeLogin();
         }
@@ -3488,7 +3580,7 @@ app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
     });
 
     function handleOfficeLogin() {
-        db.query('SELECT id, office_name, cluster_name, email_address, password FROM offices WHERE email_address = ? LIMIT 1', [emailInput], async (officeErr, officeRows) => {
+        db.query('SELECT id, office_name, full_name, cluster_name, email_address, password FROM offices WHERE email_address = ? LIMIT 1', [emailInput], async (officeErr, officeRows) => {
             if (officeErr) {
                 return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
             }
@@ -3508,6 +3600,10 @@ app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
             req.adminSession.user = {
                 id: office.id,
                 office_name: office.office_name,
+                // Carried on the session so every office page can spell the
+                // office out in its header without a query per page load
+                // (see officeHeaderNames / ensureOfficeAuth's backfill).
+                full_name: office.full_name || null,
                 cluster_name: office.cluster_name,
                 email_address: office.email_address,
                 type: 'office'
@@ -3543,73 +3639,52 @@ app.get('/client-login', noCache, (req, res) => {
 // ==========================================
 // OFFICE LOGIN & APPROVAL PANEL
 // ==========================================
-// A separate login for office staff (not an admin, not a client) — its whole
-// purpose is to review survey submissions from non-@cspc.edu.ph accounts that
-// claim to have visited THIS office, and approve or decline them (see
+// Office staff (not an admin, not a client) sign in through the SAME '/login'
+// form as everyone else — see handleOfficeLogin inside /auth-login, which is
+// tried after the admin and client lookups both miss. The panel behind that
+// login reviews survey submissions from non-@cspc.edu.ph accounts that claim
+// to have visited THIS office, and approves or declines them (see
 // checkResubmissionEligibility / finalizeVerifiedSurvey for how an approved
-// submission is replayed into survey_responses). Reuses the same hand-rolled
-// admin-session cookie/store as admin logins (see ensureOfficeAuth above).
-// Always renders the login form, even with a valid office session already on
-// the request — same as admin's /login. This page is exactly where the office
-// pages' new-tab guard sends a freshly-pasted-URL tab that hasn't
-// authenticated in THAT tab yet; if this route bounced an already-logged-in
-// session straight back into the panel, that page's guard would bounce it
-// right back here, forever (a visible infinite-reload freeze).
+// submission is replayed into survey_responses). An office session still
+// reuses the same hand-rolled admin-session cookie/store as admin logins
+// (see ensureOfficeAuth above), only with user.type === 'office'.
+//
+// The dedicated '/office-login' page it used to have is gone: one login page
+// for every kind of account means office staff can never again land on a form
+// that refuses their credentials, and there is only one place to maintain the
+// lockout/rate-limit/reCAPTCHA protections. These two routes stay behind only
+// as forwarders, because a bookmark, a typed URL, an old QR code, a
+// service-worker-cached shell or a stale open tab on ANY device can still
+// aim at the old path long after the page itself stopped existing.
 app.get('/office-login', noCache, (req, res) => {
-    res.render('office-login');
+    // Carry ?status / ?error through so a forwarded visitor still sees why
+    // they were asked to log in; login.ejs understands the same flags.
+    const status = typeof req.query.status === 'string' ? req.query.status : '';
+    const error = typeof req.query.error === 'string' ? req.query.error : '';
+    let target = '/login';
+    if (error) target += '?error=' + encodeURIComponent(error);
+    else if (status) target += '?status=' + encodeURIComponent(status);
+    return res.redirect(302, target);
 });
 
-app.post('/office-login', loginRateLimiter('/office-login'), (req, res) => {
-    const emailInput = String(req.body.email || '').trim().toLowerCase();
-    const password = req.body.password;
-    if (!emailInput || !password) {
-        return res.redirect('/office-login?error=' + encodeURIComponent('Please enter both the office email and password.'));
-    }
-
-    const existingLockout = getAccountLockout(emailInput);
-    if (existingLockout) {
-        return res.redirect('/office-login?error=' + encodeURIComponent(accountLockoutMessage(existingLockout)));
-    }
-
-    db.query('SELECT id, office_name, cluster_name, email_address, password FROM offices WHERE email_address = ? LIMIT 1', [emailInput], async (err, rows) => {
-        if (err) return res.redirect('/office-login?error=' + encodeURIComponent('Server error. Please try again.'));
-
-        const office = rows && rows[0];
-        if (!office || !office.password) {
-            return res.redirect('/office-login?error=' + encodeURIComponent('Invalid office email or password.'));
-        }
-
-        const passwordMatches = await bcrypt.compare(password, office.password);
-        if (!passwordMatches) {
-            recordFailedLogin(emailInput);
-            return res.redirect('/office-login?error=' + encodeURIComponent('Invalid office email or password.'));
-        }
-        clearFailedLogins(emailInput);
-
-        regenerateAdminSession(req, res);
-        req.adminSession.user = {
-            id: office.id,
-            office_name: office.office_name,
-            cluster_name: office.cluster_name,
-            email_address: office.email_address,
-            type: 'office'
-        };
-        // Straight to the Dashboard — see the same redirect above.
-        res.redirect('/office-dashboard?loggedin=1');
-    });
+// A stale cached copy of the old office form (or a bot) can still POST here.
+// The credentials in that body are deliberately NOT processed — this path no
+// longer authenticates anyone — so the visitor is simply sent to the real
+// form. loginRateLimiter still guards it so it can't be used as an
+// unthrottled probe of which office emails exist.
+app.post('/office-login', loginRateLimiter('/login'), (req, res) => {
+    return res.redirect(303, '/login?status=login_required');
 });
 
 app.get('/office-logout', noCache, (req, res) => {
-    // Back to the OFFICE login page, not '/login' (the admin/client one).
-    // ensureOfficeAuth sends an unauthenticated office visitor to
-    // '/office-login', so logging out has to land in the same place — it
-    // used to drop office staff on the admin login form, which cannot
-    // accept their credentials at all. status=logged_out gives them the
-    // same "You have been logged out successfully" confirmation the admin
-    // and client flows get from '/logout' below.
+    // Offices log back in at '/login' now, so logging out lands there too —
+    // the same place ensureOfficeAuth sends an unauthenticated office
+    // visitor. status=logged_out gives them the same "You have been logged
+    // out successfully" confirmation the admin and client flows get from
+    // '/logout' below.
     const hadSession = !!(req.adminSession && req.adminSession.user && req.adminSession.user.type === 'office');
     destroyAdminSession(req, res);
-    res.redirect(302, hadSession ? '/office-login?status=logged_out' : '/office-login');
+    res.redirect(302, hadSession ? '/login?status=logged_out' : '/login');
 });
 
 // Approval/decline history count only — used to show a badge on the sidebar's
@@ -3644,7 +3719,7 @@ function getOfficePendingCount(officeId, callback) {
 // "how many", not the "who" or the "what".
 app.get('/office-dashboard', ensureOfficeAuth, noCache, (req, res) => {
     const officeId = req.adminSession.user.id;
-    const officeName = req.adminSession.user.office_name;
+    const { officeName, officeNameShort } = officeHeaderNames(req.adminSession.user);
 
     // ---- The reporting period is a SEMESTER, not a rolling six months ----
     // The College's terms run January–June and July–December, and the record
@@ -3689,6 +3764,7 @@ app.get('/office-dashboard', ensureOfficeAuth, noCache, (req, res) => {
     const render = (stats) => {
         res.render('office-dashboard', Object.assign({
             officeName,
+            officeNameShort,
             semesterLabel,
             semesterRange,
             totalRespondents: 0,
@@ -3781,6 +3857,36 @@ app.get('/office-dashboard', ensureOfficeAuth, noCache, (req, res) => {
     );
 });
 
+// Live status for the office panel's poller (see office-shell.ejs). Answers
+// the two questions the panel asks on a timer — "how many are waiting?" and
+// "is any of them NEW since I last looked?" — and nothing else: no respondent
+// name, email or answer is selected, so the thing running every few seconds on
+// an unattended screen carries no personal data at all. The newest pending id
+// is what makes "new" detectable; a count alone cannot tell one submission
+// arriving while another is approved from nothing happening.
+app.get('/office-approvals/status', ensureOfficeAuth, noCache, (req, res) => {
+    const officeId = req.adminSession.user.id;
+    db.query(
+        "SELECT COUNT(*) AS pending, COALESCE(MAX(id), 0) AS latestId FROM pending_survey_submissions WHERE office_id = ? AND status = 'pending'",
+        [officeId],
+        (err, rows) => {
+            if (err) {
+                console.error('❌ Error loading office status:', err);
+                return res.status(500).json({ success: false, message: 'Server error.' });
+            }
+            const row = (rows && rows[0]) || {};
+            getOfficeHistoryCount(officeId, (historyCount) => {
+                res.json({
+                    success: true,
+                    pending: Number(row.pending || 0),
+                    latestPendingId: Number(row.latestId || 0),
+                    history: Number(historyCount || 0)
+                });
+            });
+        }
+    );
+});
+
 app.get('/office-approvals', ensureOfficeAuth, noCache, (req, res) => {
     const officeId = req.adminSession.user.id;
     db.query(
@@ -3801,11 +3907,10 @@ app.get('/office-approvals', ensureOfficeAuth, noCache, (req, res) => {
             }) : [];
 
             getOfficeHistoryCount(officeId, (historyCount) => {
-                res.render('office-approvals', {
-                    officeName: req.adminSession.user.office_name,
+                res.render('office-approvals', Object.assign(officeHeaderNames(req.adminSession.user), {
                     submissions,
                     historyCount
-                });
+                }));
             });
         }
     );
@@ -3843,12 +3948,11 @@ app.get('/office-approvals/history', ensureOfficeAuth, noCache, (req, res) => {
                 // list above is capped at 50 rows, so for a busy office the
                 // sidebar badge would otherwise sit at "50" forever.
                 getOfficeHistoryCount(officeId, (historyCount) => {
-                    res.render('office-history', {
-                        officeName: req.adminSession.user.office_name,
+                    res.render('office-history', Object.assign(officeHeaderNames(req.adminSession.user), {
                         history,
                         pendingCount,
                         historyCount
-                    });
+                    }));
                 });
             });
         }
@@ -6936,7 +7040,7 @@ app.post('/clusters/permanent-delete/:id', ensureAdminAuth, (req, res) => {
 
 app.post('/offices/add', ensureAdminAuth, async (req, res) => {
     const { cluster_name, office_name, head_director, email_address, password } = req.body;
-    // Login for the office approval panel (/office-login) — optional at creation
+    // Login for the office approval panel (signed in at /login) — optional at creation
     // time; a super admin can also set/change it later via /offices/edit.
     const passwordHash = password ? await bcrypt.hash(password, 10) : null;
     db.query('INSERT INTO offices (cluster_name, office_name, head_director, email_address, password) VALUES (?, ?, ?, ?, ?)',

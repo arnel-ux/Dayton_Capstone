@@ -1,8 +1,8 @@
 /* ==========================================================================
    auth.css — the ONE stylesheet for every full-screen authentication page:
 
-       /login          (login.ejs)          /office-login   (office-login.ejs)
-       /client-login   (client-login.ejs)   /forgot-password (forgot-password.ejs)
+       /login          (login.ejs)          /forgot-password (forgot-password.ejs)
+       /client-login   (client-login.ejs)
        /reset-password (reset-password.ejs)
        /complete-google-registration        (complete-google-registration.ejs)
 

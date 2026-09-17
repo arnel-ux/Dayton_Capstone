@@ -7,7 +7,7 @@
 // force a hard reload — that reload IS a real request, so /login redirects and
 // no-cache headers apply normally again.
 //
-// '__loginBoundary' (set by login.ejs/office-login.ejs the moment either is
+// '__loginBoundary' (set by login.ejs the moment it is
 // actually rendered) marks that THIS TAB has, at some point, navigated back
 // to the login page. Once set, a Back/Forward-triggered pageshow on a
 // protected page sends the user straight back to that login page instead of

@@ -62,6 +62,10 @@
     justify-content: center;
     flex: 0 1 auto;
     min-width: 0;
+    /* Last line of defence. The office name is the headline here and some of
+       them are very long, so if the fit check below ever measured wrong the
+       text would paint straight over the hamburger rather than being cut. */
+    overflow: hidden;
 }
 .topbar-brand-logo-wrap {
     position: absolute;
@@ -86,10 +90,21 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
-/* The office name. Allowed to shrink and ellipsis rather than wrap the header
-   onto a second line — some office names are long ("Student Testing and
-   Admission"), and the full name is in the sidebar and the page title too. */
-/* Desktop spells the name out; the phone block below swaps in the acronym. */
+/* The office's own name, the header's headline. Allowed to ellipsis rather
+   than wrap the header onto a second line — but only as a last resort, after
+   the acronym has already been tried: office-shell.ejs measures this element
+   and adds .is-short when the full spelling overflows it.
+
+   Both spellings sit in the same element so the measurement is of the real
+   line, in the real font, at the real width — not of a guessed breakpoint. */
+.topbar-brand-text .t1 .office-name-short { display: none; }
+.topbar-brand-text .t1.is-short .office-name-full { display: none; }
+.topbar-brand-text .t1.is-short .office-name-short { display: inline; }
+
+/* Desktop spells "Center for Quality Assurance" out; the phone block below
+   swaps in the acronym. This is the subtitle now — which portal this is —
+   because every page here belongs to the same portal, so it is the one piece
+   of the header that never varies and never needed the headline slot. */
 .topbar-brand-text .brand-cqa-short { display: none; }
 .topbar-brand-text .t2 {
     font-size: 0.82rem;
@@ -338,18 +353,40 @@
 }
 
 /* ---- Tablets and phones -------------------------------------------------
-   The acronym takes over from 991px down — the same width where the sidebar
-   becomes a drawer, and the same breakpoint the client survey switches at, so
-   the two portals never disagree about which spelling a given screen gets.
-   The full name does not fit beside the office's own name below this. */
+   "Center for Quality Assurance" shortens to CQA from 991px down — the same
+   width where the sidebar becomes a drawer, and the same breakpoint the client
+   survey switches at, so the two portals never disagree about which spelling a
+   given screen gets. This is the SUBTITLE, and it is the same words on every
+   office's screen, so a fixed breakpoint is right for it. The office name
+   above it is the opposite case — it differs per office, so it is measured
+   rather than switched at a width (see .t1 .office-name-short). */
 @media (max-width: 991px) {
     .topbar-brand-text .brand-cqa-full { display: none; }
     .topbar-brand-text .brand-cqa-short { display: inline; }
+
+    /* Reserve the hamburger's own width on BOTH sides.
+       The side zones are flex: 1 1 0 — basis zero — so when the header runs
+       out of room they collapse to nothing and the button, which is a fixed
+       40px, simply overflows its own zone while the brand keeps the full
+       width of the bar. With a short fixed headline that never showed; with
+       the office's name as the headline, a long one ran straight under the
+       hamburger. Flooring both sides at the button's width gives it real
+       room, keeps the brand centred (the two sides stay equal), and — the
+       part the fit check depends on — means the space left for the name is
+       an honest measurement of the space it actually has. */
+    .topbar-side { min-width: 40px; }
 }
 
 /* ---- Desktop: permanent sidebar ---------------------------------------- */
 @media (min-width: 992px) {
     body { margin-left: var(--office-sidebar-w); }
+
+    /* Desktop ALWAYS spells the office out, whatever the fit check last
+       decided on a narrower screen. Belt and braces with the same rule in
+       office-shell.ejs's script: a resize from phone to desktop width that
+       somehow missed the listener still lands on the full name. */
+    .topbar-brand-text .t1.is-short .office-name-full { display: inline; }
+    .topbar-brand-text .t1.is-short .office-name-short { display: none; }
     .office-sidebar { transform: none; box-shadow: none; }
     .sidebar-backdrop { display: none !important; }
     .topbar-hamburger { display: none; }
@@ -370,6 +407,7 @@
     :root { --office-topbar-h: 62px; --offline-pill-top: calc(var(--office-topbar-h) + 8px); }
     .topbar { padding: 0.4rem 0.65rem; gap: 0.5rem; }
     .topbar-hamburger { width: 38px; height: 38px; }
+    .topbar-side { min-width: 38px; }
     .topbar-brand-logo-wrap { width: 42px; height: 42px; right: calc(100% + 0.5rem); }
     .topbar-brand-text .t1 { font-size: 1rem; }
     .topbar-brand-text .t2 { font-size: 0.75rem; }
@@ -572,3 +610,27 @@ html[data-bs-theme="dark"] .chart-table td { color: var(--office-ink); }
 html[data-bs-theme="dark"] .chart-table th,
 html[data-bs-theme="dark"] .chart-table td { border-top-color: var(--office-line); }
 html[data-bs-theme="dark"] .empty-period { color: var(--office-ink-soft); }
+
+/* ---- History: always-visible status + the phone status filter ----
+   The mobile history card now keeps its status row out of the accordion and
+   draws a permanent divider under the summary, so those borders need dark
+   values too — the dark rule above only covered the EXPANDED state, which was
+   the only state that had them before. */
+html[data-bs-theme="dark"] .history-table .col-order-respondent,
+html[data-bs-theme="dark"] .history-table .col-order-email,
+html[data-bs-theme="dark"] .history-table tr.data-row.expanded td.col-order-status { border-color: var(--office-line) !important; }
+
+html[data-bs-theme="dark"] .hf-chip {
+    background: var(--office-surface);
+    border-color: var(--office-line);
+    color: var(--office-ink-soft);
+}
+html[data-bs-theme="dark"] .hf-chip .hf-count { background: rgba(255, 255, 255, 0.08); color: var(--office-ink-soft); }
+/* Re-asserted one by one: the dark base rule above outranks the selected
+   states' own light-mode declarations, so without these an active chip would
+   come out looking unselected in dark mode. */
+html[data-bs-theme="dark"] .hf-chip.active { background: var(--office-accent); border-color: var(--office-accent); color: #fff; }
+html[data-bs-theme="dark"] .hf-chip.hf-approved.active { background: #16a34a; border-color: #16a34a; color: #fff; }
+html[data-bs-theme="dark"] .hf-chip.hf-declined.active { background: #dc2626; border-color: #dc2626; color: #fff; }
+html[data-bs-theme="dark"] .hf-chip.active .hf-count { background: rgba(255, 255, 255, 0.22); color: #fff; }
+html[data-bs-theme="dark"] .history-filter-empty { border-color: var(--office-line); color: var(--office-ink-soft); }

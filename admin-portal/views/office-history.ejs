@@ -8,8 +8,8 @@
         // bookmark) would otherwise land here fully "logged in" without ever
         // having submitted office credentials in THAT tab. sessionStorage is
         // scoped per tab (never copied to a freshly opened one), so it's used
-        // here purely as a "did this tab actually authenticate" marker: /office-login's
-        // redirect tags the very next page load with ?loggedin=1, which this
+        // here purely as a "did this tab actually authenticate" marker: the
+        // login redirect tags the very next page load with ?loggedin=1, which this
         // script converts into the marker before the URL is cleaned up. Same
         // pattern as /office-approvals, the admin dashboard (layout/header.ejs)
         // and /client-survey.
@@ -27,7 +27,7 @@
                     var cleanedUrl = window.location.pathname + (cleanedSearch ? '?' + cleanedSearch : '') + window.location.hash;
                     window.history.replaceState({}, '', cleanedUrl);
                 } else if (sessionStorage.getItem('cqa_office_tab_ok') !== '1') {
-                    window.location.replace('/office-login?error=' + encodeURIComponent('Please log in to continue.'));
+                    window.location.replace('/login?error=' + encodeURIComponent('Please log in to continue.'));
                 }
             } catch (e) { /* sessionStorage unavailable (privacy mode, etc.) — fail open */ }
         })();
@@ -319,6 +319,18 @@
         }
 
         /* ==========================================================
+           STATUS FILTER (phones only)
+           ==========================================================
+           The desktop table has a Status column that can be read down the
+           page, so it needs no filter. A phone shows one card at a time, and
+           "show me only the declined ones" is the other half of what a
+           staffer comes to History for — so the two statuses get their own
+           views of the same list here, without a second page or a round trip
+           to the server. Hidden entirely on desktop. */
+        .history-filter { display: none; }
+        .history-filter-empty { display: none; }
+
+        /* ==========================================================
            RESPONSIVE
            ========================================================== */
         @media (max-width: 767px) {
@@ -327,6 +339,68 @@
             .page-header h2 { font-size: 1.3rem; }
             .page-header p { font-size: 0.84rem; max-width: 100%; }
             .pending-badge { width: 100%; }
+
+            /* --- Status filter chips ---------------------------------- */
+            .history-filter {
+                display: flex;
+                gap: 0.4rem;
+                margin: 0 0.85rem 0.25rem;
+            }
+            .hf-chip {
+                flex: 1 1 0;
+                min-width: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 0.35rem;
+                padding: 0.5rem 0.4rem;
+                border: 1px solid #e9ebf3;
+                border-radius: 11px;
+                background: #ffffff;
+                color: #64748b;
+                font-size: 0.74rem;
+                font-weight: 700;
+                letter-spacing: 0.2px;
+                line-height: 1;
+                cursor: pointer;
+                /* The tap target is the whole chip; 44px keeps it reachable
+                   for a thumb without making the row look like a toolbar. */
+                min-height: 44px;
+            }
+            .hf-chip .hf-count {
+                font-size: 0.68rem;
+                font-weight: 800;
+                padding: 0.1rem 0.36rem;
+                border-radius: 50px;
+                background: #f1f2f8;
+                color: #64748b;
+            }
+            .hf-chip.active { color: #ffffff; background: #4b3a86; border-color: #4b3a86; }
+            .hf-chip.active .hf-count { background: rgba(255, 255, 255, 0.22); color: #ffffff; }
+            /* Each status chip carries its own colour when selected, the same
+               green/red the badges and the card edges use, so the chip, the
+               accent and the badge all say the same thing. */
+            .hf-chip.hf-approved.active { background: #16a34a; border-color: #16a34a; }
+            .hf-chip.hf-declined.active { background: #dc2626; border-color: #dc2626; }
+            /* A chip for a status this office has none of is shown, not
+               hidden — "0 declined" is a real and useful answer — but it is
+               dimmed and unusable so tapping it can't empty the list. */
+            .hf-chip[disabled] { opacity: 0.45; cursor: default; }
+
+            .approvals-table tbody tr.data-row.hf-hidden,
+            .approvals-table-card.hf-hidden { display: none !important; }
+
+            .history-filter-empty {
+                display: none;
+                margin: 0.85rem;
+                padding: 1.1rem;
+                border: 1px dashed #e9ebf3;
+                border-radius: 14px;
+                text-align: center;
+                font-size: 0.84rem;
+                color: #94a3b8;
+            }
+            .history-filter-empty.show { display: block; }
 
             /* Card-style responsive table — same pattern as /office-approvals:
                each row reflows into its own bordered card with the header
@@ -372,9 +446,9 @@
 
             /* --- History list accordion ---------------------------------
                Same collapsed-by-default pattern as the Pending list: each
-               card shows only Respondent + Google Account (side by side);
-               tapping it expands the same card to reveal Service Availed,
-               Status, Decline Reason and Reviewed date. Keeps a long
+               card shows Respondent + Google Account (side by side) and the
+               status; tapping it expands the same card to reveal Service
+               Availed, Decline Reason and Reviewed date. Keeps a long
                history from turning into a wall of scrolling. */
             .history-table.approvals-table tbody tr.data-row {
                 display: grid;
@@ -383,8 +457,11 @@
             }
             .history-table .col-order-respondent { grid-column: 1; order: 1; min-width: 0; }
             .history-table .col-order-email { grid-column: 2; order: 2; min-width: 0; }
-            .history-table .col-order-service { grid-column: 1 / -1; order: 3; }
-            .history-table .col-order-status { grid-column: 1 / -1; order: 4; }
+            /* Status sits in the COLLAPSED card, directly under the summary —
+               see the block further down for why it is not behind the
+               accordion with the rest. */
+            .history-table .col-order-status { grid-column: 1 / -1; order: 3; }
+            .history-table .col-order-service { grid-column: 1 / -1; order: 4; }
             .history-table .col-order-reason { grid-column: 1 / -1; order: 5; }
             .history-table .col-order-reviewed { grid-column: 1 / -1; order: 6; }
 
@@ -414,11 +491,14 @@
             }
             tr.data-row.expanded .toggle-chevron { transform: rotate(180deg); color: #4b3a86; }
 
+            /* The divider under the summary is permanent now (it used to
+               appear only once expanded), because the status row below it is
+               always there to be separated from. */
             .history-table .col-order-respondent,
             .history-table .col-order-email {
-                border-bottom: none !important;
+                border-bottom: 1px solid #f0f1f7 !important;
                 padding-top: 0 !important;
-                padding-bottom: 0.3rem !important;
+                padding-bottom: 0.55rem !important;
             }
             .history-table .col-order-email .cell-value {
                 font-size: 0.88rem;
@@ -427,9 +507,36 @@
             }
             .history-table tr.data-row.expanded .col-order-respondent,
             .history-table tr.data-row.expanded .col-order-email {
-                border-bottom: 1px solid #f0f1f7 !important;
-                padding-bottom: 0.55rem !important;
                 margin-bottom: 0.3rem;
+            }
+
+            /* --- Status, visible without expanding ------------------------
+               The status IS what this page is for: "was this one approved or
+               declined" is the question a staffer opens History to answer.
+               Behind the accordion, every single row had to be tapped to
+               learn the one thing being looked for, which made the collapsed
+               list — the thing meant to make a long history scannable —
+               unscannable. It stays in the card at all times, and the card
+               carries the same answer as a colour down its left edge, so the
+               list can be read without touching it.
+
+               An inset shadow, not a left border: the dark-mode rules set
+               border-color on this same card, so a coloured border would be
+               repainted grey the moment the theme flipped. */
+            .history-table tbody tr.data-row.status-approved { box-shadow: inset 4px 0 0 #16a34a; }
+            .history-table tbody tr.data-row.status-declined { box-shadow: inset 4px 0 0 #dc2626; }
+
+            .history-table td.col-order-status {
+                border-bottom: none !important;
+                padding-top: 0.55rem !important;
+                padding-bottom: 0 !important;
+            }
+            /* No "STATUS" caption: the badge already reads "Approved" or
+               "Declined", so the label would only repeat it. */
+            .history-table td.col-order-status::before { display: none; }
+            .history-table tr.data-row.expanded td.col-order-status {
+                border-bottom: 1px solid #f0f1f7 !important;
+                padding-bottom: 0.6rem !important;
             }
         }
     </style>
@@ -473,6 +580,18 @@
                 <p>Submissions you approve or decline for your office will be listed here for reference.</p>
             </div>
         <% } else { %>
+            <%
+               // Counted here rather than in the browser so the chips carry
+               // real numbers in the very first paint, with no flash of "0".
+               var nApproved = history.filter(function (h) { return h.status === 'approved'; }).length;
+               var nDeclined = history.length - nApproved;
+            %>
+            <div class="history-filter" role="group" aria-label="Filter history by status">
+                <button type="button" class="hf-chip active" data-filter="all" aria-pressed="true">All <span class="hf-count"><%= history.length %></span></button>
+                <button type="button" class="hf-chip hf-approved" data-filter="approved" aria-pressed="false" <%= nApproved ? '' : 'disabled' %>>Approved <span class="hf-count"><%= nApproved %></span></button>
+                <button type="button" class="hf-chip hf-declined" data-filter="declined" aria-pressed="false" <%= nDeclined ? '' : 'disabled' %>>Declined <span class="hf-count"><%= nDeclined %></span></button>
+            </div>
+            <div class="history-filter-empty" id="historyFilterEmpty" role="status"></div>
             <div class="approvals-table-card">
                 <div class="approvals-table-scroll">
                     <table class="approvals-table history-table">
@@ -492,7 +611,7 @@
                         </thead>
                         <tbody>
                             <% history.forEach(function(sub) { %>
-                                <tr class="data-row">
+                                <tr class="data-row status-<%= sub.status === 'approved' ? 'approved' : 'declined' %>" data-status="<%= sub.status === 'approved' ? 'approved' : 'declined' %>">
                                     <td data-label="Respondent" class="col-order-respondent">
                                         <div class="respondent-cell row-summary-toggle" role="button" tabindex="0" aria-expanded="false">
                                             <span class="cell-label-inline">Respondent</span>
@@ -509,7 +628,7 @@
                                             <%= sub.serviceAvailed || 'Not specified' %>
                                         </div>
                                     </td>
-                                    <td data-label="Status" class="collapsible-detail col-order-status">
+                                    <td data-label="Status" class="col-order-status">
                                         <% if (sub.status === 'approved') { %>
                                             <span class="status-badge approved"><i class="fas fa-check-circle"></i> Approved</span>
                                         <% } else { %>
@@ -597,10 +716,60 @@
                 if (e.key === 'Escape') closeSidebar();
             });
 
+            // Status filter chips (phones only — the CSS hides the chips on
+            // desktop, where the Status column is readable down the page).
+            // Filters the rows already on the page: the whole history is
+            // rendered either way, so switching is instant and works with no
+            // connection, which matters for a portal staff open offline.
+            (function () {
+                var chips = document.querySelectorAll('.hf-chip');
+                if (!chips.length) return;
+                var rows = document.querySelectorAll('.history-table tbody tr.data-row');
+                var emptyNote = document.getElementById('historyFilterEmpty');
+                var card = document.querySelector('.approvals-table-card');
+
+                function apply(filter) {
+                    var shown = 0;
+                    rows.forEach(function (row) {
+                        var match = filter === 'all' || row.getAttribute('data-status') === filter;
+                        row.classList.toggle('hf-hidden', !match);
+                        if (match) shown++;
+                        // A row hidden while expanded would come back
+                        // expanded later, out of step with every other card.
+                        if (!match) {
+                            row.classList.remove('expanded');
+                            row.querySelectorAll('.row-summary-toggle').forEach(function (t) {
+                                t.setAttribute('aria-expanded', 'false');
+                            });
+                        }
+                    });
+                    if (emptyNote) {
+                        emptyNote.textContent = shown ? '' : 'No ' + filter + ' submissions yet.';
+                        emptyNote.classList.toggle('show', shown === 0);
+                    }
+                    // The card is the rows' container — with every row hidden it
+                    // would otherwise stay behind as an empty bordered strip
+                    // under the "none of these yet" note.
+                    if (card) card.classList.toggle('hf-hidden', shown === 0);
+                }
+
+                chips.forEach(function (chip) {
+                    chip.addEventListener('click', function () {
+                        if (chip.hasAttribute('disabled')) return;
+                        chips.forEach(function (c) {
+                            var on = c === chip;
+                            c.classList.toggle('active', on);
+                            c.setAttribute('aria-pressed', String(on));
+                        });
+                        apply(chip.getAttribute('data-filter'));
+                    });
+                });
+            })();
+
             // Mobile history-list accordion: same collapsed-by-default
-            // pattern as the Pending list — a card starts showing only
-            // Respondent + Google Account; tapping it expands the same
-            // card in place to reveal Service Availed, Status, Decline
+            // pattern as the Pending list — a card starts showing
+            // Respondent, Google Account and the status; tapping it expands
+            // the same card in place to reveal Service Availed, Decline
             // Reason and Reviewed date. Purely a CSS class toggle — the
             // ".collapsible-detail" cells are only actually hidden inside
             // the mobile media query, so this is a no-op on desktop.
