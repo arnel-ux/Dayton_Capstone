@@ -3590,29 +3590,38 @@ app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
         return res.redirect('/login?error=' + encodeURIComponent('Please enter both your email and password.'));
     }
 
+    // One address can legitimately BE two different accounts here. Office
+    // staff sign in to the panel with their office's address and the office's
+    // password — and the same person may also have taken a survey, which
+    // creates a client account under that very same address.
+    //
+    // This used to stop at the first table that recognised the address: a
+    // client account whose password did not match ended the attempt with
+    // "Invalid email or password", and the offices table was never consulted
+    // at all. The office's own password was correct and the office could
+    // still never get in, from any device, with no way to tell why — the
+    // message blamed the credentials rather than the lookup order.
+    //
+    // So a table that knows the address but rejects the password is no longer
+    // an answer, only a miss. Every identity this address could be is tried,
+    // and the attempt fails only when all of them have.
     db.query('SELECT email, password FROM client_accounts WHERE email = ? LIMIT 1', [emailInput], async (err, rows) => {
         if (err) {
             return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
         }
-        // Not a client account either — try offices before giving up. This is
-        // where office staff sign in: '/login' is the single login page for
-        // admins, clients AND offices, so an office's email/password has to be
-        // accepted here or it has nowhere left to authenticate.
-        if (!rows || rows.length === 0) {
-            return handleOfficeLogin();
-        }
 
-        const account = rows[0];
-        if (!account.password) {
-            return res.redirect('/login?error=' + encodeURIComponent('This account has no password set yet. Please sign in with Google once to create one.'));
-        }
+        const account = rows && rows[0];
+        // Known here, but this password is not the one — carried through so
+        // the final message can say "wrong password" rather than "no account".
+        if (!account) return handleOfficeLogin({ knownAsClient: false });
+        // A client account created by signing in with Google has no password
+        // of its own yet. That is not a rejection of what was typed; it just
+        // means this identity cannot answer, so the others still get their turn.
+        if (!account.password) return handleOfficeLogin({ knownAsClient: true, noClientPassword: true });
 
         const passwordMatches = await bcrypt.compare(password, account.password);
-        if (!passwordMatches) {
-            recordFailedLogin(emailInput);
-            if (req.noteLoginFailure) req.noteLoginFailure();
-            return res.redirect('/login?error=' + encodeURIComponent('Invalid email or password.'));
-        }
+        if (!passwordMatches) return handleOfficeLogin({ knownAsClient: true });
+
         clearFailedLogins(emailInput);
         if (req.clearLoginFailures) req.clearLoginFailures();
 
@@ -3634,18 +3643,37 @@ app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
         });
     });
 
-    function handleOfficeLogin() {
+    // The last identity this address can be, so this is where the attempt
+    // finally succeeds or fails. `fromClient` carries what the client-account
+    // lookup already established, purely so the failure message is truthful
+    // about WHICH thing went wrong.
+    function handleOfficeLogin(fromClient) {
+        fromClient = fromClient || {};
+
+        // Every way of failing from here ends in one of two honest answers,
+        // recorded once — not once per table consulted, which would have
+        // spent a person's lockout allowance at two or three times the rate
+        // they were actually typing.
+        const rejectUnknown = () => {
+            if (req.noteLoginFailure) req.noteLoginFailure();
+            if (fromClient.knownAsClient) {
+                // The address is real, so sending them to Register would be
+                // wrong — the password is what did not match.
+                recordFailedLogin(emailInput);
+                const message = fromClient.noClientPassword
+                    ? 'This account has no password set yet. Please sign in with Google once to create one.'
+                    : 'Invalid email or password.';
+                return res.redirect('/login?error=' + encodeURIComponent(message));
+            }
+            return res.redirect('/login?tab=register&error=' + encodeURIComponent('No account found for that email. Open the Register tab and sign up with your CSPC or personal email first.'));
+        };
+
         db.query('SELECT id, office_name, full_name, cluster_name, email_address, password FROM offices WHERE email_address = ? LIMIT 1', [emailInput], async (officeErr, officeRows) => {
             if (officeErr) {
                 return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
             }
             const office = officeRows && officeRows[0];
-            if (!office || !office.password) {
-                // Counts as a failure: an unknown address is exactly what a
-                // list of guessed emails looks like from the server's side.
-                if (req.noteLoginFailure) req.noteLoginFailure();
-                return res.redirect('/login?tab=register&error=' + encodeURIComponent('No account found for that email. Open the Register tab and sign up with your CSPC or personal email first.'));
-            }
+            if (!office || !office.password) return rejectUnknown();
 
             const passwordMatches = await bcrypt.compare(password, office.password);
             if (!passwordMatches) {
