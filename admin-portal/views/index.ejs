@@ -1014,7 +1014,10 @@
              mechanism, not a mix of that and inline styles/Bootstrap's
              d-none, so there's exactly one way this element's visibility is
              ever controlled. -->
-        <div id="serverUnavailableNotice" class="offline-pill" role="status">
+        <!-- .is-notice: this one carries a full sentence and a Retry button,
+             unlike the two-word chip above. See /css/offline-pill.css for why
+             that needs its own layout rather than the pill rule. -->
+        <div id="serverUnavailableNotice" class="offline-pill is-notice" role="status">
             <i id="serverUnavailableNoticeIcon" class="fas fa-triangle-exclamation"></i><span id="serverUnavailableNoticeText" class="label">Server temporarily unavailable. Please try again.</span>
             <button type="button" class="notice-retry-btn" onclick="checkServerHealth()">Retry</button>
         </div>
@@ -2588,7 +2591,15 @@
             if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !unusable);
         }
         window.addEventListener('online', updateOfflineIndicator);
-        window.addEventListener('offline', updateOfflineIndicator);
+        window.addEventListener('offline', function () {
+            // Retract the amber notice here rather than waiting for the state
+            // machine: a probe already in flight when the network dies used to
+            // land afterwards and leave "slow or unstable" sitting next to the
+            // "Viewing Offline" chip, two claims about one connection. The
+            // module makes the same correction; this just makes it immediate.
+            setServerNotice(null);
+            updateOfflineIndicator();
+        });
         updateOfflineIndicator();
 
         function setServerNotice(kind, message) {
@@ -2619,14 +2630,18 @@
                 theme: 'dark',
                 onState: function (state) {
                     if (state === ConnectionPrompt.STATE_WEAK) {
-                        setServerNotice('warning', 'Your internet connection is slow or unstable. Some features may take longer to load.');
+                        // Short on purpose: this sits in a floating chip on a
+                        // phone, and the dialog that comes with the weak state
+                        // is where the explanation belongs.
+                        setServerNotice('warning', 'Slow connection — some features may take longer to load.');
                     } else if (state === ConnectionPrompt.STATE_SERVER_DOWN) {
                         setServerNotice('error', 'The service is temporarily unavailable. Please try again shortly.');
                     } else {
-                        // Offline included: the "Viewing Offline" chip is the
-                        // more specific of the two messages and they are both
-                        // fixed at the same top, so the amber one stands down
-                        // rather than printing over it.
+                        // STATE_OK and STATE_OFFLINE both land here. Offline
+                        // deliberately shows no amber notice and no dialog:
+                        // the "Viewing Offline" chip and the "Take Survey
+                        // Offline" button below it are the whole offline
+                        // state, and they say it more precisely on their own.
                         setServerNotice(null);
                     }
                     updateOfflineIndicator();

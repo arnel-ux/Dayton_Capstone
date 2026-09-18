@@ -169,20 +169,22 @@
         return (global.performance && global.performance.now) ? global.performance.now() : Date.now();
     }
 
-    // Two sentences, not four. The reported card ran to five lines of body
-    // text on a phone, which pushed the two buttons — the only thing being
-    // asked — most of the way down the screen. What the visitor needs is what
-    // is wrong and what happens to their answers; the rest was reassurance
-    // nobody reads at the moment their connection has just died.
+    // WEAK ONLY — there is deliberately no copy for the offline case.
+    //
+    // A dialog is for a decision, and being completely disconnected does not
+    // present one. With no network at all the page has exactly one thing it
+    // can offer, it already offers it in place (the "Viewing Offline" chip and
+    // the "Take Survey Offline" button both appear on their own), and putting
+    // a modal in front of that only adds a tap between the visitor and the
+    // single route still open to them. So: no data and no Wi-Fi drops the page
+    // straight into its offline state with no interruption.
+    //
+    // A WEAK connection is the opposite — there really are two reasonable
+    // answers, keep waiting or go offline, and the visitor is the only one who
+    // can pick. That is the one case that earns a dialog.
     var COPY = {
-        landing: {
-            weak: 'Your internet is too slow to load the survey right now. Answer it offline instead — your answers save on this device and submit automatically once you reconnect.',
-            offline: 'You have no internet connection right now. You can still answer the survey offline — it saves on this device and submits automatically once you reconnect.'
-        },
-        login: {
-            weak: 'Your internet is too slow to sign in right now. Answer the survey offline instead — your answers save on this device and submit automatically once you reconnect.',
-            offline: 'You have no internet connection, so signing in cannot work. You can still answer the survey offline — it saves on this device and submits automatically once you reconnect.'
-        }
+        landing: 'Your internet is too slow to load the survey right now. Answer it offline instead — your answers save on this device and submit automatically once you reconnect.',
+        login: 'Your internet is too slow to sign in right now. Answer the survey offline instead — your answers save on this device and submit automatically once you reconnect.'
     };
 
     function resolveTheme() {
@@ -245,22 +247,13 @@
 
     function showPrompt() {
         if (dismissed) return;
-        if (state !== STATE_WEAK && state !== STATE_OFFLINE) return;
+        // STATE_OFFLINE never reaches here — see the comment on COPY.
+        if (state !== STATE_WEAK) return;
         if (!document.body) return;
         buildOverlay();
-        var copy = COPY[options.context] || COPY.landing;
-        if (state === STATE_OFFLINE) {
-            titleEl.textContent = 'No Internet Connection';
-            bodyEl.textContent = copy.offline;
-            // "Stay Online" is a promise this page cannot keep when there is
-            // no connection at all — the honest label is the one that only
-            // describes what the button actually does.
-            secondaryBtn.textContent = 'Stay on This Page';
-        } else {
-            titleEl.textContent = 'Your Connection Is Weak';
-            bodyEl.textContent = copy.weak;
-            secondaryBtn.textContent = 'Stay Online';
-        }
+        titleEl.textContent = 'Your Connection Is Weak';
+        bodyEl.textContent = COPY[options.context] || COPY.landing;
+        secondaryBtn.textContent = 'Stay Online';
         overlay.hidden = false;
     }
 
@@ -282,9 +275,9 @@
 
     function setState(next) {
         if (next === state) {
-            // Still unusable and the dialog was never dismissed (e.g. it was
+            // Still weak and the dialog was never dismissed (e.g. it was
             // raised before body existed) — make sure it is actually up.
-            if (next === STATE_WEAK || next === STATE_OFFLINE) showPrompt();
+            if (next === STATE_WEAK) showPrompt();
             return;
         }
         state = next;
@@ -292,10 +285,20 @@
         if (typeof options.onState === 'function') {
             try { options.onState(state); } catch (e) { /* a page's own UI bug must not stop the prompt */ }
         }
-        if (state === STATE_WEAK || state === STATE_OFFLINE) {
+
+        if (state === STATE_WEAK) {
             showPrompt();
             // Check back sooner while something is wrong, so "my internet is
             // fine again, why is this still here?" is answered in seconds.
+            scheduleRecheck(RECHECK_BAD_MS);
+        } else if (state === STATE_OFFLINE) {
+            // No dialog here, by design. The page drops into its own offline
+            // state (chip + offline-survey route) via the onState callback
+            // above, with nothing in the way. If a weak-connection dialog was
+            // already up when the connection died completely, it is taken
+            // down rather than left standing over a question that no longer
+            // has two answers.
+            hidePrompt();
             scheduleRecheck(RECHECK_BAD_MS);
         } else {
             hidePrompt();
@@ -353,6 +356,7 @@
         probeInFlight = fetchWithBudget('/api/health', PROBE_TIMEOUT_MS).then(
             function (res) {
                 probeInFlight = null;
+                if (!global.navigator.onLine) { setState(STATE_OFFLINE); return STATE_OFFLINE; }
                 var elapsed = now() - started;
 
                 // A response came back, so the network works. A server that
@@ -372,6 +376,13 @@
             },
             function () {
                 probeInFlight = null;
+                // The connection can drop entirely while this probe is in
+                // flight — and it then fails for that reason, not because the
+                // link is merely weak. Reporting weak here is what put the
+                // amber "slow or unstable" chip on screen underneath a "No
+                // internet connection" status bar, saying two different things
+                // about one connection.
+                if (!global.navigator.onLine) { setState(STATE_OFFLINE); return STATE_OFFLINE; }
                 // Aborted at PROBE_TIMEOUT_MS, or failed outright, while
                 // navigator.onLine still claims we are online.
                 if (recordSample(true, null)) { setState(STATE_WEAK); return STATE_WEAK; }

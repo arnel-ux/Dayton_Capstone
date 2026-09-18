@@ -163,6 +163,82 @@
     .offline-pill .dot { animation: none; }
 }
 
+/* --------------------------------------------------------------------------
+   NOTICE VARIANT — the long-message chip (the landing page's server /
+   slow-connection notice), as opposed to the two-word "Viewing Offline" chip
+   this file was originally written for.
+
+   WHAT WAS WRONG
+   Both used the same rule, and that rule was built for two words: a 50px pill
+   radius, shrink-to-fit inline-flex sizing, centred text, and the Retry button
+   as an ordinary flex sibling. Give that a full sentence and it collapses —
+   the text box is squeezed by the button next to it, so a one-line message
+   wrapped into six cramped lines inside a giant amber oval with the button
+   floating in the middle of it. Unreadable, and it looked broken.
+
+   THE FIX
+   A long message is a banner, not a pill. This variant takes a real width
+   instead of shrinking to fit, lays out as icon | message | action with the
+   message allowed to take the slack (min-width: 0 is what actually lets a
+   flex item wrap instead of being squeezed), left-aligns the text so the
+   ragged edge is on one side only, and drops to a 14px radius because a 50px
+   radius on a two-line box is an oval, not a rounded rectangle.
+   -------------------------------------------------------------------------- */
+
+.offline-pill.is-notice {
+    display: none; /* the .is-visible rule below re-enables it, same as the base chip */
+    width: min(94vw, 33rem);
+    max-width: min(94vw, 33rem);
+    border-radius: 14px;
+    padding: 0.6rem 0.65rem 0.6rem 0.85rem;
+    gap: 0.6rem;
+    text-align: left;
+    justify-content: flex-start;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.offline-pill.is-notice.is-visible { display: flex; }
+
+/* The icon must never be the thing that gives up space. */
+.offline-pill.is-notice > i {
+    flex: 0 0 auto;
+    font-size: 1rem;
+    line-height: 1.35;
+}
+
+/* min-width: 0 is the whole fix for the six-line wrap: without it a flex item
+   refuses to shrink below its longest word's line box and the browser squeezes
+   the column instead of wrapping the text. */
+.offline-pill.is-notice .label {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: left;
+}
+
+.offline-pill.is-notice .notice-retry-btn {
+    flex: 0 0 auto;
+    align-self: center;
+    margin-left: 0;
+}
+
+@media (max-width: 480px) {
+    .offline-pill.is-notice {
+        width: calc(100vw - 20px);
+        max-width: calc(100vw - 20px);
+        font-size: 0.76rem;
+        padding: 0.55rem 0.6rem 0.55rem 0.75rem;
+    }
+}
+
+/* The stacking offset assumes a one-line first chip; the notice is the taller
+   one and is always second, so it is the one that steps down. Two lines of
+   0.76rem plus padding needs a little more clearance than the 2.85rem the base
+   rule gives a one-line pill. */
+.offline-pill.is-visible ~ .offline-pill.is-notice.is-visible {
+    top: calc(var(--offline-pill-top, 0.75rem) + 3.1rem + env(safe-area-inset-top, 0px));
+}
+
 /* ==========================================================================
    WEAK-CONNECTION PROMPT — the "your connection can't get you through the
    survey; take it offline instead?" dialog raised by /js/connection-prompt.js

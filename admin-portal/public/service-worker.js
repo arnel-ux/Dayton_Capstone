@@ -184,12 +184,13 @@ importScripts('/js/offline-db.js');
 // pages changed to load it. Without a version bump an installed worker would
 // keep serving the v42 shell and none of that would reach anyone who has
 // already visited.
-// v45: connection-prompt.js changed again — the weak-connection verdict was
-// producing false positives on healthy links (one slow bootstrap sample was
-// enough to convict, and it never retracted). It is precached, so without a
-// version bump an installed v44 worker keeps serving the old detection.
-const STATIC_CACHE = 'cspc-static-v45';
-const RUNTIME_CACHE = 'cspc-runtime-v45';
+// v46: the connection dialog is now raised for the WEAK state only (a dead
+// connection drops the page straight into its offline state with no modal in
+// the way), and the landing page's long amber notice got its own banner layout
+// instead of being squeezed into the two-word pill rule. connection-prompt.js
+// and offline-pill.css are both precached, so this needs the bump to land.
+const STATIC_CACHE = 'cspc-static-v46';
+const RUNTIME_CACHE = 'cspc-runtime-v46';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
