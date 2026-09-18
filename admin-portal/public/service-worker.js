@@ -178,8 +178,14 @@ importScripts('/js/offline-db.js');
 // office panel's live-pending watch changed in the same pass (it now
 // announces a new submission the moment it sees one, instead of waiting for
 // the reload to carry the news).
-const STATIC_CACHE = 'cspc-static-v42';
-const RUNTIME_CACHE = 'cspc-runtime-v42';
+// v43: /js/connection-prompt.js is new and is a CRITICAL precache entry (the
+// weak/offline "take the survey offline?" prompt must be able to appear on a
+// connection too bad to fetch its own script), and the three public entry
+// pages changed to load it. Without a version bump an installed worker would
+// keep serving the v42 shell and none of that would reach anyone who has
+// already visited.
+const STATIC_CACHE = 'cspc-static-v43';
+const RUNTIME_CACHE = 'cspc-runtime-v43';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
@@ -215,7 +221,7 @@ const PRECACHE_URLS = [
 // wrong key. A failure here is logged loudly, unlike the best-effort
 // PRECACHE_URLS/CDN_PRECACHE_URLS entries below (e.g. a decorative image),
 // where one bad resource staying uncached is harmless.
-const CRITICAL_PRECACHE_URLS = ['/survey-offline', '/js/pwa-client.js', '/js/offline-db.js', '/js/alerts.js', '/css/alerts.css', '/css/auth.css', '/css/offline-pill.css'];
+const CRITICAL_PRECACHE_URLS = ['/survey-offline', '/js/pwa-client.js', '/js/offline-db.js', '/js/connection-prompt.js', '/js/alerts.js', '/css/alerts.css', '/css/auth.css', '/css/offline-pill.css'];
 
 // Third-party libraries the survey/login pages load from a CDN. Cached
 // individually (not via cache.addAll) so one failure doesn't abort install.

@@ -125,25 +125,6 @@
         </div>
     </div>
 
-    <!-- WEAK-CONNECTION PROMPT — same dialog, same wording and the same
-         trigger as the landing page's; see showWeakConnectionPrompt() below
-         and /css/offline-pill.css for the styling. It matters more here than
-         anywhere else: Google sign-in is a full round trip to a third party,
-         so it is the first thing a weak connection breaks, and until now this
-         page's only response was to sit there looking normal while the button
-         did nothing. -->
-    <div id="weakConnectionPrompt" class="weak-connection-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="weakConnectionTitle">
-        <div class="weak-connection-card">
-            <div class="weak-connection-icon"><i class="fas fa-wifi"></i></div>
-            <h4 id="weakConnectionTitle">Your Connection Is Weak</h4>
-            <p>Your internet is too slow or unstable to sign in right now. You can take the survey offline instead — your answers are saved on this device and submitted automatically once your connection improves.</p>
-            <div class="weak-connection-actions">
-                <a href="/survey-offline" class="wc-btn-primary"><i class="fas fa-clipboard-list"></i> Take Offline Survey</a>
-                <button type="button" class="wc-btn-secondary" onclick="dismissWeakConnectionPrompt()">Stay Online</button>
-            </div>
-        </div>
-    </div>
-
     <script>
         // Marks a real landing on the login page in THIS browser tab (sessionStorage
         // is tab-scoped, so this can never bleed into a different tab or a different
@@ -159,103 +140,26 @@
          session's server-side logout may still be pending) — this page
          didn't load it before since it had no other use for offline-db.js. -->
     <script src="/js/offline-db.js"></script>
+    <script src="/js/connection-prompt.js"></script>
     <script>
-        // ==========================================
-        // CONNECTIVITY — two separate signals, deliberately.
-        //
-        //   navigator.onLine false  -> no network at all. The chip and the
-        //                              "Take Survey Offline" button.
-        //   /api/health unreachable -> a connection the browser still calls
-        //     while onLine is true     "online" but which nothing gets
-        //                              through. This is the one that used to
-        //                              be invisible here, and it is the state
-        //                              that actually stranded people: Google
-        //                              sign-in is a third-party round trip,
-        //                              so it is the first thing to break, and
-        //                              the page gave no sign anything was
-        //                              wrong and offered no alternative.
-        //
-        // Same probe, same 4s budget and the same three outcomes as the
-        // landing page's checkServerHealth() — one behaviour across both
-        // entry points, so a visitor who bounces between them isn't told two
+        // Connectivity is owned by /js/connection-prompt.js — same module,
+        // same three observations and the same dialog as the landing page and
+        // /login, so a visitor bouncing between them is never told two
         // different stories about the same connection.
-        // ==========================================
-        let weakConnectionDetected = false;
-        // "Stay Online" was chosen on this page load: stops the popup
-        // re-opening by itself. The offline button stays up regardless for as
-        // long as the connection is unusable, so the route is still one click
-        // away without the dialog nagging.
-        let weakConnectionPromptDismissed = false;
-
         function updateOfflineIndicator() {
-            const offline = !navigator.onLine;
             const el = document.getElementById('offlineIndicator');
-            if (el) el.classList.toggle('is-visible', offline);
+            if (el) el.classList.toggle('is-visible', !navigator.onLine);
             const offlineSurveyBtn = document.getElementById('offlineSurveyBtn');
-            if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !offline && !weakConnectionDetected);
+            const unusable = window.ConnectionPrompt ? ConnectionPrompt.isUnusable() : !navigator.onLine;
+            if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !unusable);
         }
-
-        function showWeakConnectionPrompt() {
-            if (weakConnectionPromptDismissed) return;
-            const prompt = document.getElementById('weakConnectionPrompt');
-            if (prompt) prompt.hidden = false;
-        }
-
-        function hideWeakConnectionPrompt() {
-            const prompt = document.getElementById('weakConnectionPrompt');
-            if (prompt) prompt.hidden = true;
-        }
-
-        // "Stay Online" — re-probes straight away so a connection that has
-        // since recovered clears the offline button immediately instead of
-        // leaving the page looking broken to someone who just said they want
-        // to keep waiting for it.
-        function dismissWeakConnectionPrompt() {
-            weakConnectionPromptDismissed = true;
-            hideWeakConnectionPrompt();
-            checkClientConnectionHealth();
-        }
-
-        async function checkClientConnectionHealth() {
-            // Nothing to probe with, and nothing to add: navigator.onLine
-            // already covers this case on its own, below.
-            if (!navigator.onLine) return;
-            if (typeof fetchWithTimeout !== 'function') return;
-            try {
-                const res = await fetchWithTimeout('/api/health', {}, 4000);
-                // res.ok or not, a response came back, so the connection
-                // itself is usable — a failing service is not a reason to
-                // push someone into an offline survey that would only queue
-                // behind that same service.
-                weakConnectionDetected = false;
-                weakConnectionPromptDismissed = false;
-                hideWeakConnectionPrompt();
-            } catch (err) {
-                weakConnectionDetected = true;
-                updateOfflineIndicator();
-                showWeakConnectionPrompt();
-                return;
-            }
-            updateOfflineIndicator();
-        }
-
-        window.addEventListener('online', function () {
-            updateOfflineIndicator();
-            checkClientConnectionHealth();
-        });
-        // Losing the network outright supersedes the weak state: the chip and
-        // the offline button both run off navigator.onLine from here, and the
-        // popup's "too slow to sign in" wording would be wrong for a
-        // connection that is simply gone. Cleared, not just hidden, so a
-        // recovery back to a merely-weak connection can ask again.
-        window.addEventListener('offline', function () {
-            weakConnectionDetected = false;
-            weakConnectionPromptDismissed = false;
-            hideWeakConnectionPrompt();
-            updateOfflineIndicator();
-        });
+        window.addEventListener('online', updateOfflineIndicator);
+        window.addEventListener('offline', updateOfflineIndicator);
         updateOfflineIndicator();
-        checkClientConnectionHealth();
+
+        if (window.ConnectionPrompt) {
+            ConnectionPrompt.init({ context: 'login', onState: updateOfflineIndicator });
+        }
 
         // ==========================================
         // PENDING-LOGOUT / NEW-LOGIN RACE GUARD — same mechanism and same

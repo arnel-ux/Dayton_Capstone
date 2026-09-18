@@ -646,6 +646,7 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="/js/alerts.js"></script>
     <script src="/js/offline-db.js"></script>
+    <script src="/js/connection-prompt.js"></script>
     <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     <script>
         // The Login button stays disabled until the "I'm not a robot" checkbox
@@ -881,57 +882,74 @@
     </script>
 
     <script>
-        // Connectivity indicator: purely navigator.onLine. This is the ONLY
-        // signal that controls the "Take Survey Offline" button — kept
-        // strictly decoupled from the /api/health probe below, which drives
-        // a separate "server unavailable" notice for the very different case
-        // of the browser being online but unable to reach this app's server.
-        // There is no "offline login" shortcut here — a real sign-in always
-        // needs the network; see /survey-offline instead. navigator.onLine ===
-        // false (no network interface at all) therefore hides the form outright
-        // rather than leaving a dead one on screen. The /api/health "server
-        // unavailable" state below does NOT do this: there the browser still
-        // has a network, so the form is left alone and only a notice shows.
-        function updateOfflineIndicator() {
-            const offline = !navigator.onLine;
-
+        // CONNECTIVITY — owned by /js/connection-prompt.js.
+        //
+        // This page previously keyed everything on navigator.onLine alone,
+        // and that is the bug the reported screenshots caught: a phone with
+        // 4G bars but no working route showed the amber "slow or unstable"
+        // chip and left the sign-in form sitting there, with no prompt and no
+        // offline route offered — on the one page a client actually lands on
+        // from the survey link. See connection-prompt.js for the three
+        // observations it now treats as the same problem.
+        //
+        // The page's own /api/health probe is gone with it: two independent
+        // probes could disagree about the same connection, so the module owns
+        // the probe and this page just renders the state it is handed.
+        // Two levels, deliberately not one:
+        //
+        //   OFFLINE (navigator.onLine false) keeps the existing .is-offline
+        //   layout — the sign-in form, the OR divider and the Google button
+        //   are hidden outright, because with no network at all none of them
+        //   can do anything and a dead form is worse than no form.
+        //
+        //   WEAK only ADDS the offline route alongside the form; it never
+        //   takes the form away. A slow connection may still finish a
+        //   sign-in, the latency threshold is a judgement call that can
+        //   misfire on a merely-bad-day network, and removing someone's login
+        //   form on a false positive is a far worse failure than showing them
+        //   an extra button they can ignore. So weak persuades, offline
+        //   decides.
+        function applyConnectionState(unusable, offline) {
             const pill = document.getElementById('offlineIndicator');
             if (pill) pill.classList.toggle('is-visible', offline);
 
             const offlineSurveyBtn = document.getElementById('offlineSurveyBtn');
-            if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !offline);
+            if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !unusable);
 
             const offlineLoginNotice = document.getElementById('offlineLoginNotice');
-            if (offlineLoginNotice) offlineLoginNotice.classList.toggle('d-none', !offline);
+            if (offlineLoginNotice) {
+                offlineLoginNotice.classList.toggle('d-none', !unusable);
+                const noticeText = offlineLoginNotice.querySelector('span');
+                // The stock wording says "You're offline", which would be a
+                // plain falsehood in the weak case — the form is still right
+                // there and still worth trying.
+                if (noticeText) {
+                    noticeText.textContent = offline
+                        ? "You're offline. Signing in needs a connection — but you can still answer the survey now."
+                        : 'Your connection is too weak to sign in reliably. You can keep trying, or answer the survey offline now.';
+                }
+            }
 
             const offlineStepsGuide = document.getElementById('offlineStepsGuide');
-            if (offlineStepsGuide) offlineStepsGuide.classList.toggle('d-none', !offline);
+            if (offlineStepsGuide) offlineStepsGuide.classList.toggle('d-none', !unusable);
 
-            // Drives the offline layout rules in the <style> block: hides the
-            // form / OR divider / Google button, which is what keeps the
-            // offline card short enough to fit the fold without scrolling.
+            // Drives the offline layout rules in the <style> block, which is
+            // what keeps the offline card short enough to fit the fold
+            // without scrolling. Offline only — see above.
             document.body.classList.toggle('is-offline', offline);
+        }
+
+        function updateOfflineIndicator() {
+            const offline = !navigator.onLine;
+            applyConnectionState(
+                window.ConnectionPrompt ? ConnectionPrompt.isUnusable() : offline,
+                offline
+            );
         }
         window.addEventListener('online', updateOfflineIndicator);
         window.addEventListener('offline', updateOfflineIndicator);
         updateOfflineIndicator();
 
-        // Independent of navigator.onLine: the browser can report "online"
-        // while this app's own server is unreachable (down for maintenance,
-        // a network path issue between here and the server, etc). Only
-        // checked when navigator.onLine is true, since there's no point
-        // asking the server whether it's reachable when the OS already says
-        // there's no network at all — that case is already covered above.
-        // Three distinct outcomes here, not one — conflating them all into a
-        // single "server unavailable" message is exactly what made testers on
-        // merely slow connections think the deployed server itself was down:
-        //   1. A response actually came back and it wasn't ok -> the server
-        //      itself is genuinely failing.
-        //   2. fetchWithTimeout rejected (our own 4s abort, or the request
-        //      failed outright) while navigator.onLine still says "online" ->
-        //      a flaky/slow client-side connection, not proof the server is
-        //      down.
-        //   3. res.ok -> nothing to report.
         function setServerNotice(kind, message) {
             const notice = document.getElementById('serverUnavailableNotice');
             const icon = document.getElementById('serverUnavailableNoticeIcon');
@@ -947,24 +965,31 @@
             if (text) text.textContent = message;
         }
 
-        async function checkServerHealth() {
-            if (!navigator.onLine) {
-                setServerNotice(null);
-                return;
-            }
-            try {
-                const res = await fetchWithTimeout('/api/health', {}, 4000);
-                if (res.ok) {
-                    setServerNotice(null);
-                } else {
-                    setServerNotice('error', 'The service is temporarily unavailable. Please try again shortly.');
-                }
-            } catch (err) {
-                setServerNotice('warning', 'Your internet connection is slow or unstable. Some features may take longer to load.');
-            }
+        // Kept as a named global because #serverUnavailableNotice's Retry
+        // button calls it inline.
+        function checkServerHealth() {
+            if (window.ConnectionPrompt) ConnectionPrompt.probe();
         }
-        window.addEventListener('online', checkServerHealth);
-        checkServerHealth();
+
+        if (window.ConnectionPrompt) {
+            ConnectionPrompt.init({
+                context: 'login',
+                onState: function (state) {
+                    if (state === ConnectionPrompt.STATE_SERVER_DOWN) {
+                        setServerNotice('error', 'The service is temporarily unavailable. Please try again shortly.');
+                    } else {
+                        // Nothing amber for weak or offline. Weak already has
+                        // #offlineLoginNotice saying the same thing in the
+                        // card itself, right above the offline button that
+                        // does something about it, and the style block hides
+                        // this notice entirely under .is-offline — so an
+                        // amber chip here is either a duplicate or invisible.
+                        setServerNotice(null);
+                    }
+                    updateOfflineIndicator();
+                }
+            });
+        }
 
         // ==========================================
         // PENDING-LOGOUT / NEW-LOGIN RACE GUARD
