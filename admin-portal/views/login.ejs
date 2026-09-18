@@ -909,12 +909,23 @@
         //   form on a false positive is a far worse failure than showing them
         //   an extra button they can ignore. So weak persuades, offline
         //   decides.
-        function applyConnectionState(unusable, offline) {
+        // `offer` and `unusable` are deliberately different inputs:
+        //
+        //   unusable — the connection RIGHT NOW. Drives the claims: the amber
+        //              in-card notice, and the .is-offline layout.
+        //   offer    — sticky once this page load has seen a weak connection.
+        //              Drives the offline ROUTE: the button and the short
+        //              how-to beside it.
+        //
+        // The visitor who chose "Stay Online" in the dialog and then found the
+        // offline button gone had their own choice used against them. An
+        // option can safely outlive the moment; an assertion cannot.
+        function applyConnectionState(unusable, offline, offer) {
             const pill = document.getElementById('offlineIndicator');
             if (pill) pill.classList.toggle('is-visible', offline);
 
             const offlineSurveyBtn = document.getElementById('offlineSurveyBtn');
-            if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !unusable);
+            if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !offer);
 
             const offlineLoginNotice = document.getElementById('offlineLoginNotice');
             if (offlineLoginNotice) {
@@ -930,8 +941,11 @@
                 }
             }
 
+            // Travels with the button, not with the warning — it explains how
+            // to use the route, so it is useless without it and confusing
+            // beside a button that isn't there.
             const offlineStepsGuide = document.getElementById('offlineStepsGuide');
-            if (offlineStepsGuide) offlineStepsGuide.classList.toggle('d-none', !unusable);
+            if (offlineStepsGuide) offlineStepsGuide.classList.toggle('d-none', !offer);
 
             // Drives the offline layout rules in the <style> block, which is
             // what keeps the offline card short enough to fit the fold
@@ -941,9 +955,11 @@
 
         function updateOfflineIndicator() {
             const offline = !navigator.onLine;
+            const CP = window.ConnectionPrompt;
             applyConnectionState(
-                window.ConnectionPrompt ? ConnectionPrompt.isUnusable() : offline,
-                offline
+                CP ? CP.isUnusable() : offline,
+                offline,
+                CP ? CP.offerOfflineRoute() : offline
             );
         }
         window.addEventListener('online', updateOfflineIndicator);

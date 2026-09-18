@@ -31,31 +31,69 @@
            IS an in-flow element. */
         .offline-pill-row { text-align: center; }
 
-        /* Same visibility rule as the pill above — navigator.onLine only,
-           never auto-navigated to. Matches login.ejs's .btn-login look. */
+        /* THE OFFLINE ROUTE, PINNED.
+           Two things were wrong with this button in the reported screenshot:
+
+           1. IT COLLIDED WITH THE CHIPS. It sat in the normal flow with a
+              hand-tuned `margin-top: 3.5rem`, a number chosen when the only
+              thing above it was the one-line "Viewing Offline" chip. The
+              chips are position:fixed, so they take no space in the flow and
+              nothing keeps them apart — once the taller two-line slow-
+              connection banner appeared above it, the banner printed straight
+              over the button and clipped the one action the page was offering.
+
+           2. IT SCROLLED AWAY. The chips stay pinned while the page moves, so
+              a visitor reading the dashboard was left with a warning fixed to
+              the top and no visible way to act on it.
+
+           Both are the same mistake — half the group was fixed and half was
+           not. So the button joins the fixed stack, and its exact top is
+           measured from the chips actually on screen rather than guessed (see
+           syncOfflineStackPosition() near the bottom of this file). A magic
+           margin cannot track a chip whose height depends on how its text
+           wrapped.
+
+           Gold, not navy: navy on this navy page is the low-contrast smudge
+           visible in the report. This is the same gold as the header's Login
+           button and the connection dialog's primary action — the page's
+           established "this is the thing to press" colour. */
+        .offline-pill-row { text-align: center; }
+
         .offline-survey-btn {
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%);
+            /* Overwritten in px by syncOfflineStackPosition() whenever a chip
+               is up; this is the no-chips fallback. */
+            top: calc(var(--offline-pill-top, 0.75rem) + env(safe-area-inset-top, 0px));
+            /* Directly under .offline-pill (1030) so a chip never hides behind
+               it, and under the mobile drawer (1035) like the chips. */
+            z-index: 1029;
+
             display: inline-flex;
             align-items: center;
-            gap: 0.4rem;
-            /* Clears the floating "Viewing Offline" chip. The chip is fixed just
-               under the header and this button starts at exactly the same
-               height, so the chip landed right on top of it — hiding the one
-               action this page offers while offline. The two always appear
-               together (both are driven by navigator.onLine), so the clearance
-               is unconditional: ~46px of chip + its gap. */
-            margin: 3.5rem 0 0;
-            padding: 0.55rem 1.1rem;
-            border-radius: 10px;
-            background: #251d3a;
-            color: #ffffff;
-            font-weight: 700;
-            font-size: 0.85rem;
+            justify-content: center;
+            gap: 0.45rem;
+            max-width: min(94vw, 33rem);
+            padding: 0.6rem 1.15rem;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #ffd84d, #ffcc00);
+            color: #251d3a;
+            font-weight: 800;
+            font-size: 0.86rem;
+            line-height: 1.2;
             text-decoration: none;
-            box-shadow: 0 6px 16px -4px rgba(0,0,0,0.35);
-            transition: transform 0.15s ease;
+            white-space: nowrap;
+            box-shadow: 0 8px 20px -6px rgba(255, 204, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+            transition: filter 0.15s ease, transform 0.15s ease;
         }
-        .offline-survey-btn:hover { color: #ffffff; transform: translateY(-1px); }
+        .offline-survey-btn:hover { color: #251d3a; filter: brightness(1.05); transform: translateX(-50%) translateY(-1px); }
+        .offline-survey-btn:active { transform: translateX(-50%) translateY(0); }
         .offline-survey-btn.d-none { display: none; }
+
+        @media (max-width: 480px) {
+            .offline-survey-btn { font-size: 0.8rem; padding: 0.55rem 0.95rem; max-width: calc(100vw - 20px); }
+        }
 
         :root {
             --navy-950: #251d3a;
@@ -2578,18 +2616,49 @@
         // to live here is gone: it ran a second, independent /api/health probe
         // against the shared module's, so the two could disagree about the
         // same connection and the chip could contradict the dialog.
+        // The button and the chips are all position:fixed, so this can work in
+        // plain viewport coordinates and stays correct while the page scrolls.
+        // Measured rather than assumed: the slow-connection banner's height
+        // depends on how its sentence wrapped at this width, which no CSS
+        // constant can know in advance.
+        function syncOfflineStackPosition() {
+            const btn = document.getElementById('offlineSurveyBtn');
+            if (!btn) return;
+            const pills = Array.prototype.slice.call(
+                document.querySelectorAll('.offline-pill.is-visible')
+            );
+            if (!pills.length) {
+                btn.style.top = '';
+                return;
+            }
+            let lowest = 0;
+            pills.forEach(function (pill) {
+                const bottom = pill.getBoundingClientRect().bottom;
+                if (bottom > lowest) lowest = bottom;
+            });
+            btn.style.top = Math.round(lowest + 10) + 'px';
+        }
+
         function updateOfflineIndicator() {
             const offline = !navigator.onLine;
             const el = document.getElementById('offlineIndicator');
             if (el) el.classList.toggle('is-visible', offline);
+
             const offlineSurveyBtn = document.getElementById('offlineSurveyBtn');
-            // Shown for BOTH unusable-connection cases, not just the
-            // navigator.onLine one: "online but nothing gets through" is the
-            // state that stranded visitors, precisely because the browser
-            // still called it online and this button stayed hidden.
-            const unusable = window.ConnectionPrompt ? ConnectionPrompt.isUnusable() : offline;
-            if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !unusable);
+            // offerOfflineRoute(), NOT isUnusable(): once this page load has
+            // seen a connection too weak to reach the survey, the route stays
+            // on offer. Choosing "Stay Online" in the dialog must not be the
+            // thing that closes the door it just showed you — the dialog asks
+            // once, the button keeps standing. The amber notice above still
+            // follows the live state, because that one is a claim rather than
+            // an option.
+            const offer = window.ConnectionPrompt ? ConnectionPrompt.offerOfflineRoute() : offline;
+            if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !offer);
+
+            // After the class flips, so the chips have their final layout.
+            syncOfflineStackPosition();
         }
+        window.addEventListener('resize', syncOfflineStackPosition);
         window.addEventListener('online', updateOfflineIndicator);
         window.addEventListener('offline', function () {
             // Retract the amber notice here rather than waiting for the state

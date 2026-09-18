@@ -150,8 +150,11 @@
             const el = document.getElementById('offlineIndicator');
             if (el) el.classList.toggle('is-visible', !navigator.onLine);
             const offlineSurveyBtn = document.getElementById('offlineSurveyBtn');
-            const unusable = window.ConnectionPrompt ? ConnectionPrompt.isUnusable() : !navigator.onLine;
-            if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !unusable);
+            // offerOfflineRoute(), not isUnusable() — once a weak connection
+            // has been seen on this page load the route stays on offer, so
+            // "Stay Online" never removes the alternative it just showed.
+            const offer = window.ConnectionPrompt ? ConnectionPrompt.offerOfflineRoute() : !navigator.onLine;
+            if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !offer);
         }
         window.addEventListener('online', updateOfflineIndicator);
         window.addEventListener('offline', updateOfflineIndicator);

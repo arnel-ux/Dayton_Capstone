@@ -184,13 +184,13 @@ importScripts('/js/offline-db.js');
 // pages changed to load it. Without a version bump an installed worker would
 // keep serving the v42 shell and none of that would reach anyone who has
 // already visited.
-// v46: the connection dialog is now raised for the WEAK state only (a dead
-// connection drops the page straight into its offline state with no modal in
-// the way), and the landing page's long amber notice got its own banner layout
-// instead of being squeezed into the two-word pill rule. connection-prompt.js
-// and offline-pill.css are both precached, so this needs the bump to land.
-const STATIC_CACHE = 'cspc-static-v46';
-const RUNTIME_CACHE = 'cspc-runtime-v46';
+// v47: the offline route is now a standing offer once a weak connection has
+// been seen (choosing "Stay Online" no longer withdraws the alternative it
+// just offered), and the landing page pins its "Take Survey Offline" button
+// into the fixed chip stack instead of colliding with it. connection-prompt.js
+// is precached, so this needs the bump to reach anyone who has visited.
+const STATIC_CACHE = 'cspc-static-v47';
+const RUNTIME_CACHE = 'cspc-runtime-v47';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.

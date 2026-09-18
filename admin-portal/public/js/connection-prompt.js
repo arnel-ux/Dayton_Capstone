@@ -130,6 +130,21 @@
     var recheckTimer = null;
     var recheckEveryMs = null;
     var probeInFlight = null;
+    // Set the first time this page load reaches STATE_WEAK, and never cleared.
+    //
+    // "Stay Online" must not be a dead end. The visitor was told their
+    // connection is too weak to reach the survey and chose to keep waiting —
+    // if the page then quietly withdraws the offline route, the only thing
+    // that choice accomplished was closing the door they were just shown. And
+    // a connection that has proved this bad once is likely to be bad again a
+    // minute later, when the dialog will not be on screen to offer it.
+    //
+    // So the DIALOG is a one-time question and the BUTTON is a standing offer.
+    // The amber notice deliberately does NOT follow this flag — it is a claim
+    // about the connection right now, and leaving it up after recovery would
+    // be the false alarm this was already fixed for once. A button is only an
+    // option; a warning is an assertion.
+    var offlineRouteEarned = false;
     var badStreak = 0;
     var fastestSampleMs = Infinity;
     var sampledOnce = false;
@@ -287,6 +302,7 @@
         }
 
         if (state === STATE_WEAK) {
+            offlineRouteEarned = true;
             showPrompt();
             // Check back sooner while something is wrong, so "my internet is
             // fine again, why is this still here?" is answered in seconds.
@@ -523,6 +539,14 @@
         // "online but hopeless" are the same problem to the person holding
         // the phone.
         isUnusable: function () { return state === STATE_WEAK || state === STATE_OFFLINE; },
+        // What a page should key its "Take Survey Offline" button on — as
+        // opposed to isUnusable(), which is the live state and is what the
+        // amber notice and the offline layout follow. Once the connection has
+        // proved unusable on this page load, the route stays on offer even if
+        // a later probe comes back clean. See offlineRouteEarned.
+        offerOfflineRoute: function () {
+            return offlineRouteEarned || state === STATE_WEAK || state === STATE_OFFLINE;
+        },
         STATE_OK: STATE_OK,
         STATE_WEAK: STATE_WEAK,
         STATE_OFFLINE: STATE_OFFLINE,
