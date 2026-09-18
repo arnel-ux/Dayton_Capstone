@@ -2773,6 +2773,145 @@ CREATE TABLE IF NOT EXISTS client_accounts (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );`;
 
+// ==========================================
+// ACCOUNT DELETION -> PURGE EVERYTHING IT OWNS
+// ==========================================
+// client_accounts.email is this app's account identifier, and every
+// per-account row elsewhere stores that email as a plain column, not as a
+// foreign key (see client_notifications' table comment). So deleting an
+// account — which today only ever happens by hand in the DB, there is no
+// delete-account route — left its surveys, its pending/offline submission
+// records and its whole notification inbox behind. Registering the same
+// email again silently inherited all of it: a brand-new account opening its
+// bell to "Survey Approved" notices from the deleted account (and, because
+// client_notifications.dedupe_key is UNIQUE and soft-deletes keep the row,
+// the leftovers can even suppress the new account's real notifications).
+//
+// Two parts, because the delete happens outside this app:
+//   1. An AFTER DELETE trigger on client_accounts, so a DELETE issued from
+//      phpMyAdmin/CLI/anywhere purges the owned rows in the same statement.
+//      This is the actual fix — an app-side helper cannot see a hand-made
+//      DELETE at all.
+//   2. A startup sweep for rows orphaned by deletes that happened BEFORE
+//      the trigger existed (i.e. what is already in the DB right now).
+//
+// Rows with a NULL/blank email are untouched by both: those are the
+// anonymous/walk-in submissions, which belong to no account.
+
+// Ordered children-first. client_profiles is purged by email directly as
+// well as cascading from survey_responses, so a profile row whose survey
+// was already deleted doesn't survive the account it names.
+// `stamp` is the column saying when the row was written on THIS server —
+// used by the sweep below to spot rows that predate the account that now
+// owns their email. offline_survey_submissions uses synced_at, not
+// created_offline_at: the latter is client-supplied (when the survey was
+// filled in while offline) and is not a claim about this server's clock.
+const CLIENT_ACCOUNT_OWNED_ROWS = [
+    { table: 'client_notifications',       column: 'client_email',          stamp: 'created_at' },
+    { table: 'offline_survey_submissions', column: 'registered_identifier', stamp: 'synced_at' },
+    { table: 'pending_survey_submissions', column: 'google_email',          stamp: 'created_at' },
+    { table: 'client_profiles',            column: 'email',                 stamp: 'created_at' },
+    { table: 'survey_responses',           column: 'google_email',          stamp: 'created_at' }
+];
+
+const clientAccountPurgeTriggerBody = CLIENT_ACCOUNT_OWNED_ROWS
+    .map(({ table, column }) => `    DELETE FROM ${table} WHERE ${column} = OLD.email;`)
+    .join('\n');
+
+const createClientAccountPurgeTriggerQuery = `
+CREATE TRIGGER trg_client_accounts_purge_owned_rows
+AFTER DELETE ON client_accounts
+FOR EACH ROW
+BEGIN
+${clientAccountPurgeTriggerBody}
+END`;
+
+// Dropped and recreated on every boot so the trigger in the DB always
+// matches the list above (adding a table here is otherwise invisible to a
+// database that already has the old trigger installed).
+function installClientAccountPurgeTrigger() {
+    db.query('DROP TRIGGER IF EXISTS trg_client_accounts_purge_owned_rows', (dropErr) => {
+        if (dropErr) {
+            // Most likely cause: the DB user has no TRIGGER privilege (common on
+            // shared/managed hosting). Say so loudly — without the trigger, a
+            // hand-made account delete only gets cleaned up at the NEXT restart,
+            // by the sweep below.
+            console.error('❌ Could not drop client_accounts purge trigger:', dropErr.message);
+            return;
+        }
+        db.query(createClientAccountPurgeTriggerQuery, (createErr) => {
+            if (createErr) console.error('❌ Could not install client_accounts purge trigger — deleting an account will leave its surveys/notifications behind until the next restart:', createErr.message);
+            else console.log('✅ client_accounts purge trigger verified/created successfully!');
+        });
+    });
+}
+
+// Fresh-start guard for a re-registration. The trigger above handles a
+// delete made from now on, but the account this app is most likely to meet
+// in that state is one deleted BEFORE it was installed: the email signs up
+// again and its new account row silently adopts the old one's surveys and
+// notification inbox. Nothing an account owns can predate the account, so
+// anything older than the row just inserted belonged to the deleted one and
+// goes. Called only when registration actually INSERTED a new account row
+// (see /complete-google-registration) — never when an existing account
+// simply re-saved its details.
+function purgeRowsPredatingAccount(email, callback) {
+    let remaining = CLIENT_ACCOUNT_OWNED_ROWS.length;
+    const finish = () => { if (--remaining === 0 && callback) callback(); };
+    CLIENT_ACCOUNT_OWNED_ROWS.forEach(({ table, column, stamp }) => {
+        db.query(
+            `DELETE child FROM ${table} child
+             JOIN client_accounts ca ON ca.email = child.${column}
+             WHERE child.${column} = ? AND child.${stamp} < ca.created_at - INTERVAL 1 MINUTE`,
+            [email],
+            (err, result) => {
+                // Logged and swallowed: a leftover row must never be the reason
+                // a registration fails — the startup sweep below catches
+                // whatever this missed.
+                if (err) console.error(`❌ [Account] Could not clear old ${table} rows for ${email}:`, err.message);
+                else if (result && result.affectedRows > 0) console.log(`🧹 [Account] Cleared ${result.affectedRows} ${table} row(s) from a previous account under ${email}.`);
+                finish();
+            }
+        );
+    });
+}
+
+// Cleans up what deletes made before the trigger existed left behind. Two
+// distinct leftovers, both belonging to an account that no longer exists:
+//
+//   orphaned — the email has no client_accounts row at all.
+//     Safe against legacy pre-account-system data: every authenticated
+//     survey upserts client_accounts (see insertVerifiedSurveyOnConnection),
+//     and the one-time client_profiles backfill above already seeded
+//     accounts for older rows, so "no account row" really does mean "that
+//     account was deleted".
+//
+//   inherited — the email HAS an account row, but the child row predates
+//     it. This is the re-registration case: delete the account, sign up
+//     again with the same email, and the new account adopts the old one's
+//     surveys and notification inbox. Nothing an account owns can exist
+//     before that account was created, so anything older belongs to the
+//     deleted one. The one-minute grace guards the only case where the two
+//     timestamps legitimately coincide: the account row and its first
+//     survey are written in the SAME transaction (again, see
+//     insertVerifiedSurveyOnConnection), and both columns are second-
+//     precision, so they can land a tick apart in either order.
+function sweepOrphanedClientAccountRows() {
+    CLIENT_ACCOUNT_OWNED_ROWS.forEach(({ table, column, stamp }) => {
+        db.query(
+            `DELETE child FROM ${table} child
+             LEFT JOIN client_accounts ca ON ca.email = child.${column}
+             WHERE child.${column} IS NOT NULL AND child.${column} <> ''
+               AND (ca.email IS NULL
+                    OR child.${stamp} < ca.created_at - INTERVAL 1 MINUTE)`,
+            (err, result) => {
+                if (err) console.error(`❌ Could not sweep ${table} rows left by deleted client account(s):`, err.message);
+                else if (result && result.affectedRows > 0) console.log(`🧹 Removed ${result.affectedRows} ${table} row(s) left behind by deleted client account(s).`);
+            }
+        );
+    });
+}
+
 // One row per admin user account — replaces the old hardcoded admin/admin123 login.
 const createAdminsTableQuery = `
 CREATE TABLE IF NOT EXISTS admins (
@@ -3251,6 +3390,15 @@ db.query(createClustersTableQuery, (err) => {
                                     });
                                 });
                             });
+
+                            // Deleting an account must take everything that account owns with
+                            // it — its surveys, its pending/offline submission records and its
+                            // notification inbox — so re-registering the same email starts
+                            // genuinely empty. The trigger covers deletes made from anywhere
+                            // (including phpMyAdmin); the sweep clears what earlier deletes,
+                            // made before the trigger existed, already left behind.
+                            installClientAccountPurgeTrigger();
+                            sweepOrphanedClientAccountRows();
 
                             // NOTE: a second-pass "fill any still-NULL region/age/gender from this
                             // email's most recent client_profiles row" migration used to run here on
@@ -4780,17 +4928,26 @@ app.post('/complete-google-registration', async (req, res) => {
         // This branch used to discard the error entirely and show the client a
         // bare "Could not save your account", which made a registration that
         // fails in production impossible to diagnose from the logs.
-        saveAccount(true, (err) => {
-            if (!err) return finishRegistration();
+        // A brand-new account row (affectedRows 1; an ON DUPLICATE KEY UPDATE
+        // reports 2) means this email is starting over — clear anything the
+        // previous, deleted account under the same address left behind before
+        // showing the new one its first page.
+        const afterSave = (result) => {
+            if (result && result.affectedRows === 1) return purgeRowsPredatingAccount(registeredEmail, finishRegistration);
+            return finishRegistration();
+        };
+
+        saveAccount(true, (err, result) => {
+            if (!err) return afterSave(result);
 
             if (err.code === 'ER_BAD_FIELD_ERROR') {
                 console.error(`⚠️  [Google registration] client_accounts is missing a column (${err.sqlMessage || err.message}) — retrying without google_photo_url for ${registeredEmail}.`);
-                return saveAccount(false, (retryErr) => {
+                return saveAccount(false, (retryErr, retryResult) => {
                     if (retryErr) {
                         console.error(`❌ [Google registration] Could not save account for ${registeredEmail}:`, retryErr.code, retryErr.sqlMessage || retryErr.message);
                         return res.redirect('/complete-google-registration?error=' + encodeURIComponent('Could not save your account. Please try again.'));
                     }
-                    return finishRegistration();
+                    return afterSave(retryResult);
                 });
             }
 
