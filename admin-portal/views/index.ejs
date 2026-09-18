@@ -2667,7 +2667,24 @@
             // once, the button keeps standing. The amber notice above still
             // follows the live state, because that one is a claim rather than
             // an option.
-            const offer = window.ConnectionPrompt ? ConnectionPrompt.offerOfflineRoute() : offline;
+            //
+            // ...but on THIS page only while the device still has a network at
+            // all. On a fully disconnected device (data off / no signal) the
+            // landing page is a cached shell, and the only thing it can
+            // honestly say is the "Viewing Offline" chip — so the survey
+            // button is withdrawn rather than offered here. The offline survey
+            // route itself is unchanged and still reachable from /login, which
+            // is the page that exists to start it.
+            //
+            // Keyed on navigator.onLine rather than ConnectionPrompt's state
+            // because that is the one signal that is true the instant the
+            // network drops: STATE_OFFLINE only arrives once the module runs
+            // its own handler, and waiting for it would leave the button on
+            // screen for that gap. The 'offline'/'online' listeners below
+            // re-run this, so the button follows the radio, not a probe.
+            const offer = !offline
+                && !!window.ConnectionPrompt
+                && ConnectionPrompt.offerOfflineRoute();
             if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !offer);
 
             // After the class flips, so the chips have their final layout.
@@ -2723,9 +2740,10 @@
                     } else {
                         // STATE_OK and STATE_OFFLINE both land here. Offline
                         // deliberately shows no amber notice and no dialog:
-                        // the "Viewing Offline" chip and the "Take Survey
-                        // Offline" button below it are the whole offline
-                        // state, and they say it more precisely on their own.
+                        // on this page the "Viewing Offline" chip is the whole
+                        // offline state and says it more precisely on its own.
+                        // (The "Take Survey Offline" button is a weak-
+                        // connection offer only — see updateOfflineIndicator.)
                         setServerNotice(null);
                     }
                     updateOfflineIndicator();

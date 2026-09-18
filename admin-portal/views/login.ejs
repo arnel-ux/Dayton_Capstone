@@ -73,7 +73,9 @@
 
         /* Thumb width is calc(50% - 4px), so translateX(100%) — i.e. by its OWN
            width — lands it exactly on the right half's inset position.
-           Percentage-based, so it stays correct at every card width. */
+           Percentage-based, so it stays correct at every card width.
+           Register is the FIRST slot (the default state), so it is Login that
+           slides the thumb to the right half. */
         .auth-switch-thumb {
             position: absolute;
             top: 4px;
@@ -85,7 +87,7 @@
             box-shadow: 0 6px 14px -6px rgba(37, 29, 58, 0.65);
             transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .auth-switch[data-active="register"] .auth-switch-thumb {
+        .auth-switch[data-active="login"] .auth-switch-thumb {
             transform: translateX(100%);
         }
 
@@ -424,7 +426,7 @@
         <div class="header-container">
             <h1 class="main-title">Office Of Center For Quality Assurance (CQA)</h1>
             <p class="sub-title">Digital Client Satisfaction Survey of Camarines Sur Polytechnic Colleges</p>
-            <h2 class="portal-text" id="portalBadge">Login Portal</h2>
+            <h2 class="portal-text" id="portalBadge">Register Portal</h2>
         </div>
 
         <!-- The gap between the heading and the card. An element rather than a
@@ -438,9 +440,9 @@
 
             <div class="text-center mb-2">
                 <img src="/images/cspc-logo.png" alt="CSPC Logo" class="cqa-logo mb-1" width="46" height="46">
-                <h4 class="fw-bold text-dark mb-0" id="cardTitle">CQA Portal Login</h4>
+                <h4 class="fw-bold text-dark mb-0" id="cardTitle">Create Your Account</h4>
                 <div class="divider-soft"></div>
-                <p class="text-muted text-xsmall mb-0" id="cardSubtitle">Sign in to your account</p>
+                <p class="text-muted text-xsmall mb-0" id="cardSubtitle">Sign up first with your CSPC or personal email</p>
             </div>
 
             <!-- Blocks starting a NEW login while an old session's server-
@@ -514,17 +516,17 @@
                  says "sign IN" — so a first-time visitor had no way to tell
                  that this was also where they sign UP. The switch names both
                  states up front and puts them on equal footing. -->
-            <div class="auth-switch" id="authSwitch" data-active="login" role="tablist" aria-label="Login or Register">
+            <div class="auth-switch" id="authSwitch" data-active="register" role="tablist" aria-label="Register or Login">
                 <span class="auth-switch-thumb" aria-hidden="true"></span>
-                <button type="button" class="auth-switch-btn" id="loginTabBtn" role="tab" aria-selected="true" aria-controls="loginPanel" data-tab="login" title="Sign in to an account you already created">
-                    <i class="fas fa-right-to-bracket" aria-hidden="true"></i> Login
-                </button>
-                <button type="button" class="auth-switch-btn" id="registerTabBtn" role="tab" aria-selected="false" aria-controls="registerPanel" data-tab="register" title="Create a new account">
+                <button type="button" class="auth-switch-btn" id="registerTabBtn" role="tab" aria-selected="true" aria-controls="registerPanel" data-tab="register" title="Create a new account">
                     <i class="fas fa-user-plus" aria-hidden="true"></i> Register
+                </button>
+                <button type="button" class="auth-switch-btn" id="loginTabBtn" role="tab" aria-selected="false" aria-controls="loginPanel" data-tab="login" title="Sign in to an account you already created">
+                    <i class="fas fa-right-to-bracket" aria-hidden="true"></i> Login
                 </button>
             </div>
 
-            <div id="loginPanel" class="auth-panel" role="tabpanel" aria-labelledby="loginTabBtn">
+            <div id="loginPanel" class="auth-panel d-none" role="tabpanel" aria-labelledby="loginTabBtn">
 
             <!-- UNIFIED LOGIN FORM (POST REQUEST) -->
             <form action="/auth-login" method="POST" id="loginForm">
@@ -593,7 +595,7 @@
                  honest thing this panel can do is explain that the email step
                  comes first, then start it. Typing an email into a form here
                  would look like it registered something and would not. -->
-            <div id="registerPanel" class="auth-panel d-none" role="tabpanel" aria-labelledby="registerTabBtn">
+            <div id="registerPanel" class="auth-panel" role="tabpanel" aria-labelledby="registerTabBtn">
 
                 <div class="reg-emails">
                     <span class="reg-email-chip"><i class="fas fa-graduation-cap" aria-hidden="true"></i> CSPC email (@my.cspc.edu.ph)</span>
@@ -703,7 +705,7 @@
 
             function setAuthTab(tab, opts) {
                 const options = opts || {};
-                const active = tab === 'register' ? 'register' : 'login';
+                const active = tab === 'login' ? 'login' : 'register';
 
                 switcher.setAttribute('data-active', active);
 
@@ -728,8 +730,8 @@
                 // back to the same tab the user was looking at.
                 try {
                     const url = new URL(window.location.href);
-                    if (active === 'register') {
-                        url.searchParams.set('tab', 'register');
+                    if (active === 'login') {
+                        url.searchParams.set('tab', 'login');
                     } else {
                         url.searchParams.delete('tab');
                     }
@@ -770,8 +772,20 @@
                 });
             });
 
-            const requestedTab = new URLSearchParams(window.location.search).get('tab');
-            setAuthTab(requestedTab === 'register' ? 'register' : 'login');
+            // Register is the default state of this page: someone who has no
+            // account yet is the one who needs to be told what to do, and a
+            // returning user recognises the Login tab right next to it. Login
+            // is shown only when it is actually being asked for — ?tab=login,
+            // or any of the login-outcome redirects from server.js (a failed
+            // sign-in, a logout, an expired session), all of which carry an
+            // error/status flag and must land back on the login FORM, not on
+            // registration instructions.
+            const loginParams = new URLSearchParams(window.location.search);
+            const requestedTab = loginParams.get('tab');
+            const isLoginOutcome = loginParams.has('error') || loginParams.has('status');
+            const startOnLogin = requestedTab === 'login'
+                || (isLoginOutcome && requestedTab !== 'register');
+            setAuthTab(startOnLogin ? 'login' : 'register');
         })();
     </script>
 
