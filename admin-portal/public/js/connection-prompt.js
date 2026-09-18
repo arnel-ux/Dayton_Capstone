@@ -121,6 +121,14 @@
     // Let the page finish loading before measuring anything. See mistake (2).
     var FIRST_PROBE_SETTLE_MS = 1500;
 
+    // How long to wait for the CONFIRMING sample after a bad one, while the
+    // verdict is still pending. Deliberately much shorter than RECHECK_BAD_MS:
+    // waiting a full 8s for the second opinion is what left a bad connection
+    // showing nothing at all for roughly ten seconds after load — long enough
+    // for the visitor to conclude the page simply has no offline option. Two
+    // samples are still required; they just arrive promptly.
+    var CONFIRM_DELAY_MS = 1800;
+
     var state = STATE_UNKNOWN;
     var dismissed = false;
     var overlay = null;
@@ -145,6 +153,48 @@
     // be the false alarm this was already fixed for once. A button is only an
     // option; a warning is an assertion.
     var offlineRouteEarned = false;
+
+    // ...and it survives navigation, because an in-memory flag does not.
+    //
+    // That was the remaining hole: the flag reset on every page load, so
+    // tapping Login and coming back, returning from the client survey via
+    // "Back to Dashboard", or simply refreshing on a bad connection all
+    // landed on a page offering nothing — and then took another ten seconds
+    // of probing to work out what it already knew a moment earlier. The
+    // connection did not change when the page did.
+    //
+    // sessionStorage, not localStorage: this belongs to one browsing session
+    // in one tab. It is cleared the moment a probe comes back healthy (see
+    // setState), so it can never outlive the condition it describes, and the
+    // timestamp caps a marker left behind by a tab that sat open for hours.
+    var OFFLINE_ROUTE_KEY = '__cqaOfflineRouteEarned';
+    var OFFLINE_ROUTE_TTL_MS = 1800000; // 30 minutes
+
+    function rememberOfflineRouteEarned() {
+        offlineRouteEarned = true;
+        try { sessionStorage.setItem(OFFLINE_ROUTE_KEY, String(Date.now())); } catch (e) { /* private mode — falls back to in-memory only */ }
+    }
+
+    function forgetOfflineRouteEarned() {
+        offlineRouteEarned = false;
+        try { sessionStorage.removeItem(OFFLINE_ROUTE_KEY); } catch (e) { /* nothing to clear */ }
+    }
+
+    function restoreOfflineRouteEarned() {
+        var raw = null;
+        try { raw = sessionStorage.getItem(OFFLINE_ROUTE_KEY); } catch (e) { return; }
+        if (!raw) return;
+        var when = parseInt(raw, 10);
+        if (!when || isNaN(when) || (Date.now() - when) > OFFLINE_ROUTE_TTL_MS) {
+            forgetOfflineRouteEarned();
+            return;
+        }
+        // Restored WITHOUT re-showing the dialog or the amber notice. The
+        // route is offered again immediately; the claim about the connection
+        // waits for this page load's own measurement, which is what keeps a
+        // recovered connection from being told it is still broken.
+        offlineRouteEarned = true;
+    }
     var badStreak = 0;
     var fastestSampleMs = Infinity;
     var sampledOnce = false;
@@ -296,18 +346,25 @@
             return;
         }
         state = next;
-        if (state === STATE_OK) dismissed = false;
+        if (state === STATE_OK) {
+            dismissed = false;
+            // The connection is demonstrably fine again, so the standing offer
+            // is withdrawn here and on every later page load — this is what
+            // stops the button from becoming permanent furniture.
+            forgetOfflineRouteEarned();
+        }
         if (typeof options.onState === 'function') {
             try { options.onState(state); } catch (e) { /* a page's own UI bug must not stop the prompt */ }
         }
 
         if (state === STATE_WEAK) {
-            offlineRouteEarned = true;
+            rememberOfflineRouteEarned();
             showPrompt();
             // Check back sooner while something is wrong, so "my internet is
             // fine again, why is this still here?" is answered in seconds.
             scheduleRecheck(RECHECK_BAD_MS);
         } else if (state === STATE_OFFLINE) {
+            rememberOfflineRouteEarned();
             // No dialog here, by design. The page drops into its own offline
             // state (chip + offline-survey route) via the onState callback
             // above, with nothing in the way. If a weak-connection dialog was
@@ -387,6 +444,11 @@
                 }
 
                 if (recordSample(false, elapsed)) { setState(STATE_WEAK); return STATE_WEAK; }
+                // A slow-but-successful sample that has not yet convicted must
+                // not be reported as OK — that would clear the standing offer
+                // on the strength of the very sample that looked wrong. Hold
+                // the current state and confirm quickly instead.
+                if (badStreak > 0) { setTimeout(probe, CONFIRM_DELAY_MS); return state; }
                 setState(STATE_OK);
                 return STATE_OK;
             },
@@ -402,10 +464,9 @@
                 // Aborted at PROBE_TIMEOUT_MS, or failed outright, while
                 // navigator.onLine still claims we are online.
                 if (recordSample(true, null)) { setState(STATE_WEAK); return STATE_WEAK; }
-                // Suspicious but unconfirmed: say nothing yet. The faster
-                // recheck cadence below means the second opinion arrives
-                // within seconds, not half a minute.
-                scheduleRecheck(RECHECK_BAD_MS);
+                // Suspicious but unconfirmed: say nothing yet, and go get the
+                // second opinion promptly rather than on the ordinary timer.
+                setTimeout(probe, CONFIRM_DELAY_MS);
                 return state;
             }
         );
@@ -446,6 +507,14 @@
         // in the light skin over a navy page: the theme was accepted into the
         // defaults object but never read off the caller's options.
         if (opts.theme) options.theme = opts.theme;
+
+        // Before anything is measured, so a page arrived at on a connection
+        // already known to be bad offers the route on its first paint rather
+        // than after a round of probing.
+        restoreOfflineRouteEarned();
+        if (offlineRouteEarned && typeof options.onState === 'function') {
+            try { options.onState(state); } catch (e) { /* page UI bug must not stop the probe */ }
+        }
 
         wireOfflineIntentLinks();
 
