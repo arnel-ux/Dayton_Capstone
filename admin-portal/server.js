@@ -2769,6 +2769,7 @@ CREATE TABLE IF NOT EXISTS client_accounts (
     email VARCHAR(255) PRIMARY KEY,
     respondent_name VARCHAR(255) NULL,
     password VARCHAR(255) NULL,
+    google_photo_url VARCHAR(500) NULL,
     region VARCHAR(100) NULL,
     age VARCHAR(50) NULL,
     gender VARCHAR(50) NULL,
@@ -3160,17 +3161,33 @@ db.query(createClustersTableQuery, (err) => {
                             // Older deployments created this table before the `password` column
                             // existed (Google sign-in used to log clients in directly, no local
                             // password) — add it now so existing rows can be upgraded in place.
-                            db.query("ALTER TABLE client_accounts ADD COLUMN password VARCHAR(255) NULL", () => {});
+                            // These ADD COLUMNs are expected to fail with ER_DUP_FIELDNAME on
+                            // every boot after the first — that is the steady state, not a
+                            // problem, so it stays silent. Anything ELSE means the column is
+                            // genuinely missing (a dropped connection against Clever Cloud's
+                            // 5-connection cap is enough to lose one), and a missing column
+                            // breaks writes that name it for as long as it stays missing. They
+                            // used to be fire-and-forget `() => {}`, which hid exactly that:
+                            // registration would fail on every attempt with nothing in the log.
+                            const alterClientAccounts = (sql, column) => {
+                                db.query(sql, (alterErr) => {
+                                    if (alterErr && alterErr.code !== 'ER_DUP_FIELDNAME') {
+                                        console.error(`❌ Could not add client_accounts.${column} — writes naming that column will fail:`, alterErr.message);
+                                    }
+                                });
+                            };
+
+                            alterClientAccounts("ALTER TABLE client_accounts ADD COLUMN password VARCHAR(255) NULL", 'password');
                             // Captured from the Google account's own profile photo on every Google
                             // sign-in (see /auth/google/callback and /complete-google-registration) —
                             // there's nothing to capture for the plain email/password login path, so
                             // this simply keeps whichever photo was last seen from Google.
-                            db.query("ALTER TABLE client_accounts ADD COLUMN google_photo_url VARCHAR(500) NULL", () => {});
+                            alterClientAccounts("ALTER TABLE client_accounts ADD COLUMN google_photo_url VARCHAR(500) NULL", 'google_photo_url');
                             // "Forgot Password" (email link) support: a short-lived, single-use
                             // token, stored only as a SHA-256 hash (never the raw token — the raw
                             // value only ever exists in the emailed link itself) plus its expiry.
-                            db.query("ALTER TABLE client_accounts ADD COLUMN reset_token_hash VARCHAR(255) NULL", () => {});
-                            db.query("ALTER TABLE client_accounts ADD COLUMN reset_token_expires DATETIME NULL", () => {});
+                            alterClientAccounts("ALTER TABLE client_accounts ADD COLUMN reset_token_hash VARCHAR(255) NULL", 'reset_token_hash');
+                            alterClientAccounts("ALTER TABLE client_accounts ADD COLUMN reset_token_expires DATETIME NULL", 'reset_token_expires');
                             // Drives the one-time setup wizard shown on /client-survey right after
                             // registration. DEFAULT 1 here so this ALTER TABLE marks every EXISTING
                             // account as already onboarded (they never asked to see a first-run
@@ -4706,33 +4723,87 @@ app.post('/complete-google-registration', async (req, res) => {
         return res.redirect('/complete-google-registration?error=' + encodeURIComponent('Passwords do not match.'));
     }
 
+    // What Google hands back is decoration on top of the real account, which is
+    // just (email, password): a display name longer than its column, or a photo
+    // URL longer than its own, must never be the reason someone cannot register.
+    // Clamped to the declared widths here so the INSERT below cannot trip
+    // ER_DATA_TOO_LONG on a value the account does not actually depend on.
+    const registeredEmail = String(pending.email).trim();
+    const respondentName = pending.name ? String(pending.name).trim().slice(0, 255) : null;
+    // Same http(s)-only rule /user-accounts applies when it renders this into an
+    // <img src>, plus the column width — a URL past 500 chars would only be
+    // stored truncated, i.e. broken, so it is dropped rather than saved.
+    const rawPhoto = pending.photo ? String(pending.photo).trim() : '';
+    const photoUrl = (rawPhoto.length <= 500 && /^https?:\/\//i.test(rawPhoto)) ? rawPhoto : null;
+
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
-        db.query(
-            // onboarding_completed only takes effect via INSERT (a brand-new account) —
-            // ON DUPLICATE KEY UPDATE deliberately omits it, so an email that already had
-            // an account (e.g. re-registering) doesn't get its onboarding state reset.
-            `INSERT INTO client_accounts (email, respondent_name, password, google_photo_url, onboarding_completed)
-             VALUES (?, ?, ?, ?, 0)
-             ON DUPLICATE KEY UPDATE respondent_name = VALUES(respondent_name), password = VALUES(password), google_photo_url = VALUES(google_photo_url)`,
-            [pending.email, pending.name || null, hashedPassword, pending.photo || null],
-            (err) => {
-                if (err) {
-                    return res.redirect('/complete-google-registration?error=' + encodeURIComponent('Could not save your account. Please try again.'));
+
+        // Regenerate before assigning identity to prevent session
+        // fixation — same reasoning as the /auth-login client path.
+        const finishRegistration = () => {
+            req.session.regenerate((regenErr) => {
+                if (regenErr) {
+                    return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
                 }
-                // Regenerate before assigning identity to prevent session
-                // fixation — same reasoning as the /auth-login client path.
-                const registeredEmail = pending.email;
-                req.session.regenerate((regenErr) => {
-                    if (regenErr) {
-                        return res.redirect('/login?error=' + encodeURIComponent('Server error. Please try again.'));
+                req.session.clientEmail = registeredEmail;
+                return res.redirect('/client-survey?loggedin=1');
+            });
+        };
+
+        // onboarding_completed only takes effect via INSERT (a brand-new account) —
+        // ON DUPLICATE KEY UPDATE deliberately omits it, so an email that already had
+        // an account (e.g. re-registering) doesn't get its onboarding state reset.
+        //
+        // `withPhoto` picks between the full insert and one naming only columns
+        // that EVERY deployment is guaranteed to have. google_photo_url is not
+        // in createClientAccountsTableQuery's original shape — it arrives via a
+        // fire-and-forget `ALTER TABLE ... ADD COLUMN` at startup, so one boot
+        // where that ALTER failed (a dropped connection against Clever Cloud's
+        // 5-connection cap is enough) leaves the column missing permanently, and
+        // every registration then dies on a column nobody's account depends on.
+        const saveAccount = (withPhoto, done) => {
+            if (withPhoto) {
+                return db.query(
+                    `INSERT INTO client_accounts (email, respondent_name, password, google_photo_url, onboarding_completed)
+                     VALUES (?, ?, ?, ?, 0)
+                     ON DUPLICATE KEY UPDATE respondent_name = VALUES(respondent_name), password = VALUES(password), google_photo_url = VALUES(google_photo_url)`,
+                    [registeredEmail, respondentName, hashedPassword, photoUrl],
+                    done
+                );
+            }
+            db.query(
+                `INSERT INTO client_accounts (email, respondent_name, password, onboarding_completed)
+                 VALUES (?, ?, ?, 0)
+                 ON DUPLICATE KEY UPDATE respondent_name = VALUES(respondent_name), password = VALUES(password)`,
+                [registeredEmail, respondentName, hashedPassword],
+                done
+            );
+        };
+
+        // Every failure below is logged with the driver's own code and message.
+        // This branch used to discard the error entirely and show the client a
+        // bare "Could not save your account", which made a registration that
+        // fails in production impossible to diagnose from the logs.
+        saveAccount(true, (err) => {
+            if (!err) return finishRegistration();
+
+            if (err.code === 'ER_BAD_FIELD_ERROR') {
+                console.error(`⚠️  [Google registration] client_accounts is missing a column (${err.sqlMessage || err.message}) — retrying without google_photo_url for ${registeredEmail}.`);
+                return saveAccount(false, (retryErr) => {
+                    if (retryErr) {
+                        console.error(`❌ [Google registration] Could not save account for ${registeredEmail}:`, retryErr.code, retryErr.sqlMessage || retryErr.message);
+                        return res.redirect('/complete-google-registration?error=' + encodeURIComponent('Could not save your account. Please try again.'));
                     }
-                    req.session.clientEmail = registeredEmail;
-                    return res.redirect('/client-survey?loggedin=1');
+                    return finishRegistration();
                 });
             }
-        );
+
+            console.error(`❌ [Google registration] Could not save account for ${registeredEmail}:`, err.code, err.sqlMessage || err.message);
+            return res.redirect('/complete-google-registration?error=' + encodeURIComponent('Could not save your account. Please try again.'));
+        });
     } catch (e) {
+        console.error(`❌ [Google registration] Unexpected error registering ${registeredEmail}:`, e && (e.stack || e.message || e));
         return res.redirect('/complete-google-registration?error=' + encodeURIComponent('Server error. Please try again.'));
     }
 });
