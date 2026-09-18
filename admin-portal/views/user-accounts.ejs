@@ -33,6 +33,12 @@
 
             --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
             --shadow-md: 0 6px 16px rgba(15, 23, 42, 0.06);
+
+            /* ONE grid definition shared by the column headings and every
+               account row below them. Declared once here rather than repeated
+               on each selector, so a heading can never drift out of line with
+               the column it labels. */
+            --account-grid: 40px minmax(0, 1fr) 132px 168px;
         }
 
         html[data-bs-theme="dark"] {
@@ -132,8 +138,8 @@
             margin-top: 2px;
         }
 
-        /* --- Activity card --- */
-        .activity-card {
+        /* --- Accounts card --- */
+        .accounts-card {
             background: var(--card-bg);
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius-lg);
@@ -142,33 +148,60 @@
             overflow: hidden;
         }
 
-        .activity-toolbar {
+        /* Title on its own line, controls on the next one. A title plus three
+           controls in a single flex row left the search field squeezed against
+           the selects at laptop widths; this way the controls have the full
+           width of the card to divide between them. */
+        .accounts-toolbar {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: var(--sp-3) var(--sp-4);
+            flex-direction: column;
+            gap: var(--sp-4);
             padding: var(--sp-5) var(--sp-6);
             border-bottom: 1px solid var(--border-subtle);
         }
-        .activity-toolbar-title { min-width: 0; }
-        .activity-toolbar-title h6 {
+        .accounts-toolbar-title { min-width: 0; }
+        .accounts-toolbar-title h6 {
             margin: 0;
             font-size: 0.95rem;
             font-weight: 700;
             color: var(--text-heading);
         }
-        .activity-toolbar-title p {
+        .accounts-toolbar-title p {
             margin: 3px 0 0;
             font-size: 0.76rem;
+            color: var(--text-faint);
+        }
+
+        .accounts-controls {
+            display: flex;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            gap: var(--sp-3);
+        }
+
+        /* Each control is label-above-field, so the search box and the two
+           selects all sit on the same baseline whatever their label lengths. */
+        .control-field {
+            display: flex;
+            flex-direction: column;
+            gap: var(--sp-1);
+            flex: 0 1 200px;
+            min-width: 170px;
+        }
+        .control-field.is-search { flex: 1 1 260px; min-width: 220px; }
+        .control-label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
             color: var(--text-faint);
         }
 
         .search-bar {
             display: flex;
             align-items: center;
-            flex: 0 1 320px;
-            min-width: 220px;
+            flex: 1 1 auto;
+            min-width: 0;
             border: 1px solid var(--border-strong);
             border-radius: var(--radius-md);
             background: var(--card-bg);
@@ -191,48 +224,76 @@
             box-shadow: 0 0 0 3px rgba(37, 29, 58, 0.08);
         }
 
-        /* --- Day group --- */
-        .day-group-label {
-            display: flex;
+        .control-select {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 100%;
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-md);
+            background-color: var(--card-bg);
+            color: var(--text-main);
+            font-size: 0.86rem;
+            font-weight: 600;
+            padding: var(--sp-3) calc(var(--sp-6) + var(--sp-1)) var(--sp-3) var(--sp-3);
+            /* Caret drawn with gradients rather than an image, so it follows
+               the text colour in dark mode instead of staying black. */
+            background-image: linear-gradient(45deg, transparent 50%, var(--text-faint) 50%),
+                              linear-gradient(135deg, var(--text-faint) 50%, transparent 50%);
+            background-position: calc(100% - 18px) 52%, calc(100% - 13px) 52%;
+            background-size: 5px 5px, 5px 5px;
+            background-repeat: no-repeat;
+            cursor: pointer;
+        }
+        .control-select:focus {
+            outline: none;
+            border-color: var(--primary-indigo);
+            box-shadow: 0 0 0 3px rgba(37, 29, 58, 0.08);
+        }
+        /* The native option list is drawn by the OS, so it needs the surface
+           colours spelled out to stay readable in dark mode. */
+        html[data-bs-theme="dark"] .control-select option { background-color: #141d30; color: #cbd5e1; }
+
+        /* --- Column headings ---
+           Same grid as the rows (see --account-grid), so "Date Registered"
+           sits directly above the dates it labels. */
+        .accounts-head {
+            display: grid;
+            grid-template-columns: var(--account-grid);
             align-items: center;
-            gap: var(--sp-3);
+            column-gap: var(--sp-4);
             padding: var(--sp-3) var(--sp-6);
             background: var(--surface-subtle);
             border-bottom: 1px solid var(--border-subtle);
-            font-size: 0.72rem;
+            font-size: 0.68rem;
             font-weight: 700;
             letter-spacing: 0.06em;
             text-transform: uppercase;
             color: var(--text-muted);
         }
-        .day-group-count {
-            margin-left: auto;
-            font-size: 0.7rem;
-            font-weight: 600;
-            letter-spacing: 0;
-            text-transform: none;
-            color: var(--text-faint);
-        }
+        /* The account heading covers both the avatar and the identity track. */
+        .accounts-head span:first-child { grid-column: 1 / span 2; }
 
-        /* --- Activity row ---
-           One grid, three tracks: avatar / identity / time. Because the tracks
-           are declared on the row rather than sized by their contents, the
-           name column starts at the same x on every row and every timestamp
-           ends flush on the right edge, no matter how long a name or address
-           happens to be. */
-        .activity-row {
+        /* --- Account row ---
+           Four tracks: avatar / identity / account type / date registered.
+           Because the tracks are declared on the row rather than sized by their
+           contents, the name column starts at the same x on every row and every
+           date ends flush on the right edge, no matter how long a name or an
+           address happens to be. */
+        .account-row {
             display: grid;
-            grid-template-columns: 40px minmax(0, 1fr) auto;
+            grid-template-columns: var(--account-grid);
             align-items: center;
             column-gap: var(--sp-4);
             padding: var(--sp-4) var(--sp-6);
             border-bottom: 1px solid var(--border-subtle);
             transition: background-color 0.12s ease;
         }
-        .activity-row:last-child { border-bottom: none; }
-        .activity-row:hover { background: var(--surface-subtle); }
+        .account-row:last-child { border-bottom: none; }
+        .account-row:hover { background: var(--surface-subtle); }
+        /* hidden alone would be overridden by display: grid above. */
+        .account-row[hidden] { display: none; }
 
-        .activity-avatar {
+        .account-avatar {
             width: 40px;
             height: 40px;
             border-radius: 50%;
@@ -247,8 +308,8 @@
             letter-spacing: 0.02em;
         }
 
-        .activity-identity { min-width: 0; }
-        .activity-name {
+        .account-identity { min-width: 0; }
+        .account-name {
             margin: 0;
             font-size: 0.9rem;
             font-weight: 600;
@@ -258,8 +319,8 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
-        .activity-name.is-unset { font-weight: 500; font-style: italic; color: var(--text-faint); }
-        .activity-email {
+        .account-name.is-unset { font-weight: 500; font-style: italic; color: var(--text-faint); }
+        .account-email {
             display: flex;
             align-items: center;
             gap: var(--sp-2);
@@ -271,15 +332,43 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
-        .activity-email i { flex: 0 0 auto; font-size: 0.72rem; color: var(--text-faint); }
+        .account-email i { flex: 0 0 auto; font-size: 0.72rem; color: var(--text-faint); }
 
-        .activity-time {
-            font-size: 0.78rem;
+        .type-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--sp-1);
+            padding: 3px var(--sp-2);
+            border-radius: 999px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+        }
+        .type-badge i { font-size: 0.68rem; }
+        .type-badge.is-cspc { background: rgba(52, 82, 165, 0.1); color: var(--accent-indigo); }
+        .type-badge.is-personal { background: rgba(100, 116, 139, 0.12); color: var(--text-muted); }
+        html[data-bs-theme="dark"] .type-badge.is-cspc { background: rgba(109, 150, 255, 0.16); color: #b9cbff; }
+        html[data-bs-theme="dark"] .type-badge.is-personal { background: rgba(148, 163, 184, 0.16); color: #cbd5e1; }
+
+        /* Date over time in one block: the date reads as the primary value and
+           the exact clock time sits under it, which is what the column is for. */
+        .account-registered { text-align: right; }
+        .registered-date {
+            display: block;
+            font-size: 0.82rem;
             font-weight: 600;
-            color: var(--text-muted);
+            color: var(--text-main);
             white-space: nowrap;
             font-variant-numeric: tabular-nums;
-            text-align: right;
+        }
+        .registered-time {
+            display: block;
+            font-size: 0.74rem;
+            color: var(--text-faint);
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+            margin-top: 1px;
         }
 
         /* --- Empty states --- */
@@ -292,7 +381,7 @@
         .empty-state h5 { font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-bottom: var(--sp-1); }
         .empty-state p { font-size: 0.82rem; margin: 0; }
 
-        .activity-foot {
+        .accounts-foot {
             padding: var(--sp-3) var(--sp-6);
             border-top: 1px solid var(--border-subtle);
             background: var(--surface-subtle);
@@ -301,25 +390,32 @@
             text-align: center;
         }
 
-        /* On a phone the timestamp moves under the address rather than
-           competing with it for the same row -- the three-track grid becomes
-           two tracks and the identity block spans the freed column. */
+        /* On a tablet the two right-hand columns give up width before the name
+           column starts truncating. */
+        @media (max-width: 991.98px) {
+            :root { --account-grid: 40px minmax(0, 1fr) 118px 132px; }
+            .registered-date { font-size: 0.78rem; }
+        }
+
+        /* On a phone the type badge and the date move under the address rather
+           than competing with it for the same row -- the four-track grid becomes
+           two tracks and the lower cells span the freed column. */
         @media (max-width: 575.98px) {
             .page-header { padding: var(--sp-5) var(--sp-4); }
-            .activity-toolbar { padding: var(--sp-4); }
-            .search-bar { flex: 1 1 100%; }
-            .day-group-label { padding-left: var(--sp-4); padding-right: var(--sp-4); }
-            .activity-row {
+            .accounts-toolbar { padding: var(--sp-4); }
+            .control-field, .control-field.is-search { flex: 1 1 100%; min-width: 0; }
+            .accounts-head { display: none; }
+            .account-row {
                 grid-template-columns: 40px minmax(0, 1fr);
-                row-gap: var(--sp-1);
+                row-gap: var(--sp-2);
                 padding: var(--sp-4);
             }
-            .activity-time {
+            .account-type, .account-registered {
                 grid-column: 2;
                 text-align: left;
-                font-weight: 500;
-                color: var(--text-faint);
             }
+            .account-registered { display: flex; align-items: baseline; gap: var(--sp-2); }
+            .registered-time { margin-top: 0; }
             .stat-tile { padding: var(--sp-4); }
         }
     </style>
@@ -335,8 +431,8 @@
         <div class="page-header">
             <div class="container-fluid d-md-flex justify-content-between align-items-center">
                 <div>
-                    <h2 class="fw-bold mb-1 text-white"><i class="fas fa-user-clock me-2"></i>User Account Activity</h2>
-                    <p class="mb-0 page-subtitle">Recent accounts that submitted a survey on the client side</p>
+                    <h2 class="fw-bold mb-1 text-white"><i class="fas fa-user-check me-2"></i>Registered User Accounts</h2>
+                    <p class="mb-0 page-subtitle">Every account registered on the client side, with the date and time it signed up</p>
                 </div>
                 <div class="mt-3 mt-md-0">
                     <a href="/dashboard" class="btn btn-back">
@@ -348,78 +444,119 @@
 
         <div class="container-fluid px-4">
 
+            <%# Total first, then the two halves it splits into (CSPC + Personal
+                = Total), then today's registrations. Reading left to right now
+                follows the arithmetic instead of mixing a total, a subset and
+                two date ranges in no particular order. %>
             <div class="stat-grid">
-                <div class="stat-tile">
-                    <span class="stat-icon"><i class="fas fa-paper-plane"></i></span>
-                    <span class="stat-text">
-                        <span class="stat-value"><%= stats.totalSubmissions %></span>
-                        <span class="stat-label">Total Submissions</span>
-                    </span>
-                </div>
                 <div class="stat-tile">
                     <span class="stat-icon"><i class="fas fa-user-group"></i></span>
                     <span class="stat-text">
-                        <span class="stat-value"><%= stats.distinctAccounts %></span>
-                        <span class="stat-label">Unique Accounts</span>
+                        <span class="stat-value"><%= stats.totalAccounts %></span>
+                        <span class="stat-label">Total Accounts</span>
+                    </span>
+                </div>
+                <div class="stat-tile">
+                    <span class="stat-icon"><i class="fas fa-graduation-cap"></i></span>
+                    <span class="stat-text">
+                        <span class="stat-value"><%= stats.cspcAccounts %></span>
+                        <span class="stat-label">CSPC Accounts</span>
+                    </span>
+                </div>
+                <div class="stat-tile">
+                    <span class="stat-icon"><i class="fas fa-user"></i></span>
+                    <span class="stat-text">
+                        <span class="stat-value"><%= stats.personalAccounts %></span>
+                        <span class="stat-label">Personal Accounts</span>
                     </span>
                 </div>
                 <div class="stat-tile">
                     <span class="stat-icon"><i class="fas fa-calendar-day"></i></span>
                     <span class="stat-text">
                         <span class="stat-value"><%= stats.todayCount %></span>
-                        <span class="stat-label">Today</span>
-                    </span>
-                </div>
-                <div class="stat-tile">
-                    <span class="stat-icon"><i class="fas fa-calendar-week"></i></span>
-                    <span class="stat-text">
-                        <span class="stat-value"><%= stats.weekCount %></span>
-                        <span class="stat-label">Last 7 Days</span>
+                        <span class="stat-label">Registered Today</span>
                     </span>
                 </div>
             </div>
 
-            <div class="activity-card">
+            <div class="accounts-card">
 
-                <div class="activity-toolbar">
-                    <div class="activity-toolbar-title">
-                        <h6>Recent Survey Activity</h6>
-                        <p id="activitySummary"><%= listedCount %> <%= listedCount === 1 ? 'entry' : 'entries' %>, newest first</p>
+                <div class="accounts-toolbar">
+                    <div class="accounts-toolbar-title">
+                        <h6>Registered Accounts</h6>
+                        <p id="accountsSummary"><%= listedCount %> <%= listedCount === 1 ? 'account' : 'accounts' %>, newest registered first</p>
                     </div>
-                    <label class="search-bar" for="activitySearch">
-                        <i class="fas fa-search"></i>
-                        <input type="text" id="activitySearch" placeholder="Search by name or email..."
-                               autocomplete="off" title="Search survey activity">
-                    </label>
+
+                    <div class="accounts-controls">
+                        <div class="control-field is-search">
+                            <span class="control-label">Search</span>
+                            <label class="search-bar" for="accountSearch">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="accountSearch" placeholder="Search by name or email..."
+                                       autocomplete="off" title="Search registered accounts">
+                            </label>
+                        </div>
+
+                        <div class="control-field">
+                            <label class="control-label" for="accountSort">Sort by</label>
+                            <select class="control-select" id="accountSort" title="Sort registered accounts">
+                                <option value="date-desc" selected>Date registered (newest)</option>
+                                <option value="date-asc">Date registered (oldest)</option>
+                                <option value="name-asc">Name (A&ndash;Z)</option>
+                                <option value="name-desc">Name (Z&ndash;A)</option>
+                            </select>
+                        </div>
+
+                        <div class="control-field">
+                            <label class="control-label" for="accountType">Account type</label>
+                            <select class="control-select" id="accountType" title="Filter by account type">
+                                <option value="all" selected>All accounts</option>
+                                <option value="cspc">CSPC accounts</option>
+                                <option value="personal">Personal accounts</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
 
                 <% if (listedCount > 0) { %>
-                    <div id="activityFeed">
-                        <% activityGroups.forEach(group => { %>
-                            <div class="day-group" data-group>
-                                <div class="day-group-label">
-                                    <span><%= group.label %></span>
-                                    <span class="day-group-count" data-group-count><%= group.entries.length %> <%= group.entries.length === 1 ? 'survey' : 'surveys' %></span>
+                    <div class="accounts-head">
+                        <span>Account</span>
+                        <span>Type</span>
+                        <span class="text-end">Date Registered</span>
+                    </div>
+
+                    <div id="accountList">
+                        <% accounts.forEach(account => { %>
+                            <%
+                                // The avatar letter comes from the name when there is one
+                                // and from the address otherwise, so a circle is never blank.
+                                const initialSource = account.hasName ? account.name : (account.email || '?');
+                                const initial = initialSource.trim().charAt(0) || '?';
+                                const emailText = account.email || 'No email on record';
+                            %>
+                            <div class="account-row"
+                                 data-search="<%= (account.name + ' ' + emailText).toLowerCase() %>"
+                                 data-name="<%= account.nameKey %>"
+                                 data-date="<%= account.dateKey %>"
+                                 data-type="<%= account.isCspc ? 'cspc' : 'personal' %>">
+                                <span class="account-avatar"><%= initial %></span>
+                                <div class="account-identity">
+                                    <p class="account-name<%= account.hasName ? '' : ' is-unset' %>" title="<%= account.name %>"><%= account.name %></p>
+                                    <p class="account-email" title="<%= emailText %>">
+                                        <i class="fas fa-envelope"></i><span><%= emailText %></span>
+                                    </p>
                                 </div>
-                                <% group.entries.forEach(entry => { %>
-                                    <%
-                                        // The avatar letter comes from the name when there is one
-                                        // and from the address otherwise, so a circle is never blank.
-                                        const initialSource = entry.hasName ? entry.name : (entry.email || '?');
-                                        const initial = initialSource.trim().charAt(0) || '?';
-                                        const emailText = entry.email || 'No email on record';
-                                    %>
-                                    <div class="activity-row" data-search="<%= (entry.name + ' ' + emailText).toLowerCase() %>">
-                                        <span class="activity-avatar"><%= initial %></span>
-                                        <div class="activity-identity">
-                                            <p class="activity-name<%= entry.hasName ? '' : ' is-unset' %>" title="<%= entry.name %>"><%= entry.name %></p>
-                                            <p class="activity-email" title="<%= emailText %>">
-                                                <i class="fas fa-envelope"></i><span><%= emailText %></span>
-                                            </p>
-                                        </div>
-                                        <span class="activity-time"><%= entry.timeText %></span>
-                                    </div>
-                                <% }) %>
+                                <div class="account-type">
+                                    <% if (account.isCspc) { %>
+                                        <span class="type-badge is-cspc"><i class="fas fa-graduation-cap"></i> CSPC</span>
+                                    <% } else { %>
+                                        <span class="type-badge is-personal"><i class="fas fa-user"></i> Personal</span>
+                                    <% } %>
+                                </div>
+                                <div class="account-registered" title="Registered <%= account.registeredFull %>">
+                                    <span class="registered-date"><%= account.registeredDate %></span>
+                                    <span class="registered-time"><%= account.registeredTime %></span>
+                                </div>
                             </div>
                         <% }) %>
                     </div>
@@ -427,19 +564,19 @@
                     <div class="empty-state" id="noResults" hidden>
                         <i class="fas fa-search d-block"></i>
                         <h5>No matching account</h5>
-                        <p>Try a different name or email address.</p>
+                        <p>Try a different name, email address, or account type.</p>
                     </div>
 
-                    <% if (listedCount >= activityLimit) { %>
-                        <div class="activity-foot">
-                            Showing the <%= activityLimit %> most recent submissions.
+                    <% if (listedCount >= accountLimit) { %>
+                        <div class="accounts-foot">
+                            Showing the <%= accountLimit %> most recently registered accounts.
                         </div>
                     <% } %>
                 <% } else { %>
                     <div class="empty-state">
                         <i class="fas fa-user-slash d-block"></i>
-                        <h5>No survey activity yet</h5>
-                        <p>Accounts appear here as soon as someone submits a survey.</p>
+                        <h5>No registered accounts yet</h5>
+                        <p>Accounts appear here as soon as someone registers on the client side.</p>
                     </div>
                 <% } %>
 
@@ -450,49 +587,79 @@
 
 <%- include('layout/footer') %>
 <script>
-    // Client-side filter over the rows already rendered -- the whole feed is
-    // on the page, so this never needs a round trip. The searchable text is
-    // precomputed server-side into data-search (name + email), so this doesn't
-    // have to walk the cells on every keystroke.
+    // Search, sort and account-type filter over the rows already rendered --
+    // the whole list is on the page, so none of the three needs a round trip.
+    // The keys they compare (lowercased name, registration timestamp, account
+    // type) are precomputed server-side into data- attributes, so a click never
+    // re-parses a printed date or re-lowercases a name.
     (function () {
-        const input = document.getElementById('activitySearch');
-        const feed = document.getElementById('activityFeed');
-        if (!input || !feed) return;
+        const list = document.getElementById('accountList');
+        if (!list) return;
 
-        const groups = Array.from(feed.querySelectorAll('[data-group]'));
-        const summary = document.getElementById('activitySummary');
+        const search = document.getElementById('accountSearch');
+        const sortSelect = document.getElementById('accountSort');
+        const typeSelect = document.getElementById('accountType');
+        const summary = document.getElementById('accountsSummary');
         const noResults = document.getElementById('noResults');
 
-        function applyFilter() {
-            const query = input.value.trim().toLowerCase();
+        // Read the keys once instead of on every comparison: a sort touches each
+        // row O(log n) times and every dataset read is a string parse.
+        const entries = Array.from(list.querySelectorAll('.account-row')).map(row => ({
+            row,
+            name: row.dataset.name || '',
+            date: Number(row.dataset.date) || 0,
+            type: row.dataset.type || 'personal',
+            search: row.dataset.search || ''
+        }));
+
+        // Every sort has a tiebreaker, so rows that tie on the chosen key still
+        // land in a stable, meaningful order rather than an arbitrary one.
+        const SORTERS = {
+            'date-desc': (a, b) => b.date - a.date || a.name.localeCompare(b.name),
+            'date-asc': (a, b) => a.date - b.date || a.name.localeCompare(b.name),
+            'name-asc': (a, b) => a.name.localeCompare(b.name) || b.date - a.date,
+            'name-desc': (a, b) => b.name.localeCompare(a.name) || b.date - a.date
+        };
+
+        const SORT_LABELS = {
+            'date-desc': 'newest registered first',
+            'date-asc': 'oldest registered first',
+            'name-asc': 'sorted by name (A–Z)',
+            'name-desc': 'sorted by name (Z–A)'
+        };
+
+        function apply() {
+            const query = (search ? search.value : '').trim().toLowerCase();
+            const wantedType = typeSelect ? typeSelect.value : 'all';
+            const sortKey = (sortSelect && SORTERS[sortSelect.value]) ? sortSelect.value : 'date-desc';
+
             let visible = 0;
-
-            groups.forEach(group => {
-                let groupVisible = 0;
-                group.querySelectorAll('.activity-row').forEach(row => {
-                    const match = !query || row.dataset.search.includes(query);
-                    row.hidden = !match;
-                    if (match) groupVisible++;
-                });
-
-                // A day heading with nothing left under it is hidden too, so a
-                // filtered feed never shows an empty "Yesterday" band.
-                group.hidden = groupVisible === 0;
-                const countEl = group.querySelector('[data-group-count]');
-                if (countEl) countEl.textContent = groupVisible + (groupVisible === 1 ? ' survey' : ' surveys');
-                visible += groupVisible;
+            entries.forEach(entry => {
+                const matchesQuery = !query || entry.search.includes(query);
+                const matchesType = wantedType === 'all' || entry.type === wantedType;
+                const show = matchesQuery && matchesType;
+                entry.row.hidden = !show;
+                if (show) visible++;
             });
 
+            // Reordered into a fragment and reattached in one go, so the browser
+            // lays the list out once instead of on every moved row.
+            const fragment = document.createDocumentFragment();
+            entries.slice().sort(SORTERS[sortKey]).forEach(entry => fragment.appendChild(entry.row));
+            list.appendChild(fragment);
+
             if (summary) {
-                summary.textContent = query
-                    ? visible + (visible === 1 ? ' entry' : ' entries') + ' matched'
-                    : visible + (visible === 1 ? ' entry' : ' entries') + ', newest first';
+                const noun = visible === 1 ? ' account' : ' accounts';
+                const filtered = !!query || wantedType !== 'all';
+                summary.textContent = visible + noun + (filtered ? ' matched, ' : ', ') + SORT_LABELS[sortKey];
             }
             if (noResults) noResults.hidden = visible !== 0;
-            feed.hidden = visible === 0;
+            list.hidden = visible === 0;
         }
 
-        input.addEventListener('input', applyFilter);
+        if (search) search.addEventListener('input', apply);
+        if (sortSelect) sortSelect.addEventListener('change', apply);
+        if (typeSelect) typeSelect.addEventListener('change', apply);
     })();
 </script>
 </body>

@@ -1791,6 +1791,15 @@ function formatZonedDayLabel(date) {
     });
 }
 
+// The compact 'Sep 18, 2026' form, for places that print a date beside its
+// time in a fixed-width column (the registered-accounts list) and cannot
+// afford the weekday-and-full-month version above.
+function formatZonedDateShort(date) {
+    return date.toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric', timeZone: DISPLAY_TIME_ZONE
+    });
+}
+
 // ==========================================
 // PERIOD COVERED HELPERS
 // ==========================================
@@ -7185,111 +7194,108 @@ app.patch('/api/admin/survey-response/:id/analysis', ensureAdminAuth, async (req
 });
 
 // ==========================================
-// SURVEY ACCOUNT ACTIVITY
+// REGISTERED USER ACCOUNTS
 // ==========================================
-// Who has been coming in and submitting surveys on the client side, newest
-// first. One entry per submission -- the same person surveying twice is two
-// entries, because the point of this page is the activity itself, not a
-// deduplicated directory of accounts.
+// The directory of accounts that actually EXIST on the client side: one row per
+// row of client_accounts, which is written the moment someone registers (Google
+// sign-in or the email/password form). Surveys are deliberately not the source
+// here -- a registered account that has never surveyed still belongs on this
+// page, and an account that surveyed ten times is still one account. The
+// activity itself lives on /survey-records.
 //
-// Deliberately narrow: an admin sees the name on the submission and the Gmail
-// account it came from, and nothing else. Which office was rated, the ratings,
-// the comment and the demographics all stay on /survey-records where they
-// already live.
-const ACCOUNT_ACTIVITY_LIMIT = 200;
+// Deliberately narrow: an admin sees the account's name, its email, whether it
+// is institutional or personal, and when it registered. Ratings, comments and
+// demographics all stay on /survey-records where they already live.
+const ACCOUNT_LIST_LIMIT = 500;
 
 app.get('/user-accounts', ensureAdminAuth, noCache, (req, res) => {
-    // respondent_name on client_accounts is the account's own Profile name,
-    // which a survey submission deliberately never writes (see the upsert in
-    // insertVerifiedSurveyOnConnection). The name given on THIS submission is
-    // what's shown, with the account's profile name as the fallback -- so a
-    // row is only ever "Anonymous" when neither actually exists.
-    const activityQuery = `
-        SELECT s.id,
-               s.respondent_name,
-               s.google_email,
-               s.created_at,
-               ca.respondent_name AS account_name
-        FROM survey_responses s
-        LEFT JOIN client_accounts ca ON ca.email = s.google_email
-        WHERE s.canonical_status = 'canonical'
-        ORDER BY s.created_at DESC, s.id DESC
-        LIMIT ${ACCOUNT_ACTIVITY_LIMIT}
+    // Newest registration first, which is also the page's default sort. The
+    // sort controls in the toolbar reorder these same rows in the browser, so
+    // switching sort never costs a round trip.
+    const accountsQuery = `
+        SELECT ca.email,
+               ca.respondent_name,
+               ca.created_at,
+               (SELECT COUNT(*)
+                  FROM survey_responses s
+                 WHERE s.google_email = ca.email
+                   AND s.canonical_status = 'canonical') AS submission_count
+        FROM client_accounts ca
+        ORDER BY ca.created_at DESC, ca.email ASC
+        LIMIT ${ACCOUNT_LIST_LIMIT}
     `;
 
     // Counted over the whole table rather than derived from the capped list
     // above, so the tiles stay truthful once there are more than
-    // ACCOUNT_ACTIVITY_LIMIT submissions.
+    // ACCOUNT_LIST_LIMIT accounts.
     //
-    // The day boundaries are computed in the display zone and passed in, rather
-    // than using MySQL's CURDATE(). CURDATE() is midnight in the DATABASE's
-    // zone, which on a UTC server is 8am Manila — so between midnight and 8am
-    // the "Today" tile would count yesterday's surveys while the "Today"
-    // heading right below it listed the correct ones.
+    // The CSPC test mirrors isCspcEmail() exactly: both institutional domains,
+    // matched on the END of the address so a personal address that merely
+    // mentions the school (e.g. cspc.edu.ph.fake@gmail.com) is not counted as
+    // institutional. '%@cspc.edu.ph' does not match '...@my.cspc.edu.ph',
+    // hence the second pattern.
+    //
+    // "Registered today" uses a boundary computed in the display zone and
+    // passed in, rather than MySQL's CURDATE(). CURDATE() is midnight in the
+    // DATABASE's zone, which on a UTC server is 8am Manila -- so between
+    // midnight and 8am the tile would count yesterday's registrations while
+    // the dates listed right below it read correctly.
     const startOfToday = startOfZonedDay(new Date());
-    const startOfWeek = startOfZonedDay(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000));
     const statsQuery = `
-        SELECT COUNT(*) AS total_submissions,
-               COUNT(DISTINCT s.google_email) AS distinct_accounts,
-               SUM(s.created_at >= ?) AS today_count,
-               SUM(s.created_at >= ?) AS week_count
-        FROM survey_responses s
-        WHERE s.canonical_status = 'canonical'
+        SELECT COUNT(*) AS total_accounts,
+               SUM(LOWER(ca.email) LIKE '%@cspc.edu.ph'
+                OR LOWER(ca.email) LIKE '%@my.cspc.edu.ph') AS cspc_accounts,
+               SUM(ca.created_at >= ?) AS today_count
+        FROM client_accounts ca
     `;
 
-    db.query(activityQuery, (err, rows) => {
-        if (err) console.error('\u274c [Account Activity] Error loading recent survey activity:', err);
+    db.query(accountsQuery, (err, rows) => {
+        if (err) console.error('\u274c [User Accounts] Error loading registered accounts:', err);
 
-        db.query(statsQuery, [startOfToday, startOfWeek], (err2, statRows) => {
-            if (err2) console.error('\u274c [Account Activity] Error loading activity stats:', err2);
+        db.query(statsQuery, [startOfToday], (err2, statRows) => {
+            if (err2) console.error('\u274c [User Accounts] Error loading account stats:', err2);
 
-            // Grouped by calendar day on the server so every admin sees the same
-            // grouping -- doing it in the browser would regroup the page for an
-            // admin whose machine sits in another zone. The day a submission
-            // belongs to, its heading, and its printed time are all resolved in
+            // Both the date and the time of registration are resolved in
             // DISPLAY_TIME_ZONE rather than the server's own, so a deployment
             // running in UTC still reports campus time.
-            const todayKey = zonedDayKey(new Date());
-            const yesterdayKey = zonedDayKey(new Date(Date.now() - 24 * 60 * 60 * 1000));
-
-            const groups = [];
-            let currentGroup = null;
-
-            (rows || []).forEach(row => {
+            const accounts = (rows || []).map(row => {
                 const when = row.created_at ? new Date(row.created_at) : null;
-                const key = when ? zonedDayKey(when) : 'unknown';
+                const email = row.email || '';
+                const hasName = !!(row.respondent_name && String(row.respondent_name).trim());
+                const name = hasName ? String(row.respondent_name).trim() : 'No name set';
 
-                if (!currentGroup || currentGroup.key !== key) {
-                    let label = 'Unknown date';
-                    if (when) {
-                        if (key === todayKey) label = 'Today';
-                        else if (key === yesterdayKey) label = 'Yesterday';
-                        else label = formatZonedDayLabel(when);
-                    }
-                    currentGroup = { key, label, entries: [] };
-                    groups.push(currentGroup);
-                }
-
-                currentGroup.entries.push({
-                    id: row.id,
-                    name: row.respondent_name || row.account_name || 'Anonymous',
-                    hasName: !!(row.respondent_name || row.account_name),
-                    email: row.google_email || null,
-                    timeText: when ? formatZonedTime(when) : '',
-                    isoTime: when ? when.toISOString() : null
-                });
+                return {
+                    email,
+                    name,
+                    hasName,
+                    isCspc: isCspcEmail(email),
+                    submissionCount: Number(row.submission_count) || 0,
+                    // Sort keys are precomputed server-side so the browser sort
+                    // compares numbers and lowercased strings instead of
+                    // re-parsing the printed date on every click.
+                    nameKey: name.toLowerCase(),
+                    dateKey: when ? when.getTime() : 0,
+                    registeredDate: when ? formatZonedDateShort(when) : 'Unknown',
+                    registeredTime: when ? formatZonedTime(when) : '',
+                    registeredFull: when ? `${formatZonedDayLabel(when)} at ${formatZonedTime(when)}` : 'Registration date unknown'
+                };
             });
 
             const stats = (statRows && statRows[0]) ? statRows[0] : {};
+            const totalAccounts = Number(stats.total_accounts) || 0;
+            const cspcAccounts = Number(stats.cspc_accounts) || 0;
+
             res.render('user-accounts', {
-                activityGroups: groups,
-                listedCount: (rows || []).length,
-                activityLimit: ACCOUNT_ACTIVITY_LIMIT,
+                accounts,
+                listedCount: accounts.length,
+                accountLimit: ACCOUNT_LIST_LIMIT,
                 stats: {
-                    totalSubmissions: Number(stats.total_submissions) || 0,
-                    distinctAccounts: Number(stats.distinct_accounts) || 0,
-                    todayCount: Number(stats.today_count) || 0,
-                    weekCount: Number(stats.week_count) || 0
+                    totalAccounts,
+                    cspcAccounts,
+                    // Personal is the complement rather than its own SUM(), so
+                    // the two tiles can never disagree with the total.
+                    personalAccounts: Math.max(totalAccounts - cspcAccounts, 0),
+                    todayCount: Number(stats.today_count) || 0
                 }
             });
         });
