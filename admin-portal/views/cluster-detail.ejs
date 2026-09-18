@@ -12,7 +12,7 @@
 
     <style>
         :root { --primary-gradient: linear-gradient(135deg, #251d3a 0%, #2a2550 100%); --glass-bg: #ffffff; --navy: #251d3a; }
-        body { background-color: #f1f5f9; font-family: 'Plus Jakarta Sans', sans-serif; color: var(--navy); overflow-x: hidden; }
+        body { background-color: #f1f5f9; font-family: var(--font-ui); color: var(--navy); overflow-x: hidden; }
         html[data-bs-theme="dark"] body { background-color: #0b1526; color: #e2e8f0; }
         html[data-bs-theme="dark"] .chart-card,
         html[data-bs-theme="dark"] .stat-box,
@@ -931,8 +931,10 @@
         function updateOfficeReportComments(comments) {
             const tbody = document.getElementById('officeReportCommentsBody');
 
-            // Written comments only — same rule as /report, and as
-            // HAS_REAL_COMMENT_SQL which already excludes these server-side.
+            // Written comments only — same rule as /report. The declines,
+            // the non-words and the profanity masking are all applied by
+            // /api/report-data before this ever sees them (see
+            // shared/commentFilter.js), so `c.comments` is the text to print.
             comments = (comments || []).filter(c => c && c.sentiment && c.topic);
 
             if (comments.length === 0) {

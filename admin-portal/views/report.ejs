@@ -368,6 +368,18 @@
         document.getElementById('overall_interp').innerText = overallAnswerable === 0 ? 'N/A' : getInterpretation(overall).toUpperCase();
     }
 
+    // Same helper cluster-detail.ejs already carries. The comment text is
+    // written by a member of the public, and the rows below are built by
+    // string concatenation into innerHTML — so it goes through here first.
+    function escapeHtml(str) {
+        return String(str == null ? '' : str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     function updateCommentsTable(comments) {
         const tbody = document.getElementById('commentsBody');
         tbody.innerHTML = '';
@@ -375,12 +387,15 @@
         let pos = 0, neu = 0, neg = 0;
         let topics = {};
 
-        // Only written comments belong in this report. A blank or "N/A"
-        // comment is already excluded server-side (see HAS_REAL_COMMENT_SQL);
-        // this repeats the rule so the table stays correct even if the API is
-        // called directly, and so a page whose comments are ALL "N/A" falls
-        // through to the empty-state message below instead of printing rows
-        // with nothing in them.
+        // Only written comments belong in this report. /api/report-data has
+        // already applied the full rule set — the "N/A"-style declines, the
+        // keyboard mashes that are not words, and the profanity masking (see
+        // shared/commentFilter.js) — so `c.comments` here is what is meant to
+        // be PRINTED and is never the raw stored text. This filter repeats
+        // only the sentiment/topic half, so the table stays correct if the API
+        // is ever called directly, and so a page whose comments were all
+        // excluded falls through to the empty-state message below rather than
+        // printing rows with nothing in them.
         comments = (comments || []).filter(c => c && c.sentiment && c.topic);
 
         if (comments.length === 0) {
@@ -411,9 +426,9 @@
 
                 tbody.innerHTML += `<tr>
                     <td class="text-center">${index + 1}</td>
-                    <td>${c.comments}</td>
-                    <td class="text-center"><span class="topic-pill">${aiTopic}</span></td>
-                    <td class="text-center"><span class="badge-sentiment ${badgeClass}">${aiSentiment}</span></td>
+                    <td>${escapeHtml(c.comments)}</td>
+                    <td class="text-center"><span class="topic-pill">${escapeHtml(aiTopic)}</span></td>
+                    <td class="text-center"><span class="badge-sentiment ${badgeClass}">${escapeHtml(aiSentiment)}</span></td>
                 </tr>`;
             });
 

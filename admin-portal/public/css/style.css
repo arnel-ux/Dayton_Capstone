@@ -26,6 +26,38 @@
     --text-muted: #6b7280;
     --border-color: #e5e7eb;
     --navbar-bg: #ffffff;
+
+    /* ==================== TYPOGRAPHY ====================
+       Two families, one job each, and nothing else anywhere in the app:
+
+         --font-display  Playfair Display. Institutional headings ONLY — the
+                         landing page's section titles, the auth pages' CQA
+                         headline, the survey hero. It is what makes a page
+                         read as belonging to a college office rather than to
+                         a generic admin template, and it is deliberately not
+                         used for anything a user operates: a serif at 13px in
+                         a form label is harder to read, not more official.
+
+         --font-ui       Plus Jakarta Sans. Every other piece of text — body
+                         copy, labels, buttons, tables, the sidebar. Inter is
+                         the second name on purpose: it is metrically close
+                         enough that a swap between the two does not reflow
+                         the page, so it is a genuine fallback rather than a
+                         different design.
+
+       Both are requested in ONE <link> in views/layout/header.ejs, italics
+       included (see the comment there for why that matters). Use the tokens,
+       not the literal family names — a page that hardcodes 'Inter' or
+       'Plus Jakarta Sans' is a page that will drift the next time this
+       changes, which is exactly how the login page ended up not matching the
+       landing page it links to.
+
+       The print/report templates (report.ejs, dashboard-report.ejs,
+       offices.ejs, survey-records.ejs, cluster-detail.ejs's print block) stay
+       on Arial ON PURPOSE — those reproduce an official CQA form and have to
+       match the paper original, so they are not part of this system. */
+    --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+    --font-ui: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 html[data-bs-theme="dark"] {
@@ -39,7 +71,7 @@ html[data-bs-theme="dark"] {
 }
 
 body {
-    font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: var(--font-ui);
     font-size: 0.95rem;
     line-height: 1.6;
     background-color: var(--bg-main);
@@ -54,7 +86,25 @@ body {
 h1, h2, h3, h4, h5, h6 {
     font-family: inherit;
     font-weight: 700;
+    /* Headings are set tighter than body text because they are read as a
+       shape, not word by word; body copy keeps its default tracking so it
+       stays comfortable at 15px. */
     letter-spacing: -0.01em;
+    line-height: 1.25;
+}
+
+/* Numbers that sit in a column — dashboard KPI figures, table cells, the
+   notification count — need to line up digit under digit. Proportional
+   figures make "1" narrower than "8", so a column of scores visibly wobbles.
+   Plus Jakarta Sans ships tabular figures; this is what turns them on. */
+.table-custom td,
+.table-custom th,
+.stat-card-number,
+.notif-badge,
+time,
+.tabular-nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
 }
 
 /* --- Dark mode overrides for shared components --- */

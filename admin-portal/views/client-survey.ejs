@@ -126,7 +126,12 @@
          page greet a deliberate offline arrival with "You're Back Online". -->
     <script src="/js/connection-prompt.js"></script>
     <script src="/js/pwa-client.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+    <!-- The one shared request — identical to views/layout/header.ejs and the
+         landing page, so the survey is set in the same two families as the
+         portal it is reached from rather than in its own Inter-only stack. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600..800&family=Plus+Jakarta+Sans:ital,wght@0,400..800;1,400..700&family=Inter:ital,wght@0,400..700;1,400&display=swap" rel="stylesheet">
 
     <style>
         :root {
@@ -162,10 +167,14 @@
             --nav-bg-solid: #131c30;
             --shadow-soft: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.10);
             --shadow-lift: 0 4px 10px -4px rgba(15,23,42,.10), 0 24px 48px -20px rgba(15,23,42,.18);
+
+            /* The app-wide pair — see the "Typography" block in /css/style.css. */
+            --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+            --font-ui: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-family: var(--font-ui);
             scroll-behavior: smooth;
             margin: 0;
             padding: 0;
@@ -1730,7 +1739,7 @@
 
         .review-doc-kicker {
             text-align: center;
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-weight: 700;
             font-size: 1rem;
             color: var(--ink-900);
@@ -2296,7 +2305,7 @@
             color: var(--accent); margin-bottom: 0.35rem;
         }
         .survey-hero-eyebrow::before, .survey-hero-eyebrow::after { content: ''; width: 22px; height: 2px; background: var(--accent); display: inline-block; }
-        .survey-hero-title { font-family: 'Playfair Display', serif; letter-spacing: 0.01em; }
+        .survey-hero-title { font-family: var(--font-display); letter-spacing: 0.01em; }
         .survey-hero-badge {
             position: relative; display: inline-flex; align-items: center; gap: 0.6rem; margin-top: 1.5rem;
             background: linear-gradient(135deg, var(--brand), var(--brand-light));

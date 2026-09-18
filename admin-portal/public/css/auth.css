@@ -33,6 +33,66 @@
        <div class="bg-blurred" style="--auth-hero-image: url('<%- heroImageUrl %>')"></div>
    ========================================================================== */
 
+/* ==========================================================================
+   TYPE SYSTEM
+   Every size, weight and tracking on these five pages resolves to something in
+   this block. It is here because the login page's type was the loudest thing
+   wrong with it, and none of it was a matter of taste:
+
+   - The subtitle was set in italic on a family loaded WITHOUT an italic face,
+     so the browser drew a faux oblique: the upright letters mechanically
+     sheared over. That is the "cheap" look — a real italic is a differently
+     drawn alphabet, not a slanted one. views/layout/header.ejs now requests
+     the italic axis, so `font-style: italic` gets the real face.
+
+   - The headline was set in the same sans as the form under it, so the page
+     had no typographic hierarchy: one family, one texture, everything
+     competing. The institutional headline now uses the serif the landing page
+     already uses for its section titles, which both creates that hierarchy
+     and makes /login and / read as the same product.
+
+   - The sizes were 13 unrelated values (0.68, 0.7, 0.72, 0.74, 0.75, 0.76,
+     0.8, 0.82, 0.85, 0.88, 0.9, 0.95, 1.05rem) with no relationship between
+     any two of them, which is what "inconsistent" actually looks like on a
+     screen. They are now a scale, and a size that isn't on it is a bug.
+
+   - Tracking was set in PIXELS (0.2px, 0.3px, 0.4px, 0.5px, 1.2px, 2.2px).
+     A fixed pixel offset is a different amount of tracking at every step of
+     the density ladder below, so the gold badge's letters spread further
+     apart the smaller the phone got. Tracking is in `em` here, so it is the
+     same proportion at every size.
+
+   NOTE on the ladder at the bottom of this file: its font sizes are
+   deliberately NOT tokens. Those are fold-fitting measurements — each one was
+   arrived at by checking that the card still fits a specific viewport without
+   scrolling — so they are steps DOWN from this scale, not part of it. Change
+   one and re-check the fold; don't "tidy" it onto a token.
+   ========================================================================== */
+:root {
+    --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+    --font-ui: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+    /* Seven steps. Small because these cards are small: the top of it is the
+       headline and the bottom is a field hint, with everything else in
+       between — there is nothing on an auth page that wants 2rem type. The
+       gap between --fs-lg and --fs-2xl is deliberate; nothing on these pages
+       sits between the card's title and the institutional headline, and
+       leaving the step out is what stops something drifting into it. */
+    --fs-2xs: 0.7rem;     /* 11.2px — field labels, badges, the OR rule */
+    --fs-xs: 0.75rem;     /* 12px   — hints, secondary links */
+    --fs-sm: 0.8125rem;   /* 13px   — notices, step copy */
+    --fs-base: 0.875rem;  /* 14px   — input text, subtitle */
+    --fs-md: 0.9375rem;   /* 15px   — buttons */
+    --fs-lg: 1.0625rem;   /* 17px   — the card's own title */
+    --fs-2xl: 1.5rem;     /* 24px   — the institutional headline */
+
+    /* Tracking, in em so it holds at every size (see the note above). */
+    --tr-tight: -0.01em;  /* large display type — closes up the word shape */
+    --tr-wide: 0.04em;    /* small sentence-case UI text */
+    --tr-caps: 0.09em;    /* ALL CAPS labels, which need the air to be legible */
+    --tr-badge: 0.16em;   /* the gold portal badge — caps with room around it */
+}
+
 /* ---------- Reset / page shell ---------- */
 html, body {
     height: 100vh;
@@ -44,8 +104,17 @@ html, body {
     margin: 0;
     padding: 0;
     overflow: hidden;
-    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-family: var(--font-ui);
+    font-size: var(--fs-base);
+    line-height: 1.5;
+    /* Both smoothing hints, not just the WebKit one: without the Firefox/macOS
+       counterpart the same page renders noticeably heavier there, which is one
+       of the ways "the font looks off" happens without anyone changing a font.
+       optical-sizing lets Playfair use its display cut at the headline size. */
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-optical-sizing: auto;
+    text-rendering: optimizeLegibility;
 }
 
 /* ---------- 1. Backdrop ----------
@@ -253,23 +322,39 @@ html, body {
 
 .main-title {
     color: #ffffff;
-    font-weight: 800;
-    font-size: 1.5rem;
+    /* The serif, at 700 rather than 800: Playfair's heaviest weight has very
+       thin hairlines next to very thick stems, and over a photograph that
+       contrast breaks up at small sizes. 700 keeps the stroke solid. */
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-2xl);
     text-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
     margin-bottom: 0.35rem;
-    letter-spacing: 0.3px;
-    line-height: 1.25;
+    /* Negative, where it used to be +0.3px. A display serif is drawn with its
+       own spacing already built in; adding more pulls the words apart and the
+       line stops reading as one title. */
+    letter-spacing: var(--tr-tight);
+    line-height: 1.2;
+    text-wrap: balance;
     opacity: 0;
     animation: fadeSlideUp 0.8s ease-out forwards;
 }
 
 .sub-title {
     color: #e2e8f0;
-    font-weight: 400;
+    /* Stays the sans, so it is a clear second voice under the serif headline
+       rather than more of the same. The italic is now a REAL italic — the
+       family is loaded with its italic axis (see views/layout/header.ejs), so
+       this no longer renders as the upright face sheared over. */
+    font-family: var(--font-ui);
+    font-weight: 500;
     font-style: italic;
-    font-size: 0.85rem;
+    font-size: var(--fs-base);
+    letter-spacing: var(--tr-wide);
+    line-height: 1.45;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
     margin-bottom: 0.6rem;
+    text-wrap: balance;
     opacity: 0;
     animation: fadeSlideUp 0.8s ease-out 0.3s forwards;
 }
@@ -281,11 +366,20 @@ html, body {
     align-items: center;
     gap: 0.5rem;
     color: #ffffff;
+    font-family: var(--font-ui);
     font-weight: 700;
-    font-size: 0.7rem;
+    font-size: var(--fs-2xs);
+    line-height: 1;
     text-transform: uppercase;
-    letter-spacing: 2.2px;
+    /* em, not the old fixed 2.2px: at the 0.6rem this badge shrinks to on the
+       tightest tier, 2.2px was a quarter of the letter height and the word
+       came apart into separate characters. */
+    letter-spacing: var(--tr-badge);
+    /* The trailing letter's tracking is drawn AFTER it, so a centred all-caps
+       run with wide tracking always sits a little left of centre. Pulling the
+       right padding in by one tracking unit puts it back. */
     padding: 0.3rem 0.9rem;
+    padding-right: calc(0.9rem - var(--tr-badge));
     background: rgba(255, 204, 0, 0.35);
     border: 1px solid rgba(255, 255, 255, 0.25);
     border-radius: 50px;
@@ -485,8 +579,13 @@ html, body {
 
 .card-custom h4 {
     color: #0f172a;
-    font-size: 1.05rem;
-    letter-spacing: 0.2px;
+    /* The card is the working part of the page, so its title is the sans — the
+       serif stops at the headline above. */
+    font-family: var(--font-ui);
+    font-size: var(--fs-lg);
+    font-weight: 700;
+    letter-spacing: var(--tr-tight);
+    line-height: 1.3;
 }
 
 .card-custom .divider-soft {
@@ -504,9 +603,12 @@ html, body {
 
 .field-label {
     display: block;
-    font-size: 0.68rem;
-    font-weight: 600;
-    letter-spacing: 0.4px;
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+    /* Caps tracking. All-caps text has no ascenders or descenders to tell one
+       word from the next, so it needs measurably more air than the 0.4px it
+       had — at this size that was very nearly none. */
+    letter-spacing: var(--tr-caps);
     text-transform: uppercase;
     color: #64748b;
     margin-bottom: 0.3rem;
@@ -535,7 +637,7 @@ html, body {
     width: 2.6rem;
     flex-shrink: 0;
     color: #94a3b8;
-    font-size: 0.9rem;
+    font-size: var(--fs-md);
     transition: color 0.2s ease;
 }
 
@@ -547,7 +649,9 @@ html, body {
     border: none;
     background: transparent;
     padding: 0.55rem 0.85rem 0.55rem 0;
-    font-size: 0.88rem;
+    font-family: var(--font-ui);
+    font-size: var(--fs-base);
+    font-weight: 500;
     box-shadow: none !important;
 }
 
@@ -565,15 +669,17 @@ html, body {
 }
 
 .field-hint {
-    font-size: 0.68rem;
+    font-size: var(--fs-xs);
+    font-weight: 500;
     color: #94a3b8;
     margin-top: 0.3rem;
-    line-height: 1.35;
+    line-height: 1.4;
 }
 
 .forgot-link {
-    font-size: 0.75rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
+    letter-spacing: var(--tr-wide);
     color: #251d3a;
     text-decoration: none;
     transition: color 0.2s ease;
@@ -586,13 +692,37 @@ html, body {
 
 /* ---------- Buttons ---------- */
 .btn-login {
+    /* These three exist because .btn-login is NOT one of Bootstrap's own
+       variants (.btn-primary and friends), and Bootstrap's disabled rule is
+       written against variables that only those variants define:
+
+           .btn.disabled, .btn:disabled { color: var(--bs-btn-disabled-color);
+                                          background-color: var(--bs-btn-disabled-bg); }
+
+       With the variables unset those declarations are invalid at
+       computed-value time, so `color` fell back to INHERIT — the card's dark
+       body text — and painted it over this button's dark navy gradient at 65%
+       opacity. The result was a plain grey bar with no readable label, and
+       that is the state every single visitor sees on arrival, because the
+       submit button starts disabled until the reCAPTCHA is ticked. The rule
+       that beat `color: #ffffff` below is `.btn:disabled` (two classes to one),
+       which is why the fix is to give Bootstrap the values it is asking for
+       rather than to add another colour declaration it would also outrank. */
+    --bs-btn-disabled-color: #ffffff;
+    --bs-btn-disabled-bg: #251d3a;
+    --bs-btn-disabled-border-color: transparent;
+
     background: linear-gradient(135deg, #251d3a, #2a2550);
     border: none;
     border-radius: 0.75rem;
     padding: 0.6rem 1rem;
+    font-family: var(--font-ui);
     font-weight: 700;
-    font-size: 0.9rem;
-    letter-spacing: 0.2px;
+    font-size: var(--fs-md);
+    /* Both buttons carry the same tracking. They used to differ (0.2px here,
+       none on the Google button) for no reason, and two buttons stacked
+       directly on top of each other is exactly where that shows. */
+    letter-spacing: var(--tr-wide);
     color: #ffffff;
     box-shadow: 0 8px 18px -6px rgba(37, 29, 58, 0.55);
     transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
@@ -609,6 +739,12 @@ html, body {
 .btn-login:focus-visible { outline: 2px solid #ffcc00; outline-offset: 2px; }
 
 .btn-google {
+    /* Same reason as .btn-login above — Bootstrap's disabled rule needs these
+       defined or it resolves `color` to inherit. */
+    --bs-btn-disabled-color: #334155;
+    --bs-btn-disabled-bg: #ffffff;
+    --bs-btn-disabled-border-color: #e2e8f0;
+
     background-color: #ffffff;
     color: #334155;
     border: 1.5px solid #e2e8f0;
@@ -617,8 +753,10 @@ html, body {
     align-items: center;
     justify-content: center;
     gap: 10px;
+    font-family: var(--font-ui);
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: var(--fs-md);
+    letter-spacing: var(--tr-wide);
     padding: 0.6rem 1rem;
     transition: all 0.25s ease;
 }
@@ -655,14 +793,16 @@ html, body {
 }
 
 .divider-or span {
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.5px;
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: var(--tr-caps);
     color: #94a3b8;
 }
 
 .text-xsmall {
-    font-size: 0.75rem;
+    font-size: var(--fs-xs);
+    line-height: 1.45;
 }
 
 /* ---------- Home / back button ----------
@@ -684,7 +824,7 @@ html, body {
     color: #ffffff;
     border: 1px solid rgba(255, 255, 255, 0.4);
     border-radius: 50%;
-    font-size: 1.05rem;
+    font-size: var(--fs-lg);
     backdrop-filter: blur(6px);
     box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.45);
     transition: all 0.3s ease;
@@ -736,9 +876,10 @@ html, body {
     border: 1px solid #fde68a;
     border-radius: 10px;
     padding: 0.65rem 0.85rem;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     font-weight: 600;
-    line-height: 1.4;
+    letter-spacing: var(--tr-wide);
+    line-height: 1.45;
     margin-bottom: 0.85rem;
 }
 
@@ -779,8 +920,10 @@ html, body {
     border: 1px solid currentColor;
     color: inherit;
     border-radius: 50px;
-    font-size: 0.72rem;
+    font-family: var(--font-ui);
+    font-size: var(--fs-2xs);
     font-weight: 700;
+    letter-spacing: var(--tr-wide);
     padding: 0.25rem 0.7rem;
     min-height: 30px;
 }
@@ -800,10 +943,11 @@ html, body {
 
 .auth-steps-title {
     margin: 0 0 0.55rem;
-    font-size: 0.7rem;
+    font-size: var(--fs-2xs);
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 1.2px;
+    letter-spacing: var(--tr-caps);
+    line-height: 1.3;
     color: #64748b;
 }
 
@@ -818,14 +962,19 @@ html, body {
     border-radius: 50%;
     background: #251d3a;
     color: #ffffff;
-    font-size: 0.72rem;
+    /* Lining, tabular figures: the step numbers sit in a vertical stack of
+       identical circles, so 1 and 2 have to occupy the same width or the
+       column reads as crooked. */
+    font-size: var(--fs-2xs);
     font-weight: 800;
+    font-variant-numeric: tabular-nums lining-nums;
+    line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-.auth-step p { margin: 0; font-size: 0.82rem; line-height: 1.4; color: #334155; }
+.auth-step p { margin: 0; font-size: var(--fs-sm); line-height: 1.5; color: #334155; }
 .auth-step strong { color: #1e293b; font-weight: 700; }
 
 .auth-steps-foot {
@@ -835,8 +984,8 @@ html, body {
     margin: 0.6rem 0 0;
     padding-top: 0.55rem;
     border-top: 1px dashed #e2e8f0;
-    font-size: 0.75rem;
-    line-height: 1.35;
+    font-size: var(--fs-xs);
+    line-height: 1.45;
     color: #64748b;
 }
 
@@ -852,7 +1001,12 @@ html, body {
 /* Hero text on small tablets and phones. */
 @media (max-width: 600px) {
     .main-title { font-size: 1.4rem; }
-    .sub-title { font-size: 0.9rem; margin-bottom: 0.5rem; }
+    /* 0.8125rem, not the 0.9rem this used to be. Every other line in this
+       tier steps DOWN from the desktop size; the subtitle alone stepped up
+       (0.85 -> 0.9rem), so on a tablet it was set larger than the size it is
+       given on a full desktop window — and larger relative to the headline
+       above it than at any other width. */
+    .sub-title { font-size: 0.8125rem; margin-bottom: 0.5rem; }
     .portal-text { font-size: 0.68rem; min-height: 36px; padding: 0.4rem 0.9rem; }
 }
 

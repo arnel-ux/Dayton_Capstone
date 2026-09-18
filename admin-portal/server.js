@@ -19,6 +19,7 @@ const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const multer = require('multer');
 const { TOPIC_TAXONOMY, SENTIMENT_VALUES, splitTopic, combineTopic } = require('./shared/topicTaxonomy');
+const { isNoFeedbackComment, prepareReportComment } = require('./shared/commentFilter');
 const app = express();
 const port = 3000;
 
@@ -1430,17 +1431,11 @@ function parsePendingPayload(raw) {
     }
 }
 
-const NO_FEEDBACK_PHRASES = new Set([
-    'na', 'n/a', 'none', 'nil', 'no comment', 'no comments', 'not applicable'
-]);
-function isNoFeedbackComment(text) {
-    if (text === null || text === undefined) return true;
-    const trimmed = String(text).trim();
-    if (trimmed === '') return true;
-    const stripped = trimmed.toLowerCase().replace(/[.\-]/g, '').replace(/\s+/g, ' ').trim();
-    if (stripped === '') return true; // "-", "--", "...", etc. reduce to nothing
-    return NO_FEEDBACK_PHRASES.has(stripped);
-}
+// isNoFeedbackComment now lives in shared/commentFilter.js, next to the two
+// rules it is always applied alongside when a report is built (the gibberish
+// test and profanity masking). It was here, and the report-time rules were
+// nowhere, which is how a report could be generated with all three rules
+// meaning to apply and only this one actually running.
 
 // Resolves { sentiment, topic } for a comment. Used by both the live
 // /submit-survey route (fire-and-forget, applied via an UPDATE after the
@@ -7075,9 +7070,31 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
         const commentsQuery = `SELECT s.comments, ${REPORT_SENTIMENT_SQL} AS sentiment, ${REPORT_TOPIC_SQL} AS topic FROM survey_responses s LEFT JOIN offices o ON s.office_id = o.id WHERE ${HAS_REAL_COMMENT_SQL}${commentsWhere}`;
 
         db.query(commentsQuery, queryParams, (err, commentsResult) => {
+            // Last gate before a comment becomes a line on a signed document.
+            // HAS_REAL_COMMENT_SQL above has already dropped the blanks and
+            // the "N/A"s it can see in SQL, and the topic filter has dropped
+            // whatever the AI classifier flagged as junk — but both of those
+            // depend on the classifier having run and having been reachable at
+            // the time. prepareReportComment does not: it re-checks every rule
+            // against the text itself, here, and masks any profanity in what
+            // survives. See shared/commentFilter.js for why each rule is
+            // written to keep a borderline comment rather than drop it.
+            const comments = [];
+            for (const row of (commentsResult || [])) {
+                const verdict = prepareReportComment(row.comments);
+                if (!verdict.include) continue;
+                comments.push(Object.assign({}, row, {
+                    comments: verdict.text,
+                    // Lets a view mark a masked row if it ever wants to; the
+                    // printed templates deliberately do not, since an asterisk
+                    // run already reads as "removed" on paper.
+                    wasMasked: verdict.wasMasked
+                }));
+            }
+
             res.json({
                 stats: results[0] || {},
-                comments: commentsResult || []
+                comments
             });
         });
     });

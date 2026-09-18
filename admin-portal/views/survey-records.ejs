@@ -55,7 +55,7 @@
 
         body {
             background-color: var(--bg-body);
-            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-family: var(--font-ui);
             color: var(--text-main);
             overflow-x: hidden;
         }
@@ -1500,7 +1500,23 @@
         let pos = 0, neu = 0, neg = 0;
         let topics = {};
 
-        if (!comments || comments.length === 0) {
+        // Same rule as /report and the cluster report: a row reaches this
+        // table only if it is a real written comment. /api/report-data applies
+        // the whole rule set before it gets here — the "N/A"-style declines,
+        // the keyboard mashes, and the profanity masking (see
+        // shared/commentFilter.js) — so `c.comments` is the text to PRINT and
+        // never the raw stored text.
+        //
+        // This page used to be the one report that printed those rows anyway:
+        // it rendered a no-feedback row with the respondent's literal "N/A" in
+        // the Comments column and the words "No feedback" as its topic and
+        // sentiment. On a single-respondent report whose only comment was
+        // "N/A" that produced a Comments section consisting of one row saying
+        // nothing, instead of the empty-state line below, which is what a
+        // report with no written comments is supposed to say.
+        comments = (comments || []).filter(c => c && c.sentiment && c.topic);
+
+        if (comments.length === 0) {
             tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-muted">NO WRITTEN COMMENTS AND SUGGESTIONS REFLECTED IN ANY OF THE INSTRUMENTS</td></tr>`;
             document.getElementById('cr_aiPos').innerText = '0';
             document.getElementById('cr_aiNeu').innerText = '0';
@@ -1508,22 +1524,18 @@
             document.getElementById('cr_aiDomTopic').innerText = 'N/A';
         } else {
             comments.forEach((c, index) => {
-                // A NULL topic means this was a blank/"N/A"-style comment
-                // with genuinely nothing to classify (see
-                // isNoFeedbackComment in server.js) — shown as "No feedback",
-                // excluded from the Positive/Neutral/Negative tally and the
-                // dominant-topic count below rather than silently counted as
-                // a fabricated "Neutral"/"General" opinion.
-                const noFeedback = c.topic === null || c.topic === undefined;
-                let aiSentiment = noFeedback ? 'No feedback' : (c.sentiment || 'Neutral');
-                let aiTopic = noFeedback ? 'No feedback' : (c.topic || 'General');
+                // Every row here is a real, AI-analyzed comment — the filter
+                // above guarantees it, so there is no '|| Neutral' / '||
+                // General' fallback to apply (those used to invent a result
+                // for comments the AI never analyzed) and no no-feedback case
+                // left to render.
+                const aiSentiment = c.sentiment;
+                const aiTopic = c.topic;
 
-                if (!noFeedback) {
-                    if (aiSentiment === 'Positive') pos++;
-                    else if (aiSentiment === 'Negative') neg++;
-                    else neu++;
-                    topics[aiTopic] = (topics[aiTopic] || 0) + 1;
-                }
+                if (aiSentiment === 'Positive') pos++;
+                else if (aiSentiment === 'Negative') neg++;
+                else neu++;
+                topics[aiTopic] = (topics[aiTopic] || 0) + 1;
 
                 let badgeClass = 'bg-neu';
                 if (aiSentiment === 'Positive') badgeClass = 'bg-pos';

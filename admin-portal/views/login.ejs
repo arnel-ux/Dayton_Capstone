@@ -101,9 +101,9 @@
             border-radius: 50px;
             padding: 0.5rem 0.4rem;
             min-height: 40px; /* comfortable tap target on a phone */
-            font-size: 0.78rem;
+            font-size: var(--fs-xs);
             font-weight: 700;
-            letter-spacing: 0.8px;
+            letter-spacing: var(--tr-caps);
             text-transform: uppercase;
             color: #64748b;
             transition: color 0.25s ease;
@@ -139,12 +139,13 @@
             background: #eef2ff;
             border: 1px solid #e0e7ff;
             color: #3730a3;
-            font-size: 0.72rem;
+            font-size: var(--fs-2xs);
             font-weight: 700;
-            line-height: 1.3;
+            letter-spacing: var(--tr-wide);
+            line-height: 1.35;
             text-align: center;
         }
-        .reg-email-chip i { font-size: 0.78rem; }
+        .reg-email-chip i { font-size: var(--fs-xs); }
 
         .btn-register-google {
             background: linear-gradient(135deg, #251d3a, #2a2550);
@@ -157,8 +158,10 @@
             width: 100%;
             min-height: 44px;
             padding: 0.6rem 1rem;
+            font-family: var(--font-ui);
             font-weight: 700;
-            font-size: 0.9rem;
+            font-size: var(--fs-md);
+            letter-spacing: var(--tr-wide);
             color: #ffffff;
             text-decoration: none;
             box-shadow: 0 8px 18px -6px rgba(37, 29, 58, 0.55);
@@ -191,14 +194,15 @@
         .auth-swap-hint {
             margin: 0.7rem 0 0;
             text-align: center;
-            font-size: 0.78rem;
+            font-size: var(--fs-xs);
+            line-height: 1.5;
             color: #64748b;
         }
         .auth-swap-hint button {
             background: none;
             border: none;
             padding: 0.25rem 0.3rem;
-            font-size: 0.78rem;
+            font-size: var(--fs-xs);
             font-weight: 700;
             color: #251d3a;
             text-decoration: underline;

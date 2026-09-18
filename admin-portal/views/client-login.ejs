@@ -14,7 +14,7 @@
         /* The single Google button is this page's whole form, so it is sized
            up a little from the shared .btn-google (which sits under an OR
            divider next to a password form on /login). */
-        .btn-google { font-size: 0.98rem; gap: 12px; min-height: 48px; }
+        .btn-google { font-size: 1rem; gap: 12px; min-height: 48px; }
         .btn-google img { width: 21px; height: 21px; }
 
         /* Blocked while a previous session's server-side logout is still
@@ -41,8 +41,10 @@
             border-radius: 10px;
             background: #251d3a;
             color: #ffffff;
+            font-family: var(--font-ui);
             font-weight: 700;
-            font-size: 0.85rem;
+            font-size: var(--fs-base);
+            letter-spacing: var(--tr-wide);
             text-decoration: none;
             box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.35);
             transition: transform 0.15s ease;
@@ -94,7 +96,7 @@
             </div>
 
             <div class="text-center mb-4">
-                <p class="text-muted mb-0" style="font-size: 0.85rem; line-height: 1.5;">
+                <p class="text-muted mb-0" style="font-size: var(--fs-base); line-height: 1.55;">
                     Please sign in using your personal or academic Gmail account to access the survey portal.
                 </p>
             </div>

@@ -5,7 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CQA - Public Transparency Portal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+    <!-- Same request, byte for byte, as views/layout/header.ejs serves every
+         other page — so the landing page and the portal share one cache entry
+         and, more importantly, one set of families. This page is the only one
+         with its own <head> (it deliberately doesn't include the header
+         partial), which is how it drifted onto an Inter-only stack while the
+         rest of the site was on Plus Jakarta Sans. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600..800&family=Plus+Jakarta+Sans:ital,wght@0,400..800;1,400..700&family=Inter:ital,wght@0,400..700;1,400&display=swap" rel="stylesheet">
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -117,6 +125,13 @@
             --sp-10: 5rem;    /* 80px */
             --sp-12: 6rem;    /* 96px */
 
+            /* ---- Type families ----
+               The same two the rest of the portal uses (see the "Typography"
+               block in /css/style.css). Playfair for institutional headings,
+               Plus Jakarta Sans for everything a visitor reads or operates. */
+            --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+            --font-ui: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
             /* ---- Typography scale ---- */
             --fs-xs: 0.75rem;
             --fs-sm: 0.875rem;
@@ -131,7 +146,7 @@
         /* --- GENERAL LAYOUT --- */
         html { scroll-behavior: smooth; }
         body, html {
-            margin: 0; padding: 0; font-family: 'Inter', sans-serif; color: #1e293b;
+            margin: 0; padding: 0; font-family: var(--font-ui); color: #1e293b;
             font-size: var(--fs-base); line-height: 1.6;
             /* Any single element overflowing horizontally by even a few px (a
                fixed-width card, an un-shrunk image, a stray negative margin)
@@ -255,7 +270,7 @@
         /* --- SECTION HEADING HELPER --- */
         .section-eyebrow { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); font-size: var(--fs-xs); font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: var(--gold-500); margin-bottom: var(--sp-1); line-height: 1.4; }
         .section-eyebrow::before { content: ''; width: 28px; height: 2px; background: var(--gold-500); display: inline-block; flex-shrink: 0; }
-        .section-title { font-family: 'Playfair Display', serif; font-weight: 800; font-size: var(--fs-3xl); color: var(--navy-900); margin: 0 0 var(--sp-3); }
+        .section-title { font-family: var(--font-display); font-weight: 800; font-size: var(--fs-3xl); color: var(--navy-900); margin: 0 0 var(--sp-3); }
         body.dark-mode .section-title { color: #f8fafc; }
 
         /* ---------------------------------------------------------------
