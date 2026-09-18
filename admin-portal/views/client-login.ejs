@@ -158,7 +158,8 @@
         updateOfflineIndicator();
 
         if (window.ConnectionPrompt) {
-            ConnectionPrompt.init({ context: 'login', onState: updateOfflineIndicator });
+            // forceLightMode in the header include, same as /login.
+            ConnectionPrompt.init({ context: 'login', theme: 'light', onState: updateOfflineIndicator });
         }
 
         // ==========================================

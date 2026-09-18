@@ -164,27 +164,37 @@
 }
 
 /* ==========================================================================
-   WEAK-CONNECTION PROMPT — landing page (index.ejs) and client login
-   (client-login.ejs).
+   WEAK-CONNECTION PROMPT — the "your connection can't get you through the
+   survey; take it offline instead?" dialog raised by /js/connection-prompt.js
+   on the landing page, /login and /client-login.
 
-   The gap this closes: navigator.onLine is a two-state signal and it lies by
-   omission. A phone on one bar of mobile data reports "online", so the
-   "Take Survey Offline" button stayed hidden and nothing offered the offline
-   route — yet the survey itself could not actually be reached, because every
-   request to the server timed out. The visitor was left on a page that
-   claimed to be working, waiting on a sign-in that would never complete.
+   WHY IT EXISTS
+   navigator.onLine is a two-state signal about the network INTERFACE and it
+   is wrong in both directions for this question: it reports "online" for a
+   phone holding one unusable bar of data, and on Android it reports "offline"
+   for a connection with full signal but no working route. Either way the
+   visitor is stuck on a page that looks fine and cannot reach the survey. The
+   module's job is to notice; this file's job is to make the question look
+   like it belongs to the page asking it.
 
-   So a FAILED /api/health probe while navigator.onLine is still true (the
-   amber "slow or unstable" case each page already detected and only ever
-   whispered about in a chip) now asks the question outright: take the survey
-   offline, or keep waiting. Nothing is ever auto-navigated — the visitor
-   picks, exactly like the fully-offline button they already have.
+   TWO SKINS, DECLARED BY THE PAGE — NOT GUESSED
+   The first version of this was one white card everywhere. That is right on
+   /login and /client-login, which render forceLightMode and are white cards
+   with navy buttons — and plainly foreign on the landing page, which is
+   permanently navy. So each page names its skin (.wc-theme-light /
+   .wc-theme-dark) and the dialog adopts that page's own palette: navy
+   (#251d3a) and gold (#ffcc00), the two colours the rest of this project is
+   built from, rather than a third accent of its own.
 
-   Styled to match .offline-transition-card in client-survey.ejs rather than
-   introducing a third popup look, so the two connectivity dialogs in this
-   project read as one system. Self-contained (no Bootstrap modal JS) because
-   both pages must be able to raise this while the network is unusable, from
-   the service worker's precache.
+   Light: white card, navy primary button — the same .btn-login those two
+   pages already use, so the dialog's main action looks like their main
+   action. Dark: navy card, GOLD primary — on the landing page navy-on-navy
+   would disappear, and gold is exactly what that page's own Login button
+   uses for the same reason.
+
+   Structurally it still matches .offline-transition-card in client-survey.ejs
+   (same size, radius, icon disc and stacked full-width buttons) so the
+   project's connectivity dialogs read as one system.
    ========================================================================== */
 
 .weak-connection-overlay {
@@ -193,67 +203,76 @@
     /* Above .offline-pill (1030) and any page header — this is a question the
        visitor has to answer, so nothing may sit on top of it. */
     z-index: 2000;
-    background: rgba(15, 23, 42, 0.72);
-    backdrop-filter: blur(3px);
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 1.25rem;
     padding-top: calc(1.25rem + env(safe-area-inset-top, 0px));
     padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    background: rgba(15, 23, 42, 0.72);
+    backdrop-filter: blur(3px);
 }
 
 /* Same single-mechanism rule as .offline-pill above: the [hidden] attribute
    is the only thing that controls this, never an inline style or d-none. */
 .weak-connection-overlay[hidden] { display: none; }
 
+/* A navy page needs a deeper scrim than a white one, or the card floats on a
+   grey wash that reads as a rendering glitch rather than a dimmed page. */
+.weak-connection-overlay.wc-theme-dark { background: rgba(8, 5, 18, 0.8); }
+
 .weak-connection-card {
-    background: #ffffff;
-    color: #0f172a;
     border-radius: 20px;
-    padding: 2rem 1.85rem;
+    padding: 1.85rem 1.6rem;
     max-width: 380px;
     width: 100%;
     text-align: center;
-    box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.5);
+    animation: wcCardIn 0.26s cubic-bezier(0.34, 1.26, 0.64, 1) both;
+}
+
+@keyframes wcCardIn {
+    0%   { opacity: 0; transform: translateY(14px) scale(0.97); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .weak-connection-card { animation: none; }
 }
 
 .weak-connection-icon {
     width: 56px;
     height: 56px;
     border-radius: 50%;
-    margin: 0 auto 1rem;
+    margin: 0 auto 0.9rem;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 1.5rem;
-    background: rgba(245, 158, 11, 0.14);
-    color: #d97706;
 }
 
 .weak-connection-card h4 {
     font-weight: 700;
     font-size: 1.15rem;
     margin: 0 0 0.5rem;
-    color: #0f172a;
+    letter-spacing: -0.01em;
 }
 
 .weak-connection-card p {
-    color: #475569;
-    font-size: 0.9rem;
-    line-height: 1.5;
-    margin: 0 0 1.5rem;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    margin: 0 0 1.35rem;
 }
 
 .weak-connection-actions {
     display: flex;
     flex-direction: column;
-    gap: 0.6rem;
+    gap: 0.55rem;
 }
 
-/* Deliberately NOT .btn — the landing page and the login page load different
-   button systems (and the landing page's .btn is its own marketing button),
-   so this dialog carries its own two buttons and looks identical on both. */
+/* Deliberately NOT .btn — the landing page and the two login pages load
+   different button systems (and the landing page's .btn is its own marketing
+   button), so this dialog carries its own two buttons and is identical on all
+   three. */
 .weak-connection-actions button,
 .weak-connection-actions a {
     display: inline-flex;
@@ -261,8 +280,8 @@
     justify-content: center;
     gap: 0.5rem;
     width: 100%;
-    min-height: 44px;
-    padding: 0.55rem 1rem;
+    min-height: 46px;
+    padding: 0.6rem 1rem;
     border-radius: 12px;
     border: 1px solid transparent;
     font-size: 0.92rem;
@@ -270,27 +289,87 @@
     line-height: 1.2;
     text-decoration: none;
     cursor: pointer;
+    transition: filter 0.18s ease, background 0.18s ease, transform 0.18s ease;
 }
 
-/* The offline route leads and is the only filled button: on a connection this
-   weak it is the choice that actually gets the visitor through the survey. */
-.weak-connection-actions .wc-btn-primary {
-    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-    color: #ffffff;
-    box-shadow: 0 10px 20px -10px rgba(146, 64, 14, 0.8);
-}
-.weak-connection-actions .wc-btn-primary:hover { filter: brightness(1.05); color: #ffffff; }
+.weak-connection-actions .wc-btn-primary:active,
+.weak-connection-actions .wc-btn-secondary:active { transform: translateY(1px); }
 
-.weak-connection-actions .wc-btn-secondary {
+/* ---------------- LIGHT SKIN — /login, /client-login ---------------- */
+
+.wc-theme-light .weak-connection-card {
     background: #ffffff;
-    color: #334155;
-    border-color: #cbd5e1;
+    color: #1e1b33;
+    box-shadow: 0 30px 60px -15px rgba(15, 23, 42, 0.5);
 }
-.weak-connection-actions .wc-btn-secondary:hover { background: #f1f5f9; color: #334155; }
+
+.wc-theme-light .weak-connection-icon {
+    background: rgba(37, 29, 58, 0.08);
+    color: #251d3a;
+}
+
+.wc-theme-light .weak-connection-card h4 { color: #1e1b33; }
+.wc-theme-light .weak-connection-card p { color: #4a5568; }
+
+/* Mirrors .btn-login in /css/auth.css — same gradient, weight and shadow — so
+   on those two pages the dialog's main action and the page's main action are
+   visibly the same button. */
+.wc-theme-light .wc-btn-primary {
+    background: linear-gradient(135deg, #251d3a, #2a2550);
+    color: #ffffff;
+    box-shadow: 0 8px 18px -6px rgba(37, 29, 58, 0.55);
+}
+.wc-theme-light .wc-btn-primary:hover { filter: brightness(1.12); color: #ffffff; }
+
+.wc-theme-light .wc-btn-secondary {
+    background: #ffffff;
+    color: #3d4759;
+    border-color: #d7dbe3;
+}
+.wc-theme-light .wc-btn-secondary:hover { background: #f4f6fa; color: #3d4759; }
+
+/* ---------------- DARK SKIN — the landing page ---------------- */
+
+.wc-theme-dark .weak-connection-card {
+    /* A step lighter than the page's own --navy-950 (#251d3a) so the card
+       lifts off it, with a hairline edge doing the work a shadow cannot do
+       against a dark ground. */
+    background: linear-gradient(160deg, #2c2348 0%, #241c39 100%);
+    color: #f2f0f8;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.75);
+}
+
+.wc-theme-dark .weak-connection-icon {
+    background: rgba(255, 204, 0, 0.14);
+    color: #ffcc00;
+}
+
+.wc-theme-dark .weak-connection-card h4 { color: #ffffff; }
+.wc-theme-dark .weak-connection-card p { color: #c5bfd8; }
+
+/* Gold, matching that page's own .btn-admin Login button. Navy-on-navy would
+   vanish here, and gold is the landing page's established "this is the
+   action" colour. Navy text on gold clears AA comfortably. */
+.wc-theme-dark .wc-btn-primary {
+    background: linear-gradient(135deg, #ffd84d, #ffcc00);
+    color: #251d3a;
+    box-shadow: 0 8px 20px -6px rgba(255, 204, 0, 0.45);
+}
+.wc-theme-dark .wc-btn-primary:hover { filter: brightness(1.06); color: #251d3a; }
+
+.wc-theme-dark .wc-btn-secondary {
+    background: rgba(255, 255, 255, 0.04);
+    color: #ded9ec;
+    border-color: rgba(255, 255, 255, 0.2);
+}
+.wc-theme-dark .wc-btn-secondary:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
 
 @media (max-width: 480px) {
-    .weak-connection-card { padding: 1.5rem 1.25rem; border-radius: 16px; }
-    .weak-connection-icon { width: 48px; height: 48px; font-size: 1.25rem; margin-bottom: 0.85rem; }
+    .weak-connection-card { padding: 1.45rem 1.15rem; border-radius: 16px; }
+    .weak-connection-icon { width: 48px; height: 48px; font-size: 1.25rem; margin-bottom: 0.75rem; }
     .weak-connection-card h4 { font-size: 1.05rem; }
-    .weak-connection-card p { font-size: 0.85rem; margin-bottom: 1.25rem; }
+    .weak-connection-card p { font-size: 0.85rem; margin-bottom: 1.15rem; }
+    .weak-connection-actions button,
+    .weak-connection-actions a { min-height: 44px; font-size: 0.88rem; }
 }

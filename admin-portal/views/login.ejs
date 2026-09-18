@@ -974,6 +974,9 @@
         if (window.ConnectionPrompt) {
             ConnectionPrompt.init({
                 context: 'login',
+                // forceLightMode in the header include — white card, navy
+                // buttons. See .wc-theme-light.
+                theme: 'light',
                 onState: function (state) {
                     if (state === ConnectionPrompt.STATE_SERVER_DOWN) {
                         setServerNotice('error', 'The service is temporarily unavailable. Please try again shortly.');

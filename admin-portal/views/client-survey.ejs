@@ -118,6 +118,13 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="/js/alerts.js"></script>
     <script src="/js/offline-db.js"></script>
+    <!-- Loaded for its probe helpers only; init() is deliberately NEVER called
+         here. This page IS the survey — the offline one on /survey-offline,
+         the authenticated one otherwise — so raising a "would you like the
+         offline survey?" dialog on it would be meaningless. What it is used
+         for: isReachable(), because navigator.onLine alone is what made this
+         page greet a deliberate offline arrival with "You're Back Online". -->
+    <script src="/js/connection-prompt.js"></script>
     <script src="/js/pwa-client.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
 
@@ -5414,6 +5421,13 @@ function confirmLeaveOfflineSurvey(url, event) {
 // because the confirm rendered underneath the overlay's own backdrop — made
 // these buttons look completely dead.
 function leaveFromOfflineOverlay(url, event) {
+    // Choosing the offline survey from this overlay is the same deliberate
+    // answer as choosing it from the public pages' connection prompt, so it
+    // gets the same one-shot marker — otherwise /survey-offline greets this
+    // arrival with "You're Back Online" too. See connection-prompt.js.
+    if (url && url.indexOf('/survey-offline') === 0 && typeof ConnectionPrompt !== 'undefined') {
+        ConnectionPrompt.markOfflineIntent();
+    }
     if (event) event.preventDefault();
     // Defensive re-save: cheap, idempotent, and guarantees the very latest
     // answers are on disk even if something was typed between the overlay
@@ -5441,8 +5455,44 @@ if (OFFLINE_MODE) {
     // so a page reload always re-checks fresh — the banner is only ever
     // absent for the remainder of THIS load after Stay Here is clicked, not
     // permanently.
-    if (navigator.onLine) showBackOnlineBanner();
-    window.addEventListener('online', showBackOnlineBanner);
+    //
+    // BOTH paths below now confirm the connection is REALLY usable before
+    // claiming it is. navigator.onLine was the only test, and it is exactly
+    // the signal that lies here: on the phone this was reported on it reads
+    // true while the OS status bar says "No internet connection", so tapping
+    // "Take Offline Survey" landed on this page and was immediately covered
+    // by "You're Back Online" — contradicting, on arrival, the choice that
+    // had just been made. ConnectionPrompt.isReachable() actually asks the
+    // server (a /api/health round trip, judged on latency as well as
+    // success) and answers false for that case.
+    //
+    // A deliberate arrival is skipped entirely, before any probe: the visitor
+    // tapped "Take Offline Survey" seconds ago, so on THIS load the question
+    // is already answered and re-opening it is the bug. The marker is
+    // one-shot and tab-scoped (see connection-prompt.js), so a genuine
+    // reconnect later in the same visit still gets its banner from the
+    // 'online' listener below.
+    const arrivedByDeliberateChoice = (typeof ConnectionPrompt !== 'undefined')
+        ? ConnectionPrompt.consumeOfflineIntent()
+        : false;
+
+    function showBackOnlineBannerIfReachable() {
+        if (typeof ConnectionPrompt === 'undefined') {
+            // Module unavailable (blocked/failed to load): fall back to the
+            // old behaviour rather than losing the recovery UI entirely.
+            if (navigator.onLine) showBackOnlineBanner();
+            return;
+        }
+        ConnectionPrompt.isReachable().then(function (reachable) {
+            if (reachable) showBackOnlineBanner();
+        });
+    }
+
+    if (!arrivedByDeliberateChoice && navigator.onLine) showBackOnlineBannerIfReachable();
+    // The 'online' event means the network INTERFACE came back, which is not
+    // the same as the server being reachable over it — verified here for the
+    // same reason as above.
+    window.addEventListener('online', showBackOnlineBannerIfReachable);
 
     // This page (/survey-offline) is legitimately usable with no account
     // session at all, but the pending-logout marker isn't scoped to "was

@@ -2615,6 +2615,8 @@
         if (window.ConnectionPrompt) {
             ConnectionPrompt.init({
                 context: 'landing',
+                // This page is permanently navy — see .wc-theme-dark.
+                theme: 'dark',
                 onState: function (state) {
                     if (state === ConnectionPrompt.STATE_WEAK) {
                         setServerNotice('warning', 'Your internet connection is slow or unstable. Some features may take longer to load.');

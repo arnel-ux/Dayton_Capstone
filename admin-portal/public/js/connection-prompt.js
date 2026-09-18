@@ -89,7 +89,23 @@
     var secondaryBtn = null;
     var recheckTimer = null;
     var probeInFlight = null;
-    var options = { context: 'landing', onState: null };
+    var options = { context: 'landing', onState: null, theme: 'auto' };
+
+    // One-shot, tab-scoped marker meaning "the visitor deliberately chose the
+    // offline survey just now".
+    //
+    // /survey-offline greets an arrival with "You're Back Online" whenever
+    // navigator.onLine is true at load — and on the phone this was reported
+    // on, navigator.onLine is true while the OS status bar says "No internet
+    // connection". So tapping Take Offline Survey landed on the offline
+    // survey and was immediately told the opposite, over the top of the thing
+    // that had just been asked for. Choosing the offline survey is an answer;
+    // the page must not re-open the question on arrival.
+    var OFFLINE_INTENT_KEY = '__cqaOfflineSurveyIntent';
+    // Generous enough for a slow cache-served navigation, short enough that a
+    // marker can never outlive the navigation it was set for. It is removed on
+    // read regardless, so this only guards the crash/abandon case.
+    var OFFLINE_INTENT_TTL_MS = 120000;
 
     // Self-sufficient rather than depending on offline-db.js's copy: this
     // module is precached for the offline case and must not be one script-load
@@ -125,22 +141,57 @@
         return false;
     }
 
+    // Two sentences, not four. The reported card ran to five lines of body
+    // text on a phone, which pushed the two buttons — the only thing being
+    // asked — most of the way down the screen. What the visitor needs is what
+    // is wrong and what happens to their answers; the rest was reassurance
+    // nobody reads at the moment their connection has just died.
     var COPY = {
         landing: {
-            weak: 'Your internet is too slow or unstable to load the survey right now. You can take the survey offline instead — your answers are saved on this device and submitted automatically once your connection improves.',
-            offline: 'You have no internet connection right now. You can still take the survey offline — your answers are saved on this device and submitted automatically once you are back online.'
+            weak: 'Your internet is too slow to load the survey right now. Answer it offline instead — your answers save on this device and submit automatically once you reconnect.',
+            offline: 'You have no internet connection right now. You can still answer the survey offline — it saves on this device and submits automatically once you reconnect.'
         },
         login: {
-            weak: 'Your internet is too slow or unstable to sign in right now. You can take the survey offline instead — your answers are saved on this device and submitted automatically once your connection improves.',
-            offline: 'You have no internet connection, so signing in cannot work right now. You can still take the survey offline — your answers are saved on this device and submitted automatically once you are back online.'
+            weak: 'Your internet is too slow to sign in right now. Answer the survey offline instead — your answers save on this device and submit automatically once you reconnect.',
+            offline: 'You have no internet connection, so signing in cannot work. You can still answer the survey offline — it saves on this device and submits automatically once you reconnect.'
         }
     };
+
+    function resolveTheme() {
+        if (options.theme === 'dark' || options.theme === 'light') return options.theme;
+        var attr = document.documentElement.getAttribute('data-bs-theme');
+        if (attr === 'dark') return 'dark';
+        if (attr === 'light') return 'light';
+        if (global.matchMedia && global.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+        return 'light';
+    }
+
+    function markOfflineIntent() {
+        try { sessionStorage.setItem(OFFLINE_INTENT_KEY, String(Date.now())); } catch (e) { /* private mode — the banner just isn't suppressed */ }
+    }
+
+    // Delegated rather than bound to the dialog's own button alone: every page
+    // here also carries its own "Take Survey Offline" button, and tapping that
+    // one means exactly the same thing. One listener covers both, and any
+    // future link to the same place, instead of three that can drift apart.
+    function wireOfflineIntentLinks() {
+        document.addEventListener('click', function (e) {
+            var link = e.target && e.target.closest ? e.target.closest('a[href^="/survey-offline"]') : null;
+            if (link) markOfflineIntent();
+        }, true);
+    }
 
     function buildOverlay() {
         if (overlay) return overlay;
         var el = document.createElement('div');
         el.id = 'connectionPrompt';
-        el.className = 'weak-connection-overlay';
+        // The skin is declared by the page, not guessed. /login and
+        // /client-login render forceLightMode (white cards, navy buttons);
+        // the landing page is permanently navy. A white dialog dropped on the
+        // navy landing page is what looked foreign in the report — so each
+        // page names the one that belongs to it, and 'auto' is only the
+        // fallback for a page that says nothing.
+        el.className = 'weak-connection-overlay wc-theme-' + resolveTheme();
         el.hidden = true;
         el.setAttribute('role', 'dialog');
         el.setAttribute('aria-modal', 'true');
@@ -271,6 +322,8 @@
         if (opts.context) options.context = opts.context;
         if (opts.onState) options.onState = opts.onState;
 
+        wireOfflineIntentLinks();
+
         global.addEventListener('offline', function () { setState(STATE_OFFLINE); });
         global.addEventListener('online', function () { probe(); });
 
@@ -292,10 +345,41 @@
         startRecheckTimer();
     }
 
+    // Pure reachability check: no state change, no UI, no prompt. For a page
+    // that needs the answer but must never raise the dialog — /survey-offline
+    // IS the offline survey, so asking "would you like the offline survey?"
+    // there is meaningless, but it still needs to know whether its "You're
+    // Back Online" banner is telling the truth.
+    function isReachable() {
+        if (!global.navigator.onLine) return Promise.resolve(false);
+        var started = now();
+        return fetchWithBudget('/api/health', PROBE_TIMEOUT_MS).then(
+            function (res) { return !!res.ok && (now() - started) <= WEAK_LATENCY_MS; },
+            function () { return false; }
+        );
+    }
+
+    // Reads AND clears the marker — it answers exactly one page load, so a
+    // genuine reconnect later in the same visit still gets its banner.
+    function consumeOfflineIntent() {
+        var raw = null;
+        try {
+            raw = sessionStorage.getItem(OFFLINE_INTENT_KEY);
+            sessionStorage.removeItem(OFFLINE_INTENT_KEY);
+        } catch (e) { return false; }
+        if (!raw) return false;
+        var when = parseInt(raw, 10);
+        if (!when || isNaN(when)) return false;
+        return (Date.now() - when) < OFFLINE_INTENT_TTL_MS;
+    }
+
     global.ConnectionPrompt = {
         init: init,
         probe: probe,
         dismiss: dismiss,
+        isReachable: isReachable,
+        markOfflineIntent: markOfflineIntent,
+        consumeOfflineIntent: consumeOfflineIntent,
         getState: function () { return state; },
         // What each page keys its own "Take Survey Offline" button on. Both
         // unusable states count — the whole point is that "offline" and
