@@ -184,13 +184,12 @@ importScripts('/js/offline-db.js');
 // pages changed to load it. Without a version bump an installed worker would
 // keep serving the v42 shell and none of that would reach anyone who has
 // already visited.
-// v44: connection-prompt.js and offline-pill.css both changed (the dialog is
-// now theme-skinned and carries the reachability probe /survey-offline uses to
-// stop greeting a deliberate offline arrival with "You're Back Online"), and
-// both are precached — so an installed v43 worker would keep serving the old
-// pair and the fix would reach nobody who has already visited.
-const STATIC_CACHE = 'cspc-static-v44';
-const RUNTIME_CACHE = 'cspc-runtime-v44';
+// v45: connection-prompt.js changed again — the weak-connection verdict was
+// producing false positives on healthy links (one slow bootstrap sample was
+// enough to convict, and it never retracted). It is precached, so without a
+// version bump an installed v44 worker keeps serving the old detection.
+const STATIC_CACHE = 'cspc-static-v45';
+const RUNTIME_CACHE = 'cspc-runtime-v45';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
