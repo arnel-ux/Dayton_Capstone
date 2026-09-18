@@ -19,7 +19,7 @@ const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const multer = require('multer');
 const { TOPIC_TAXONOMY, SENTIMENT_VALUES, splitTopic, combineTopic } = require('./shared/topicTaxonomy');
-const { isNoFeedbackComment, prepareReportComment } = require('./shared/commentFilter');
+const { isNoFeedbackComment, prepareReportComment, maskProfanity } = require('./shared/commentFilter');
 const app = express();
 const port = 3000;
 
@@ -7235,6 +7235,16 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                     else if (topicLower.includes('online') || topicLower.includes('portal') || topicLower.includes('internet')) badgeClass = 'bg-online';
                     else if (topicLower.includes('health') || topicLower.includes('medical') || topicLower.includes('guidance') || topicLower.includes('counseling') || topicLower.includes('scholarship')) badgeClass = 'bg-health';
 
+                    // Profanity is masked HERE too, not only on the signed
+                    // report. /survey-records is read on a shared office
+                    // screen, and the words are starred through their vowels
+                    // (see maskProfanity in shared/commentFilter.js) so the
+                    // row still reads as the complaint it is. Only what is
+                    // sent to the browser is masked — the stored comment is
+                    // never rewritten, so the AI classifier, the exports and
+                    // any later re-read all still see the original text.
+                    const displayComments = row.comments ? maskProfanity(row.comments).text : '';
+
                     const sentimentValue = hasFeedback ? effectiveSentimentRaw : 'No feedback';
                     const sentimentLower = sentimentValue.toLowerCase();
                     let sentimentClass = 'bg-sentiment-neutral';
@@ -7242,7 +7252,7 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                     else if (sentimentLower.includes('positive')) sentimentClass = 'bg-sentiment-positive';
                     else if (sentimentLower.includes('negative')) sentimentClass = 'bg-sentiment-negative';
 
-                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', officeName: row.office_name || 'N/A', topic: hasFeedback ? effectiveTopic : 'No feedback', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: row.comments || 'No comments provided.', date: row.formatted_date, dateRaw: row.created_at ? new Date(row.created_at).toISOString() : '', officeVisitedTime: row.office_visited_time_formatted || 'N/A' });
+                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', officeName: row.office_name || 'N/A', topic: hasFeedback ? effectiveTopic : 'No feedback', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: displayComments || 'No comments provided.', date: row.formatted_date, dateRaw: row.created_at ? new Date(row.created_at).toISOString() : '', officeVisitedTime: row.office_visited_time_formatted || 'N/A' });
                 });
             }
             res.render('survey-records', { recordsByCluster, clusterRatings, TOPIC_TAXONOMY, SENTIMENT_VALUES });
@@ -7278,6 +7288,11 @@ app.get('/api/admin/survey-response/:id', ensureAdminAuth, noCache, (req, res) =
         }
         if (!rows || rows.length === 0) return res.status(404).json({ success: false, message: 'Survey not found.' });
         const survey = rows[0];
+        // The Survey Result modal is the same record surface as the
+        // /survey-records table behind it, so it gets the same masking —
+        // otherwise clicking "View Result" on a masked row would print the
+        // unmasked original right back on screen.
+        if (survey.comments) survey.comments = maskProfanity(survey.comments).text;
         const hasFeedback = survey.topic !== null && survey.topic !== undefined;
         const aiSplit = hasFeedback ? splitTopic(survey.topic) : { topic: null, subtopic: null };
         survey.effectiveSentiment = survey.sentiment_override || (hasFeedback ? (survey.sentiment || 'Neutral') : null);

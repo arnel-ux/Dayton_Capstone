@@ -6,6 +6,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="/js/pdf-repeating-header.js"></script>
+    <script src="/js/report-csv.js"></script>
     <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
          views/layout/report-footer.ejs) — see public/css/report.css. -->
     <link rel="stylesheet" href="/css/report.css">
@@ -323,7 +324,7 @@
                             <!-- Effectivity/Rev./Page footer: part of CSPC's official CSM survey
                                  result format, so renderOfficeReport() toggles this wrapper by
                                  reportType rather than hiding it globally. -->
-                            <div id="officeReportFooter1">
+                            <div id="officeReportFooter1" class="report-footer-slot">
                                 <%- include('layout/report-footer', { pageLabel: 'Page 1 of 3', footerId: 'footerPageLabel1' }) %>
                             </div>
                         </div>
@@ -380,7 +381,7 @@
                                 <%- include('layout/sqd-report-footer') %>
                             </div>
 
-                            <div id="officeReportFooterSqd">
+                            <div id="officeReportFooterSqd" class="report-footer-slot">
                                 <%- include('layout/report-footer', { pageLabel: 'Page 2 of 3', footerId: 'footerPageLabelSqd' }) %>
                             </div>
                         </div>
@@ -436,8 +437,14 @@
                                 <p class="sig-title">SUC President III</p>
                             </div>
 
-                            <!-- No Effectivity/Rev./Page footer on the AI Feedback page — not part
-                                 of CSPC's official CSM survey result format. -->
+                            <!-- Same footer pages 1 and 2 carry — this page is part of the
+                                 same signed packet, so it is footed like the rest of it. The
+                                 label is for the on-screen preview; the PDF hides this copy
+                                 and redraws the footer on every page with the real page
+                                 count (see downloadOfficeReportPDF). Page 3 only renders for
+                                 the full SQD packet, so "Page 3 of 3" is right whenever it is
+                                 visible at all. -->
+                            <%- include('layout/report-footer', { pageLabel: 'Page 3 of 3' }) %>
                         </div>
                         </div>
                     </div>
@@ -741,9 +748,10 @@
             // Page 1's footer label follows suit — "Page 1 of 3" for the full packet,
             // "Page 1 of 1" when the respondents breakdown is the only page.
             document.getElementById('footerPageLabel1').innerText = isFullPacket ? 'Page 1 of 3' : 'Page 1 of 1';
-            // Effectivity/Rev./Page footer is CSPC's official CSM survey result footer —
-            // the SQD Result Report packet only (page 3's AI Feedback report never shows
-            // it either, so it has no footer markup at all).
+            // Effectivity/Rev./Page footer is CSPC's official CSM survey result
+            // footer, carried by the SQD Result Report packet only — pages 2 and 3
+            // print theirs unconditionally because they only render for that packet,
+            // so page 1's is the one that has to be toggled.
             document.getElementById('officeReportFooter1').classList.toggle('d-none', reportType !== 'sqd');
             // Signatures are signed once per packet: the official Prepared/Interpretation/
             // Noted/Reviewed grid on the scorecard page covers the full SQD packet, so
@@ -1049,32 +1057,86 @@
                     if (!isFullPacket || pageNum === 1) return respondentsHeader;
                     return pageNum === 2 ? sqdHeader : aiHeader;
                 },
-                avoidSplitSelector: '.sqd-signature-grid'
+                avoidSplitSelector: '.sqd-signature-grid',
+                // Bottom edge of every page. The page label is counted from the
+                // finished PDF, so it no longer depends on the template's
+                // "Page 1 of 3" guess holding true — the AI Feedback section
+                // adds a page whenever the office collects enough comments, and
+                // the whole packet is one page when only the respondents
+                // breakdown was asked for.
+                footer: { effectivity: 'June 2024', revision: 'Rev. 4' }
             });
         }
 
+        // Section-by-section, like /report's own export. This packet is the
+        // clearest case for it: its three pages hold a 9-column rating-bucket
+        // breakdown, a 3-column scorecard and a 4-column comments table, and
+        // the old export ran all three through one flat cell dump — see
+        // public/js/report-csv.js. Which sections exist follows what was
+        // actually generated: "Number of Respondents" renders page 1 alone.
         function downloadOfficeReportCSV() {
-            const csv = [];
-            const rows = document.querySelectorAll('#officeReportContentToExport .report-table tr');
+            const text = (id) => document.getElementById(id).innerText.trim();
+            const rowsOf = (selector, width) =>
+                Array.from(document.querySelectorAll(selector))
+                    .map(tr => Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim()))
+                    .filter(cells => cells.length === width);
 
-            rows.forEach(row => {
-                const cols = row.querySelectorAll('td, th');
-                const line = [];
-                cols.forEach(col => {
-                    let data = col.innerText.replace(/(\r\n|\n|\r)/gm, ' ').replace(/(\s\s)/gm, ' ');
-                    data = data.replace(/"/g, '""');
-                    line.push('"' + data + '"');
+            const office = text('officeReportTitle1');
+            const service = text('officeReportService1');
+            const isFullPacket = document.getElementById('reportType').value !== 'respondents';
+
+            const BUCKET_COLUMNS = [
+                'Service Quality', 'Strongly Agree', 'Agree', 'Neither Agree or Disagree',
+                'Disagree', 'Strongly Disagree', 'N/A', 'Total Responses', 'Overall'
+            ];
+
+            const sections = [{
+                title: 'CLIENT SATISFACTION MEASUREMENT SURVEY RESULT',
+                rows: [
+                    ['Cluster', CLUSTER_NAME],
+                    ['Office', office],
+                    ['Service Availed', service],
+                    ['Period Covered', text('officeReportPeriod1')],
+                    ['Number of Respondents', text('officeReportTotal1')],
+                    ['Report', isFullPacket ? 'SQD Result Report' : 'Number of Respondents'],
+                    ['Generated', new Date().toLocaleString()]
+                ]
+            }];
+
+            sections.push({ title: 'SQD 0 RESULTS', columns: BUCKET_COLUMNS, rows: rowsOf('#sqd0Body tr', 9) });
+            sections.push({ title: 'SQD 1-8 RESULTS', columns: BUCKET_COLUMNS, rows: rowsOf('#sqd18Body tr', 9) });
+
+            // Pages 2 and 3 only exist for the full SQD packet; exporting their
+            // empty markup would put a scorecard of zeroes in the file for a
+            // report that never claimed to compute one.
+            if (isFullPacket) {
+                sections.push({
+                    title: 'SERVICE QUALITY DIMENSIONS',
+                    columns: ['Service Quality Dimension', 'Percentage', 'Rating'],
+                    rows: rowsOf('#percentageReportTable tbody tr', 3)
                 });
-                csv.push(line.join(','));
-            });
+                sections.push({
+                    title: 'AI FEEDBACK SENTIMENT & TOPIC ANALYTICS',
+                    columns: ['Measure', 'Value'],
+                    rows: [
+                        ['Analyzed Feedbacks', text('officeReportTotal2')],
+                        ['Positive', text('off_aiPos')],
+                        ['Neutral', text('off_aiNeu')],
+                        ['Negative', text('off_aiNeg')],
+                        ['Dominant Topic', text('off_aiDomTopic')]
+                    ]
+                });
+                const commentRows = rowsOf('#officeReportCommentsBody tr', 4);
+                sections.push({
+                    title: 'WRITTEN COMMENTS/SUGGESTIONS',
+                    columns: ['No.', 'Written Comment/Suggestion', 'AI Modeled Topic', 'AI Sentiment'],
+                    rows: commentRows.length
+                        ? commentRows
+                        : [['', 'NO WRITTEN COMMENTS AND SUGGESTIONS REFLECTED IN ANY OF THE INSTRUMENTS', '', '']]
+                });
+            }
 
-            const csvFile = new Blob([csv.join('\n')], { type: 'text/csv' });
-            const downloadLink = document.createElement('a');
-            downloadLink.download = 'CSM_Data.csv';
-            downloadLink.href = window.URL.createObjectURL(csvFile);
-            downloadLink.style.display = 'none';
-            document.body.appendChild(downloadLink);
-            downloadLink.click();
+            ReportCsv.download(`CSM_Report_${ReportCsv.safeName(office)}_${ReportCsv.stamp()}.csv`, sections);
         }
 
     </script>

@@ -4,6 +4,7 @@
     <%- include('layout/header', { forceLightMode: true }) %>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="/js/pdf-repeating-header.js"></script>
+    <script src="/js/report-csv.js"></script>
     <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
          views/layout/report-footer.ejs) — see public/css/report.css. -->
     <link rel="stylesheet" href="/css/report.css">
@@ -222,10 +223,14 @@
 
                         <%- include('layout/sqd-report-footer') %>
 
-                        <!-- No Effectivity/Rev./Page-label footer here on purpose: CSPC-F-CQA-06's
-                             official Client Satisfaction Measurement Survey Result format (unlike
-                             cluster-detail.ejs, survey-records.ejs and print.ejs, which legitimately
-                             print that footer) doesn't include it. -->
+                        <!-- Effectivity / Rev. / page label, the same footer cluster-detail.ejs
+                             and survey-records.ejs print. The label here is for the on-screen
+                             preview only: in the PDF this copy is hidden and the footer is
+                             redrawn along the bottom edge of EVERY page, with a page count taken
+                             from the finished document — see the `footer` option passed to
+                             exportRepeatingHeaderPdf in downloadPDF() below and
+                             public/js/pdf-repeating-header.js. -->
+                        <%- include('layout/report-footer', { pageLabel: 'Page 1 of 2' }) %>
                     </div>
 
                     <!-- PANGALAWANG PAHINA (WRITTEN COMMENTS & AI ANALYTICS) -->
@@ -279,6 +284,8 @@
                                 <p class="sig-title">ISO Chair</p>
                             </div>
                         </div>
+
+                        <%- include('layout/report-footer', { pageLabel: 'Page 2 of 2' }) %>
                     </div>
                 </div>
             </div>
@@ -492,31 +499,74 @@
             headerHeightIn: 2.4,
             headerHideSelectors: ['.report-header-block', '.sqd-report-title', '.sqd-office-name', '.sqd-meta-block', '.report-title', '.office-title', '.meta-info'],
             getHeaderForPage: (pageNum) => (pageNum === 1 ? sqdHeader : aiHeader),
-            avoidSplitSelector: '.sqd-signature-grid'
+            avoidSplitSelector: '.sqd-signature-grid',
+            // Effectivity / Rev. / "Page N of M" along the bottom edge of every
+            // page, with M counted from the finished PDF rather than guessed in
+            // the template — this report's AI Feedback section grows a page
+            // every time the office collects more written comments.
+            footer: { effectivity: 'June 2024', revision: 'Rev. 4' }
         });
     }
 
+    // Built from the report's own figures, section by section, rather than by
+    // walking every `.report-table tr` on the page and dumping the cells into
+    // one flat list — see public/js/report-csv.js for what that produced and
+    // why a CSV cannot hold a 3-column table and a 4-column table in the same
+    // columns. The SQD scorecard IS a clean 3-column grid, so its rows are read
+    // straight out of the table (keeping the dimension labels in one place);
+    // everything else is assembled from the values the report computed.
     function downloadCSV() {
-        let csv = [];
-        const rows = document.querySelectorAll(".report-table tr");
-        
-        for (let i = 0; i < rows.length; i++) {
-            let row = [], cols = rows[i].querySelectorAll("td, th");
-            for (let j = 0; j < cols.length; j++) {
-                let data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, " ").replace(/(\s\s)/gm, " ");
-                data = data.replace(/"/g, '""'); 
-                row.push('"' + data + '"');
-            }
-            csv.push(row.join(","));
-        }
+        const text = (id) => document.getElementById(id).innerText.trim();
+        const office = text('displayOfficeName1');
+        const period = text('displayPeriod1');
 
-        const csvFile = new Blob([csv.join("\n")], {type: "text/csv"});
-        const downloadLink = document.createElement("a");
-        downloadLink.download = "CSM_Data.csv";
-        downloadLink.href = window.URL.createObjectURL(csvFile);
-        downloadLink.style.display = "none";
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
+        const sqdRows = Array.from(document.querySelectorAll('#tableData1 tbody tr'))
+            .map(tr => Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim()));
+
+        // The comments table holds either real rows of four cells or the single
+        // spanned "no comments" line; only the former are data.
+        const commentRows = Array.from(document.querySelectorAll('#commentsBody tr'))
+            .map(tr => Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim()))
+            .filter(cells => cells.length === 4);
+
+        ReportCsv.download(`CSM_Report_${ReportCsv.safeName(office)}_${ReportCsv.stamp()}.csv`, [
+            {
+                title: 'CLIENT SATISFACTION MEASUREMENT SURVEY RESULT',
+                rows: [
+                    ['Office', office],
+                    ['Period Covered', period],
+                    ['Number of Respondents', text('totalRespondents1')],
+                    ['Generated', new Date().toLocaleString()]
+                ]
+            },
+            {
+                title: 'SERVICE QUALITY DIMENSIONS',
+                columns: ['Service Quality Dimension', 'Percentage', 'Rating'],
+                rows: sqdRows
+            },
+            {
+                title: 'AI FEEDBACK SENTIMENT & TOPIC ANALYTICS',
+                columns: ['Measure', 'Value'],
+                rows: [
+                    ['Analyzed Feedbacks', text('totalRespondents2')],
+                    ['Positive', text('aiPos')],
+                    ['Neutral', text('aiNeu')],
+                    ['Negative', text('aiNeg')],
+                    ['Dominant Topic', text('aiDomTopic')]
+                ]
+            },
+            {
+                title: 'WRITTEN COMMENTS/SUGGESTIONS',
+                columns: ['No.', 'Written Comment/Suggestion', 'AI Modeled Topic', 'AI Sentiment'],
+                // Profanity in these cells is already masked through its vowels
+                // by /api/report-data (shared/commentFilter.js) — the export
+                // carries the same text the printed report does, never the raw
+                // stored comment.
+                rows: commentRows.length
+                    ? commentRows
+                    : [['', 'NO WRITTEN COMMENTS AND SUGGESTIONS REFLECTED IN ANY OF THE INSTRUMENTS', '', '']]
+            }
+        ]);
     }
 </script>
 </body>

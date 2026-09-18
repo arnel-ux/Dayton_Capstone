@@ -4,6 +4,7 @@
     <%- include('layout/header', { forceLightMode: true }) %>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="/js/pdf-repeating-header.js"></script>
+    <script src="/js/report-csv.js"></script>
     <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
          views/layout/report-footer.ejs) — see public/css/report.css. -->
     <link rel="stylesheet" href="/css/report.css">
@@ -755,6 +756,12 @@
 
                         <%- include('layout/sqd-report-footer') %>
 
+                        <!-- On-screen preview only. In the PDF this copy is hidden and the
+                             footer is redrawn along the bottom edge of EVERY page with a
+                             page label counted from the finished document — "Page 1 of 2"
+                             here is only ever right while the comments table fits on one
+                             page. See downloadClientReportPDF() and
+                             public/js/pdf-repeating-header.js. -->
                         <%- include('layout/report-footer', { pageLabel: 'Page 1 of 2' }) %>
                     </div>
 
@@ -806,8 +813,11 @@
                             </div>
                         </div>
 
-                        <!-- No Effectivity/Rev./Page footer on the AI Feedback page — not part
-                             of CSPC's official CSM survey result format. -->
+                        <!-- Same footer the SQD page above carries, so the packet reads as one
+                             document rather than a footed page followed by an unfooted one. The
+                             label is for the on-screen preview; the PDF hides this copy and
+                             redraws the footer on every page with the real page count. -->
+                        <%- include('layout/report-footer', { pageLabel: 'Page 2 of 2' }) %>
                     </div>
                 </div>
             </div>
@@ -1607,31 +1617,65 @@
             headerHeightIn: 2.7,
             headerHideSelectors: ['.report-header-block', '.sqd-report-title', '.sqd-office-name', '.sqd-service-line', '.sqd-meta-block', '.report-title', '.office-title', '.meta-info'],
             getHeaderForPage: (pageNum) => (pageNum === 1 ? sqdHeader : aiHeader),
-            avoidSplitSelector: '.sqd-signature-grid'
+            avoidSplitSelector: '.sqd-signature-grid',
+            // Bottom edge of every page, page label counted from the finished
+            // PDF — which is also what retires the template's hardcoded
+            // "Page 1 of 2" for the download.
+            footer: { effectivity: 'June 2024', revision: 'Rev. 4' }
         });
     }
 
+    // Section-by-section, like /report's own export — see public/js/report-csv.js
+    // for why scraping every `.report-table tr` into one flat list could not
+    // produce a file a spreadsheet can read back.
     function downloadClientReportCSV() {
-        let csv = [];
-        const rows = document.querySelectorAll("#clientReportContentToExport .report-table tr");
+        const text = (id) => document.getElementById(id).innerText.trim();
+        const office = text('cr_officeName1');
+        const serviceEl = document.getElementById('cr_serviceLine1');
+        const service = serviceEl.classList.contains('d-none') ? '' : serviceEl.innerText.trim();
 
-        for (let i = 0; i < rows.length; i++) {
-            let row = [], cols = rows[i].querySelectorAll("td, th");
-            for (let j = 0; j < cols.length; j++) {
-                let data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, " ").replace(/(\s\s)/gm, " ");
-                data = data.replace(/"/g, '""');
-                row.push('"' + data + '"');
+        const sqdRows = Array.from(document.querySelectorAll('#clientReportContentToExport .report-table tbody tr'))
+            .map(tr => Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim()))
+            .filter(cells => cells.length === 3);
+
+        const commentRows = Array.from(document.querySelectorAll('#cr_commentsBody tr'))
+            .map(tr => Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim()))
+            .filter(cells => cells.length === 4);
+
+        const summary = [
+            ['Office', office],
+            ['Period Covered', text('cr_period1')],
+            ['Number of Respondents', text('cr_totalRespondents1')],
+            ['Generated', new Date().toLocaleString()]
+        ];
+        if (service) summary.splice(1, 0, ['Service Availed', service]);
+
+        ReportCsv.download(`CSM_Client_Report_${ReportCsv.safeName(office)}_${ReportCsv.stamp()}.csv`, [
+            { title: 'CLIENT SATISFACTION MEASUREMENT SURVEY RESULT', rows: summary },
+            {
+                title: 'SERVICE QUALITY DIMENSIONS',
+                columns: ['Service Quality Dimension', 'Percentage', 'Rating'],
+                rows: sqdRows
+            },
+            {
+                title: 'AI FEEDBACK SENTIMENT & TOPIC ANALYTICS',
+                columns: ['Measure', 'Value'],
+                rows: [
+                    ['Analyzed Feedbacks', text('cr_totalRespondents2')],
+                    ['Positive', text('cr_aiPos')],
+                    ['Neutral', text('cr_aiNeu')],
+                    ['Negative', text('cr_aiNeg')],
+                    ['Dominant Topic', text('cr_aiDomTopic')]
+                ]
+            },
+            {
+                title: 'WRITTEN COMMENTS/SUGGESTIONS',
+                columns: ['No.', 'Written Comment/Suggestion', 'AI Modeled Topic', 'AI Sentiment'],
+                rows: commentRows.length
+                    ? commentRows
+                    : [['', 'NO WRITTEN COMMENTS AND SUGGESTIONS REFLECTED IN ANY OF THE INSTRUMENTS', '', '']]
             }
-            csv.push(row.join(","));
-        }
-
-        const csvFile = new Blob([csv.join("\n")], { type: "text/csv" });
-        const downloadLink = document.createElement("a");
-        downloadLink.download = "CSM_Client_Data.csv";
-        downloadLink.href = window.URL.createObjectURL(csvFile);
-        downloadLink.style.display = "none";
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
+        ]);
     }
 </script>
 

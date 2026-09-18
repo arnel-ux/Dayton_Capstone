@@ -15,6 +15,15 @@
  * html2pdf's `.toPdf().get('pdf')` hook) to draw the header into that reserved
  * space on every page before saving. This is the "page events/hooks" approach,
  * not a CSS-only fake — html2canvas has no reliable repeating-header feature.
+ *
+ * The official Effectivity / Rev. / Page footer has exactly the same problem
+ * and is solved the same way (see drawFooter and the `footer` option). In the
+ * markup it is an ordinary in-flow <div> that lands wherever the content
+ * happens to end — halfway up the last sheet, or stranded mid-document on a
+ * page of its own — and its page label was a string typed into the template
+ * ("Page 1 of 3"), which stopped being true the moment a long comments table
+ * spilled onto a fourth page. Drawing it per page from jsPDF puts it at the
+ * bottom edge of every sheet and lets it count the pages the PDF actually has.
  */
 (function (global) {
     function loadLogoDataUrl(root) {
@@ -129,6 +138,36 @@
         }
     }
 
+    // Draws the official CQA document footer — Effectivity date, revision
+    // number, and the page label — pinned to the bottom edge of ONE page,
+    // matching views/layout/report-footer.ejs (same three cells, same blue rule
+    // above them, same left/centre/right spread).
+    //
+    // `totalPages` is the PDF's real page count, so "Page 2 of 5" is what the
+    // document actually is rather than what the template guessed it would be.
+    function drawFooter(pdf, footer, pageNum, totalPages) {
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const left = 0.5;
+        const right = pageWidth - 0.5;
+        // Measured up from the bottom edge, never down from the content: that
+        // is the whole point — the footer sits on the same line on every
+        // sheet whether the page above it is full or a third full.
+        const ruleY = pageHeight - 0.42;
+        const textY = ruleY + 0.15;
+
+        pdf.setDrawColor(108, 155, 210);
+        pdf.setLineWidth(0.02);
+        pdf.line(left, ruleY, right, ruleY);
+
+        pdf.setTextColor(0, 0, 0);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.text('Effectivity: ' + (footer.effectivity || 'June 2024'), left, textY);
+        pdf.text(footer.revision || 'Rev. 4', pageWidth / 2, textY, { align: 'center' });
+        pdf.text('Page ' + pageNum + ' of ' + totalPages, right, textY, { align: 'right' });
+    }
+
     // Draws a repeating data-table column header row (e.g. NO. | NAME OF OFFICE |
     // OVERALL SCORE | INTERPRETATION) directly below the report header, since
     // html2canvas screenshots the content as one flat image and slices it into
@@ -217,29 +256,47 @@
      * @param {string} [avoidSplitSelector] - optional CSS selector for one block
      *   (e.g. the signature/interpretation section) that must never be split
      *   across pages — see pushBelowPageBreakIfNeeded above.
+     * @param {{effectivity?: string, revision?: string, heightIn?: number}} [footer] -
+     *   pass this to print the official Effectivity / Rev. / Page footer along
+     *   the bottom edge of EVERY page. The in-flow `.page-footer` markup is
+     *   hidden during capture so it is not printed twice, and the bottom margin
+     *   is widened to `heightIn` so content can never run underneath it.
      */
-    async function exportRepeatingHeaderPdf({ elementId, filename, opt, headerHeightIn, headerHideSelectors, getHeaderForPage, columnHeader, avoidSplitSelector }) {
+    async function exportRepeatingHeaderPdf({ elementId, filename, opt, headerHeightIn, headerHideSelectors, getHeaderForPage, columnHeader, avoidSplitSelector, footer }) {
         const element = document.getElementById(elementId);
         if (!element) return;
 
         const logoDataUrl = await loadLogoDataUrl(element);
 
         const hidden = [];
-        (headerHideSelectors || []).forEach((sel) => {
+        // `.page-footer` is added unconditionally when a footer is being drawn:
+        // the in-flow copy is the one that lands in the middle of a sheet, and
+        // leaving it visible would print it twice — once adrift in the content,
+        // once correctly along the bottom edge.
+        const hideSelectors = (headerHideSelectors || []).concat(footer ? ['.page-footer'] : []);
+        hideSelectors.forEach((sel) => {
             element.querySelectorAll(sel).forEach((el) => {
                 hidden.push([el, el.style.display]);
                 el.style.display = 'none';
             });
         });
 
+        // The band the footer occupies has to be kept clear on every page, not
+        // just the last one, so it is taken out of the printable area the same
+        // way the header's is — as a real margin html2pdf paginates against.
+        // Without this the footer would be drawn ON TOP of whatever table row
+        // happened to reach the bottom of that page.
+        const footerHeightIn = footer ? (footer.heightIn || 0.55) : 0;
+        const bottomMarginIn = Math.max(opt.margin[2], footerHeightIn);
+
         let spacer = null;
         if (avoidSplitSelector) {
-            const pageContentHeightIn = 11 - headerHeightIn - opt.margin[2];
+            const pageContentHeightIn = 11 - headerHeightIn - bottomMarginIn;
             spacer = pushBelowPageBreakIfNeeded(element, avoidSplitSelector, pageContentHeightIn, opt.margin[1], opt.margin[3]);
         }
 
         const finalOpt = Object.assign({}, opt, {
-            margin: [headerHeightIn, opt.margin[1], opt.margin[2], opt.margin[3]]
+            margin: [headerHeightIn, opt.margin[1], bottomMarginIn, opt.margin[3]]
         });
 
         try {
@@ -250,6 +307,7 @@
                 pdf.setPage(page);
                 drawHeader(pdf, logoDataUrl, getHeaderForPage(page, totalPages) || {});
                 if (columnHeader) drawColumnHeader(pdf, columnHeader.startYIn, columnHeader.columns);
+                if (footer) drawFooter(pdf, footer, page, totalPages);
             }
             pdf.save(filename);
         } finally {

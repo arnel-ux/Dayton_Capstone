@@ -59,20 +59,21 @@
         })();
     </script>
 
-    <!-- Is there a Fullscreen API on this browser at all?
-         #btn-fullscreen is hidden by default in the CSS below and only revealed
-         by the .fs-capable class this sets. The default is "hidden" on purpose:
-         a control that cannot do its job should not be on screen, and the one
-         browser that cannot is not a rare one — iPhone Safari has no Fullscreen
-         API for ordinary elements, only for <video>. There, toggleFullscreen()
-         reached `if (!request) return;` and returned, so the button was drawn,
-         took the tap, highlighted on press and did nothing at all. Nothing in
-         the UI said why, so it read as a broken page rather than a missing
-         platform feature.
+    <!-- Is there a REAL Fullscreen API on this browser?
+         This no longer decides whether #btn-fullscreen exists — the button is
+         shown on every device now, iPhone included — only which of the two
+         things it does when tapped: a genuine requestFullscreen(), or the
+         in-page EXPANDED VIEW fallback (see the .pseudo-fullscreen CSS and
+         toggleFullscreen()).
 
-         This runs in the <head>, before the header is parsed, so the button is
-         never painted and then removed — an iPhone user sees a topbar that
-         simply has one fewer icon, not one that flickers.
+         iPhone Safari has no Fullscreen API for ordinary elements, only for
+         <video>, and no website on iOS can hide Safari's own bars. What it CAN
+         give back is the page's own chrome, which is what the fallback does,
+         so the control is never a button that highlights on press and does
+         nothing — the reason it used to be hidden here.
+
+         This still runs in the <head> so the class is on <html> before any of
+         it paints.
 
          Feature detection, NOT a user-agent test, because the answer is not
          "is this an iPhone": iPad Safari DOES have webkitRequestFullscreen and
@@ -506,21 +507,50 @@
         .btn-fullscreen:hover { border-color: var(--brand); color: var(--brand); transform: translateY(-1px); background: var(--ring); }
         .btn-fullscreen:active { transform: translateY(0) scale(0.94); }
 
-        /* The full-screen toggle is the ONE button here that depends on a
-           platform feature that may not exist, so it is the one button that has
-           to earn its place on the screen. Hidden unless the <head> probe found
-           a working Fullscreen API and added .fs-capable — see the comment on
-           that script for why iPhone Safari is the case that matters.
+        /* The minimize/maximize toggle is shown on EVERY device, iPhone
+           included.
 
-           Targeted by #btn-fullscreen, never by .btn-fullscreen: that class is
-           the shared icon-button skin and the notification bell wears it too.
-           Hiding by class would take the bell down with it on every iPhone.
+           It used to hide itself unless the <head> probe found a real
+           Fullscreen API (.fs-capable), because iPhone Safari has no
+           Fullscreen API for ordinary elements — only for <video> — so the
+           button was drawn, took the tap and did nothing. Hiding it was the
+           honest answer only while it had nothing to offer there. It now has
+           something: where the real API is missing, the same button toggles
+           EXPANDED VIEW (html.pseudo-fullscreen below), which reclaims the
+           in-page chrome — the tall header, the card padding — rather than
+           the browser's own bars, which no website can touch on iOS.
 
-           The centred brand does not move when this disappears. Both side zones
-           are flex: 1 1 0, so they are equal by basis rather than by content,
-           and the right-hand zone is simply one icon lighter. */
-        #btn-fullscreen { display: none; }
-        .fs-capable #btn-fullscreen { display: inline-flex; }
+           .fs-capable is still set by the probe and still means "the real API
+           is available here"; it just no longer decides whether the control
+           exists. See toggleFullscreen(). */
+        #btn-fullscreen { display: inline-flex; }
+
+        /* ---- EXPANDED VIEW (the iOS/no-Fullscreen-API fallback) ----
+           Deliberately compacts the header instead of removing it: the exit
+           control lives inside .topbar, and a version of this that hid the
+           whole bar left an iPhone user expanded with no way back out.
+           Everything here is reversible by removing one class. */
+        html.pseudo-fullscreen { --topbar-h: 52px; }
+        html.pseudo-fullscreen .topbar {
+            min-height: 52px;
+            padding-top: 0.3rem;
+            padding-bottom: 0.3rem;
+            gap: 0.6rem;
+        }
+        /* The second identity line and the logo are the parts of the brand
+           that are pure decoration once the user is already inside and
+           reading — the portal name itself stays. */
+        html.pseudo-fullscreen .topbar .topbar-brand-text .t2,
+        html.pseudo-fullscreen .topbar .topbar-brand-logo-wrap { display: none; }
+        html.pseudo-fullscreen .topbar .topbar-brand-text .t1 { font-size: 0.95rem; }
+        html.pseudo-fullscreen .content-body { padding-top: 0.5rem; padding-bottom: 0.75rem; }
+        html.pseudo-fullscreen .view-card { border-radius: 0; }
+        /* The dark-mode FAB is bottom-right furniture; in expanded view it is
+           one more thing covering the answers. The Profile/Home views keep it
+           — it is only the survey itself that needs the room. */
+        html.pseudo-fullscreen .theme-toggle-btn { opacity: 0.4; }
+        html.pseudo-fullscreen .theme-toggle-btn:hover,
+        html.pseudo-fullscreen .theme-toggle-btn:focus-visible { opacity: 1; }
 
         /* The "you're viewing offline" chip is /css/offline-pill.css — a fixed,
            centred chip floating just under this header. It used to be a child
@@ -1797,36 +1827,155 @@
 
         #terms-box { box-shadow: var(--shadow-soft); }
 
-        /* ---- Thank You / success page ---- */
-        .thank-you-card { max-width: 460px; margin: 0 auto; }
-        .thank-you-actions { display: inline-flex; gap: 0.75rem; }
+        /* ---- Thank You / success page ----
+           ONE layout at every width. This used to be an inline-flex row that a
+           @media block re-declared as a stack, with four !important overrides
+           fighting the px-5/py-3 Bootstrap utilities in the markup - so the
+           phone and the desktop were effectively two different designs, and
+           the mobile one could only be adjusted by out-specifying a utility
+           class. The buttons carry their own classes now (.ty-btn, below),
+           those utilities are gone from the markup, and the two widths differ
+           only in scale. */
+        .thank-you-card {
+            max-width: 460px;
+            margin: 0 auto;
+            padding: 0 0.5rem;
+        }
+
+        .thank-you-icon {
+            width: 92px;
+            height: 92px;
+            margin: 0 auto 1.25rem;
+            display: grid;
+            place-items: center;
+            border-radius: 50%;
+            font-size: 2.1rem;
+            color: #16a34a;
+            background: rgba(34, 197, 94, 0.12);
+            /* A soft outer ring instead of an entrance animation: the confetti
+               already fires when this page is shown, and a second moving thing
+               competing with it is what made the success state feel busy. */
+            box-shadow: 0 0 0 8px rgba(34, 197, 94, 0.07),
+                        0 12px 28px -12px rgba(22, 163, 74, 0.5);
+        }
+        [data-bs-theme="dark"] .thank-you-icon {
+            color: #4ade80;
+            background: rgba(34, 197, 94, 0.16);
+            box-shadow: 0 0 0 8px rgba(34, 197, 94, 0.08),
+                        0 12px 28px -14px rgba(0, 0, 0, 0.7);
+        }
+
+        /* clamp() rather than a mobile font-size override: the heading scales
+           continuously between the two ends instead of snapping at 576px,
+           which is what left it oversized across the 480-576px band. */
+        .thank-you-title {
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            margin-bottom: 0.55rem;
+            color: var(--ink-900);
+            font-size: clamp(1.35rem, 4.6vw, 1.85rem);
+        }
+        .thank-you-desc {
+            color: var(--ink-600);
+            font-size: clamp(0.9rem, 2.8vw, 1rem);
+            line-height: 1.6;
+            max-width: 34ch;
+            margin: 0 auto;
+        }
+        .thank-you-desc strong { color: var(--brand); }
+
+        .thank-you-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.65rem;
+            width: 100%;
+        }
+
+        /* Own classes rather than .btn .btn-outline-*: that outline pair is
+           shared with the rest of the survey and carries the muted border
+           that made "Submit Again" read as floating text (see the
+           .btn-outline-primary root-cause comment further down). These two
+           exist only on this screen, so they can state their own weight -
+           filled for the action that continues, quiet for the one that
+           leaves. Sized identically so the pair reads as one control group. */
+        .ty-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.55rem;
+            width: 100%;
+            max-width: 280px;
+            min-height: 48px; /* comfortable tap target on the smallest phone */
+            padding: 0.75rem 1.25rem;
+            border: 1.5px solid transparent;
+            border-radius: 999px;
+            font-family: var(--font-ui);
+            font-size: 0.97rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: transform .18s ease, box-shadow .18s ease,
+                        background .18s ease, color .18s ease, border-color .18s ease;
+        }
+        .ty-btn i { font-size: 0.95em; }
+        .ty-btn:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
+
+        /* Submit Again - the one thing this screen actually offers, so it is
+           filled rather than outlined. */
+        .ty-btn-primary {
+            background: linear-gradient(135deg, var(--brand-light), var(--brand));
+            border-color: var(--brand);
+            color: #fff;
+            box-shadow: 0 10px 22px -12px rgba(37, 84, 199, 0.85);
+        }
+        .ty-btn-primary:hover, .ty-btn-primary:focus {
+            color: #fff;
+            background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+            transform: translateY(-2px);
+            box-shadow: 0 14px 28px -12px rgba(37, 84, 199, 0.9);
+        }
+        .ty-btn-primary:active { transform: translateY(0); }
+
+        /* Back to Home - a neutral exit, deliberately NOT the red danger
+           button this slot used to hold: it ends nothing and destroys
+           nothing, it just navigates. */
+        .ty-btn-ghost {
+            background: var(--surface);
+            border-color: var(--line);
+            color: var(--ink-600);
+        }
+        .ty-btn-ghost:hover, .ty-btn-ghost:focus {
+            background: var(--surface);
+            border-color: var(--brand);
+            color: var(--brand);
+            transform: translateY(-2px);
+        }
+        .ty-btn-ghost:active { transform: translateY(0); }
+
+        @media (prefers-reduced-motion: reduce) {
+            .ty-btn, .ty-btn:hover, .ty-btn:focus, .ty-btn:active {
+                transition: none;
+                transform: none;
+            }
+        }
 
         @media (max-width: 576px) {
             .thank-you-card { padding: 0 0.25rem; }
-            .thank-you-icon { width: 56px !important; height: 56px !important; margin-bottom: 0.75rem !important; }
-            .thank-you-icon .fs-1 { font-size: 1.4rem !important; }
-            #thank-you-page.py-5 { padding-top: 1.1rem !important; padding-bottom: 1.5rem !important; }
-            #thank-you-page h1 { font-size: 1.2rem; margin-bottom: 0.5rem !important; }
-            #thank-you-page p.text-secondary { font-size: 0.86rem; }
-
-            /* Stacked, but deliberately NOT full-viewport-width: the previous
-               pass fixed the invisible-border bug (see .btn-outline-primary
-               above) and made both buttons full-width, which over-corrected
-               into two ~48px-tall, edge-to-edge blocks that dominate the
-               card. Constraining to a centered max-width plus a real
-               (not desktop px-5/py-3) mobile padding/font-size override
-               keeps them clearly tappable without reading as giant. The
-               .thank-you-actions .btn selector (0,2,0 specificity) beats the
-               single-class px-5/py-3 Bootstrap utilities (0,1,0), both
-               !important, so it reliably wins here. */
-            .thank-you-actions {
-                display: flex; flex-direction: column; align-items: center; width: 100%; gap: 0.6rem;
+            .thank-you-icon {
+                width: 68px; height: 68px;
+                font-size: 1.6rem;
+                margin-bottom: 0.9rem;
+                box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.07);
             }
-            .thank-you-actions .btn {
-                width: 100%; max-width: 260px; margin: 0 !important;
-                padding: 0.65rem 1rem !important;
-                font-size: 0.92rem !important;
-                min-height: 44px;
+            /* Still !important: .py-5 is a Bootstrap utility that already
+               carries !important, so nothing without it can win here. */
+            #thank-you-page.py-5 { padding-top: 1.1rem !important; padding-bottom: 1.5rem !important; }
+            .ty-btn {
+                max-width: 300px;
+                min-height: 46px;
+                padding: 0.68rem 1.1rem;
+                font-size: 0.93rem;
             }
         }
 
@@ -3659,22 +3808,66 @@
             </form>
             <div id="thank-you-page" class="page text-center py-5">
                 <div class="thank-you-card">
-                    <div class="bg-success-subtle rounded-circle d-inline-flex align-items-center justify-content-center mb-4 thank-you-icon" style="width:100px;height:100px;">
-                        <span class="fs-1 text-success">✔</span>
+                    <!-- An icon-font glyph, not the bare ✔ character: that
+                         one rendered at whatever weight the device's own font
+                         happened to have (thin and slightly off-centre on
+                         Android), while every other icon on this page is a
+                         Bootstrap Icons <i>. Font Awesome is NOT loaded here -
+                         only bootstrap-icons.css is (see the <head>) - so
+                         these must be bi-* classes. -->
+                    <div class="thank-you-icon" aria-hidden="true">
+                        <i class="bi bi-check-lg"></i>
                     </div>
-                    <h1 class="fw-semibold mb-3 text-heading" data-i18n="ty_title"></h1>
-                    <p class="text-secondary">
-                        <span data-i18n="ty_desc"></span> <strong class="text-primary">CSPC</strong>
+                    <h1 class="thank-you-title" data-i18n="ty_title"></h1>
+                    <p class="thank-you-desc">
+                        <span data-i18n="ty_desc"></span> <strong>CSPC</strong>
                     </p>
                     <div class="thank-you-actions mt-4">
-                        <button type="button" onclick="startNewSurvey()" class="btn btn-outline-primary px-5 py-3 fw-semibold" data-i18n="btn_again"></button>
+                        <button type="button" onclick="startNewSurvey()" class="ty-btn ty-btn-primary">
+                            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+                            <span data-i18n="btn_again"></span>
+                        </button>
+                        <!-- Back to Home, not Logout. Finishing a survey is not
+                             a reason to end the session: the client may well
+                             submit another one, and the old red "🚪 Logout"
+                             sat directly under "Submit Again" as an equally
+                             weighted, alarm-coloured button - so the screen
+                             read as a choice between continuing and being
+                             thrown out.
+
+                             "Home" means the same thing the sidebar's own Home
+                             link means, so the two cannot disagree: in the
+                             authenticated portal that is the in-app #view-home
+                             (instant, no navigation, session untouched), and
+                             on the offline entry point - which has no Home view
+                             of its own - it is the landing page, exactly as
+                             that render's sidebar already does it.
+
+                             Unlike the logout it replaces, this is shown in
+                             BOTH renders: switchView() needs no network at all,
+                             and '/' is precached (PRECACHE_URLS in
+                             public/service-worker.js), whereas
+                             /logout?scope=client never was - which was the
+                             whole reason that button had to be hidden offline.
+                        -->
                         <% if (!offlineMode) { %>
-                        <!-- No client session ever exists on the offline entry point
-                             (/survey-offline) to log out of, and /logout?scope=client
-                             isn't a precached route — clicking this while offline
-                             would just fail the navigation like any other
-                             unreachable page. Authenticated-only. -->
-                        <button type="button" onclick="logout()" class="btn btn-outline-danger px-5 py-3 fw-semibold">🚪 Logout</button>
+                        <button type="button" onclick="switchView('home')" class="ty-btn ty-btn-ghost">
+                            <i class="bi bi-house-door" aria-hidden="true"></i>
+                            <span data-i18n="btn_home"></span>
+                        </button>
+                        <% } else { %>
+                        <!-- Plain link, deliberately NOT confirmLeaveOfflineSurvey():
+                             that guard asks "you have unfinished survey
+                             information" whenever the form still holds values,
+                             and on this screen it always does - the response
+                             was just submitted and the form is not reset until
+                             "Submit Again". The queued response lives in
+                             IndexedDB and survives leaving, so there is nothing
+                             here to warn about. -->
+                        <a href="/" class="ty-btn ty-btn-ghost">
+                            <i class="bi bi-house-door" aria-hidden="true"></i>
+                            <span data-i18n="btn_home"></span>
+                        </a>
                         <% } %>
                     </div>
                 </div>
@@ -3980,13 +4173,48 @@
                     <h5 class="fw-semibold text-center mb-2">Manage Your Profile</h5>
                     <p class="text-secondary text-center mb-0">Visit <strong>Profile</strong> to update your name, set a local password, or check the account details tied to your surveys.</p>
                 </div>
-                <div class="text-center mt-4">
-                    <span class="onboarding-dot" data-dot="1"></span>
-                    <span class="onboarding-dot" data-dot="2"></span>
-                    <span class="onboarding-dot" data-dot="3"></span>
-                    <span class="onboarding-dot" data-dot="4"></span>
-                    <span class="onboarding-dot" data-dot="5"></span>
+
+                <!-- Steps 6-8 cover the three controls that are always on
+                     screen but were never explained anywhere: the bell, the
+                     dark-mode button and the language switch. Each one shows
+                     the control EXACTLY as it looks in the interface (.onboarding-
+                     chip renders the real icon), because "the bell in the top
+                     right" is only findable if you already know what you are
+                     looking for. -->
+                <div class="onboarding-step" data-onboarding-step="6" hidden>
+                    <div class="text-center mb-3"><i class="bi bi-bell-fill text-primary onboarding-icon"></i></div>
+                    <h5 class="fw-semibold text-center mb-2">Notifications</h5>
+                    <p class="text-secondary text-center mb-2">The bell in the top-right corner tells you when a survey you submitted has been reviewed or approved. A red dot means something new is waiting.</p>
+                    <p class="text-center mb-0">
+                        <span class="onboarding-chip"><i class="bi bi-bell"></i><span class="onboarding-chip-dot"></span></span>
+                        <span class="onboarding-chip-note">Top-right of the header</span>
+                    </p>
                 </div>
+                <div class="onboarding-step" data-onboarding-step="7" hidden>
+                    <div class="text-center mb-3"><i class="bi bi-moon-stars-fill text-primary onboarding-icon"></i></div>
+                    <h5 class="fw-semibold text-center mb-2">Light or Dark Mode</h5>
+                    <p class="text-secondary text-center mb-2">The round button in the bottom-right corner switches between light and dark. Your choice is remembered on this device, so the portal opens the way you left it.</p>
+                    <p class="text-center mb-0">
+                        <span class="onboarding-chip"><i class="bi bi-moon"></i></span>
+                        <span class="onboarding-chip-note">Bottom-right of the screen</span>
+                    </p>
+                </div>
+                <div class="onboarding-step" data-onboarding-step="8" hidden>
+                    <div class="text-center mb-3"><i class="bi bi-translate text-primary onboarding-icon"></i></div>
+                    <h5 class="fw-semibold text-center mb-2">English or Tagalog</h5>
+                    <p class="text-secondary text-center mb-2">Inside <strong>Take Survey</strong>, the <strong>EN / TL</strong> switch at the top of the card translates the whole survey. You can flip it at any point — your answers are kept.</p>
+                    <p class="text-center mb-0">
+                        <span class="onboarding-chip onboarding-chip-wide">EN&nbsp;<i class="bi bi-toggle-on"></i>&nbsp;TL</span>
+                        <span class="onboarding-chip-note">Top of the survey card</span>
+                    </p>
+                </div>
+
+                <!-- Filled by renderOnboardingStep() from the number of steps
+                     actually in the markup. It used to be five hand-written
+                     spans, which is a second place to remember to edit — and
+                     the one that silently goes wrong, since a missing dot
+                     breaks nothing loudly. -->
+                <div class="text-center mt-4" id="onboardingDots"></div>
             </div>
             <div class="modal-footer onboarding-footer">
                 <button type="button" class="btn btn-outline-secondary onboarding-back-btn" id="onboardingBackBtn" onclick="onboardingStep(-1)" hidden>Back</button>
@@ -3998,6 +4226,34 @@
 <style>
     .onboarding-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--bs-secondary-bg, #dee2e6); margin: 0 4px; transition: background-color .2s ease; }
     .onboarding-dot.active { background: var(--bs-primary); }
+
+    /* A miniature of the real control, so the step points at something the
+       eye can then find on screen rather than describing it in words. */
+    .onboarding-chip {
+        position: relative;
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 38px; height: 38px;
+        border-radius: 11px;
+        border: 1px solid var(--bs-border-color, #dee2e6);
+        background: var(--bs-body-bg, #fff);
+        color: var(--bs-body-color, #1e293b);
+        font-size: 1rem;
+        vertical-align: middle;
+    }
+    .onboarding-chip-wide { width: auto; padding: 0 0.7rem; border-radius: 999px; font-size: 0.85rem; font-weight: 600; }
+    .onboarding-chip-dot {
+        position: absolute; top: 6px; right: 7px;
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #ef4444;
+        box-shadow: 0 0 0 2px var(--bs-body-bg, #fff);
+    }
+    .onboarding-chip-note {
+        display: inline-block;
+        margin-left: 0.55rem;
+        vertical-align: middle;
+        font-size: 0.82rem;
+        color: var(--bs-secondary-color, #6c757d);
+    }
 
     /* Bootstrap's modal-dialog is already full-width-minus-margin below the
        sm breakpoint, and modal-dialog-scrollable caps modal-content's height
@@ -4025,6 +4281,13 @@
         .onboarding-footer { flex-wrap: nowrap; }
         .onboarding-back-btn, .onboarding-next-btn { flex: 1 1 0; padding-left: 0.75rem; padding-right: 0.75rem; }
         .onboarding-next-btn { margin-left: 0; }
+        /* The tour is longer than it was, so the dot row has to survive a
+           320px screen: tighter dots, and allowed to wrap rather than force
+           the dialog to scroll sideways. */
+        #onboardingDots { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+        .onboarding-dot { margin: 0; }
+        .onboarding-chip { width: 34px; height: 34px; font-size: 0.95rem; }
+        .onboarding-chip-note { display: block; margin-left: 0; margin-top: 0.35rem; font-size: 0.78rem; }
     }
 </style>
 <% } %>
@@ -4435,7 +4698,7 @@ document.getElementById('serviceSelect').addEventListener('change', updateAvaila
 // guards that even though server-side (see
 // server.js's VALID_AGE_BRACKETS/VALID_GENDERS/VALID_REGIONS allowlists)
 // should already keep these fields to known-safe values.
-const savedClientProfile = <%- JSON.stringify(typeof clientProfile !== 'undefined' && clientProfile ? clientProfile : null).replace(/\//g, '\\u002f') %>;
+let savedClientProfile = <%- JSON.stringify(typeof clientProfile !== 'undefined' && clientProfile ? clientProfile : null).replace(/\//g, '\\u002f') %>;
 
 // Reaching this page means the server already confirmed an active session
 // (ensureClientAuth). Cache that identity so client-login.ejs can recognize a
@@ -5678,6 +5941,37 @@ function notifyIfNoAutofillName() {
     }
 }
 
+// A confirmed, FINALIZED submission is the moment this account's Region/Age/
+// Sex become permanent: server-side they are COALESCE'd into client_accounts
+// write-once (see insertVerifiedSurveyOnConnection in server.js) and every
+// later submission has them overwritten from there (resolveLockedField).
+//
+// savedClientProfile was rendered BEFORE that happened, so on a first-ever
+// submission the page still believed the account had no locked demographics —
+// "Submit Again", or opening Take Survey again, then showed them as freely
+// editable fields that the server would silently overwrite. This brings the
+// page's copy in line with what the database now holds, so every later
+// applyLockedProfile() in this session locks them without needing a reload.
+//
+// Called ONLY for a finalized submission, never a pending one: a personal
+// (non-CSPC) account's response goes to pending_survey_submissions and does
+// not reach client_accounts at all until an office approves it, so claiming
+// the lock at submit time would be a promise the database has not made.
+// `resData.pending` is the server's own word for which of the two happened.
+function rememberLockedDemographics(submitted) {
+    if (!submitted) return;
+    const base = savedClientProfile || {};
+    savedClientProfile = Object.assign({}, base, {
+        // Write-once on this side too, mirroring the server's COALESCE: the
+        // locked value is the one from the FIRST submission, and a later
+        // answer must never quietly replace it.
+        region: base.region || submitted.region || null,
+        age: base.age || submitted.age || null,
+        gender: base.gender || submitted.gender || null
+    });
+    applyLockedProfile(savedClientProfile);
+}
+
 // Toggling on fills Name, Sex, Age, and Region from this account's saved profile
 // (same source as applyLockedProfile). Toggling off restores whatever those
 // fields held before the switch was turned on.
@@ -5706,6 +6000,31 @@ function toggleAutofillClientProfile(enabled) {
 
                 const genderSelect = document.querySelector('select[name="gender"]');
                 if (genderSelect && !genderSelect.disabled && p.gender) genderSelect.value = p.gender;
+
+                // Any account that has submitted even once has Region/Age/Sex
+                // recorded on client_accounts (write-once, COALESCE'd — see the
+                // upsert in server.js), and the server will overwrite whatever
+                // this form sends for them anyway (resolveLockedField). So the
+                // honest thing for Autofill to do is not just fill them but
+                // show them as what they are: locked. Without this the fields
+                // filled in as ordinary editable ones, and a client could spend
+                // the rest of the form believing an edit there would be kept.
+                //
+                // applyLockedProfile() is the SAME function page load uses, so
+                // the two paths cannot drift; it no-ops on any field the
+                // profile has no value for, which is exactly the
+                // never-submitted account's case.
+                //
+                // It also keeps the page's own copy current, so a later
+                // Submit Again / reset locks them too without another fetch.
+                if (p.region || p.age || p.gender) {
+                    savedClientProfile = Object.assign({}, savedClientProfile, {
+                        region: p.region || (savedClientProfile && savedClientProfile.region) || null,
+                        age: p.age || (savedClientProfile && savedClientProfile.age) || null,
+                        gender: p.gender || (savedClientProfile && savedClientProfile.gender) || null
+                    });
+                    applyLockedProfile(savedClientProfile);
+                }
 
                 // Fall back to this account's own locally-remembered answers
                 // for Client Type/Age/Region only where the server didn't
@@ -5808,6 +6127,22 @@ function switchView(view) {
 
     if (view === 'profile' && !profileLoaded) loadProfileView();
     if (view === 'history' && !historyLoaded) loadHistoryView();
+
+    // Re-opening Take Survey after finishing one starts a NEW survey.
+    //
+    // The Thank You page is a .page inside #view-survey, so it stays .active
+    // while the client is away on Home/Profile/History — leaving via "Back to
+    // Home" and tapping "Take Survey" again used to drop them straight back
+    // onto the "THANK YOU!" screen of the survey they had already submitted,
+    // with no way forward except "Submit Again".
+    //
+    // Scoped to that one page on purpose: an UNFINISHED survey (any stageN
+    // active) must survive the same round trip, so this must never fire as a
+    // blanket "reset the survey whenever the view is opened".
+    if (view === 'survey') {
+        const thankYou = document.getElementById('thank-you-page');
+        if (thankYou && thankYou.classList.contains('active')) resetSurveyToStart();
+    }
 
     // (The English/Tagalog switch used to be shown/hidden from here, back
     // when it lived in the app header and had to be suppressed on every
@@ -6336,6 +6671,11 @@ function enterFullscreen() {
 }
 
 function exitFullscreen() {
+    // Also the way out of the no-API fallback: showThankYou() and navigate()
+    // call this to hand the browser chrome back when the survey ends, and on
+    // an iPhone that has to undo expanded view instead — otherwise the
+    // compacted header stayed on for the rest of the session.
+    if (isPseudoFullscreen()) setPseudoFullscreen(false);
     if (!getFullscreenElement()) return;
     const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
     if (!exit) return;
@@ -6345,17 +6685,76 @@ function exitFullscreen() {
     } catch (e) { /* ignore */ }
 }
 
+// =====================================
+// EXPANDED VIEW — the fallback for browsers with no Fullscreen API
+// =====================================
+// iPhone Safari exposes requestFullscreen() for <video> and nothing else, and
+// no page on iOS can hide Safari's own address/tab bars. So on those devices
+// the minimize/maximize button toggles a class that reclaims the space this
+// page DOES control — the tall header, the card padding — instead of being
+// hidden (which is what it used to do) or drawn as a control that does
+// nothing when tapped (which is what it did before that).
+//
+// The button is never removed on any platform now; only its mechanism differs.
+function hasNativeFullscreen() {
+    const el = document.documentElement;
+    if (!(el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen)) return false;
+    // An <iframe> without allowfullscreen reports the method but refuses the
+    // request — the same case the <head> probe checks. Treat it as missing so
+    // the tap does something rather than being silently rejected.
+    let permitted = document.fullscreenEnabled;
+    if (permitted === undefined) permitted = document.webkitFullscreenEnabled;
+    if (permitted === undefined) permitted = document.msFullscreenEnabled;
+    return permitted === undefined ? true : !!permitted;
+}
+
+function isPseudoFullscreen() {
+    return document.documentElement.classList.contains('pseudo-fullscreen');
+}
+
+// Said once per tab, the first time expanded view is entered. Without it the
+// user taps "maximize" on an iPhone, sees the page grow a little and Safari's
+// bars stay exactly where they were, and reasonably concludes it half-worked.
+const PSEUDO_FS_HINT_KEY = 'cqa_expanded_view_hint';
+function explainPseudoFullscreenOnce() {
+    try {
+        if (sessionStorage.getItem(PSEUDO_FS_HINT_KEY) === '1') return;
+        sessionStorage.setItem(PSEUDO_FS_HINT_KEY, '1');
+    } catch (e) { /* private mode — at worst the hint repeats next tab */ }
+    if (window.AppAlert && typeof AppAlert.toastInfo === 'function') {
+        AppAlert.toastInfo('Expanded view on. Your browser\u2019s own bars can\u2019t be hidden by a website on this device.');
+    }
+}
+
+function setPseudoFullscreen(on) {
+    document.documentElement.classList.toggle('pseudo-fullscreen', !!on);
+    if (on) explainPseudoFullscreenOnce();
+    updateFullscreenButton();
+}
+
 function toggleFullscreen() {
-    if (getFullscreenElement()) exitFullscreen();
-    else enterFullscreen();
+    if (hasNativeFullscreen()) {
+        if (getFullscreenElement()) exitFullscreen();
+        else enterFullscreen();
+        return;
+    }
+    setPseudoFullscreen(!isPseudoFullscreen());
 }
 
 function updateFullscreenButton() {
     const btn = document.getElementById('btn-fullscreen');
     if (!btn) return;
-    const isFs = !!getFullscreenElement();
+    // Either mechanism counts as "currently maximized" — the icon describes
+    // what the button will DO next, and that must not depend on which of the
+    // two got the user here.
+    const isFs = !!getFullscreenElement() || isPseudoFullscreen();
     btn.innerHTML = isFs ? '<i class="bi bi-fullscreen-exit"></i>' : '<i class="bi bi-arrows-fullscreen"></i>';
-    btn.title = isFs ? 'Exit full screen' : 'Toggle full screen';
+    const native = hasNativeFullscreen();
+    btn.title = isFs
+        ? (native ? 'Exit full screen' : 'Exit expanded view')
+        : (native ? 'Toggle full screen' : 'Expand — more room for the survey');
+    btn.setAttribute('aria-label', btn.title);
+    btn.setAttribute('aria-pressed', isFs ? 'true' : 'false');
 }
 
 ['fullscreenchange', 'webkitfullscreenchange', 'msfullscreenchange'].forEach(evt => {
@@ -7042,6 +7441,7 @@ const i18n = {
         ty_title: "THANK YOU!",
         ty_desc: "Your response has been sent successfully. Your feedback is valuable to",
         btn_again: "Submit Again",
+        btn_home: "Back to Home",
         sqd_items: [
             "SQD0. I am satisfied with the service that I availed.",
             "SQD1. I spent a reasonable amount of time for my transaction.",
@@ -7190,6 +7590,7 @@ const i18n = {
         ty_title: "MARAMING SALAMAT!",
         ty_desc: "Matagumpay na naipadala ang iyong tugon. Mahalaga sa amin ang iyong puna para sa",
         btn_again: "Magsumite Muli",
+        btn_home: "Bumalik sa Home",
         sqd_items: [
             "SQD0. Nasiyahan ako sa serbisyo na aking natanggap sa napuntahan na tanggapan",
             "SQD1. Makatwiran ang oras na aking ginugol para sa pagproseso ng aking transaksyon.",
@@ -7608,6 +8009,11 @@ async function submitAll(event) {
     .then(({ status, resData }) => {
         if (resData.success) {
             saveAutofillProfile(data);
+            // Finalized right now (a CSPC account) — its demographics are
+            // locked from this point on, so the form must show them that way
+            // for the rest of the session. A pending submission deliberately
+            // does not: see rememberLockedDemographics.
+            if (!resData.pending) rememberLockedDemographics(data);
             // Server confirmed the submission — this is the one point where
             // clearing any in-progress draft is actually correct (item 37:
             // only on confirmed success or explicit discard).
@@ -7738,11 +8144,15 @@ function markServiceAsTaken(officeId, serviceName) {
     }
 }
 
-// "Submit Again" from the Thank You page — resets the form and drops the
-// client straight back into a fresh survey (Stage 1) without touching the
-// session, unlike the old location.reload() which bounced to the Home view
-// and read to the user as if they'd been logged out.
-function startNewSurvey() {
+// Clears a finished/abandoned attempt and puts the survey back on Stage 1
+// (Terms). Split out of startNewSurvey() because there are now TWO ways back
+// into a fresh survey and they must land on exactly the same state: "Submit
+// Again" on the Thank You page, and re-opening Take Survey after leaving that
+// page through "Back to Home" — see the guard in switchView().
+//
+// Deliberately does NOT switch the view: switchView() calls this, so doing it
+// here too would recurse.
+function resetSurveyToStart() {
     const form = document.getElementById('surveyForm');
     if (form) form.reset();
 
@@ -7763,11 +8173,33 @@ function startNewSurvey() {
 
     editReturnTarget = null;
 
+    // form.reset() returns the Autofill switch to its unchecked default, so
+    // the in-memory snapshot it would otherwise restore on the next toggle-off
+    // belongs to a survey that no longer exists. Cleared here so the switch's
+    // first use in the new attempt captures the new form's own values.
+    autofillSnapshot = null;
+
     const progressEl = document.getElementById('surveyProgress');
     if (progressEl) progressEl.style.display = '';
 
-    switchView('survey');
+    // Also what takes the Thank You page out of .active: navigate() clears
+    // .active from every .page before activating stage1.
     navigate(1);
+}
+
+// "Submit Again" from the Thank You page — resets the form and drops the
+// client straight back into a fresh survey (Stage 1) without touching the
+// session, unlike the old location.reload() which bounced to the Home view
+// and read to the user as if they'd been logged out.
+//
+// Reset BEFORE switching the view, not after: navigate(1) inside the reset is
+// what drops the Thank You page's .active, and switchView() starts a fresh
+// survey whenever it finds that page still active. Doing it in the other
+// order would have switchView() fire its own reset first and run the whole
+// thing twice.
+function startNewSurvey() {
+    resetSurveyToStart();
+    switchView('survey');
 }
 
 async function logout(){
@@ -7817,10 +8249,27 @@ document.getElementById('agreeTermsStage1').addEventListener('change', function 
 // First-time Setup Wizard (see showOnboarding in server.js's /client-survey
 // route, and the #onboardingWizardModal markup this drives)
 // ==========================================
-const ONBOARDING_STEP_COUNT = 5;
+// Counted from the markup rather than hard-coded. It was a literal 5 sitting
+// a few hundred lines away from the five <div data-onboarding-step> elements
+// and the five dot spans — three places that had to agree, where adding a
+// step silently stranded the last one behind a "Next" that finished the tour.
+const ONBOARDING_STEP_COUNT = document.querySelectorAll('.onboarding-step').length;
 let onboardingCurrentStep = 1;
 
+// The dots are generated for the same reason — one step, one dot, always.
+function buildOnboardingDots() {
+    const wrap = document.getElementById('onboardingDots');
+    if (!wrap || wrap.childElementCount) return;
+    for (let i = 1; i <= ONBOARDING_STEP_COUNT; i++) {
+        const dot = document.createElement('span');
+        dot.className = 'onboarding-dot';
+        dot.setAttribute('data-dot', String(i));
+        wrap.appendChild(dot);
+    }
+}
+
 function renderOnboardingStep() {
+    buildOnboardingDots();
     document.querySelectorAll('.onboarding-step').forEach(el => {
         const isActive = Number(el.getAttribute('data-onboarding-step')) === onboardingCurrentStep;
         el.hidden = !isActive;
@@ -7833,6 +8282,9 @@ function renderOnboardingStep() {
     const nextBtn = document.getElementById('onboardingNextBtn');
     if (backBtn) backBtn.hidden = onboardingCurrentStep === 1;
     if (nextBtn) nextBtn.textContent = onboardingCurrentStep === ONBOARDING_STEP_COUNT ? 'Get Started' : 'Next';
+    // Screen readers otherwise get no signal that the dialog's content
+    // changed under them — the heading is the same element every time.
+    if (nextBtn) nextBtn.setAttribute('aria-label', nextBtn.textContent + ' (step ' + onboardingCurrentStep + ' of ' + ONBOARDING_STEP_COUNT + ')');
 }
 
 function onboardingStep(delta) {

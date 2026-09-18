@@ -14,10 +14,15 @@
 //   2. "asdasdasd", "..", "qwerty", "zzzz" — a respondent typing something to
 //      get past the field. There is no feedback in it to report.
 //
-//   3. Profanity. A real comment, genuinely submitted, and it belongs in the
-//      record — but the record is /survey-records, where staff read responses
-//      as they came in. The REPORT is the version that gets signed and filed,
-//      and it is masked there.
+//   3. Profanity. A real comment, genuinely submitted, and the complaint
+//      inside it is real too — so the word is never deleted and the row is
+//      never dropped. It is masked THROUGH ITS VOWELS instead
+//      ("p*t*ng*n*", "g*g*", "sh*t"): the consonants stay, which leaves the
+//      word's shape readable enough that a reader can tell which word was
+//      used and how strongly it was meant, without the page spelling it out.
+//      This applies EVERYWHERE a stored comment is shown back to staff — the
+//      signed report and /survey-records both — not the report alone. What is
+//      stored in the database is never rewritten; only what is displayed.
 //
 // WHERE THIS SITS IN THE PIPELINE
 // The AI classifier already catches (1) and (2) when it runs: analyze.py's
@@ -279,6 +284,7 @@ const PROFANITY_EXACT = new Set([
     'hinayupak', 'kupal', 'kingina', 'kinginamo',
     'pakyu', 'pakshet', 'pucha', 'yawa',
     'bobo', 'boba', 'bobong', 'tanga', 'tangang', 'engot', 'inutil',
+    'gagi', 'hangal',
     'bwiset', 'pesteng', 'gunggong', 'siraulo',
     'burat', 'titi', 'pekpek', 'kantot', 'jakol', 'bayag', 'tite'
 ]);
@@ -342,6 +348,75 @@ function normalizeToken(token) {
         .replace(/(.)\1{2,}/g, '$1$1');
 }
 
+// ---------------------------------------------------------------------------
+// 3b. THE SAME WORD, WITH FILIPINO AFFIXES ON IT
+// ---------------------------------------------------------------------------
+// The exact list above is a list of BASE FORMS, and Filipino does not leave a
+// word in its base form. "gagi grabing kabobohan and katangahan yan" came
+// through a real report completely unmasked: "bobo" and "tanga" are both on
+// the list, but what the respondent actually wrote was ka- + bobo + -han and
+// ka- + tanga + -han, and neither of those is the string the list holds. The
+// same gap hid "kagaguhan", "pagkabobo", "napakatanga" and "kaululan".
+//
+// So the affixes are peeled off and what is left is compared to a root. This
+// is deliberately separate from PROFANITY_PREFIXES above, which does the
+// opposite job — that list matches a word that STARTS with a profane stem
+// ("putanginamo"); this one strips a harmless wrapper off to find a profane
+// stem inside.
+//
+// The comparison against the root is EXACT, never fuzzy, and that is what
+// keeps ordinary vocabulary out of it. "katangian" — a quality, a
+// characteristic, a word this survey's own reports use — peels down to
+// "tangi", which is not "tanga" and so does not match. Anything looser here
+// would mask it, and masking a word like that in a quality assurance report is
+// a far worse failure than missing one insult.
+const PROFANITY_AFFIXABLE_ROOTS = new Set([
+    'bobo', 'boba', 'tanga', 'gago', 'gaga', 'gagi', 'gagu',
+    'ulol', 'ulul', 'engot', 'inutil', 'hangal', 'gunggong',
+    'tarantado', 'tarantada', 'kupal', 'hinayupak', 'siraulo',
+    'bwisit', 'buwisit', 'punyeta'
+]);
+
+// Prefixes a respondent actually puts on these words. '' is in the list so a
+// root carrying only a SUFFIX ("bobohan", "tangahan", "gagong") is reached too.
+const AFFIX_PREFIXES = [
+    '', 'ka', 'pagka', 'napaka', 'pinaka', 'sobrang',
+    'mag', 'nag', 'ma', 'na', 'pag', 'maka', 'naka', 'pina',
+    'pang', 'mang', 'nang', 'ipag'
+];
+
+// Suffixes, and the -ng linker. '' is here for the mirror case: a root
+// carrying only a PREFIX ("pagkabobo", "napakatanga").
+const AFFIX_SUFFIXES = ['', 'han', 'hin', 'an', 'in', 'ng', 'g'];
+
+function hasProfaneRoot(normalized) {
+    for (const prefix of AFFIX_PREFIXES) {
+        if (prefix && !normalized.startsWith(prefix)) continue;
+        const afterPrefix = normalized.slice(prefix.length);
+
+        for (const suffix of AFFIX_SUFFIXES) {
+            if (suffix && !afterPrefix.endsWith(suffix)) continue;
+            // Bare root with no affix either side is the exact list's job —
+            // letting it through here would only match everything twice.
+            if (!prefix && !suffix) continue;
+
+            const root = afterPrefix.slice(0, afterPrefix.length - suffix.length);
+            // Under three letters there is no root left to recognize, only a
+            // fragment that could have come from anything.
+            if (root.length < 3) continue;
+
+            if (PROFANITY_AFFIXABLE_ROOTS.has(root)) return true;
+
+            // Filipino raises a final "o" to "u" in front of a suffix: "gago"
+            // + -han is "gaguhan", "ulol" + -an is "ululan". Put the "o" back
+            // before giving up, or every suffixed form of those two is missed.
+            const restored = root.replace(/u([^u]*)$/, 'o$1');
+            if (restored !== root && PROFANITY_AFFIXABLE_ROOTS.has(restored)) return true;
+        }
+    }
+    return false;
+}
+
 function isProfaneToken(normalized) {
     if (normalized.length < 2) return false;
     if (PROFANITY_EXACT.has(normalized)) return true;
@@ -350,15 +425,56 @@ function isProfaneToken(normalized) {
     // as well before giving up.
     const single = normalized.replace(/(.)\1+/g, '$1');
     if (PROFANITY_EXACT.has(single)) return true;
-    return PROFANITY_PREFIXES.some(prefix => normalized.startsWith(prefix));
+    if (PROFANITY_PREFIXES.some(prefix => normalized.startsWith(prefix))) return true;
+    // Last: the same word wearing a Filipino affix — see hasProfaneRoot.
+    return hasProfaneRoot(normalized);
 }
 
-// Replaces every profane word with asterisks, one per character, and leaves
-// the rest of the comment exactly as written. Asterisks rather than removing
-// the word outright: the reader of a signed report should be able to see that
-// something was said and taken out, not read a sentence quietly missing a
-// piece. Length is preserved for the same reason — the shape of what was
-// written stays visible.
+// The five vowels, plus every character that stands in for one: an accented
+// form, or one of the digit/symbol substitutions LEET_MAP already knows about
+// (0 -> o, 1 -> i, 3 -> e, 4 -> a, @ -> a, ! -> i). Consonant substitutions in
+// LEET_MAP (5 -> s, 7 -> t, 8 -> b, $ -> s, | -> l, + -> t) are deliberately
+// NOT vowels here — they are consonants written oddly, and consonants stay.
+function isVowelChar(ch) {
+    const folded = ch.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    if (VOWELS.has(folded)) return true;
+    const substituted = LEET_MAP[folded];
+    return substituted !== undefined && VOWELS.has(substituted);
+}
+
+// One profane word, starred through its vowels. Composed characters are
+// normalized to NFC first so an accented vowel is one unit to replace rather
+// than a base letter with a combining mark left dangling after it.
+function maskVowels(word) {
+    let masked = 0;
+    const out = Array.from(word.normalize('NFC'), (ch) => {
+        if (!isVowelChar(ch)) return ch;
+        masked += 1;
+        return '*';
+    }).join('');
+    // Nothing to star out — see maskProfanity's note on "wtf".
+    return masked > 0 ? out : '*'.repeat(word.length);
+}
+
+// Masks the vowels of every profane word and leaves the rest of the comment
+// exactly as written — "putangina" prints as "p*t*ng*n*", "shit" as "sh*t".
+//
+// Vowels rather than the whole word: the word is removed as something to READ
+// while its shape is left intact as something to SEE. A reader of a signed
+// report can tell which word was used and how strong the complaint behind it
+// was, which is information the report exists to carry; a solid run of
+// asterisks throws that away along with the word. Length is preserved either
+// way, so the sentence never reads as quietly missing a piece.
+//
+// "Vowel" here means what a reader would call one, not just the five ASCII
+// letters: accented vowels ("tanginá") and the digits and symbols people
+// substitute for them ("b0b0", "t@nga", "sh1t") are all starred out too.
+// Leaving a substitution visible would defeat the point — the word would still
+// be perfectly legible in exactly the form its writer chose.
+//
+// A profane word with NO vowel to take ("wtf", "stfu") is masked whole
+// instead. That is the one case where the vowel rule has nothing to act on,
+// and printing the word untouched is not an outcome this function may produce.
 //
 // Returns { text, maskedCount } so the caller can log or count how much of a
 // reporting period needed masking without re-scanning the text.
@@ -402,7 +518,7 @@ function maskProfanity(text) {
     const out = parts.map((part, i) => {
         if (!doMask[i]) return part;
         maskedCount += 1;
-        return '*'.repeat(part.length);
+        return maskVowels(part);
     }).join('');
 
     return { text: out, maskedCount };

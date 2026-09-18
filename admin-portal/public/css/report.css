@@ -159,6 +159,36 @@
     .doc-code { flex-shrink: 0 !important; white-space: nowrap !important; }
 
     .page-footer { break-inside: avoid; page-break-inside: avoid; }
+
+    /* The footer prints on the BOTTOM EDGE of its sheet, not tucked directly
+       under wherever the content happened to stop. Each .report-container is
+       one printed page (page-break-after: always + page-break-inside: avoid),
+       so making it a full-page-height flex column and letting its last block
+       absorb the slack with margin-top:auto pins the footer to the bottom of
+       that page whether the page above it is full or a third full.
+       9.9in is Letter's 11in less the 0.5in/0.25in @page margins, with a little
+       slack so a rounding difference cannot push the footer onto a blank extra
+       sheet of its own.
+       Deliberately NOT `position: fixed`: only some browsers repeat a fixed
+       element per printed page, and these reports render two or three
+       .report-containers in one document — every one of their fixed footers
+       would then stack on top of the others at the bottom of every sheet.
+       The PDF download does not use this path at all. html2canvas flattens the
+       whole document into a single image before it is sliced into pages, so no
+       CSS can make anything repeat per page there; public/js/pdf-repeating-header.js
+       redraws the footer onto each page with jsPDF instead. */
+    .report-container {
+        display: flex !important;
+        flex-direction: column;
+        min-height: 9.9in;
+    }
+    /* Pinned on the flex CHILD, which is the footer itself on pages that
+       include it directly (survey-records.ejs) and the wrapper around it on
+       pages that toggle the footer at runtime (cluster-detail.ejs). */
+    .report-container > .page-footer,
+    .report-container > .report-footer-slot {
+        margin-top: auto;
+    }
     .signature-section { break-inside: avoid; page-break-inside: avoid; }
     .sqd-interpretation-standalone { break-inside: avoid; page-break-inside: avoid; }
     .sqd-signature-grid { break-inside: avoid; page-break-inside: avoid; }
