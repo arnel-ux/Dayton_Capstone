@@ -189,8 +189,15 @@ importScripts('/js/offline-db.js');
 // from the client survey no longer lands on a page offering no offline route
 // while it re-derives what it already knew. connection-prompt.js is precached,
 // so this needs the bump.
-const STATIC_CACHE = 'cspc-static-v48';
-const RUNTIME_CACHE = 'cspc-runtime-v48';
+// v49: '/user-accounts' joins ADMIN_PROTECTED_PATH_PREFIXES. It was the one
+// logged-in admin page missing from that list, so a navigation to it was
+// cached like a public page — meaning the registered-account list (names and
+// email addresses) could be served back from that cache after logout, and an
+// account deleted from the database kept appearing in a stale cached copy
+// whenever the live fetch timed out. A cache name change is what dislodges the
+// copies already stored by an installed worker.
+const STATIC_CACHE = 'cspc-static-v49';
+const RUNTIME_CACHE = 'cspc-runtime-v49';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
@@ -294,8 +301,13 @@ const ADMIN_PROTECTED_PATH_PREFIXES = [
     '/dashboard', '/report', '/profile', '/password', '/print',
     '/survey-records', '/offices', '/manage-admins', '/survey',
     '/cluster', '/clusters', '/services', '/admins', '/settings',
-    '/period-covered', '/office-approvals', '/office-dashboard', '/office-logout'
+    '/period-covered', '/office-approvals', '/office-dashboard', '/office-logout',
+    '/user-accounts'
 ];
+// '/user-accounts' belongs here for the same reason, plus one of its own: the
+// page IS the live state of client_accounts, so a cached copy is not merely
+// stale, it contradicts the database — an account deleted there would still be
+// listed by the cached page.
 // '/office-dashboard' belongs here for the same reason as '/office-approvals':
 // it is a logged-in office page, and it is where a successful login now lands,
 // so it is the office page most likely to have been cached by a navigation.

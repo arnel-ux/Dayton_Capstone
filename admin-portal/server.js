@@ -2726,6 +2726,41 @@ CREATE TABLE IF NOT EXISTS client_profiles (
     FOREIGN KEY (survey_response_id) REFERENCES survey_responses(id) ON DELETE CASCADE
 );`;
 
+// Bookkeeping for one-off DATA migrations (as opposed to the ALTER TABLEs
+// above, which are idempotent by nature and can safely re-run every boot). A
+// data backfill is not idempotent in the same way: once an admin edits or
+// deletes what it seeded, re-running it undoes that edit. One row per migration
+// name records that it has happened.
+const createSchemaMigrationsTableQuery = `
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    name VARCHAR(190) PRIMARY KEY,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);`;
+
+// Calls back with true on the single startup that gets to run `name`, and false
+// on every startup after it. Claiming the marker IS the check -- INSERT IGNORE
+// reports affectedRows 1 only for the process that actually inserted the row,
+// so two server processes booting at the same time can never both run the
+// migration (a SELECT-then-INSERT pair would let them). The marker is written
+// BEFORE the work, so a migration that fails is not retried on the next boot:
+// deliberate, because a half-applied backfill re-running is how rows an admin
+// has since deleted come back.
+function runOnce(name, callback) {
+    db.query(createSchemaMigrationsTableQuery, (createErr) => {
+        if (createErr) {
+            console.error(`❌ Could not create schema_migrations — skipping one-time migration '${name}':`, createErr.message);
+            return callback(false);
+        }
+        db.query('INSERT IGNORE INTO schema_migrations (name) VALUES (?)', [name], (claimErr, result) => {
+            if (claimErr) {
+                console.error(`❌ Could not claim one-time migration '${name}':`, claimErr.message);
+                return callback(false);
+            }
+            callback(!!result && result.affectedRows === 1);
+        });
+    });
+}
+
 // One row per Google/registered-client account. Holds the demographic details
 // (region, age, gender) locked-in from that account's FIRST survey submission,
 // plus lets registered clients log in via the regular /login form.
@@ -3162,6 +3197,13 @@ db.query(createClustersTableQuery, (err) => {
                                 // have no row here, so My Profile/autofill show "Not set yet" forever.
                                 // Seed one row per email from that email's most recent client_profiles
                                 // submission. INSERT IGNORE skips emails that already have an account row.
+                                //
+                                // ONE-TIME. This used to run on every single startup, which made
+                                // deleting an account impossible: client_profiles keeps a row per past
+                                // submission, so an account deleted from client_accounts was silently
+                                // re-created from that history on the next restart and reappeared in
+                                // /user-accounts. A row in schema_migrations marks it as done, so a
+                                // deletion now stays deleted.
                                 const backfillAccountsQuery = `
                                     INSERT IGNORE INTO client_accounts (email, respondent_name, region, age, gender, onboarding_completed)
                                     SELECT cp.email, cp.respondent_name, cp.region, cp.age, cp.gender, 1
@@ -3173,9 +3215,28 @@ db.query(createClustersTableQuery, (err) => {
                                         GROUP BY email
                                     ) latest ON cp.id = latest.max_id
                                 `;
-                                db.query(backfillAccountsQuery, (backfillErr, backfillResult) => {
-                                    if (backfillErr) console.error("❌ Error backfilling client_accounts:", backfillErr);
-                                    else if (backfillResult.affectedRows > 0) console.log(`✅ Backfilled ${backfillResult.affectedRows} client_accounts row(s) from client_profiles.`);
+                                runOnce('backfill_client_accounts_from_client_profiles', (proceed) => {
+                                    if (!proceed) return;
+
+                                    // A deployment that already has accounts has also already been
+                                    // running the old every-startup version of this backfill, so its
+                                    // pre-account-system clients are long since seeded. Re-running it
+                                    // here would only resurrect accounts an admin has deleted since,
+                                    // so the marker is recorded and the query skipped. On a fresh
+                                    // install client_accounts is empty and the backfill runs (where,
+                                    // with no client_profiles either, it is simply a no-op).
+                                    db.query('SELECT EXISTS(SELECT 1 FROM client_accounts LIMIT 1) AS has_accounts', (existsErr, existsRows) => {
+                                        if (existsErr) return console.error("❌ Could not check client_accounts before backfill:", existsErr.message);
+                                        if (existsRows && existsRows[0] && Number(existsRows[0].has_accounts) === 1) {
+                                            console.log('ℹ️  client_accounts backfill marked as already applied (existing accounts present) — deleted accounts stay deleted.');
+                                            return;
+                                        }
+
+                                        db.query(backfillAccountsQuery, (backfillErr, backfillResult) => {
+                                            if (backfillErr) console.error("❌ Error backfilling client_accounts:", backfillErr);
+                                            else if (backfillResult.affectedRows > 0) console.log(`✅ Backfilled ${backfillResult.affectedRows} client_accounts row(s) from client_profiles.`);
+                                        });
+                                    });
                                 });
                             });
 
@@ -7215,6 +7276,7 @@ app.get('/user-accounts', ensureAdminAuth, noCache, (req, res) => {
     const accountsQuery = `
         SELECT ca.email,
                ca.respondent_name,
+               ca.google_photo_url,
                ca.created_at,
                (SELECT COUNT(*)
                   FROM survey_responses s
@@ -7269,6 +7331,14 @@ app.get('/user-accounts', ensureAdminAuth, noCache, (req, res) => {
                     name,
                     hasName,
                     isCspc: isCspcEmail(email),
+                    // The Google account's own picture, saved at sign-in (see
+                    // /auth/google/callback). Only http(s) is passed through --
+                    // the column is a plain VARCHAR an operator could edit, and
+                    // this value goes straight into an <img src>, so a
+                    // javascript:/data: URL must never reach the template.
+                    photoUrl: /^https?:\/\//i.test(String(row.google_photo_url || '').trim())
+                        ? String(row.google_photo_url).trim()
+                        : null,
                     submissionCount: Number(row.submission_count) || 0,
                     // Sort keys are precomputed server-side so the browser sort
                     // compares numbers and lowercased strings instead of

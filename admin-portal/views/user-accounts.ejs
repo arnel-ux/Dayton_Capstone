@@ -308,6 +308,18 @@
             letter-spacing: 0.02em;
         }
 
+        /* The Google account's own picture, in the same 40px cell the initials
+           circle occupies, so a row with a photo and a row without line up
+           identically. object-fit keeps a non-square source from stretching. */
+        .account-photo {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: var(--surface-subtle);
+            border: 1px solid var(--border-subtle);
+        }
+
         .account-identity { min-width: 0; }
         .account-name {
             margin: 0;
@@ -539,7 +551,17 @@
                                  data-name="<%= account.nameKey %>"
                                  data-date="<%= account.dateKey %>"
                                  data-type="<%= account.isCspc ? 'cspc' : 'personal' %>">
-                                <span class="account-avatar"><%= initial %></span>
+                                <% if (account.photoUrl) { %>
+                                    <%# referrerpolicy is required, not cosmetic: Google's
+                                        lh3.googleusercontent.com refuses a request that arrives
+                                        with a referrer from an unrelated origin, and the photo
+                                        comes back 403 instead of loading. %>
+                                    <img class="account-photo" src="<%= account.photoUrl %>"
+                                         alt="" width="40" height="40" loading="lazy"
+                                         referrerpolicy="no-referrer" data-initial="<%= initial %>">
+                                <% } else { %>
+                                    <span class="account-avatar"><%= initial %></span>
+                                <% } %>
                                 <div class="account-identity">
                                     <p class="account-name<%= account.hasName ? '' : ' is-unset' %>" title="<%= account.name %>"><%= account.name %></p>
                                     <p class="account-email" title="<%= emailText %>">
@@ -656,6 +678,19 @@
             if (noResults) noResults.hidden = visible !== 0;
             list.hidden = visible === 0;
         }
+
+        // A Google photo URL is whatever was saved at sign-in and can stop
+        // resolving later (the account changed its picture, or the link expired),
+        // which renders as a broken-image icon in the middle of the list. Swap
+        // any such image for the initials circle the row would have had.
+        list.querySelectorAll('img.account-photo').forEach(img => {
+            img.addEventListener('error', () => {
+                const fallback = document.createElement('span');
+                fallback.className = 'account-avatar';
+                fallback.textContent = img.dataset.initial || '?';
+                img.replaceWith(fallback);
+            }, { once: true });
+        });
 
         if (search) search.addEventListener('input', apply);
         if (sortSelect) sortSelect.addEventListener('change', apply);
