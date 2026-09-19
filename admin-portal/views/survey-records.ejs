@@ -236,6 +236,31 @@
         }
         html[data-bs-theme="dark"] .office-group-header { color: #93c5fd; border-left-color: #93c5fd; }
 
+        /* "View All" opens every respondent of this cluster in a modal that
+           reuses the exact same table markup as the section below it. */
+        .btn-view-all {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--sp-2);
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            padding: var(--sp-1, 4px) var(--sp-3);
+            border-radius: var(--radius-sm, 6px);
+            border: 1px solid var(--border-strong);
+            background: var(--card-bg);
+            color: var(--primary-indigo);
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .btn-view-all:hover { border-color: var(--primary-indigo); background: var(--primary-indigo); color: #fff; }
+        html[data-bs-theme="dark"] .btn-view-all { color: #93c5fd; }
+        html[data-bs-theme="dark"] .btn-view-all:hover { background: #2a3b5c; border-color: #93c5fd; color: #fff; }
+
+        #viewAllModal .table { min-width: 800px; }
+        #viewAllModal .record-row.page-hidden,
+        #viewAllModal .record-row.search-hidden { display: table-row !important; }
+
         /* Table uses a fixed layout with deliberate column widths (set via <colgroup>) so
            thead/tbody columns always line up and one long cell can never distort row height. */
         .table-scroll-x { overflow-x: auto; }
@@ -600,6 +625,9 @@
                             <div class="office-section">
                                 <div class="office-group-header">
                                     <span><%= cluster.toUpperCase() %></span>
+                                    <button type="button" class="btn btn-view-all" onclick="openViewAllCluster(this)" title="View every respondent in this cluster">
+                                        <i class="fas fa-list-ul" aria-hidden="true"></i> View All
+                                    </button>
                                 </div>
                                 <div class="table-scroll-x">
                                 <table class="table">
@@ -666,6 +694,23 @@
 
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- View All modal: lists every respondent of one cluster, using the very same
+     table markup as that cluster's section (cloned at open time). -->
+<div class="modal fade" id="viewAllModal" tabindex="-1" aria-labelledby="viewAllModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header border-bottom-0 pb-2">
+                <h5 class="modal-title fw-bold" id="viewAllModalLabel"><i class="fas fa-list-ul me-2 modal-title-icon"></i>Cluster</h5>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="text-muted small" id="viewAllCount"></span>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body pt-0" id="viewAllBody"></div>
         </div>
     </div>
 </div>
@@ -1300,6 +1345,38 @@
         });
 
         paginateAllSections(true);
+    }
+
+    // "View All": opens one cluster's complete record list in a modal. It clones
+    // the cluster's own table (colgroup + thead + every row, including the ones
+    // the pager or search is currently hiding) so the modal is guaranteed to
+    // match the page's format — nothing about the section itself is changed.
+    function openViewAllCluster(btn) {
+        const section = btn.closest('.office-section');
+        const sourceTable = section && section.querySelector('table');
+        if (!sourceTable) return;
+
+        const clone = sourceTable.cloneNode(true);
+        const rows = clone.querySelectorAll('.record-row');
+        // Cloned nodes carry no Bootstrap tooltip instances; the title attributes
+        // stay, so hovering still shows the full text natively.
+        rows.forEach(row => row.removeAttribute('data-bs-toggle'));
+
+        const wrap = document.createElement('div');
+        wrap.className = 'table-scroll-x';
+        wrap.appendChild(clone);
+
+        const body = document.getElementById('viewAllBody');
+        body.innerHTML = '';
+        body.appendChild(wrap);
+
+        const clusterName = section.querySelector('.office-group-header span').innerText.trim();
+        document.getElementById('viewAllModalLabel').innerHTML =
+            '<i class="fas fa-list-ul me-2 modal-title-icon"></i>' + clusterName;
+        document.getElementById('viewAllCount').textContent =
+            rows.length + (rows.length === 1 ? ' record' : ' records');
+
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('viewAllModal')).show();
     }
 
     function initSorting() {
