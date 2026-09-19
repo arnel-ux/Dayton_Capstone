@@ -1064,12 +1064,30 @@ function ensureOfficeAuth(req, res, next) {
         // copy of it, and the header needs it to spell the office out. Fill it
         // in once, here, so an office already signed in on some device gets
         // the proper header without having to log out and back in first.
-        // `null` is a filled-in answer (this office has no full_name);
-        // `undefined` is the only value that means "never looked".
-        if (typeof req.adminSession.user.full_name === 'undefined') {
-            return db.query('SELECT full_name FROM offices WHERE id = ? LIMIT 1', [req.adminSession.user.id], (err, rows) => {
-                if (err) console.error('❌ Error loading this office full name:', err);
-                req.adminSession.user.full_name = (rows && rows[0] && rows[0].full_name) || null;
+        //
+        // "Once" means once SUCCESSFULLY, which is why the marker is a
+        // separate flag rather than the value itself. An empty full_name is
+        // not proof that the question was ever answered: it is equally what a
+        // session carries when it was opened before the offices table had the
+        // column filled in, and what this very query leaves behind when it
+        // errors. Treating that emptiness as the answer is what pinned the
+        // header to the acronym ("CCS") for the whole life of such a session,
+        // on desktop included, where the full name is supposed to be
+        // unconditional. So the lookup is retried while the name is still
+        // missing, and the flag — set only when the database actually
+        // answered — stops the retries for the offices whose full_name really
+        // is empty (those whose office_name is already spelled out).
+        const officeUser = req.adminSession.user;
+        if (!officeUser.full_name && !officeUser.fullNameResolved) {
+            return db.query('SELECT full_name FROM offices WHERE id = ? LIMIT 1', [officeUser.id], (err, rows) => {
+                if (err) {
+                    console.error('❌ Error loading this office full name:', err);
+                    // Left unresolved on purpose: the next page load asks again.
+                    officeUser.full_name = officeUser.full_name || null;
+                    return next();
+                }
+                officeUser.full_name = (rows && rows[0] && rows[0].full_name) || null;
+                officeUser.fullNameResolved = true;
                 return next();
             });
         }
