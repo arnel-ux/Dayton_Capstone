@@ -208,8 +208,15 @@ importScripts('/js/offline-db.js');
 // cache-first, so an installed v49 worker would keep serving the old type no
 // matter what the server sends — only a cache name change dislodges it. That
 // is what makes the larger hero reach offline installs as well as online ones.
-const STATIC_CACHE = 'cspc-static-v50';
-const RUNTIME_CACHE = 'cspc-runtime-v50';
+//
+// v51: /css/alerts.css again — the SweetAlert2 success/error icons were
+// being resized with width/height while SweetAlert2 positions their strokes
+// in `em`, so the sync dialog's check rendered as a pale slash instead of a
+// check. alerts.css is a CRITICAL precache entry served cache-first, so an
+// installed v50 worker would keep handing out the old stylesheet; the cache
+// name has to change for the corrected icons to reach devices already set up.
+const STATIC_CACHE = 'cspc-static-v51';
+const RUNTIME_CACHE = 'cspc-runtime-v51';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.

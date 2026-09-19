@@ -115,15 +115,88 @@ html[data-bs-theme="dark"] {
 }
 
 /* The icon scales with the popup so the ratio is the same everywhere.
-   SweetAlert2 sizes it in `em` off its own font-size, so it is set in
-   rem-clamp here rather than left at the 5em default. */
+
+   IMPORTANT — scale it with font-size, never with width/height. Every
+   part of a SweetAlert2 icon (the ring, the two check strokes, the two
+   X strokes, their keyframe offsets) is positioned in `em` off the
+   icon's own font-size, against a 5em x 5em box. Forcing the box to a
+   rem size while the strokes stayed at their `em` offsets is what made
+   the success check render as a lopsided slash spilling out of the
+   ring: the box shrank, the strokes did not. Setting font-size instead
+   moves the box AND everything inside it together, so the mark keeps
+   its intended geometry at any size.
+   font-size x 5 = the rendered diameter, so this is the old clamp / 5. */
 .swal2-icon {
-    width: clamp(3.2rem, 2.6rem + 3vw, 4.5rem);
-    height: clamp(3.2rem, 2.6rem + 3vw, 4.5rem);
+    font-size: clamp(0.64rem, 0.52rem + 0.6vw, 0.9rem);
+    width: 5em;
+    height: 5em;
     margin: clamp(0.5rem, 2vw, 1rem) auto clamp(0.85rem, 2vw, 1.1rem);
-    border-width: 3px;
+    border-width: 0.25em;
 }
-.swal2-icon .swal2-icon-content { font-size: clamp(2rem, 1.6rem + 2vw, 2.75rem); }
+
+/* SweetAlert2's stock marks are pastel (#a5dc86 check, #f27474 X) on a
+   30%-opacity ring, which reads as a faint smudge on a phone and barely
+   registers as a check or an X at all. Both marks use the app's own
+   status colors at full strength over a soft tint of the same hue, and
+   the strokes are thickened, so "it worked" vs "it failed" is legible
+   at a glance in either theme. */
+.swal2-icon.swal2-success {
+    border-color: transparent;
+    background-color: rgba(25, 135, 84, 0.1); /* fallback for browsers without color-mix */
+    background-color: color-mix(in srgb, var(--alert-success) 12%, transparent);
+    color: var(--alert-success);
+}
+.swal2-icon.swal2-success .swal2-success-ring {
+    border: 0.25em solid var(--alert-success);
+}
+.swal2-icon.swal2-success [class^='swal2-success-line'] {
+    background-color: var(--alert-success);
+    height: 0.4em;
+    border-radius: 0.2em;
+}
+/* These three are plain white wedges SweetAlert2 uses to mask the ring
+   while the check animates in. On a dark popup they flash as white
+   slices, and with a tinted circle behind them they leave notches, so
+   they are made invisible instead of recolored. */
+.swal2-icon.swal2-success .swal2-success-circular-line-left,
+.swal2-icon.swal2-success .swal2-success-circular-line-right,
+.swal2-icon.swal2-success .swal2-success-fix {
+    background-color: transparent;
+}
+
+.swal2-icon.swal2-error {
+    border-color: transparent;
+    background-color: rgba(220, 53, 69, 0.1); /* fallback for browsers without color-mix */
+    background-color: color-mix(in srgb, var(--alert-danger) 12%, transparent);
+    color: var(--alert-danger);
+}
+.swal2-icon.swal2-error [class^='swal2-x-mark-line'] {
+    background-color: var(--alert-danger);
+    height: 0.4em;
+    border-radius: 0.2em;
+}
+
+/* The glyph icons (i, !, ?) get the same treatment: themed ring, themed
+   tint, and a weight heavy enough to read on a small screen. */
+.swal2-icon.swal2-warning {
+    border-color: var(--alert-warning);
+    background-color: rgba(180, 83, 9, 0.1); /* fallback for browsers without color-mix */
+    background-color: color-mix(in srgb, var(--alert-warning) 12%, transparent);
+    color: var(--alert-warning);
+}
+.swal2-icon.swal2-info {
+    border-color: var(--alert-info);
+    background-color: rgba(13, 110, 253, 0.1); /* fallback for browsers without color-mix */
+    background-color: color-mix(in srgb, var(--alert-info) 12%, transparent);
+    color: var(--alert-info);
+}
+.swal2-icon.swal2-question {
+    border-color: var(--alert-warning);
+    background-color: rgba(180, 83, 9, 0.1); /* fallback for browsers without color-mix */
+    background-color: color-mix(in srgb, var(--alert-warning) 12%, transparent);
+    color: var(--alert-warning);
+}
+.swal2-icon .swal2-icon-content { font-weight: 700; }
 
 /* ---------------------------------------------------------------------
    BUTTONS
@@ -193,7 +266,16 @@ html[data-bs-theme="dark"] {
     color: var(--alert-muted);
     margin: 0.15rem 0 0;
 }
-.swal2-toast .swal2-icon { width: 1.8em; height: 1.8em; margin: 0 0.6em 0 0; }
+/* Same rule as the popup icon: scale the toast icon with font-size, not
+   with width/height, so its check/X keeps its geometry. 2em x 0.9rem is
+   the ~29px the old width override was aiming for. */
+.swal2-toast .swal2-icon {
+    font-size: 0.9rem;
+    width: 2em;
+    min-width: 2em;
+    height: 2em;
+    margin: 0 0.6em 0 0;
+}
 .swal2-toast .swal2-close { align-self: center; font-size: 1.6em; color: var(--alert-muted); }
 
 /* A colored left edge makes the severity readable at a glance without
