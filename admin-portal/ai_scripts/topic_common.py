@@ -627,6 +627,27 @@ TOPIC_KEYWORDS = {
     "Scholarship and Financial Assistance": [
         "scholarship", "iskolarship", "iskolar", "scholar",
         "financial assistance", "grants-in-aid", "scholarship grant",
+        # "grant" bare — verified no collision with any other topic's
+        # keyword list (checked 2026-09-19); in this school's Taglish survey
+        # comments it's used exclusively for scholarship/financial-assistance
+        # disbursements, never as a verb elsewhere in the corpus.
+        "grant",
+        # Wrong/insufficient disbursement-amount phrasing — enumerated across
+        # the common Tagalog qualifier+particle forms (mali/maling/kulang x
+        # ang/yung/na x amount/halaga) rather than the literal reported
+        # sentence, since the connecting particle varies comment to comment.
+        # Deliberately NOT bare "amount"/"halaga"/"mali"/"kulang" as topic
+        # anchors — those are generic enough to misfire on unrelated Payment
+        # and Fees or other complaints (same "ambiguous bare descriptor" trap
+        # already avoided elsewhere in this file). Weighted 1.5 (same
+        # convention as other intensified/compound phrases in this file) so
+        # a comment that also happens to mention "resibo" (Payment and Fees'
+        # own anchor, weight 1) still resolves here instead of tying and
+        # falling to whichever topic is listed first in this dict.
+        ("mali ang amount", 1.5), ("mali yung amount", 1.5), ("maling amount", 1.5),
+        ("mali ang halaga", 1.5), ("mali yung halaga", 1.5), ("maling halaga", 1.5),
+        ("kulang ang amount", 1.5), ("kulang yung amount", 1.5), ("kulang na amount", 1.5),
+        ("kulang ang halaga", 1.5), ("kulang yung halaga", 1.5), ("kulang na halaga", 1.5),
     ],
 }
 
@@ -966,6 +987,13 @@ TOPIC_ITEM_KEYWORDS = {
         ]),
         ("Scholarship and Financial Assistance - Scholarship Application/Grant", [
             "scholarship", "iskolarship", "iskolar", "scholar", "scholarship grant",
+        ]),
+        ("Scholarship and Financial Assistance - Insufficient Amount", [
+            "grant", "kulang", "insufficient", "hindi sapat",
+            "mali ang amount", "mali yung amount", "maling amount",
+            "mali ang halaga", "mali yung halaga", "maling halaga",
+            "kulang ang amount", "kulang yung amount", "kulang na amount",
+            "kulang ang halaga", "kulang yung halaga", "kulang na halaga",
         ]),
     ],
 }
@@ -1422,6 +1450,22 @@ FAST_NEGATIVE_WORDS = [
     # ("masusungit", used when describing a plural "sila") or these common
     # English synonyms.
     "masusungit", "disrespectful", "unfriendly",
+    # "mali"/"maling"/"incorrect" — plain, unambiguous negative descriptors
+    # that had no sentiment anchor at all, e.g. "Mali yung amount na
+    # nailagay sa receipt ko" scored no sentiment despite clearly complaining.
+    # Deliberately NOT bare "wrong" — collides with the common English idiom
+    # "nothing wrong with it" (meaning fine/neutral), which this file's
+    # NEGATOR_WORDS list can't catch since "nothing" isn't a recognized
+    # negator; found via regression suite per this file's root-cause rule.
+    "mali", "maling", "incorrect",
+    # Queue-length descriptors — "matagal"/"tagal"/"antagal" above cover
+    # waiting *duration*, but "mahaba"/"haba" (long) describing the queue
+    # itself was missing entirely, e.g. "masyadong mahaba ang pila" scored no
+    # sentiment. Deliberately compound/intensified phrases, not the bare word
+    # "mahaba" (ambiguous elsewhere, e.g. "mahabang buhok" = long hair),
+    # same collision-avoidance approach as the "mahal" price phrases above.
+    "mahaba ang pila", "mahabang pila", "napakahaba ang pila",
+    "sobrang haba ng pila", "ang haba ng pila", "long line", "long queue",
 ]
 FAST_POSITIVE_WORDS = [
     "maganda", "magandang", "mabilis", "magaling", "mabait", "salamat",
@@ -1453,6 +1497,13 @@ FAST_POSITIVE_WORDS = [
     "considerate", "welcoming", "sulit", "astig", "solid", "top-notch",
     "seamless", "responsive", "on-time", "prompt",
     "organized", "spot on", "kaaya-aya", "mapagkalinga",
+    # "all goods" — plural "goods" doesn't match the bare "good" anchor above
+    # (\b...\b word-boundary matching requires a boundary right after "good",
+    # which the trailing "s" removes), e.g. "All goods transaction" scored no
+    # sentiment. Added as its own phrase rather than a bare "goods" anchor,
+    # since "goods" alone is a neutral noun (products) and only reads
+    # positive in this "all goods"/complete-transaction idiom.
+    "all goods",
     # NOTE: "asikaso"/"inaasikaso"/"pinapansin" deliberately do NOT appear
     # here as bare sentiment anchors (tried and reverted — see git history):
     # against the project's existing regression suite (test_accuracy.py)

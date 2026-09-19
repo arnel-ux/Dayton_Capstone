@@ -262,6 +262,35 @@ CASES += [
     ("Hindi mabait sila", "Negative", "Courtesy and Attitude", None),
 ]
 
+# =============================================================================
+# 2026-09-19 fixes: plural "good(s)" sentiment gap, queue-length ("mahaba")
+# sentiment gap, "mali"/"wrong" sentiment gap, and a new "Insufficient
+# Amount" subtopic under Scholarship and Financial Assistance (bare "grant"
+# keyword + wrong/insufficient amount phrasing). Each admin-reported comment
+# plus several similar variations, per the project's root-cause regression
+# rule (never patch just the one failing sentence).
+# =============================================================================
+CASES += [
+    # "all goods" — plural breaks the bare "good" word-boundary match.
+    ("All goods transaction", "Positive", "Transaction - General", None),
+    ("All goods naman transaction namin", "Positive", "Transaction - General", None),
+    ("Complete naman lahat, all goods ang transaction ko today.", "Positive", "Transaction - General", None),
+
+    # Queue-length ("mahaba ang pila") sentiment gap.
+    ("Masyadong mahaba ang pila.", "Negative", "Queueing and Waiting Time - Long Lines", None),
+    ("Ang haba ng pila dito, sobrang haba talaga.", "Negative", "Queueing and Waiting Time - Long Lines", None),
+    ("Napakahaba ng pila kanina, mahabang oras din ang inabot.", "Negative", "Queueing and Waiting Time - Long Lines", None),
+
+    # New "Insufficient Amount" subtopic — bare "grant" keyword gap.
+    ("Kulang yung grant na nareceive ko.", "Negative", "Scholarship and Financial Assistance - Insufficient Amount", None),
+    ("Kulang po yung grant na natanggap ko this semester.", "Negative", "Scholarship and Financial Assistance - Insufficient Amount", None),
+
+    # New "Insufficient Amount" subtopic — wrong-amount phrasing.
+    ("Mali yung amount na nailagay sa receipt ko.", "Negative", "Scholarship and Financial Assistance - Insufficient Amount", None),
+    ("Mali ang amount na nasa resibo ko, kulang po.", "Negative", "Scholarship and Financial Assistance - Insufficient Amount", None),
+    ("Kulang yung halaga na nasa resibo ko para sa grant ko.", "Negative", "Scholarship and Financial Assistance - Insufficient Amount", None),
+]
+
 # Short, plainly meaningful comments that must NOT be swept up by the
 # strengthened gibberish/no-meaningful-feedback detector above (B3 in the
 # task: don't overfit the detector to reject short real feedback).
