@@ -1483,6 +1483,17 @@
 
             noResults.style.display = totalFound === 0 ? "block" : "none";
         });
+
+        // Deep link from the notification bell: /survey-records?office=CCS opens
+        // the page already filtered to that office, so clicking a notification
+        // lands on the office that was actually surveyed. It drives the existing
+        // search box rather than filtering separately, so clearing the box
+        // restores the full list exactly as a typed search does.
+        const officeParam = new URLSearchParams(window.location.search).get('office');
+        if (officeParam) {
+            searchInput.value = officeParam;
+            searchInput.dispatchEvent(new Event('keyup'));
+        }
     });
 
     // Generate Report: computes and displays one client's own SQD score using the

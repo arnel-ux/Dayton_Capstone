@@ -31,6 +31,7 @@
         <div class="notif-bell-wrap">
             <button type="button" id="adminNotifBell" class="notif-bell"
                     data-bs-toggle="modal" data-bs-target="#adminNotifModal"
+                    data-admin-key="<%= _currentAdmin && _currentAdmin.id ? _currentAdmin.id : 'admin' %>"
                     title="Incoming surveys" aria-label="Incoming surveys">
                 <i class="fas fa-bell"></i>
                 <span class="notif-badge" id="adminNotifBadge" hidden>0</span>
@@ -282,7 +283,7 @@
         color: inherit;
         transition: background-color 0.15s ease;
     }
-    .notif-row + .notif-row { margin-top: 2px; }
+    .notif-row { padding-right: 66px; }
     .notif-row:hover { background: var(--bg-light, #f3f4f6); color: inherit; }
     html[data-bs-theme="dark"] .notif-row:hover { background: rgba(255, 255, 255, 0.05); }
     .notif-row:focus-visible { outline: 2px solid var(--primary, #251d3a); outline-offset: -2px; }
@@ -291,10 +292,134 @@
        the tint on its own was a 4.5%-opacity wash that did not survive being
        looked at on a bright screen. */
     .notif-row.is-new {
-        background: rgba(220, 53, 69, 0.055);
+        background: rgba(220, 53, 69, 0.11);
         box-shadow: inset 3px 0 0 #dc3545;
     }
-    html[data-bs-theme="dark"] .notif-row.is-new { background: rgba(220, 53, 69, 0.12); }
+    html[data-bs-theme="dark"] .notif-row.is-new { background: rgba(220, 53, 69, 0.2); }
+    /* An unread row should read as lit-up next to the ones already seen, not
+       merely tinted: the title goes to full strength and the whole row sits on
+       a soft halo, while seen rows are dimmed slightly to widen the gap. */
+    .notif-row.is-new .notif-row-office { color: var(--text-main, #1f2937); font-weight: 800; }
+    html[data-bs-theme="dark"] .notif-row.is-new .notif-row-office { color: #fff; }
+    .notif-row.is-new .notif-row-sub,
+    .notif-row.is-new .notif-row-time { color: var(--text-muted, #6b7280); }
+    html[data-bs-theme="dark"] .notif-row.is-new .notif-row-sub,
+    html[data-bs-theme="dark"] .notif-row.is-new .notif-row-time { color: #cbd5e1; }
+    .notif-row.is-new:hover { background: rgba(220, 53, 69, 0.17); }
+    html[data-bs-theme="dark"] .notif-row.is-new:hover { background: rgba(220, 53, 69, 0.26); }
+    .notif-row:not(.is-new) { opacity: 0.86; }
+    .notif-row:not(.is-new):hover { opacity: 1; }
+
+    /* ---- Toolbar: All/Unread filter + bulk actions ---- */
+    .notif-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border-color, #e5e7eb);
+    }
+    .notif-filter {
+        display: inline-flex;
+        gap: 4px;
+        padding: 3px;
+        border-radius: 999px;
+        background: var(--bg-light, #f3f4f6);
+    }
+    html[data-bs-theme="dark"] .notif-filter { background: rgba(255, 255, 255, 0.06); }
+    .notif-filter-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 0;
+        background: transparent;
+        color: var(--text-muted, #6b7280);
+        font-size: 0.74rem;
+        font-weight: 700;
+        padding: 5px 12px;
+        border-radius: 999px;
+        white-space: nowrap;
+        transition: background-color 0.15s ease, color 0.15s ease;
+    }
+    .notif-filter-btn:hover { color: var(--text-main, #1f2937); }
+    .notif-filter-btn.is-active {
+        background: var(--card-bg, #fff);
+        color: var(--primary, #251d3a);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    }
+    html[data-bs-theme="dark"] .notif-filter-btn.is-active { background: rgba(255, 255, 255, 0.14); color: #fff; }
+    .notif-filter-btn:focus-visible { outline: 2px solid var(--primary, #251d3a); outline-offset: 1px; }
+    /* The unread tally rides on its own tab, so the number and the list it
+       opens can never disagree. */
+    .notif-filter-count {
+        min-width: 18px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: rgba(220, 53, 69, 0.14);
+        color: #dc3545;
+        font-size: 0.68rem;
+        font-weight: 800;
+        line-height: 1.5;
+        text-align: center;
+    }
+    .notif-filter-count.is-zero { background: rgba(148, 163, 184, 0.2); color: var(--text-faint, #9ca3af); }
+
+    .notif-toolbar-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+    .notif-tool-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--border-color, #e5e7eb);
+        background: var(--card-bg, #fff);
+        color: var(--text-muted, #6b7280);
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 5px 10px;
+        border-radius: 999px;
+        white-space: nowrap;
+        transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    html[data-bs-theme="dark"] .notif-tool-btn { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12); color: #cbd5e1; }
+    .notif-tool-btn:hover { color: var(--primary, #251d3a); border-color: var(--primary, #251d3a); }
+    html[data-bs-theme="dark"] .notif-tool-btn:hover { color: #fff; border-color: rgba(255, 255, 255, 0.4); }
+    .notif-tool-btn.is-danger:hover { color: #dc3545; border-color: #dc3545; }
+    .notif-tool-btn:disabled { opacity: 0.45; }
+    .notif-tool-btn:focus-visible { outline: 2px solid var(--primary, #251d3a); outline-offset: 1px; }
+
+    /* Each row and its own delete button share a wrapper: the button cannot
+       live inside the row itself, because the row is a link. */
+    .notif-row-wrap { position: relative; }
+    .notif-row-wrap + .notif-row-wrap { margin-top: 2px; }
+    .notif-row-actions {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: inline-flex;
+        gap: 2px;
+    }
+    .notif-row-btn {
+        width: 26px;
+        height: 26px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text-faint, #9ca3af);
+        font-size: 0.78rem;
+        opacity: 0;
+        transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+    }
+    .notif-row-wrap:hover .notif-row-btn,
+    .notif-row-btn:focus-visible { opacity: 1; }
+    .notif-row-read:hover { background: rgba(37, 99, 235, 0.14); color: #2563eb; }
+    .notif-row-dismiss:hover { background: rgba(220, 53, 69, 0.14); color: #dc3545; }
+    /* Touch screens have no hover, so the buttons must simply always be there. */
+    @media (hover: none) {
+        .notif-row-btn { opacity: 1; }
+    }
 
     .notif-row-icon {
         flex: 0 0 auto;
@@ -464,6 +589,26 @@
                 </button>
             </div>
 
+            <!-- Toolbar: which rows to list, and the two bulk actions. Kept out
+                 of the coloured header because these are controls the admin
+                 works with, not part of the panel's title. -->
+            <div class="notif-toolbar">
+                <div class="notif-filter" role="tablist" aria-label="Filter notifications">
+                    <button type="button" class="notif-filter-btn is-active" data-filter="all" role="tab" aria-selected="true">All</button>
+                    <button type="button" class="notif-filter-btn" data-filter="unread" role="tab" aria-selected="false">
+                        Unread <span class="notif-filter-count" id="adminNotifUnreadCount">0</span>
+                    </button>
+                </div>
+                <div class="notif-toolbar-actions">
+                    <button type="button" class="notif-tool-btn" id="adminNotifMarkAll" title="Mark every notification as read">
+                        <i class="fas fa-check-double" aria-hidden="true"></i> Mark all read
+                    </button>
+                    <button type="button" class="notif-tool-btn is-danger" id="adminNotifClearAll" title="Clear every notification from this list">
+                        <i class="fas fa-broom" aria-hidden="true"></i> Clear all
+                    </button>
+                </div>
+            </div>
+
             <div class="notif-body" id="adminNotifList">
                 <!-- Skeleton rows, not a spinner: the panel opens at its final
                      height and the real rows land where the grey ones were, so
@@ -559,9 +704,128 @@
         var headCount = document.getElementById('adminNotifHeadCount');
         var list = document.getElementById('adminNotifList');
         var modal = document.getElementById('adminNotifModal');
+        var clearAllBtn = document.getElementById('adminNotifClearAll');
+        var markAllBtn = document.getElementById('adminNotifMarkAll');
+        var unreadCountEl = document.getElementById('adminNotifUnreadCount');
+        var filterBtns = document.querySelectorAll('.notif-filter-btn');
         if (!bell || !badge || !list || !modal) return;
 
         var pollTimer = null;
+
+        // Dismissed notifications. The feed IS survey_responses, so there is no
+        // notification row to delete -- deleting one here must never delete the
+        // survey itself, which still has to show up on /survey-records and in
+        // the reports. What is stored is therefore only "this admin has cleared
+        // survey #N from their own bell", kept in this browser and keyed by
+        // admin id so two admins sharing a machine do not clear each other's.
+        var DISMISS_KEY = 'adminNotifDismissed:' + (bell.dataset.adminKey || 'admin');
+        var dismissed = (function () {
+            try {
+                var raw = JSON.parse(localStorage.getItem(DISMISS_KEY));
+                return Array.isArray(raw) ? raw.map(Number) : [];
+            } catch (e) { return []; }
+        })();
+        // Whatever the panel last received from the server, before dismissals
+        // are applied -- "Clear all" works off this.
+        var lastItems = [];
+
+        // Read/unread is tracked HERE, not off the server's isNew flag alone.
+        // isNew is derived from the seen watermark, and merely OPENING the panel
+        // moves that watermark, so every row would flip to "read" on the next
+        // 30s poll whether or not the admin actually dealt with it -- an Unread
+        // list built on it would empty itself while the admin was reading it.
+        // Instead each notification is classified ONCE, the first time this
+        // browser ever sees it: arrived unseen => unread, already seen => read.
+        // After that only the admin changes it, via the row's own button or
+        // "Mark all read".
+        var READ_KEY = 'adminNotifRead:' + (bell.dataset.adminKey || 'admin');
+        var KNOWN_KEY = 'adminNotifKnown:' + (bell.dataset.adminKey || 'admin');
+
+        function loadIdSet(key) {
+            try {
+                var raw = JSON.parse(localStorage.getItem(key));
+                return Array.isArray(raw) ? raw.map(Number) : [];
+            } catch (e) { return []; }
+        }
+
+        var readIds = loadIdSet(READ_KEY);
+        var knownIds = loadIdSet(KNOWN_KEY);
+        var activeFilter = 'all';
+
+        function saveIdSet(key, ids) {
+            try { localStorage.setItem(key, JSON.stringify(ids)); } catch (e) { /* private mode */ }
+        }
+
+        // Classifies anything this browser has not seen before, then prunes all
+        // three stored sets back to what the feed still returns.
+        function reconcileReadState() {
+            var live = lastItems.map(function (item) { return Number(item.id); });
+
+            lastItems.forEach(function (item) {
+                var id = Number(item.id);
+                if (knownIds.indexOf(id) !== -1) return;
+                knownIds.push(id);
+                if (!item.isNew && readIds.indexOf(id) === -1) readIds.push(id);
+            });
+
+            function prune(ids) {
+                return ids.filter(function (id) { return live.indexOf(id) !== -1; });
+            }
+            knownIds = prune(knownIds);
+            readIds = prune(readIds);
+            saveIdSet(KNOWN_KEY, knownIds);
+            saveIdSet(READ_KEY, readIds);
+        }
+
+        function isUnread(item) {
+            return readIds.indexOf(Number(item.id)) === -1;
+        }
+
+        function markRead(id) {
+            id = Number(id);
+            if (readIds.indexOf(id) === -1) readIds.push(id);
+            saveIdSet(READ_KEY, readIds);
+            renderList(lastItems);
+        }
+
+        function markAllRead() {
+            lastItems.forEach(function (item) {
+                var id = Number(item.id);
+                if (isDismissed(item)) return;
+                if (readIds.indexOf(id) === -1) readIds.push(id);
+            });
+            saveIdSet(READ_KEY, readIds);
+            renderList(lastItems);
+        }
+
+        function saveDismissed() {
+            // Only ids still in the feed are worth keeping: the endpoint returns
+            // the newest 20, so anything older can never be listed again and the
+            // stored list would otherwise grow without limit.
+            var live = lastItems.map(function (item) { return Number(item.id); });
+            dismissed = dismissed.filter(function (id) { return live.indexOf(id) !== -1; });
+            try { localStorage.setItem(DISMISS_KEY, JSON.stringify(dismissed)); } catch (e) { /* private mode */ }
+        }
+
+        function isDismissed(item) {
+            return dismissed.indexOf(Number(item.id)) !== -1;
+        }
+
+        function dismissOne(id) {
+            id = Number(id);
+            if (dismissed.indexOf(id) === -1) dismissed.push(id);
+            saveDismissed();
+            renderList(lastItems);
+        }
+
+        function dismissAll() {
+            lastItems.forEach(function (item) {
+                var id = Number(item.id);
+                if (dismissed.indexOf(id) === -1) dismissed.push(id);
+            });
+            saveDismissed();
+            renderList(lastItems);
+        }
 
         function stopPolling() {
             if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -612,9 +876,19 @@
         // Built with DOM nodes rather than an HTML string so a respondent name
         // or office name containing markup can never be injected into the page.
         function renderRow(item) {
+            var wrap = document.createElement('div');
+            wrap.className = 'notif-row-wrap';
+
+            var unread = isUnread(item);
+
             var row = document.createElement('a');
-            row.className = 'notif-row' + (item.isNew ? ' is-new' : '');
-            row.href = '/survey-records';
+            row.className = 'notif-row' + (unread ? ' is-new' : '');
+            // Opening a notification is also reading it.
+            row.addEventListener('click', function () { markRead(item.id); });
+            // Straight to the office this response was submitted for: the
+            // records page reads ?office= and opens already filtered to it,
+            // instead of dropping the admin at the top of every cluster.
+            row.href = '/survey-records?office=' + encodeURIComponent(item.office || '');
 
             var icon = document.createElement('span');
             icon.className = 'notif-row-icon';
@@ -634,7 +908,7 @@
             office.textContent = 'New survey for ' + item.office;
             office.title = 'New survey for ' + item.office;
             title.appendChild(office);
-            if (item.isNew) {
+            if (unread) {
                 var tag = document.createElement('span');
                 tag.className = 'notif-row-tag';
                 tag.textContent = 'New';
@@ -656,7 +930,49 @@
             body.appendChild(time);
             row.appendChild(icon);
             row.appendChild(body);
-            return row;
+
+            // The row's own buttons, kept OUTSIDE the link so clicking one can
+            // never be read as following the link.
+            var actions = document.createElement('div');
+            actions.className = 'notif-row-actions';
+
+            // Mark as read is only offered while there is something to mark.
+            if (unread) {
+                var readBtn = document.createElement('button');
+                readBtn.type = 'button';
+                readBtn.className = 'notif-row-btn notif-row-read';
+                readBtn.title = 'Mark as read';
+                readBtn.setAttribute('aria-label', 'Mark this notification as read');
+                readBtn.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i>';
+                readBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    markRead(item.id);
+                });
+                actions.appendChild(readBtn);
+            }
+
+            var del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'notif-row-btn notif-row-dismiss';
+            del.title = 'Delete this notification';
+            del.setAttribute('aria-label', 'Delete this notification');
+            del.innerHTML = '<i class="fas fa-trash-can" aria-hidden="true"></i>';
+            del.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                confirmThen(
+                    'Delete this notification from your bell? The survey record itself stays in Survey Records.',
+                    'Delete notification?',
+                    'Yes, delete',
+                    function () { dismissOne(item.id); }
+                );
+            });
+            actions.appendChild(del);
+
+            wrap.appendChild(row);
+            wrap.appendChild(actions);
+            return wrap;
         }
 
         // Shared shape for "there is nothing to list" and "we could not
@@ -698,18 +1014,54 @@
         }
 
         function renderList(items) {
-            if (!items || items.length === 0) {
-                renderPlaceholder(
-                    'far fa-bell-slash',
-                    'Nothing new yet',
-                    'Survey responses appear here the moment a client submits one.'
-                );
+            lastItems = items || [];
+            reconcileReadState();
+
+            var kept = lastItems.filter(function (item) { return !isDismissed(item); });
+            var unreadCount = kept.filter(isUnread).length;
+            var visible = activeFilter === 'unread' ? kept.filter(isUnread) : kept;
+
+            if (unreadCountEl) {
+                unreadCountEl.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+                unreadCountEl.classList.toggle('is-zero', unreadCount === 0);
+            }
+            if (clearAllBtn) clearAllBtn.disabled = kept.length === 0;
+            if (markAllBtn) markAllBtn.disabled = unreadCount === 0;
+
+            if (visible.length === 0) {
+                // The Unread tab empties on its own as rows are read, and that is
+                // a good outcome, not an error -- it gets its own wording.
+                if (activeFilter === 'unread') {
+                    renderPlaceholder(
+                        'fas fa-check-double',
+                        'No unread notifications',
+                        'Everything here has been read. Switch to All to see the full list.'
+                    );
+                    setHeadCount(0);
+                    return;
+                }
+                // Two different empty states: one for "nothing has come in", one
+                // for "you cleared what came in" -- the second must not read as
+                // though the surveys themselves went missing.
+                if (lastItems.length > 0) {
+                    renderPlaceholder(
+                        'fas fa-check',
+                        'All caught up',
+                        'You cleared these notifications. The survey records themselves are untouched -- open them any time from the button below.'
+                    );
+                } else {
+                    renderPlaceholder(
+                        'far fa-bell-slash',
+                        'Nothing new yet',
+                        'Survey responses appear here the moment a client submits one.'
+                    );
+                }
                 setHeadCount(0);
                 return;
             }
             list.innerHTML = '';
-            items.forEach(function (item) { list.appendChild(renderRow(item)); });
-            setHeadCount(items.filter(function (item) { return item.isNew; }).length);
+            visible.forEach(function (item) { list.appendChild(renderRow(item)); });
+            setHeadCount(unreadCount);
         }
 
         function loadNotifications() {
@@ -774,6 +1126,48 @@
         });
         modal.addEventListener('hidden.bs.modal', function () {
             bell.classList.remove('is-open');
+        });
+
+        // One asking-first path for every destructive action here. AppAlert is
+        // loaded by layout/footer.ejs, below this partial, so it is looked up at
+        // click time rather than captured now; if it somehow is not there, the
+        // browser's own confirm still asks.
+        function confirmThen(message, title, confirmText, run) {
+            if (window.AppAlert && AppAlert.confirm) {
+                AppAlert.confirm(message, { title: title, confirmText: confirmText, danger: true })
+                    .then(function (ok) { if (ok) run(); });
+            } else if (window.confirm(message)) {
+                run();
+            }
+        }
+
+        if (clearAllBtn) {
+            clearAllBtn.addEventListener('click', function () {
+                confirmThen(
+                    'Clear all notifications from your bell? The survey records themselves stay exactly where they are.',
+                    'Clear all notifications?',
+                    'Yes, clear all',
+                    dismissAll
+                );
+            });
+        }
+
+        if (markAllBtn) {
+            markAllBtn.addEventListener('click', markAllRead);
+        }
+
+        // All / Unread. Purely a view over what is already loaded, so switching
+        // tabs costs no request and never changes what is stored.
+        filterBtns.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                activeFilter = btn.dataset.filter === 'unread' ? 'unread' : 'all';
+                filterBtns.forEach(function (other) {
+                    var on = other === btn;
+                    other.classList.toggle('is-active', on);
+                    other.setAttribute('aria-selected', on ? 'true' : 'false');
+                });
+                renderList(lastItems);
+            });
         });
 
         loadNotifications();
