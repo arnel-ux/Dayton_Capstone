@@ -196,8 +196,20 @@ importScripts('/js/offline-db.js');
 // account deleted from the database kept appearing in a stale cached copy
 // whenever the live fetch timed out. A cache name change is what dislodges the
 // copies already stored by an installed worker.
-const STATIC_CACHE = 'cspc-static-v49';
-const RUNTIME_CACHE = 'cspc-runtime-v49';
+// v50: /css/auth.css only — the hero block on every auth page (the "Office Of
+// Center For Quality Assurance (CQA)" headline, the survey subtitle and the
+// gold portal badge) is set about 20% larger at every density tier, because at
+// the old sizes it was hard to read on a real handset. The three sizes now
+// come from their own --fs-hero-* variables rather than the shared type scale,
+// so the input text and buttons are untouched, and the extra height is taken
+// out of the two shrinkable spacers so the pages still fit the fold without
+// scrolling. auth.css is in CRITICAL_PRECACHE_URLS and the '/login',
+// '/client-login' and '/survey-offline' shells that use it are served
+// cache-first, so an installed v49 worker would keep serving the old type no
+// matter what the server sends — only a cache name change dislodges it. That
+// is what makes the larger hero reach offline installs as well as online ones.
+const STATIC_CACHE = 'cspc-static-v50';
+const RUNTIME_CACHE = 'cspc-runtime-v50';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.
