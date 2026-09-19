@@ -104,6 +104,11 @@
         flex: 1 1 auto;
         overflow-y: auto;
         overflow-x: hidden;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+    #sidebar ul.components::-webkit-scrollbar {
+        display: none;
     }
 
     #sidebar ul li a {
