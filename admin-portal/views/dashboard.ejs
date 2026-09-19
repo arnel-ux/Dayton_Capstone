@@ -1946,7 +1946,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     renderRankChart('topOfficesChart', <%- typeof topOffices !== 'undefined' ? JSON.stringify(topOffices.map(o => ({ name: o.name, score: o.score }))) : '[]' %>, '#ffcc00');
-    renderRankChart('bottomOfficesChart', <%- typeof bottomOffices !== 'undefined' ? JSON.stringify(bottomOffices.map(o => ({ name: o.name, score: o.score }))) : '[]' %>, '#251d3a');
+    renderRankChart('bottomOfficesChart', <%- typeof bottomOffices !== 'undefined' ? JSON.stringify(bottomOffices.map(o => ({ name: o.name, score: o.score }))) : '[]' %>, '#7b68c4');
 });
 
 // --- 7. CONTROLS MANAGEMENT FUNCTIONS FOR POPUP REPORT MODAL ---
