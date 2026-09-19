@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <%- include('layout/header', { forceLightMode: true }) %>
+    <%- include('layout/header') %>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="/js/pdf-repeating-header.js"></script>
     <script src="/js/report-csv.js"></script>
@@ -84,7 +84,24 @@
             .report-container { border: none; box-shadow: none; max-width: 100%; padding: 0; display: block; page-break-after: always; page-break-inside: avoid; break-inside: avoid; overflow: visible; }
             .page-break { page-break-before: always; }
         }
-    </style>
+    
+        /* --- Dark theme ---
+           Only the CHROME of this page follows the theme: the parameters
+           card, the empty state and the download buttons. Everything
+           inside .report-container is the official CSPC form and stays
+           black on white in both themes — html2pdf captures that element
+           exactly as it renders on screen, so darkening it would darken
+           the exported PDF and anything printed from this page. The
+           shared stylesheet pins it white and gives it a paper shadow. */
+
+        /* Bootstrap's .text-light is a fixed near-white. In light mode it
+           makes the empty-state icon a pale grey hint; in dark mode the
+           same value turns it into the brightest thing on the screen,
+           which is the opposite of what a placeholder should be. */
+        html[data-bs-theme="dark"] #emptyState .text-light {
+            color: #334155 !important;
+        }
+</style>
 </head>
 <body data-connection-alerts>
 <div id="wrapper">
@@ -293,6 +310,7 @@
     </div>
 </div>
 <%- include('layout/footer') %>
+<%- include('layout/theme-toggle') %>
 
 <script>
     async function generateReport() {

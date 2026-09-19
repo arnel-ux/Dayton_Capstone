@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <%- include('layout/header', { forceLightMode: true }) %>
+    <%- include('layout/header') %>
     <style>
         .profile-hero {
             position: relative;
@@ -129,7 +129,32 @@
             gap: 1rem;
             flex-wrap: wrap;
         }
-    </style>
+    
+        /* --- Dark theme ---
+           .profile-hero and .btn-hero-photo are already a navy gradient
+           with white text, so they need nothing: the header looks the same
+           in both themes, which is what keeps the page identifiable after
+           the toggle. Only the two white tiles below it are restated. */
+        html[data-bs-theme="dark"] .info-tile,
+        html[data-bs-theme="dark"] .security-card {
+            background: #141d30;
+            border-color: #263045;
+        }
+        html[data-bs-theme="dark"] .info-tile:hover {
+            border-color: rgba(148, 163, 184, 0.4);
+        }
+        html[data-bs-theme="dark"] .info-tile-label { color: #94a3b8; }
+        /* Navy ink on a navy card is the one combination that fails
+           outright here — the value is the content of the tile, so it goes
+           to the brightest text color on the page. */
+        html[data-bs-theme="dark"] .info-tile-value { color: #f1f5f9; }
+        /* The avatar ring is white in light mode to separate the photo from
+           the navy hero. Against the same hero in dark that is still
+           correct, so only the outer glow is toned down. */
+        html[data-bs-theme="dark"] .profile-avatar-ring {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18));
+        }
+</style>
 </head>
 <body data-connection-alerts>
 
@@ -228,6 +253,7 @@
 </div>
 
 <%- include('layout/footer') %>
+<%- include('layout/theme-toggle') %>
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {

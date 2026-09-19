@@ -68,6 +68,50 @@ html[data-bs-theme="dark"] {
     --border-color: #263045;
     --navbar-bg: #101a2c;
     --bg-light: #0b1526;
+
+    /* The admin pages each declare their own local token set (--card-bg,
+       --surface-subtle, --text-heading, --border-subtle, ...) in their inline
+       <style>. Those names are repeated here so a page that only defines the
+       LIGHT values still lands on the shared dark palette instead of keeping
+       its white surfaces — one palette, defined once, for every admin screen.
+       A page is free to override any of them in its own dark block; this is
+       the floor, not a ceiling. */
+    --bg-body: #0b1526;
+    --card-bg: #141d30;
+    --surface-subtle: #1a2438;
+    --text-heading: #f1f5f9;
+    --text-dark: #f1f5f9;
+    --text-faint: #64748b;
+    --border-subtle: #263045;
+    --border-strong: #2c3a54;
+    --border-soft: rgba(148, 163, 184, 0.16);
+    --border-soft-strong: rgba(148, 163, 184, 0.26);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.35);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 6px 16px -10px rgba(0, 0, 0, 0.5);
+    --shadow-card-hover: 0 2px 6px rgba(0, 0, 0, 0.4), 0 16px 32px -14px rgba(0, 0, 0, 0.55);
+    --shadow-hero: 0 24px 48px -16px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+
+    /* Bootstrap 5.3 ships its own dark theme under this same attribute, but on
+       ITS palette (#212529 greys), which read as a different product sitting
+       next to our navy surfaces. Re-pointing Bootstrap's variables at our
+       tokens is what makes .card, .modal, .dropdown-menu, .table, .list-group
+       and the form controls come out the right color without restyling each
+       one by hand. */
+    --bs-body-bg: #0b1526;
+    --bs-body-color: #e2e8f0;
+    --bs-emphasis-color: #f8fafc;
+    --bs-secondary-color: rgba(226, 232, 240, 0.72);
+    --bs-secondary-bg: #1a2438;
+    --bs-tertiary-bg: #141d30;
+    --bs-tertiary-color: rgba(226, 232, 240, 0.5);
+    --bs-border-color: #263045;
+    --bs-border-color-translucent: rgba(255, 255, 255, 0.12);
+    --bs-heading-color: #f1f5f9;
+    --bs-link-color: #93c5fd;
+    --bs-link-hover-color: #bfdbfe;
+    --bs-link-color-rgb: 147, 197, 253;
+    --bs-code-color: #f0abfc;
 }
 
 body {
@@ -629,4 +673,357 @@ html[data-bs-theme="dark"] .form-control {
        whole right edge of the field is tappable. */
     .password-toggle { width: 2.9rem; min-height: 41px; font-size: 1.05rem; }
     .pw-strength-label { font-size: 0.74rem; }
+}
+
+
+/* ==================================================================
+   DARK MODE — shared admin components
+   ------------------------------------------------------------------
+   Everything above this line was written light-first, and the pieces
+   that hardcode a light value (rather than reading a token) are
+   re-stated here for dark. Grouped by component so a change to, say,
+   the report accordion is made in one place.
+
+   Deliberately NOT darkened anywhere in the app:
+
+     .report-container / .csm-export-container — the on-screen preview
+     of an official CSPC form. html2pdf captures those elements exactly
+     as they render, so darkening them would darken the exported PDF
+     and the printed page. They stay white paper on a dark desk, which
+     is also how every PDF viewer shows a document in dark mode.
+
+   Contrast: every text color below was picked to clear WCAG AA (4.5:1)
+   against the surface it sits on — #e2e8f0/#f1f5f9 on #141d30, with
+   #94a3b8 for muted text, the lightest grey that still passes on the
+   card background.
+   ================================================================== */
+
+/* --- App shell --- */
+/* The sidebar is navy in BOTH themes (it is the brand rail, not a
+   surface), but it is deepened in dark so it does not glow brighter
+   than the content beside it — a light-navy sidebar next to a near
+   black page reads as the page being unfinished. */
+html[data-bs-theme="dark"] {
+    --sidebar-bg: linear-gradient(160deg, #141131, #171340);
+}
+html[data-bs-theme="dark"] .top-navbar {
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* --- Cards & tables --- */
+html[data-bs-theme="dark"] .card-custom {
+    border: 1px solid var(--border-color);
+}
+html[data-bs-theme="dark"] .table-custom tbody tr:hover > * {
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+/* The cluster/report accordion and its tables are light-first
+   throughout, so all four surfaces (button, open button, header row,
+   body row) are restated. */
+html[data-bs-theme="dark"] .accordion-custom .accordion-item {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+}
+html[data-bs-theme="dark"] .accordion-custom .accordion-button {
+    background-color: var(--bg-card);
+    color: var(--text-main);
+    border-bottom-color: var(--border-color);
+}
+html[data-bs-theme="dark"] .accordion-custom .accordion-button:not(.collapsed) {
+    background-color: #1a2438;
+    color: #93c5fd;
+}
+/* Bootstrap's chevron is a black SVG, and invert() is the only way to
+   recolor a background-image icon. The first filter lightens it for the
+   collapsed state, the second keeps the open state on the accent. */
+html[data-bs-theme="dark"] .accordion-custom .accordion-button.collapsed::after {
+    filter: invert(1) brightness(1.6);
+}
+html[data-bs-theme="dark"] .accordion-custom .accordion-button::after {
+    filter: invert(74%) sepia(24%) saturate(1200%) hue-rotate(185deg) brightness(102%);
+}
+
+html[data-bs-theme="dark"] .table-report th {
+    background-color: #1a2438;
+    color: var(--text-muted);
+    border-bottom-color: var(--border-color);
+}
+html[data-bs-theme="dark"] .table-report td {
+    color: var(--text-main);
+    border-bottom-color: var(--border-color);
+}
+html[data-bs-theme="dark"] .table-report tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+/* --- Status pills ---
+   The light pills are a pale tint plus dark ink, which inverts badly:
+   the tint turns into a bright block on a dark page. Dark mode uses the
+   opposite construction — a translucent wash of the same hue plus light
+   ink — so the color still MEANS the same thing at a glance. */
+html[data-bs-theme="dark"] .badge-outstanding {
+    background-color: rgba(16, 185, 129, 0.18);
+    color: #6ee7b7;
+}
+html[data-bs-theme="dark"] .badge-archived {
+    background-color: rgba(239, 68, 68, 0.18);
+    color: #fca5a5;
+}
+html[data-bs-theme="dark"] .archived-row {
+    opacity: 0.6;
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* --- Forms --- */
+html[data-bs-theme="dark"] #content .form-label { color: var(--text-main); }
+html[data-bs-theme="dark"] #content ::placeholder { color: #64748b; }
+html[data-bs-theme="dark"] #content .form-control:focus,
+html[data-bs-theme="dark"] #content .form-select:focus {
+    background-color: var(--bg-card);
+    color: var(--text-main);
+    border-color: #6d96ff;
+    box-shadow: 0 0 0 3px rgba(109, 150, 255, 0.25);
+}
+/* Bootstrap paints the select chevron as a dark SVG data-URI; without
+   this it disappears against the dark field. */
+html[data-bs-theme="dark"] #content .form-select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+}
+/* Left global on purpose (no #content scope): a select's dropdown list
+   is drawn by the OS, not by CSS — the options
+   only inherit a color if they are styled directly, which is why
+   light-on-light unreadable option lists are the classic dark-mode bug
+   on Windows. */
+html[data-bs-theme="dark"] select.form-select option,
+html[data-bs-theme="dark"] select.form-control option {
+    background-color: #141d30;
+    color: #e2e8f0;
+}
+/* .bg-light is a Bootstrap utility whose value does NOT follow the dark
+   theme (it is a fixed near-white), so every field carrying it stays
+   white unless it is re-pointed here. */
+html[data-bs-theme="dark"] #content .bg-light {
+    background-color: #1a2438 !important;
+    color: var(--text-main);
+}
+html[data-bs-theme="dark"] #content .text-muted { color: var(--text-muted) !important; }
+html[data-bs-theme="dark"] #content .border { border-color: var(--border-color) !important; }
+html[data-bs-theme="dark"] #content .modal-header,
+html[data-bs-theme="dark"] #content .modal-footer { border-color: var(--border-color); }
+html[data-bs-theme="dark"] #content .list-group-item {
+    background-color: var(--bg-card);
+    color: var(--text-main);
+    border-color: var(--border-color);
+}
+
+/* --- Password field helpers (injected by /js/alerts.js) ---
+   Also left global. The same script injects these controls on the client
+   survey's change-password panel, which is a dark-capable page with no
+   dark rules of its own for them — the toggle's hover state there is
+   navy ink on a navy wash, i.e. invisible. Scoping these to #content
+   would leave that broken for no gain. */
+html[data-bs-theme="dark"] .password-toggle { color: #94a3b8; }
+html[data-bs-theme="dark"] .password-toggle:hover {
+    color: #e2e8f0;
+    background: rgba(255, 255, 255, 0.08);
+}
+html[data-bs-theme="dark"] .password-toggle:focus-visible { outline-color: #6d96ff; }
+html[data-bs-theme="dark"] .input-group > .password-toggle-grouped {
+    border-color: var(--border-color);
+    background-color: #1a2438;
+}
+html[data-bs-theme="dark"] .input-group > .password-toggle-grouped:hover { background-color: #22304a; }
+html[data-bs-theme="dark"] .pw-strength-track {
+    background: #1a2438;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+html[data-bs-theme="dark"] .pw-strength-fill { background: #2c3a54; }
+html[data-bs-theme="dark"] .pw-strength-badge { background: #1a2438; color: #94a3b8; }
+html[data-bs-theme="dark"] .pw-strength-label .pw-strength-hint { color: #94a3b8; }
+html[data-bs-theme="dark"] .pw-strength[data-level="1"] .pw-strength-badge { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+html[data-bs-theme="dark"] .pw-strength[data-level="2"] .pw-strength-badge { background: rgba(245, 158, 11, 0.18); color: #fcd34d; }
+html[data-bs-theme="dark"] .pw-strength[data-level="3"] .pw-strength-badge { background: rgba(234, 179, 8, 0.18); color: #fde047; }
+html[data-bs-theme="dark"] .pw-strength[data-level="4"] .pw-strength-badge { background: rgba(34, 197, 94, 0.18); color: #86efac; }
+
+/* --- Scrollbars ---
+   #content is the app's only scroller; a default light scrollbar down
+   the right edge of a dark page is the last thing that gives away an
+   unfinished dark mode. */
+html[data-bs-theme="dark"] #content { scrollbar-color: #2c3a54 transparent; }
+html[data-bs-theme="dark"] #content::-webkit-scrollbar { width: 10px; height: 10px; }
+html[data-bs-theme="dark"] #content::-webkit-scrollbar-track { background: transparent; }
+html[data-bs-theme="dark"] #content::-webkit-scrollbar-thumb {
+    background: #2c3a54;
+    border-radius: 10px;
+    border: 2px solid var(--bg-main);
+}
+html[data-bs-theme="dark"] #content::-webkit-scrollbar-thumb:hover { background: #3b4c6b; }
+
+/* --- Print ---
+   Printing happens from whatever theme the admin is sitting in, so the
+   dark surfaces are forced back to paper here. Without this, printing
+   the Offices or Survey Records page from dark mode produces grey
+   blocks and pale text. The .report-container pages are unaffected
+   (they were never darkened) — this covers the ordinary screens. */
+@media print {
+    html[data-bs-theme="dark"] body,
+    html[data-bs-theme="dark"] #content,
+    html[data-bs-theme="dark"] .card,
+    html[data-bs-theme="dark"] .card-custom,
+    html[data-bs-theme="dark"] .stat-card {
+        background: #fff !important;
+        color: #000 !important;
+    }
+}
+
+/* --- Bootstrap utilities that do not follow the theme ---
+   .bg-white and .text-primary resolve to fixed values, not to theme
+   variables, so a card header carrying .bg-white stays a white strip
+   across the top of a dark card and the navy .text-primary link on it
+   effectively disappears.
+
+   Everything in this group is scoped to #content — the admin shell's
+   scrolling pane, which only the sidebar-layout pages have. The client
+   and office pages load this same stylesheet but style their own
+   buttons and surfaces from their own token sets (see the
+   .btn-outline-primary block in client-survey.ejs), and a bare
+   html[dark] .btn-outline-primary here would outrank those and quietly
+   restyle the survey. Admin modals are rendered inside #content too, so
+   nothing on these pages is missed by the narrower scope.
+
+   The :not() guards matter: .report-container and .csm-export-container
+   are the on-screen previews of official CSPC forms, captured as-is by
+   html2pdf. Anything inside them has to stay exactly as it prints, so
+   they are carved out of every dark rule rather than darkened and then
+   undone at print time. */
+html[data-bs-theme="dark"] #content .bg-white:not(.report-container *):not(.csm-export-container *) {
+    background-color: var(--bg-card) !important;
+    color: var(--text-main);
+}
+html[data-bs-theme="dark"] #content .text-primary:not(.report-container *):not(.csm-export-container *) {
+    color: #93c5fd !important;
+}
+html[data-bs-theme="dark"] #content .card-header,
+html[data-bs-theme="dark"] #content .card-footer {
+    background-color: var(--bg-card);
+    color: var(--text-main);
+    border-color: var(--border-color);
+}
+
+/* Outline buttons are drawn in the brand navy, which on a navy-black
+   page is a button-shaped hole. They keep their meaning (primary /
+   neutral / danger) but are lifted to the light end of each hue. */
+html[data-bs-theme="dark"] #content .btn-outline-primary {
+    --bs-btn-color: #93c5fd;
+    --bs-btn-border-color: #3f5a8a;
+    --bs-btn-hover-bg: #3452a5;
+    --bs-btn-hover-border-color: #3452a5;
+    --bs-btn-hover-color: #ffffff;
+}
+html[data-bs-theme="dark"] #content .btn-outline-secondary {
+    --bs-btn-color: #cbd5e1;
+    --bs-btn-border-color: #3b4c6b;
+    --bs-btn-hover-bg: #2c3a54;
+    --bs-btn-hover-border-color: #2c3a54;
+    --bs-btn-hover-color: #f1f5f9;
+}
+html[data-bs-theme="dark"] #content .btn-outline-danger {
+    --bs-btn-color: #fca5a5;
+    --bs-btn-border-color: #7f3a3a;
+    --bs-btn-hover-bg: #b91c1c;
+    --bs-btn-hover-border-color: #b91c1c;
+    --bs-btn-hover-color: #ffffff;
+}
+/* .btn-primary is the navy brand button. It stays navy — it is the one
+   element that should look identical in both themes — but gains a rim
+   so it does not merge into the dark card behind it. */
+html[data-bs-theme="dark"] #content .btn-primary {
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* The paper previews: explicitly pinned back to black-on-white so no
+   inherited dark color can leak into a page that will be exported as a
+   PDF or printed. */
+html[data-bs-theme="dark"] .report-container,
+html[data-bs-theme="dark"] .csm-export-container {
+    background: #fff;
+    color: #000;
+}
+html[data-bs-theme="dark"] .report-container .text-muted {
+    color: #6b7280 !important;
+}
+/* The white page is a bright rectangle on a dark desk; a soft rim keeps
+   it reading as a sheet of paper rather than as a blown-out panel. */
+html[data-bs-theme="dark"] .report-container {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+}
+@media print {
+    html[data-bs-theme="dark"] .report-container { box-shadow: none; }
+}
+
+/* ==================================================================
+   DARK MODE — status pills (sentiment, SQD score, AI topic)
+   ------------------------------------------------------------------
+   /dashboard and /survey-records render the SAME pill classes, so the
+   dark values live here rather than in either page — otherwise the two
+   screens drift apart the first time one of them is touched.
+
+   Every light pill is built as "pale tint + dark ink". Inverted
+   naively that becomes a bright block on a dark page, which is both
+   loud and, for the pale ones, lower contrast than it looks. Each pill
+   is therefore rebuilt the other way round — a translucent wash of the
+   SAME hue plus light ink of that hue — so the color still carries the
+   same meaning (green = positive, red = negative, amber = facility)
+   while the surface stays quiet.
+
+   This replaces an earlier `filter: brightness(0.92) saturate(0.9)` on
+   the whole badge, which could only darken the existing pale tint: a
+   near-white pill stayed near-white, so the badges were the brightest
+   thing on a dark records table.
+   ================================================================== */
+
+/* --- Sentiment --- */
+html[data-bs-theme="dark"] .bg-sentiment-positive { background-color: rgba(34, 197, 94, 0.18); color: #86efac; }
+html[data-bs-theme="dark"] .bg-sentiment-negative { background-color: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+html[data-bs-theme="dark"] .bg-sentiment-neutral  { background-color: rgba(148, 163, 184, 0.20); color: #cbd5e1; }
+html[data-bs-theme="dark"] .bg-sentiment-none {
+    background-color: rgba(148, 163, 184, 0.10);
+    color: #94a3b8;
+    border-color: #3b4c6b;
+}
+
+/* --- SQD score badges (1-5 plus N/A) --- */
+html[data-bs-theme="dark"] .sqd-badge-5,
+html[data-bs-theme="dark"] .sqd-badge-4 { background: rgba(34, 197, 94, 0.18); color: #86efac; }
+html[data-bs-theme="dark"] .sqd-badge-3 { background: rgba(148, 163, 184, 0.20); color: #cbd5e1; }
+html[data-bs-theme="dark"] .sqd-badge-2,
+html[data-bs-theme="dark"] .sqd-badge-1 { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+html[data-bs-theme="dark"] .sqd-badge-na,
+html[data-bs-theme="dark"] .sqd-badge-unanswered { background: rgba(148, 163, 184, 0.10); color: #94a3b8; }
+
+/* --- AI topic badges ---
+   Scoped to .topic-badge because these hue names (.bg-online, .bg-docs,
+   .bg-general) are generic enough to collide with something else later. */
+html[data-bs-theme="dark"] .topic-badge.bg-cr          { background-color: rgba(239, 68, 68, 0.18);  color: #fca5a5; }
+html[data-bs-theme="dark"] .topic-badge.bg-aircon      { background-color: rgba(14, 165, 233, 0.20); color: #7dd3fc; }
+html[data-bs-theme="dark"] .topic-badge.bg-general     { background-color: rgba(148, 163, 184, 0.18); color: #cbd5e1; }
+html[data-bs-theme="dark"] .topic-badge.bg-facility    { background-color: rgba(217, 119, 6, 0.22);  color: #fcd34d; }
+html[data-bs-theme="dark"] .topic-badge.bg-staff       { background-color: rgba(124, 58, 237, 0.26); color: #c4b5fd; }
+html[data-bs-theme="dark"] .topic-badge.bg-payment     { background-color: rgba(22, 163, 74, 0.20);  color: #86efac; }
+html[data-bs-theme="dark"] .topic-badge.bg-docs        { background-color: rgba(37, 99, 235, 0.24);  color: #93c5fd; }
+html[data-bs-theme="dark"] .topic-badge.bg-online      { background-color: rgba(8, 145, 178, 0.24);  color: #67e8f9; }
+html[data-bs-theme="dark"] .topic-badge.bg-health      { background-color: rgba(219, 39, 119, 0.22); color: #f9a8d4; }
+html[data-bs-theme="dark"] .topic-badge.bg-transaction { background-color: rgba(194, 65, 12, 0.24);  color: #fdba74; }
+/* The two "nothing to classify" states keep their dashed outline — that
+   is what marks them as not-a-real-topic rather than one more color. */
+html[data-bs-theme="dark"] .topic-badge.bg-unclassified {
+    background-color: rgba(148, 163, 184, 0.10);
+    color: #94a3b8;
+    border-color: #3b4c6b;
+}
+html[data-bs-theme="dark"] .topic-badge.bg-no-feedback {
+    background-color: rgba(148, 163, 184, 0.10);
+    color: #94a3b8;
+    border-color: #3b4c6b;
 }

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <%- include('layout/header', { forceLightMode: true }) %>
+    <%- include('layout/header') %>
 </head>
 <body data-connection-alerts>
 <div id="wrapper">
@@ -151,6 +151,7 @@
 </div>
 
 <%- include('layout/footer') %>
+<%- include('layout/theme-toggle') %>
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {

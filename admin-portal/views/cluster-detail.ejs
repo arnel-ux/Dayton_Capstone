@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <%- include('layout/header', { forceLightMode: true }) %>
+    <%- include('layout/header') %>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -138,7 +138,31 @@
             .report-container { border: none; box-shadow: none; max-width: 100%; padding: 0; display: block; page-break-after: always; page-break-inside: avoid; break-inside: avoid; overflow: visible; }
             .page-break { page-break-before: always; }
         }
-    </style>
+    
+        /* --- Dark theme, remaining gaps ---
+           The rules above already darken this page's surfaces. These are
+           the pieces that were still drawn light-first.
+
+           .report-container further down is NOT touched: it is the printed
+           CSM form, captured as-is by html2pdf, so it stays white paper. */
+        html[data-bs-theme="dark"] .chart-card,
+        html[data-bs-theme="dark"] .stat-box,
+        html[data-bs-theme="dark"] .filter-bar {
+            border: 1px solid #263045;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+        }
+        /* The bottom rule is brand navy, which vanishes against a navy-black
+           card — the stat box loses the accent that distinguishes it. */
+        html[data-bs-theme="dark"] .stat-box { border-bottom: 4px solid #ffcc00; }
+        /* Navy fill on a navy-black group is an invisible "selected" state,
+           so the active toggle switches to the brand gold (same choice the
+           dashboard's chart toggle makes, so the two pages agree). */
+        html[data-bs-theme="dark"] .chart-toggle-btn.active {
+            background: #ffcc00;
+            color: #251d3a;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+        }
+</style>
 </head>
 <body data-connection-alerts>
     <div id="wrapper">
@@ -454,6 +478,7 @@
     </div>
 
     <%- include('layout/footer') %>
+    <%- include('layout/theme-toggle') %>
 
     <script>
         // Tumatanggap ng real-time query mula sa server.js tuwing niloload ang page (already
@@ -553,8 +578,8 @@
                 respondents: {
                     label: 'Total Respondents',
                     data: (dataArray) => dataArray.map(d => parseInt(d.resp) || 0),
-                    color: 'rgba(37, 29, 58, 0.85)',
-                    border: '#251d3a',
+                    color: 'rgba(123, 104, 196, 0.85)',
+                    border: '#7b68c4',
                     axisTitle: 'Number of Respondents',
                     max: undefined
                 },
@@ -572,6 +597,11 @@
             function renderChart(dataArray) {
                 if (chartInstance) chartInstance.destroy();
                 const metric = officeMetrics[currentMetric];
+                // Canvas text is out of reach of CSS; #666 (the Chart.js
+                // default) is hard to read on the dark card. Matches the value
+                // used on /dashboard so both pages' charts read alike.
+                Chart.defaults.color = '#7c889c';
+                Chart.defaults.borderColor = 'rgba(148, 163, 184, 0.22)';
                 chartInstance = new Chart(ctx, {
                     type: 'bar',
                     data: {
@@ -590,7 +620,7 @@
                         plugins: {
                             legend: { display: false },
                             datalabels: {
-                                anchor: 'end', align: 'end', color: '#1e293b',
+                                anchor: 'end', align: 'end', color: '#7c889c',
                                 font: { weight: '800', size: 11 },
                                 formatter: function(value) {
                                     if (value === 0) return '';

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <%- include('layout/header', { forceLightMode: true }) %>
+    <%- include('layout/header') %>
     <style>
         /* Custom Styles for Survey Management — palette matches the Survey Records page. */
         :root {
@@ -343,6 +343,7 @@
 </div>
 
 <%- include('layout/footer') %>
+<%- include('layout/theme-toggle') %>
 
 <script>
     let myModal;

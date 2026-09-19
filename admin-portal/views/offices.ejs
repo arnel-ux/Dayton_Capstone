@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <%- include('layout/header', { forceLightMode: true }) %>
+    <%- include('layout/header') %>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <style>
@@ -151,7 +151,38 @@
             .csm-table tr { page-break-inside: avoid; }
             @page { size: landscape; margin: 0.4in; }
         }
-    </style>
+    
+        /* --- Dark theme ---
+           The shared dark palette (public/css/style.css) already supplies
+           --border-strong and --surface-subtle, and it covers .archived-row
+           and .badge-archived, so only what this page hardcodes is listed
+           here.
+
+           #csmExportContent is left untouched on purpose: it is the
+           off-screen official "List of Services" table that gets printed,
+           so it stays black on white whatever the screen theme is. */
+        html[data-bs-theme="dark"] .btn-icon {
+            background: #1a2438;
+            border-color: var(--border-strong);
+            color: #cbd5e1;
+        }
+        /* The hover tints are pale washes with dark ink — unreadable once
+           the button itself is dark. Each keeps its hue (blue = services,
+           red = archive/delete, green = restore) as a translucent wash
+           with light ink, so the color still says the same thing. */
+        html[data-bs-theme="dark"] .btn-icon-services:hover { background-color: rgba(56, 189, 248, 0.20); border-color: #38bdf8; color: #7dd3fc; }
+        html[data-bs-theme="dark"] .btn-icon-archive:hover,
+        html[data-bs-theme="dark"] .btn-icon-delete:hover,
+        html[data-bs-theme="dark"] .btn-icon-export:hover { background-color: rgba(239, 68, 68, 0.20); border-color: #ef4444; color: #fca5a5; }
+        html[data-bs-theme="dark"] .btn-icon-restore:hover { background-color: rgba(34, 197, 94, 0.20); border-color: #22c55e; color: #86efac; }
+        html[data-bs-theme="dark"] .btn-icon-edit:hover { background-color: #3452a5; border-color: #3452a5; color: #fff; }
+
+        /* Cluster header rows carry Bootstrap's .bg-light, which is a fixed
+           near-white: without this every cluster band stays a white stripe
+           across the table. */
+        html[data-bs-theme="dark"] .cluster-toggle.bg-light { background-color: #1a2438 !important; }
+        html[data-bs-theme="dark"] .cluster-toggle:hover { background-color: #22304a !important; }
+</style>
 </head>
 <body data-connection-alerts>
 <div id="wrapper">
@@ -611,6 +642,7 @@
 </div>
 
 <%- include('layout/footer') %>
+<%- include('layout/theme-toggle') %>
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {

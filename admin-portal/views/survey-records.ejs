@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <%- include('layout/header', { forceLightMode: true }) %>
+    <%- include('layout/header') %>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="/js/pdf-repeating-header.js"></script>
     <script src="/js/report-csv.js"></script>
@@ -337,8 +337,8 @@
         .bg-sentiment-neutral { background-color: #e2e8f0; color: #334155; }
         .bg-sentiment-none { background-color: #f8fafc; color: #94a3b8; border: 1px dashed #cbd5e1; }
 
-        html[data-bs-theme="dark"] .topic-badge,
-        html[data-bs-theme="dark"] .sentiment-badge { filter: brightness(0.92) saturate(0.9); }
+        /* Dark values for these pills are shared with /dashboard — see the
+           "status pills" section of public/css/style.css. */
 
         /* Wider, left-aligned tooltip for long comments so wrapped text stays readable
            instead of Bootstrap's default narrow 200px bubble. */
@@ -426,7 +426,8 @@
         .sqd-badge-3 { background: #e2e8f0; color: #334155; }
         .sqd-badge-2, .sqd-badge-1 { background: #fee2e2; color: #b91c1c; }
         .sqd-badge-na, .sqd-badge-unanswered { background: #f1f5f9; color: #94a3b8; }
-        html[data-bs-theme="dark"] .sqd-badge { filter: brightness(0.92) saturate(0.9); }
+        /* Dark values for these pills are shared with /dashboard — see the
+           "status pills" section of public/css/style.css. */
 
         /* Generate Report modal — fills the content area (same wide layout/format as the
            official /report page) but docks to the right of the sidebar instead of covering
@@ -826,6 +827,7 @@
 </div>
 
 <%- include('layout/footer') %>
+<%- include('layout/theme-toggle') %>
 
 <script>
     const SQD_ITEMS = [

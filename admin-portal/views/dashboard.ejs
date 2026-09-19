@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <%- include('layout/header', { forceLightMode: true }) %>
+    <%- include('layout/header') %>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="/js/pdf-repeating-header.js"></script>
@@ -52,6 +52,137 @@
             --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
             --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
         }
+
+        /* ============================================================
+           1b. DARK THEME
+           ------------------------------------------------------------
+           Most of this page already reads from the tokens above, so dark
+           mode is mainly a second set of values for them. What follows
+           the token block is the short list of rules that hardcode a
+           light color instead — the white card gradients, the tinted
+           page washes, and the pale status pills.
+
+           The hero card, the navy buttons and the sidebar are NOT
+           restated: they are already dark navy in both themes, and that
+           is what keeps the page recognisably the same product after
+           the toggle rather than a different skin.
+           ============================================================ */
+        html[data-bs-theme="dark"] {
+            --bg-body: #0b1526;
+            --border-soft: rgba(148, 163, 184, 0.14);
+            --border-soft-strong: rgba(148, 163, 184, 0.24);
+            --text-dark: #f1f5f9;
+            --text-muted: #94a3b8;
+            --text-faint: #64748b;
+            --card-bg: #141d30;
+
+            /* The light shadows are navy-tinted and simply disappear on a
+               dark page, so the cards lose their edge. Dark mode leans on
+               a real black shadow plus the 1px border below instead. */
+            --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 16px -10px rgba(0, 0, 0, 0.55);
+            --shadow-card-hover: 0 2px 6px rgba(0, 0, 0, 0.45), 0 16px 32px -14px rgba(0, 0, 0, 0.6);
+            --shadow-hero: 0 24px 48px -16px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.45);
+        }
+
+        /* The light page uses three soft brand washes to give the white
+           cards something to sit on. The same washes at the same opacity
+           over a near-black page turn into visible grey clouds, so they
+           are dialled right down — enough to keep the page from being a
+           flat black rectangle, not enough to read as banding. */
+        html[data-bs-theme="dark"] body {
+            background-image:
+                radial-gradient(1100px 520px at 10% -10%, rgba(109, 150, 255, 0.07), transparent 62%),
+                radial-gradient(900px 460px at 104% 2%, rgba(255, 204, 0, 0.05), transparent 58%),
+                radial-gradient(900px 620px at 50% 118%, rgba(109, 150, 255, 0.05), transparent 60%);
+        }
+
+        /* --- Surfaces ---
+           Every panel on this page is the same white-to-faint-blue
+           gradient; in dark it becomes a flat card color plus a border,
+           because a gradient that subtle is invisible at this lightness
+           and only costs a repaint. */
+        html[data-bs-theme="dark"] .filter-bar-v2,
+        html[data-bs-theme="dark"] .stat-card,
+        html[data-bs-theme="dark"] .insight-chip,
+        html[data-bs-theme="dark"] .chart-container-main,
+        html[data-bs-theme="dark"] .side-panel-card {
+            background: var(--card-bg);
+            border-color: var(--border-soft);
+        }
+        html[data-bs-theme="dark"] .stat-card:hover,
+        html[data-bs-theme="dark"] .filter-bar-v2:hover {
+            border-color: rgba(148, 163, 184, 0.34);
+        }
+
+        /* --- Filter bar --- */
+        html[data-bs-theme="dark"] .filter-bar-v2 .filter-icon {
+            background: rgba(109, 150, 255, 0.16);
+            color: #b9cbff;
+        }
+        html[data-bs-theme="dark"] .filter-bar-v2 select.form-select {
+            background-color: #1a2438;
+            color: var(--text-dark);
+            border-color: var(--border-soft-strong);
+        }
+        html[data-bs-theme="dark"] .filter-bar-v2 select.form-select:focus {
+            border-color: #6d96ff;
+            box-shadow: 0 0 0 3px rgba(109, 150, 255, 0.22);
+        }
+        html[data-bs-theme="dark"] .filter-clear-btn { background: rgba(255, 255, 255, 0.07); }
+        html[data-bs-theme="dark"] .filter-clear-btn:hover {
+            background: rgba(239, 68, 68, 0.18);
+            color: #fca5a5;
+        }
+
+        /* --- Stat cards & insight chips ---
+           The navy-on-pale-navy icon chip is the one combination that
+           breaks outright in dark: navy ink on a near-navy card. It flips
+           to a light blue on a translucent blue wash. */
+        html[data-bs-theme="dark"] .stat-icon,
+        html[data-bs-theme="dark"] .insight-chip-icon.active {
+            background: rgba(109, 150, 255, 0.16);
+            color: #b9cbff;
+        }
+        html[data-bs-theme="dark"] .stat-card:hover .stat-icon {
+            background: var(--gold-500);
+            color: #251d3a;
+        }
+        html[data-bs-theme="dark"] .insight-chip-icon.good { background: rgba(16, 185, 129, 0.18); color: #6ee7b7; }
+        html[data-bs-theme="dark"] .insight-chip-icon.warn { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+        html[data-bs-theme="dark"] .view-details-pill {
+            background: rgba(109, 150, 255, 0.14);
+            color: #b9cbff !important;
+        }
+        html[data-bs-theme="dark"] .stat-card:hover .view-details-pill {
+            background: var(--gold-500);
+            color: #251d3a !important;
+        }
+        html[data-bs-theme="dark"] .section-eyebrow { color: #b9cbff; }
+
+        /* --- Chart toggle --- */
+        html[data-bs-theme="dark"] .chart-toggle-group { background: rgba(255, 255, 255, 0.06); }
+        html[data-bs-theme="dark"] .chart-toggle-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.09);
+            color: var(--text-dark);
+        }
+        html[data-bs-theme="dark"] .chart-toggle-btn.active {
+            background: var(--gold-500);
+            color: #251d3a;
+            box-shadow: 0 6px 14px -6px rgba(0, 0, 0, 0.7);
+        }
+
+        /* --- Sentiment pills & ranking rows ---
+           Pale tint + dark ink inverts into a bright block, so dark mode
+           swaps to a translucent wash of the same hue + light ink. The
+           hue is what carries the meaning, and it is preserved exactly. */
+        /* The sentiment pills are shared with /survey-records, so their
+           dark values live in public/css/style.css. */
+        html[data-bs-theme="dark"] .rank-score.good { background: rgba(34, 197, 94, 0.18); color: #86efac; }
+        html[data-bs-theme="dark"] .rank-score.bad  { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+        html[data-bs-theme="dark"] .rank-badge.warn { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+        /* The three medals keep their metal colors — they are the one
+           place on the page where the color IS the information, and the
+           dark ink on them still clears AA against the bright gradient. */
 
         /* Tinted, fixed backdrop. The old flat #f4f6fb sat too close to the
            white cards, so the containers read as floating text blocks rather
@@ -1270,6 +1401,7 @@
 </div>
 
 <%- include('layout/footer') %>
+<%- include('layout/theme-toggle') %>
 
 <script>
 // "+ Add New Period" is a sentinel option inside the Period Covered dropdown
@@ -1451,12 +1583,22 @@ document.addEventListener("DOMContentLoaded", function() {
     const chartRatings = <%- typeof chartData !== 'undefined' ? JSON.stringify(chartData.ratings) : JSON.stringify([0, 0, 0, 0, 0]) %>;
 
     const ctx = document.getElementById('clusterAnalyticsChart').getContext('2d');
+    // Axis labels, the y-axis title and the tick text are drawn onto the
+    // canvas, so no stylesheet can reach them. Chart.js defaults them to #666,
+    // which is dim-but-legible on a white card and genuinely hard to read on
+    // the dark one. This slate is the single value that clears ~4:1 against
+    // BOTH card colors, so the charts read the same in either theme instead of
+    // one theme being an afterthought. Set once here, before any chart is
+    // built, so every chart on the page agrees.
+    Chart.defaults.color = '#7c889c';
+    Chart.defaults.borderColor = 'rgba(148, 163, 184, 0.22)';
+
     const barGradientGold = ctx.createLinearGradient(0, 0, 0, 320);
     barGradientGold.addColorStop(0, '#ffcc00');
     barGradientGold.addColorStop(1, '#ffcc00');
     const barGradientNavy = ctx.createLinearGradient(0, 0, 0, 320);
-    barGradientNavy.addColorStop(0, '#2a2550');
-    barGradientNavy.addColorStop(1, '#251d3a');
+    barGradientNavy.addColorStop(0, '#9182d6');
+    barGradientNavy.addColorStop(1, '#7b68c4');
 
     // Cluster Performance chart: Respondents (Volume) and Satisfaction Rating
     // are two separate metrics on very different scales (raw counts vs. a
@@ -1468,7 +1610,7 @@ document.addEventListener("DOMContentLoaded", function() {
             label: 'Respondents (Volume)',
             data: chartRespondents,
             color: barGradientNavy,
-            hoverColor: '#2a2550',
+            hoverColor: '#9d8fe0',
             axisTitle: 'Total Respondents',
             max: undefined,
             tooltip: (v) => `Respondents: ${v.toLocaleString()}`,
@@ -1543,7 +1685,7 @@ document.addEventListener("DOMContentLoaded", function() {
                         beginAtZero: true,
                         max: metric.max,
                         title: { display: true, text: metric.axisTitle, font: { weight: 'bold' } },
-                        grid: { color: '#f1f5f9' }
+                        grid: { color: 'rgba(148, 163, 184, 0.22)' }
                     },
                     x: {
                         grid: { display: false },
@@ -1577,8 +1719,8 @@ document.addEventListener("DOMContentLoaded", function() {
                     <%= sentimentBreakdown.Neutral %>,
                     <%= sentimentBreakdown.Negative %>
                 ],
-                backgroundColor: ['#ffcc00', '#9d99a6', '#251d3a'],
-                borderColor: '#fff',
+                backgroundColor: ['#ffcc00', '#9d99a6', '#7b68c4'],
+                borderColor: 'rgba(148, 163, 184, 0.45)',
                 borderWidth: 3,
                 hoverOffset: 6
             }]
@@ -1611,7 +1753,7 @@ document.addEventListener("DOMContentLoaded", function() {
     if (clusterShareEl) {
         const clusterShareLabels = <%- typeof clusterCards !== 'undefined' ? JSON.stringify(clusterCards.map(c => c.name)) : '[]' %>;
         const clusterShareData = <%- typeof clusterCards !== 'undefined' ? JSON.stringify(clusterCards.map(c => Number(c.respondents) || 0)) : '[]' %>;
-        const clusterShareColors = <%- typeof clusterCards !== 'undefined' ? JSON.stringify(clusterCards.map(c => c.color || '#251d3a')) : '[]' %>;
+        const clusterShareColors = <%- typeof clusterCards !== 'undefined' ? JSON.stringify(clusterCards.map(c => c.color || '#7b68c4')) : '[]' %>;
 
         new Chart(clusterShareEl.getContext('2d'), {
             type: 'pie',
@@ -1620,7 +1762,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 datasets: [{
                     data: clusterShareData,
                     backgroundColor: clusterShareColors,
-                    borderColor: '#fff',
+                    borderColor: 'rgba(148, 163, 184, 0.45)',
                     borderWidth: 2,
                     hoverOffset: 8
                 }]
@@ -1708,7 +1850,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 datasets: [
                     { label: 'Positive', data: officeNames.map(o => officeTally[o].Positive), borderColor: '#ffcc00', backgroundColor: 'rgba(255, 204, 0, 0.55)', fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#ffcc00', pointBorderColor: '#fff', pointBorderWidth: 1.5, pointHoverRadius: 6 },
                     { label: 'Neutral', data: officeNames.map(o => officeTally[o].Neutral), borderColor: '#9d99a6', backgroundColor: 'rgba(157, 153, 166, 0.55)', fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#9d99a6', pointBorderColor: '#fff', pointBorderWidth: 1.5, pointHoverRadius: 6 },
-                    { label: 'Negative', data: officeNames.map(o => officeTally[o].Negative), borderColor: '#251d3a', backgroundColor: 'rgba(37, 29, 58, 0.65)', fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#251d3a', pointBorderColor: '#fff', pointBorderWidth: 1.5, pointHoverRadius: 6 }
+                    { label: 'Negative', data: officeNames.map(o => officeTally[o].Negative), borderColor: '#7b68c4', backgroundColor: 'rgba(123, 104, 196, 0.45)', fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#7b68c4', pointBorderColor: '#fff', pointBorderWidth: 1.5, pointHoverRadius: 6 }
                 ]
             },
             options: {
@@ -1736,7 +1878,7 @@ document.addEventListener("DOMContentLoaded", function() {
                         stacked: true, grid: { display: false },
                         ticks: { font: { size: 11, weight: '600' }, callback: (value, index) => truncateLabel(officeNames[index], 14) }
                     },
-                    y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#f1f5f9' } }
+                    y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, grid: { color: 'rgba(148, 163, 184, 0.22)' } }
                 }
             }
         });
@@ -1792,7 +1934,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     }
                 },
                 scales: {
-                    x: { beginAtZero: true, max: 100, grid: { color: '#f1f5f9' }, ticks: { callback: (v) => v + '%' } },
+                    x: { beginAtZero: true, max: 100, grid: { color: 'rgba(148, 163, 184, 0.22)' }, ticks: { callback: (v) => v + '%' } },
                     y: {
                         grid: { display: false },
                         ticks: { font: { size: 11, weight: '600' }, autoSkip: false, callback: (value, index) => truncateLabel(labels[index], 20) }

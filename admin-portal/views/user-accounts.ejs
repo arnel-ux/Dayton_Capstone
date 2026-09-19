@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <%- include('layout/header', { forceLightMode: true }) %>
+    <%- include('layout/header') %>
     <style>
         /* Same token set and 4/8/12/16/20/24/32 spacing scale as
            survey-records.ejs, so this page sits inside the admin portal's
@@ -608,6 +608,7 @@
 </div>
 
 <%- include('layout/footer') %>
+<%- include('layout/theme-toggle') %>
 <script>
     // Search, sort and account-type filter over the rows already rendered --
     // the whole list is on the page, so none of the three needs a round trip.
