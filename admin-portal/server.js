@@ -992,6 +992,54 @@ function ensureAdminAuth(req, res, next) {
 // So the FULL spelling is full_name when it exists and office_name otherwise,
 // and the SHORT spelling is office_name when it is already the acronym, and a
 // derived one when it is not.
+// The spelled-out name of every office whose `office_name` is stored as the
+// acronym staff use day to day. This is the same table as
+// migrations/add_office_full_name.sql, kept here as well because a .sql file
+// only ever runs on the database somebody runs it against: it had been applied
+// to the development database and never to the deployed one, so in production
+// every office below still introduced itself as "CCS" or "CEA" in the portal
+// header, on desktop included, however many times the code was committed and
+// redeployed. Applied on boot instead (see the offices table setup), the way
+// the services table's `availability` backfill is, so every environment ends
+// up spelling these out without anyone having to remember a manual step.
+const OFFICE_FULL_NAMES = {
+    'RFOIU': 'Records and Freedom of Information Unit',
+    'CEA': 'College of Engineering and Architecture',
+    'CAS': 'College of Arts and Sciences',
+    'CTDE': 'College of Technological and Development Education',
+    'CCS': 'College of Computer Studies',
+    'CHS': 'College of Health Sciences',
+    'CTHBM': 'College of Tourism, Hospitality, and Business Management',
+    'GRADUATE SCHOOL': 'Graduate School',
+    'BUHI CAMPUS': 'Buhi Campus',
+    'VPAA': 'Vice President for Academic Affairs Office',
+    'VPAF': 'Vice President for Administration and Finance Office',
+    'VPRIC': 'Vice President for Research, Innovation, and Collaboration Office',
+    'PAxS': 'Public Affairs and Special Concerns Office'
+};
+
+// One idempotent statement, run once per boot. Two deliberate limits on what
+// it may touch:
+//   - matched on office_name, never on id, because the ids in the deployed
+//     database are not guaranteed to be the ids here;
+//   - only ever fills a full_name that is MISSING, so a spelling a super admin
+//     corrected by hand is never overwritten on the next restart.
+function backfillOfficeFullNames() {
+    const names = Object.keys(OFFICE_FULL_NAMES);
+    if (!names.length) return;
+    const cases = names.map(() => 'WHEN ? THEN ?').join(' ');
+    const params = [];
+    names.forEach((n) => params.push(n, OFFICE_FULL_NAMES[n]));
+    names.forEach((n) => params.push(n));
+    const sql = `UPDATE offices SET full_name = CASE office_name ${cases} ELSE full_name END
+                 WHERE office_name IN (${names.map(() => '?').join(', ')})
+                   AND (full_name IS NULL OR TRIM(full_name) = '')`;
+    db.query(sql, params, (err, result) => {
+        if (err) return console.error('❌ Error filling in office full names:', err);
+        if (result && result.affectedRows) console.log(`✅ Office full names filled in for ${result.affectedRows} office(s).`);
+    });
+}
+
 const OFFICE_ACRONYM_STOPWORDS = new Set(['and', 'of', 'for', 'the', 'in', 'on', 'at', 'to', 'a', 'an', '&']);
 
 // Some office names carry their own acronym in the name itself — "National
@@ -3116,7 +3164,12 @@ db.query(createClustersTableQuery, (err) => {
                 // dropdowns and charts, but the official CSM report has to spell the office
                 // out. NULL/blank means office_name is already the full name, and reports
                 // fall back to it. Backfilled by migrations/add_office_full_name.sql.
-                db.query("ALTER TABLE offices ADD COLUMN full_name VARCHAR(255) NULL", () => {});
+                // The column is added here whether or not the migration ever ran;
+                // the backfill right after it is what actually puts the spelled-out
+                // names in a database that has only ever seen the acronyms.
+                db.query("ALTER TABLE offices ADD COLUMN full_name VARCHAR(255) NULL", () => {
+                    backfillOfficeFullNames();
+                });
 
                 // Services table (per office) — powers the dependent "Service Availed" dropdown
                 db.query(createServicesTableQuery, (err) => {
