@@ -5756,7 +5756,7 @@ app.get('/api/client-history', ensureClientAuth, noCache, (req, res) => {
                    p.created_at, DATE_FORMAT(p.created_at, '%M %d, %Y') AS formatted_date
             FROM pending_survey_submissions p
             JOIN offices o ON p.office_id = o.id
-            WHERE p.google_email = ?
+            WHERE p.google_email = ? AND p.status <> 'approved'
         `;
         db.query(pendingQuery, [req.clientEmail], (err2, pendingRows) => {
             const approved = (approvedRows || []).map(r => ({
