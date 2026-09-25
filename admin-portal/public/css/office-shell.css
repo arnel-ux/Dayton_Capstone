@@ -138,6 +138,181 @@
 }
 .topbar-hamburger:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
+/* Right-hand icon pair (bell + full screen) — same look as the hamburger. */
+.topbar-icon-group { gap: 0.5rem; }
+.topbar-icon-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.07);
+    color: #e2e8f0;
+    font-size: 1rem;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+.topbar-icon-btn[hidden] { display: none; }
+.topbar-icon-btn:hover,
+.topbar-icon-btn[aria-expanded="true"] {
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+}
+.topbar-icon-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.topbar-icon-btn.has-unread > i { animation: officeBellSwing 2s ease-in-out 3; transform-origin: 50% 15%; }
+@keyframes officeBellSwing {
+    0%, 60%, 100% { transform: rotate(0deg); }
+    5%  { transform: rotate(13deg); }
+    15% { transform: rotate(-11deg); }
+    25% { transform: rotate(8deg); }
+    35% { transform: rotate(-6deg); }
+    45% { transform: rotate(3deg); }
+}
+@media (prefers-reduced-motion: reduce) { .topbar-icon-btn.has-unread > i { animation: none; } }
+
+.topbar-bell-wrap { position: relative; display: flex; }
+.topbar-notif-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #dc3545;
+    color: #fff;
+    font-size: 0.66rem;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    box-shadow: 0 0 0 2px #131c30;
+}
+.topbar-notif-badge[hidden] { display: none; }
+
+/* ---- Notification panel: the same look as the client portal bell panel ---- */
+.notif-panel {
+    --notif-surface: #ffffff;
+    --notif-header-bg: #f8fafc;
+    --notif-line: rgba(15, 23, 42, 0.09);
+    --notif-title: #0f172a;
+    --notif-text: #475569;
+    --notif-muted: #94a3b8;
+    --notif-unread-bg: rgba(37, 84, 199, 0.06);
+    --notif-accent: #2554c7;
+    --notif-accent-soft: rgba(37, 84, 199, 0.12);
+    --notif-hover: rgba(15, 23, 42, 0.04);
+
+    position: fixed; top: calc(var(--office-topbar-h) + 6px); right: 16px;
+    width: 384px; max-width: calc(100vw - 2rem);
+    display: flex; flex-direction: column;
+    max-height: min(70vh, 560px);
+    max-height: min(70dvh, 560px);
+    background: var(--notif-surface); color: var(--notif-text);
+    border: 1px solid var(--notif-line); border-radius: 18px;
+    box-shadow: 0 28px 60px -20px rgba(10, 20, 40, 0.45), 0 2px 8px rgba(10, 20, 40, 0.08);
+    overflow: hidden;
+    z-index: 1060;
+    transform-origin: top right;
+    animation: notifPanelIn 0.16s ease-out;
+}
+.notif-panel[hidden] { display: none !important; }
+html[data-bs-theme="dark"] .notif-panel {
+    --notif-surface: #101827;
+    --notif-header-bg: #0c1422;
+    --notif-line: rgba(148, 163, 184, 0.16);
+    --notif-title: #e6edf7;
+    --notif-text: #9aa8bd;
+    --notif-muted: #6b7b93;
+    --notif-unread-bg: rgba(96, 141, 255, 0.10);
+    --notif-accent: #6d96ff;
+    --notif-accent-soft: rgba(96, 141, 255, 0.18);
+    --notif-hover: rgba(255, 255, 255, 0.045);
+    box-shadow: 0 28px 60px -20px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(148, 163, 184, 0.06);
+}
+@keyframes notifPanelIn {
+    from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+    to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .notif-panel { animation: none; } }
+
+.notif-panel-header { flex: none; padding: 0.85rem 0.9rem 0.6rem; background: var(--notif-header-bg); border-bottom: 1px solid var(--notif-line); }
+.notif-panel-header-top { display: flex; align-items: center; gap: 0.5rem; }
+.notif-panel-title { font-size: 0.98rem; font-weight: 700; color: var(--notif-title); letter-spacing: -0.01em; }
+.notif-panel-count { font-size: 0.66rem; font-weight: 700; line-height: 1; padding: 0.24rem 0.45rem; border-radius: 999px; background: var(--notif-accent); color: #fff; }
+.notif-panel-count[hidden] { display: none; }
+.notif-panel-close {
+    margin-left: auto; flex: none; width: 32px; height: 32px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: none; color: var(--notif-muted); font-size: 1rem; line-height: 1;
+}
+.notif-panel-close:hover, .notif-panel-close:focus-visible { background: var(--notif-hover); color: var(--notif-title); }
+.notif-panel-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
+.notif-tabs { display: flex; gap: 0.15rem; padding: 0.15rem; background: var(--notif-hover); border-radius: 10px; }
+.notif-tab {
+    display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.32rem 0.6rem; border: none; border-radius: 8px;
+    background: none; color: var(--notif-text); font-size: 0.76rem; font-weight: 600; line-height: 1.1;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.notif-tab .notif-tab-count { font-size: 0.66rem; font-weight: 700; padding: 0.08rem 0.32rem; border-radius: 999px; background: var(--notif-accent-soft); color: var(--notif-accent); }
+.notif-tab.is-active { background: var(--notif-surface); color: var(--notif-title); box-shadow: 0 1px 3px rgba(10,20,40,0.14); }
+.notif-tab.is-active .notif-tab-count { background: var(--notif-accent); color: #fff; }
+.notif-panel-header-actions { display: flex; align-items: center; gap: 0.25rem; margin-left: auto; }
+.notif-action {
+    display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.34rem 0.5rem; border: none; border-radius: 8px;
+    background: none; color: var(--notif-text); font-size: 0.74rem; font-weight: 600; line-height: 1.1;
+}
+.notif-action i { font-size: 0.85rem; }
+.notif-action:hover, .notif-action:focus-visible { background: var(--notif-hover); color: var(--notif-title); }
+.notif-action.is-danger { color: #e2596a; }
+.notif-action.is-danger:hover, .notif-action.is-danger:focus-visible { background: rgba(220, 53, 69, 0.12); color: #dc3545; }
+.notif-action[disabled] { opacity: 0.4; pointer-events: none; }
+
+.notif-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.notif-item { position: relative; display: flex; gap: 0.65rem; align-items: flex-start; padding: 0.75rem 0.6rem 0.75rem 0.9rem; border-bottom: 1px solid var(--notif-line); }
+.notif-item:last-child { border-bottom: none; }
+.notif-item.is-unread { background: var(--notif-unread-bg); }
+.notif-item.is-unread::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--notif-accent); }
+.notif-item-icon {
+    flex: none; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; background: var(--notif-hover); color: var(--notif-muted);
+}
+.notif-item.is-unread .notif-item-icon { background: var(--notif-accent-soft); color: var(--notif-accent); }
+.notif-item-body { flex: 1 1 auto; min-width: 0; }
+.notif-item-title-row { display: block; text-decoration: none; color: inherit; }
+.notif-item-title { font-size: 0.87rem; line-height: 1.3; word-break: break-word; font-weight: 500; color: var(--notif-text); }
+.notif-item.is-unread .notif-item-title { font-weight: 700; color: var(--notif-title); }
+.notif-item-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.3rem; }
+.notif-item-time { font-size: 0.71rem; color: var(--notif-muted); }
+.notif-status { font-size: 0.6rem; font-weight: 700; line-height: 1; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.18rem 0.4rem; border-radius: 999px; }
+.notif-status.is-new { background: var(--notif-accent); color: #fff; }
+.notif-status.is-read { color: var(--notif-muted); border: 1px solid var(--notif-line); }
+.notif-item-delete {
+    flex: none; width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center;
+    background: none; border: none; color: var(--notif-muted); padding: 0;
+}
+.notif-item-delete:hover, .notif-item-delete:focus-visible { background: rgba(220, 53, 69, 0.12); color: #dc3545; }
+.notif-item-read:hover, .notif-item-read:focus-visible { background: var(--notif-accent-soft); color: var(--notif-accent); }
+.notif-empty { padding: 2.4rem 1.25rem; text-align: center; color: var(--notif-muted); font-size: 0.85rem; }
+.notif-empty i { display: block; font-size: 1.6rem; margin-bottom: 0.5rem; opacity: 0.55; }
+
+@media (max-width: 576px) {
+    .notif-panel { top: calc(var(--office-topbar-h) + 8px); left: 12px; right: 12px; width: auto; max-width: none; max-height: calc(100dvh - var(--office-topbar-h) - 20px); border-radius: 16px; transform-origin: top center; }
+    .notif-panel-header { padding: 0.8rem 0.75rem 0.55rem; }
+    .notif-tabs { flex: 1 1 auto; }
+    .notif-tab { flex: 1 1 0; justify-content: center; padding: 0.45rem 0.5rem; font-size: 0.78rem; }
+    .notif-panel-header-actions { width: 100%; margin-left: 0; justify-content: flex-end; }
+    .notif-item-delete { width: 40px; height: 40px; }
+}
+@media (max-width: 380px) {
+    .notif-action span { display: none; }
+    .notif-action { padding: 0.45rem; }
+}
+
 /* Logout is in the sidebar footer only. It used to be here in the header as
    well — two ways to do the same thing, one of them sitting where it could be
    hit by accident, and the pair of them crowding the office's name. */
@@ -375,6 +550,9 @@
        part the fit check depends on — means the space left for the name is
        an honest measurement of the space it actually has. */
     .topbar-side { min-width: 40px; }
+    /* The right side now holds two buttons; both sides get the same floor so
+       the brand stays centred. */
+    .topbar-side { min-width: 90px; }
 }
 
 /* ---- Desktop: permanent sidebar ---------------------------------------- */
@@ -407,7 +585,9 @@
     :root { --office-topbar-h: 62px; --offline-pill-top: calc(var(--office-topbar-h) + 8px); }
     .topbar { padding: 0.4rem 0.65rem; gap: 0.5rem; }
     .topbar-hamburger { width: 38px; height: 38px; }
-    .topbar-side { min-width: 38px; }
+    .topbar-side { min-width: 80px; }
+    .topbar-icon-btn { width: 38px; height: 38px; }
+    .topbar-icon-group { gap: 0.35rem; }
     .topbar-brand-logo-wrap { width: 42px; height: 42px; right: calc(100% + 0.5rem); }
     .topbar-brand-text .t1 { font-size: 1rem; }
     .topbar-brand-text .t2 { font-size: 0.75rem; }

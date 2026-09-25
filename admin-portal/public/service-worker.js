@@ -489,8 +489,18 @@ const NAVIGATION_TIMEOUT_MS = 4000;
 const ASSET_TIMEOUT_MS = 6000;
 
 async function handleNavigation(request) {
+    let serverError = null;
     try {
         const response = await fetchWithTimeout(request, {}, NAVIGATION_TIMEOUT_MS);
+
+        // A 5xx means the server is up but couldn't build the page (e.g. the
+        // survey form's offices/services failed to load). Treat it like being
+        // offline so the last good cached copy is served instead of an error;
+        // the server's own error response is only shown if nothing is cached.
+        if (response.status >= 500) {
+            serverError = response;
+            throw new Error('server error ' + response.status);
+        }
 
         // Only cache a genuine, unredirected 200 for the exact URL requested.
         // fetch() transparently follows redirects (e.g. ensureClientAuth's
@@ -532,6 +542,8 @@ async function handleNavigation(request) {
             console.log('[SW] Serving cached', new URL(request.url).pathname);
             return cached;
         }
+
+        if (serverError) return serverError;
 
         // No generic offline fallback page anymore — a navigation to a page
         // that was never cached (and the network is unreachable) simply

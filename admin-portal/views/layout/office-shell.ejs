@@ -56,7 +56,43 @@
         </div>
     </div>
 
-    <div class="topbar-side topbar-side-end"></div>
+    <!-- Same right-hand pair the client portal's header has: the bell, then the
+         full-screen toggle. The bell's badge is the office's pending count. -->
+    <div class="topbar-side topbar-side-end topbar-icon-group">
+        <div class="topbar-bell-wrap">
+            <button type="button" id="officeNotifBell" class="topbar-icon-btn" title="Notifications" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false" aria-controls="officeNotifPanel">
+                <i class="far fa-bell"></i>
+                <span class="topbar-notif-badge" id="officeNotifBadge" hidden>0</span>
+            </button>
+            <!-- Same panel the client portal's bell opens: title + live count,
+                 All / Unread tabs, mark-all-read and clear-all, and per-row
+                 read / delete. Delete is a soft dismissal kept in this browser
+                 only — it never touches the survey submission. -->
+            <div class="notif-panel" id="officeNotifPanel" role="dialog" aria-label="Notifications" hidden>
+                <div class="notif-panel-header">
+                    <div class="notif-panel-header-top">
+                        <span class="notif-panel-title">Notifications</span>
+                        <span id="officeNotifHeadCount" class="notif-panel-count" hidden>0 new</span>
+                        <button type="button" class="notif-panel-close" id="officeNotifClose" aria-label="Close notifications"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="notif-panel-toolbar">
+                        <div class="notif-tabs" role="tablist" aria-label="Filter notifications">
+                            <button type="button" class="notif-tab is-active" role="tab" aria-selected="true" data-notif-filter="all">All <span class="notif-tab-count" id="officeNotifCountAll">0</span></button>
+                            <button type="button" class="notif-tab" role="tab" aria-selected="false" data-notif-filter="unread">Unread <span class="notif-tab-count" id="officeNotifCountUnread">0</span></button>
+                        </div>
+                        <div class="notif-panel-header-actions">
+                            <button type="button" id="officeNotifMarkAll" class="notif-action" aria-label="Mark all as read" title="Mark all as read"><i class="fas fa-check-double"></i><span>Mark all read</span></button>
+                            <button type="button" id="officeNotifClearAll" class="notif-action is-danger" aria-label="Clear all notifications" title="Clear all notifications"><i class="fas fa-trash-can"></i><span>Clear all</span></button>
+                        </div>
+                    </div>
+                </div>
+                <div id="officeNotifList" class="notif-list"></div>
+            </div>
+        </div>
+        <button type="button" id="officeFullscreenBtn" class="topbar-icon-btn" title="Toggle full screen" aria-label="Toggle full screen" aria-pressed="false">
+            <i class="fas fa-expand"></i>
+        </button>
+    </div>
 </header>
 
 <!-- Floating "Viewing Offline" chip: fixed, centred, just under the header
@@ -161,6 +197,308 @@
         // can flip the answer either way.
         if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
             document.fonts.ready.then(fit).catch(function () { /* measurement stays as-is */ });
+        }
+    })();
+</script>
+
+<script>
+    // Header bell panel + full-screen toggle. Self-contained: it only reads the
+    // pending count the live watch below already paints into the sidebar badge.
+    (function () {
+        var bell = document.getElementById('officeNotifBell');
+        var panel = document.getElementById('officeNotifPanel');
+        var badge = document.getElementById('officeNotifBadge');
+        var closeBtn = document.getElementById('officeNotifClose');
+        var fsBtn = document.getElementById('officeFullscreenBtn');
+        var list = document.getElementById('officeNotifList');
+        var headCount = document.getElementById('officeNotifHeadCount');
+        var countAll = document.getElementById('officeNotifCountAll');
+        var countUnread = document.getElementById('officeNotifCountUnread');
+        var markAllBtn = document.getElementById('officeNotifMarkAll');
+        var clearAllBtn = document.getElementById('officeNotifClearAll');
+        var tabs = document.querySelectorAll('#officeNotifPanel .notif-tab');
+        if (!bell || !panel || !list) return;
+
+        // Read / dismissed state lives in THIS browser, per office, exactly like
+        // the admin bell: the feed is the office's live pending queue, so
+        // "deleting" a notification can only ever mean hiding it from this
+        // staffer's own bell — never touching the submission itself, which
+        // still has to be reviewed on the Pending page.
+        var who = <%- JSON.stringify(_officeName) %>;
+        var READ_KEY = 'officeNotifRead:' + who;
+        var DISMISS_KEY = 'officeNotifDismissed:' + who;
+        function loadIds(key) {
+            try { var raw = JSON.parse(localStorage.getItem(key)); return Array.isArray(raw) ? raw.map(Number) : []; }
+            catch (e) { return []; }
+        }
+        function saveIds(key, ids) {
+            try { localStorage.setItem(key, JSON.stringify(ids)); } catch (e) { /* private mode */ }
+        }
+        var readIds = loadIds(READ_KEY);
+        var dismissed = loadIds(DISMISS_KEY);
+        var items = [];
+        var filter = 'all';
+        var loaded = false;
+
+        function isRead(it) { return readIds.indexOf(Number(it.id)) !== -1; }
+        function isDismissed(it) { return dismissed.indexOf(Number(it.id)) !== -1; }
+        function kept() { return items.filter(function (it) { return !isDismissed(it); }); }
+
+        function persist() {
+            // Ids that left the queue (reviewed) can never be listed again.
+            var live = items.map(function (it) { return Number(it.id); });
+            readIds = readIds.filter(function (id) { return live.indexOf(id) !== -1; });
+            dismissed = dismissed.filter(function (id) { return live.indexOf(id) !== -1; });
+            saveIds(READ_KEY, readIds);
+            saveIds(DISMISS_KEY, dismissed);
+        }
+
+        function relTime(iso) {
+            var then = new Date(iso).getTime();
+            if (!iso || isNaN(then)) return '';
+            var s = Math.max(0, Math.floor((Date.now() - then) / 1000));
+            if (s < 60) return 'Just now';
+            var m = Math.floor(s / 60);
+            if (m < 60) return m + (m === 1 ? ' minute ago' : ' minutes ago');
+            var h = Math.floor(m / 60);
+            if (h < 24) return h + (h === 1 ? ' hour ago' : ' hours ago');
+            var d = Math.floor(h / 24);
+            if (d < 7) return d + (d === 1 ? ' day ago' : ' days ago');
+            return new Date(then).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        function confirmThen(message, title, confirmText, run) {
+            if (window.AppAlert && AppAlert.confirm) {
+                AppAlert.confirm(message, { title: title, confirmText: confirmText, danger: true })
+                    .then(function (ok) { if (ok) run(); });
+            } else if (window.confirm(message)) { run(); }
+        }
+
+        function iconBtn(cls, label, icon, fn) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = cls;
+            b.title = label;
+            b.setAttribute('aria-label', label);
+            b.innerHTML = '<i class="fas ' + icon + '" aria-hidden="true"></i>';
+            b.addEventListener('click', function (e) { e.stopPropagation(); fn(); });
+            return b;
+        }
+
+        function renderItem(it) {
+            var unread = !isRead(it);
+            var row = document.createElement('div');
+            row.className = 'notif-item' + (unread ? ' is-unread' : '');
+
+            var icon = document.createElement('span');
+            icon.className = 'notif-item-icon';
+            icon.innerHTML = '<i class="fas fa-hourglass-half"></i>';
+
+            var body = document.createElement('div');
+            body.className = 'notif-item-body';
+            // Opening a notification is reading it, and it goes where the work is.
+            var link = document.createElement('a');
+            link.className = 'notif-item-title-row';
+            link.href = '/office-approvals';
+            link.addEventListener('click', function () {
+                if (readIds.indexOf(Number(it.id)) === -1) readIds.push(Number(it.id));
+                saveIds(READ_KEY, readIds);
+            });
+            var title = document.createElement('span');
+            title.className = 'notif-item-title';
+            title.textContent = 'New survey from ' + it.respondent + ' is waiting for your review.';
+            link.appendChild(title);
+
+            var meta = document.createElement('div');
+            meta.className = 'notif-item-meta';
+            var time = document.createElement('span');
+            time.className = 'notif-item-time';
+            time.textContent = (it.service ? it.service + ' · ' : '') + relTime(it.createdAt);
+            var status = document.createElement('span');
+            status.className = 'notif-status ' + (unread ? 'is-new' : 'is-read');
+            status.textContent = unread ? 'New' : 'Read';
+            meta.appendChild(time);
+            meta.appendChild(status);
+            body.appendChild(link);
+            body.appendChild(meta);
+
+            row.appendChild(icon);
+            row.appendChild(body);
+            if (unread) {
+                row.appendChild(iconBtn('notif-item-delete notif-item-read', 'Mark as read', 'fa-check', function () {
+                    readIds.push(Number(it.id)); saveIds(READ_KEY, readIds); render();
+                }));
+            }
+            row.appendChild(iconBtn('notif-item-delete', 'Delete notification', 'fa-trash-can', function () {
+                confirmThen(
+                    'Delete this notification from your bell? The survey stays in Pending until it is reviewed.',
+                    'Delete notification?', 'Yes, delete',
+                    function () { dismissed.push(Number(it.id)); persist(); render(); }
+                );
+            }));
+            return row;
+        }
+
+        function render() {
+            var all = kept();
+            var unread = all.filter(function (it) { return !isRead(it); });
+            var visible = filter === 'unread' ? unread : all;
+
+            countAll.textContent = String(all.length);
+            countUnread.textContent = String(unread.length);
+            headCount.textContent = unread.length + ' new';
+            headCount.hidden = unread.length === 0;
+            markAllBtn.disabled = unread.length === 0;
+            clearAllBtn.disabled = all.length === 0;
+            markAllBtn.toggleAttribute('disabled', unread.length === 0);
+            clearAllBtn.toggleAttribute('disabled', all.length === 0);
+
+            badge.textContent = unread.length > 99 ? '99+' : String(unread.length);
+            badge.hidden = unread.length === 0;
+            bell.classList.toggle('has-unread', unread.length > 0);
+
+            list.innerHTML = '';
+            if (visible.length === 0) {
+                var empty = document.createElement('div');
+                empty.className = 'notif-empty';
+                empty.innerHTML = '<i class="far fa-bell-slash"></i>';
+                empty.appendChild(document.createTextNode(
+                    filter === 'unread' ? 'No unread notifications.' : 'No pending surveys right now.'
+                ));
+                list.appendChild(empty);
+                return;
+            }
+            visible.forEach(function (it) { list.appendChild(renderItem(it)); });
+        }
+
+        function load() {
+            return fetch('/office-approvals/notifications', {
+                credentials: 'same-origin', headers: { 'Accept': 'application/json' }, cache: 'no-store'
+            }).then(function (res) {
+                if (!res.ok || res.redirected) return null;
+                if ((res.headers.get('content-type') || '').indexOf('application/json') === -1) return null;
+                return res.json().catch(function () { return null; });
+            }).then(function (data) {
+                if (!data || !data.success) return null;
+                items = data.notifications || [];
+                loaded = true;
+                persist();
+                render();
+                return items;
+            }).catch(function () { return null; });
+        }
+
+        function setOpen(open) {
+            panel.hidden = !open;
+            bell.setAttribute('aria-expanded', open ? 'true' : 'false');
+            bell.classList.toggle('is-active', open);
+            if (open) load();
+        }
+
+        bell.addEventListener('click', function (e) { e.stopPropagation(); setOpen(panel.hidden); });
+        if (closeBtn) closeBtn.addEventListener('click', function () { setOpen(false); });
+        document.addEventListener('click', function (e) {
+            if (!panel.hidden && !panel.contains(e.target)) setOpen(false);
+        });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setOpen(false); });
+
+        tabs.forEach(function (t) {
+            t.addEventListener('click', function () {
+                filter = t.getAttribute('data-notif-filter') === 'unread' ? 'unread' : 'all';
+                tabs.forEach(function (o) {
+                    o.classList.toggle('is-active', o === t);
+                    o.setAttribute('aria-selected', o === t ? 'true' : 'false');
+                });
+                render();
+            });
+        });
+        markAllBtn.addEventListener('click', function () {
+            kept().forEach(function (it) { if (!isRead(it)) readIds.push(Number(it.id)); });
+            persist(); render();
+        });
+        clearAllBtn.addEventListener('click', function () {
+            confirmThen(
+                'Clear all notifications from your bell? The surveys stay in Pending until they are reviewed.',
+                'Clear all notifications?', 'Yes, clear all',
+                function () {
+                    kept().forEach(function (it) { dismissed.push(Number(it.id)); });
+                    persist(); render();
+                }
+            );
+        });
+
+        // The live watch below repaints the sidebar's Pending badge whenever the
+        // queue changes; that is the cue to refresh this list too, so a survey
+        // that lands while the panel is open shows up without a reload.
+        var sidebarCount = document.getElementById('sidebarPendingCount');
+        if (sidebarCount && window.MutationObserver) {
+            new MutationObserver(function () { load(); }).observe(sidebarCount, { childList: true, characterData: true, subtree: true });
+        }
+
+        // Login alert. The login redirect adds ?welcome=1; the very first thing
+        // an office should see on opening its panel is whether anything is
+        // waiting. Shown once (the flag is stripped from the URL straight away,
+        // so a refresh does not repeat it) and only when something is pending.
+        var welcome = false;
+        try {
+            var params = new URLSearchParams(window.location.search);
+            if (params.has('welcome')) {
+                welcome = true;
+                params.delete('welcome');
+                var qs = params.toString();
+                window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
+            }
+        } catch (e) { /* no URL API — the alert is a bonus */ }
+
+        function announceOnLogin(count) {
+            if (!welcome || count <= 0 || !window.AppAlert || !AppAlert.confirm) return;
+            var msg = count === 1
+                ? 'You have 1 pending survey waiting for your review.'
+                : 'You have ' + count + ' pending surveys waiting for your review.';
+            AppAlert.confirm(msg, { title: 'Pending Surveys', confirmText: 'Review now', danger: false })
+                .then(function (ok) { if (ok && ACTIVE_PAGE !== 'pending') window.location.href = '/office-approvals'; });
+        }
+        var ACTIVE_PAGE = <%- JSON.stringify(_active) %>;
+
+        // AppAlert lives in layout/footer.ejs, parsed after this script.
+        function boot() {
+            load().then(function (list2) {
+                if (list2) announceOnLogin(list2.length);
+            });
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+        else boot();
+
+        // Full screen. Native where the browser has it; on iPhone Safari there
+        // is no API, so the button simply is not offered there.
+        function fsElement() {
+            return document.fullscreenElement || document.webkitFullscreenElement || null;
+        }
+        function paintFs() {
+            if (!fsBtn) return;
+            var on = !!fsElement();
+            fsBtn.innerHTML = on ? '<i class="fas fa-compress"></i>' : '<i class="fas fa-expand"></i>';
+            fsBtn.title = on ? 'Exit full screen' : 'Toggle full screen';
+            fsBtn.setAttribute('aria-label', fsBtn.title);
+            fsBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+        if (fsBtn) {
+            var root = document.documentElement;
+            var canFs = !!(root.requestFullscreen || root.webkitRequestFullscreen);
+            if (!canFs) {
+                fsBtn.hidden = true;
+            } else {
+                fsBtn.addEventListener('click', function () {
+                    try {
+                        var result = fsElement()
+                            ? (document.exitFullscreen || document.webkitExitFullscreen).call(document)
+                            : (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+                        if (result && typeof result.catch === 'function') result.catch(function () {});
+                    } catch (e) { /* blocked — the panel works windowed */ }
+                });
+                document.addEventListener('fullscreenchange', paintFs);
+                document.addEventListener('webkitfullscreenchange', paintFs);
+            }
         }
     })();
 </script>

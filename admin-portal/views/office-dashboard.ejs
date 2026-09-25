@@ -316,6 +316,23 @@
     </div>
 
     <%- include('layout/footer') %>
+
+    <script>
+        // Ask before logging out — Pending and History already do; on the
+        // Dashboard the sidebar's Logout link ended the session in one click.
+        (function () {
+            var logoutBtn = document.getElementById('officeLogoutBtn');
+            if (!logoutBtn || !window.AppAlert) return;
+            logoutBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                var href = logoutBtn.getAttribute('href');
+                AppAlert.confirm('Are you sure you want to logout?', { title: 'Logout?', confirmText: 'Yes, logout', danger: false })
+                    .then(function (confirmed) {
+                        if (confirmed) window.location.href = href;
+                    });
+            });
+        })();
+    </script>
     <%- include('layout/theme-toggle') %>
     <script>
         (function () {
