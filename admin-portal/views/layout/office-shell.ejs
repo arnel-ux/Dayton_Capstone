@@ -450,8 +450,24 @@
             }
         } catch (e) { /* no URL API — the alert is a bonus */ }
 
+        // The alert used to depend on ?welcome=1, which only a fresh login adds —
+        // so a device that reopened the panel on a saved session (a phone's
+        // installed app, a second browser) never saw it. Now it is shown once
+        // each time the panel is opened in a tab/app window, tracked in
+        // sessionStorage so moving between Dashboard / Pending / History does
+        // not repeat it. A fresh login still always shows it.
+        var ANNOUNCE_KEY = 'cqa_office_open_alert';
+        function alreadyAnnounced() {
+            try { return sessionStorage.getItem(ANNOUNCE_KEY) === '1'; } catch (e) { return false; }
+        }
+        function markAnnounced() {
+            try { sessionStorage.setItem(ANNOUNCE_KEY, '1'); } catch (e) { /* storage blocked — may repeat, harmless */ }
+        }
+
         function announceOnLogin(count) {
-            if (!welcome || count <= 0 || !window.AppAlert || !AppAlert.confirm) return;
+            if (count <= 0 || !window.AppAlert || !AppAlert.confirm) return;
+            if (!welcome && alreadyAnnounced()) return;
+            markAnnounced();
             var msg = count === 1
                 ? 'You have 1 pending survey waiting for your review.'
                 : 'You have ' + count + ' pending surveys waiting for your review.';

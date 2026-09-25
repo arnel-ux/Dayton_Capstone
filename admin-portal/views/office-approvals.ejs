@@ -386,6 +386,36 @@
         .btn-approve:active { transform: translateY(1px); }
         .btn-approve:focus-visible { outline: 2px solid #16a34a; outline-offset: 2px; }
 
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex: 0 0 auto;
+        }
+        .btn-approve-all {
+            background: #16a34a;
+            border: 1px solid #16a34a;
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.85rem;
+            padding: 0.55rem 1.1rem;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            min-height: 46px;
+            white-space: nowrap;
+            transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+        }
+        .btn-approve-all:hover { background: #15803d; color: #fff; box-shadow: 0 6px 16px -6px rgba(22,163,74,0.55); }
+        .btn-approve-all:active { transform: translateY(1px); }
+        .btn-approve-all:disabled { opacity: 0.7; cursor: not-allowed; }
+        @media (max-width: 768px) {
+            .header-actions { width: 100%; flex-direction: column-reverse; align-items: stretch; }
+            .btn-approve-all { width: 100%; }
+        }
+
         .btn-decline {
             background: #fff;
             border: 1.5px solid #dc2626;
@@ -680,11 +710,18 @@
                 <h2>Survey Approval Requests</h2>
                 <p>Review and verify pending client survey submissions for your office.</p>
             </div>
-            <div class="pending-badge">
-                <div class="icon"><i class="fas fa-hourglass-half"></i></div>
-                <div>
-                    <div class="num"><%= submissions ? submissions.length : 0 %></div>
-                    <div class="label">Pending Approvals</div>
+            <div class="header-actions">
+                <% if (submissions && submissions.length > 0) { %>
+                    <button type="button" class="btn-approve-all" id="approveAllBtn">
+                        <i class="fas fa-check-double"></i> Approve All
+                    </button>
+                <% } %>
+                <div class="pending-badge">
+                    <div class="icon"><i class="fas fa-hourglass-half"></i></div>
+                    <div>
+                        <div class="num"><%= submissions ? submissions.length : 0 %></div>
+                        <div class="label">Pending Approvals</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -922,6 +959,52 @@
                     });
                 });
             });
+
+            // Approve All: confirm once, then approve every pending row one at a
+            // time through the same per-submission endpoint the Approve button
+            // uses (so each still gets its own claim, precedence check, client
+            // notification and email). Sequential on purpose — approvals take a
+            // per-survey DB lock. The endpoint answers with a redirect whose
+            // final URL carries ?success= or ?error=, which is how each result
+            // is told apart.
+            var approveAllBtn = document.getElementById('approveAllBtn');
+            if (approveAllBtn) {
+                approveAllBtn.addEventListener('click', function () {
+                    var forms = [].slice.call(document.querySelectorAll('form.approve-form'));
+                    if (!forms.length) return;
+                    var total = forms.length;
+                    AppAlert.confirm(
+                        'Approve all ' + total + ' pending survey submission' + (total === 1 ? '' : 's') + ' for your office?',
+                        { title: 'Approve All?', confirmText: 'Yes, approve all', danger: false }
+                    ).then(function (confirmed) {
+                        if (!confirmed) return;
+                        approveAllBtn.disabled = true;
+                        document.querySelectorAll('.btn-approve, .btn-decline').forEach(function (b) { b.disabled = true; });
+                        var done = 0, failed = 0;
+                        function paint() {
+                            approveAllBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Approving ' + (done + failed) + '/' + total + '...';
+                        }
+                        paint();
+                        var chain = Promise.resolve();
+                        forms.forEach(function (form) {
+                            chain = chain.then(function () {
+                                return fetch(form.getAttribute('action'), { method: 'POST', credentials: 'same-origin' })
+                                    .then(function (res) {
+                                        if (res.ok && /[?&]success=/.test(res.url)) done++; else failed++;
+                                    })
+                                    .catch(function () { failed++; })
+                                    .then(paint);
+                            });
+                        });
+                        chain.then(function () {
+                            var qs = failed === 0
+                                ? 'success=' + encodeURIComponent(done + ' survey submission' + (done === 1 ? '' : 's') + ' approved successfully.')
+                                : 'error=' + encodeURIComponent(done + ' approved, ' + failed + ' could not be approved. Please review the remaining items.');
+                            window.location.href = '/office-approvals?' + qs;
+                        });
+                    });
+                });
+            }
 
             // Decline: same confirm-then-submit pattern; the optional reason the
             // office staff typed is preserved since we submit the real form as-is.
