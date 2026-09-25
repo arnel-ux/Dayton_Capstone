@@ -217,8 +217,10 @@ importScripts('/js/offline-db.js');
 // name has to change for the corrected icons to reach devices already set up.
 //
 // v52: /css/office-shell.css only — the office bell panel gained a "Review
-// pending surveys" footer link. A cache name change is what makes installed
-// workers on other devices pick up the new stylesheet.
+// pending surveys" footer link, and /js/offline-db.js now sends each queued
+// survey's createdOfflineAt so it is recorded at the time it was answered. A
+// cache name change is what makes installed workers on other devices pick up
+// the new stylesheet and script.
 const STATIC_CACHE = 'cspc-static-v52';
 const RUNTIME_CACHE = 'cspc-runtime-v52';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];

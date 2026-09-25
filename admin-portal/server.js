@@ -868,14 +868,19 @@ async function submitCanonicalSurvey(googleEmail, fields, submissionSource) {
 // resolveSubmissionPrecedence), and lets the office-approval route re-check
 // precedence at approval time (an Online canonical row may have appeared
 // while this was still awaiting review).
-async function queuePendingSurveyWithPrecedence(officeId, googleEmail, serviceAvailed, payloadObj, submissionSource) {
+//
+// `submittedAt` (optional Date) is when the client actually answered — only
+// the offline paths pass it, so a survey filled in at 9:05 with no signal and
+// synced at 2:40 shows 9:05 in the office's Pending list instead of the sync
+// time. Omitted, the row is stamped at insert exactly as before.
+async function queuePendingSurveyWithPrecedence(officeId, googleEmail, serviceAvailed, payloadObj, submissionSource, submittedAt) {
     return withLogicalSurveyLock(officeId, googleEmail, serviceAvailed, async (conn) => {
         const precedence = await resolveSubmissionPrecedence(conn, officeId, googleEmail, serviceAvailed, submissionSource);
         throwIfSubmissionRejected(precedence);
 
         const [result] = await conn.query(
-            'INSERT INTO pending_survey_submissions (office_id, google_email, service_availed, payload, submission_source) VALUES (?, ?, ?, ?, ?)',
-            [officeId, googleEmail, serviceAvailed, JSON.stringify(payloadObj), submissionSource]
+            'INSERT INTO pending_survey_submissions (office_id, google_email, service_availed, payload, submission_source, created_at) VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))',
+            [officeId, googleEmail, serviceAvailed, JSON.stringify(payloadObj), submissionSource, submittedAt || null]
         );
         return { pendingSubmissionId: result.insertId };
     });
@@ -1861,6 +1866,35 @@ function formatZonedDateShort(date) {
     });
 }
 
+// 'September 05, 2026' / 'September 05, 2026 03:42 PM' — the exact shapes the
+// SQL DATE_FORMAT(created_at, '%M %d, %Y [%h:%i %p]') calls used to produce,
+// but computed from the instant in the display zone. DATE_FORMAT prints the
+// DATABASE SESSION's wall clock, so on a MySQL running in UTC every survey
+// record read 8 hours behind Philippine time while the office's Pending list
+// (formatted here in Node) read correctly — two different times for the same
+// submission. Returns '' for a missing/invalid value.
+function formatZonedDateLong(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return '';
+    const p = {};
+    new Intl.DateTimeFormat('en-US', {
+        month: 'long', day: '2-digit', year: 'numeric', timeZone: DISPLAY_TIME_ZONE
+    }).formatToParts(d).forEach(part => { p[part.type] = part.value; });
+    return `${p.month} ${p.day}, ${p.year}`;
+}
+
+function formatZonedDateTimeLong(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return '';
+    const t = {};
+    new Intl.DateTimeFormat('en-US', {
+        hour: '2-digit', minute: '2-digit', hour12: true, timeZone: DISPLAY_TIME_ZONE
+    }).formatToParts(d).forEach(part => { t[part.type] = part.value; });
+    return `${formatZonedDateLong(d)} ${t.hour}:${t.minute} ${String(t.dayPeriod || '').toUpperCase()}`;
+}
+
 // ==========================================
 // PERIOD COVERED HELPERS
 // ==========================================
@@ -1870,8 +1904,14 @@ function formatZonedDateShort(date) {
 // whatever happens to be in the database, to avoid legacy/inconsistent
 // strings leaking into the UI.
 function getPeriodCovered(date = new Date()) {
-    const year = date.getFullYear();
-    const month = date.getMonth(); // 0 = Jan ... 11 = Dec
+    // Year and month as they are in the display zone, not the server's: on a
+    // UTC host, a survey answered at 6 AM Manila on July 1 is still June 30
+    // there and would be filed under the wrong half-year.
+    const parts = {};
+    new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'numeric', timeZone: DISPLAY_TIME_ZONE })
+        .formatToParts(date).forEach(p => { parts[p.type] = p.value; });
+    const year = Number(parts.year);
+    const month = Number(parts.month) - 1; // 0 = Jan ... 11 = Dec
     return month <= 5 ? `Jan to June ${year}` : `July to Dec ${year}`;
 }
 
@@ -4558,6 +4598,7 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
     let payload = null;
     let googleEmail = null;
     let surveyResponseId = null;
+    let submittedAtDb = null; // the pending row's own created_at — when the client really submitted
     let claimFailed = false;
     let supersededByOnline = false;
     let lockName = null;
@@ -4586,6 +4627,7 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
         }
         const row = rows[0];
         googleEmail = row.google_email;
+        submittedAtDb = row.created_at;
         payload = parsePendingPayload(row.payload);
         if (!payload || payload.officeId === undefined || !Array.isArray(payload.sqdValues)) {
             // A genuinely unusable payload (not merely a JSON-column vs
@@ -4763,7 +4805,10 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
             clusterName: office ? office.cluster_name : '',
             clientType: payload.clientType,
             serviceAvailed: payload.serviceAvailed || 'Not specified',
-            submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short', timeZone: DISPLAY_TIME_ZONE }),
+            // The survey's real submission time (the pending row's created_at,
+            // which is also what the approval stored on survey_responses) —
+            // NOT "now", which would date the email at the approval.
+            submittedAt: formatSubmittedAtForEmail(submittedAtDb ? new Date(submittedAtDb) : null),
             surveyResponseId,
             cc1: payload.cc1, cc2: payload.cc2, cc3: payload.cc3,
             sqd: (payload.sqdValues || []).map((v, i) => ({ label: 'SQD' + i, value: v })),
@@ -5716,13 +5761,13 @@ app.get('/api/client-history', ensureClientAuth, noCache, (req, res) => {
         db.query(pendingQuery, [req.clientEmail], (err2, pendingRows) => {
             const approved = (approvedRows || []).map(r => ({
                 id: r.id, office_name: r.office_name, cluster_name: r.cluster_name,
-                topic: r.topic, sentiment: r.sentiment, formatted_date: r.formatted_date,
+                topic: r.topic, sentiment: r.sentiment, formatted_date: formatZonedDateLong(r.created_at) || r.formatted_date,
                 created_at: r.created_at, status: 'approved'
             }));
             const pending = (!err2 && pendingRows ? pendingRows : []).map(r => ({
                 id: 'p' + r.id, office_name: r.office_name, cluster_name: r.cluster_name,
                 service_availed: r.service_availed, decline_reason: r.decline_reason,
-                formatted_date: r.formatted_date, created_at: r.created_at, status: r.status
+                formatted_date: formatZonedDateLong(r.created_at) || r.formatted_date, created_at: r.created_at, status: r.status
             }));
             const history = approved.concat(pending).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
             res.json({ success: true, history });
@@ -5736,7 +5781,7 @@ app.get('/api/client-history/:id', ensureClientAuth, noCache, (req, res) => {
     const query = `
         SELECT s.id, s.topic, s.sentiment, s.region, s.cc1, s.cc2, s.cc3,
                s.sqd0, s.sqd1, s.sqd2, s.sqd3, s.sqd4, s.sqd5, s.sqd6, s.sqd7, s.sqd8,
-               s.comments, s.period_year_quarter,
+               s.comments, s.period_year_quarter, s.created_at,
                DATE_FORMAT(s.created_at, '%M %d, %Y %h:%i %p') AS formatted_date,
                o.office_name, o.cluster_name,
                p.client_type, p.age, p.gender,
@@ -5750,6 +5795,8 @@ app.get('/api/client-history/:id', ensureClientAuth, noCache, (req, res) => {
     db.query(query, [req.params.id, req.clientEmail], (err, rows) => {
         if (err) return res.status(500).json({ success: false, message: 'Server error loading this survey.' });
         if (!rows || rows.length === 0) return res.status(404).json({ success: false, message: 'Survey not found.' });
+        // Printed in the display zone (see formatZonedDateTimeLong), not the DB session's.
+        rows[0].formatted_date = formatZonedDateTimeLong(rows[0].created_at) || rows[0].formatted_date;
         res.json({ success: true, survey: rows[0] });
     });
 });
@@ -5934,7 +5981,7 @@ app.post('/sync-surveys', ensureClientAuth, async (req, res) => {
             // through as the idempotency key so a retried sync (a lost
             // response, two near-simultaneous sync attempts) resolves to
             // the same existing row instead of a second insert.
-            const result = await syncOneSurvey(googleEmail, payload, localId);
+            const result = await syncOneSurvey(googleEmail, payload, localId, item && item.createdOfflineAt);
             results.push({ localId, ...result });
         } catch (err) {
             console.error("❌ [Sync] Unexpected error syncing survey:", err);
@@ -5945,7 +5992,10 @@ app.post('/sync-surveys', ensureClientAuth, async (req, res) => {
     res.status(200).json({ success: true, results });
 });
 
-async function syncOneSurvey(googleEmail, body, clientSubmissionId) {
+async function syncOneSurvey(googleEmail, body, clientSubmissionId, createdOfflineAtRaw) {
+    // When the respondent actually finished this survey offline (null = unknown
+    // or implausible, so it is stamped at sync time as before).
+    const submittedAt = resolveOfflineSubmittedAt(createdOfflineAtRaw);
     const cleanInt = (val) => (val !== undefined && val !== "" && val !== null && !isNaN(val)) ? parseInt(val, 10) : null;
     const cleanStr = (val) => (val !== undefined && val !== null && String(val).trim() !== "") ? String(val).trim() : null;
 
@@ -5993,7 +6043,9 @@ async function syncOneSurvey(googleEmail, body, clientSubmissionId) {
     const finalServiceAvailed = cleanStr(service_availed);
 
     const sqdValues = [sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8].map(cleanInt);
-    const currentPeriod = getPeriodCovered();
+    // Filed under the half-year it was ANSWERED in, not the one the sync
+    // happened to land in (a survey done June 30 offline, synced July 1).
+    const currentPeriod = getPeriodCovered(submittedAt || new Date());
 
     // This survey was ANSWERED offline and is only now reaching the server
     // through the authenticated queue-sync route — 'offline_sync' regardless
@@ -6013,7 +6065,7 @@ async function syncOneSurvey(googleEmail, body, clientSubmissionId) {
                 comments: cleanStr(comments), serviceAvailed: finalServiceAvailed,
                 clientType: finalClientType, age: finalAge, gender: finalGender,
                 officeVisitedTime: finalOfficeVisitedTime, period: currentPeriod
-            }, SUBMISSION_SOURCE);
+            }, SUBMISSION_SOURCE, submittedAt);
         } catch (err) {
             if (err.code === 'ELIGIBILITY_REJECTED' || err.code === 'PENDING_REJECTED') {
                 return { success: false, status: 'rejected', message: err.rejectMessage };
@@ -6084,7 +6136,7 @@ async function syncOneSurvey(googleEmail, body, clientSubmissionId) {
             comments: cleanStr(comments), serviceAvailed: finalServiceAvailed,
             clientType: finalClientType, age: finalAge, gender: finalGender,
             officeVisitedTime: finalOfficeVisitedTime, period: currentPeriod,
-            clientSubmissionId: finalClientSubmissionId
+            clientSubmissionId: finalClientSubmissionId, submittedAt
         }, SUBMISSION_SOURCE);
         surveyResponseId = result.surveyResponseId;
         supersededId = result.supersededId;
@@ -6188,6 +6240,29 @@ function parseCreatedOfflineAt(raw) {
     if (isNaN(parsed.getTime())) return null;
     if (parsed.getTime() > Date.now() + 24 * 60 * 60 * 1000) return null;
     return parsed;
+}
+
+// The time an offline-answered survey should be RECORDED under: when the
+// respondent actually finished it, not when the queue happened to reach the
+// server. Before this, both offline routes stamped the sync moment, so a
+// survey answered at 9:05 with no signal read 2:40 PM everywhere — the office's
+// Pending list, the admin's records, the client's receipt and the resubmission
+// cooldown. The device clock is the only witness to the real time, so it is
+// sanity-bounded: anything unparseable, in the future (a fast clock), or more
+// than a year old (a clock reset to 2000) returns null and the survey is
+// stamped at sync time like before, never at a nonsense date.
+const OFFLINE_SUBMITTED_AT_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
+function resolveOfflineSubmittedAt(raw) {
+    const parsed = parseCreatedOfflineAt(raw);
+    if (!parsed) return null;
+    const now = Date.now();
+    if (parsed.getTime() > now) return null;
+    if (parsed.getTime() < now - OFFLINE_SUBMITTED_AT_MAX_AGE_MS) return null;
+    return parsed;
+}
+
+function formatSubmittedAtForEmail(date) {
+    return (date || new Date()).toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short', timeZone: DISPLAY_TIME_ZONE });
 }
 
 // Strict positive-integer parse — accepts only a real number/numeric string
@@ -6401,6 +6476,9 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
     // Use the DB's stored casing from here on, not whatever casing was typed.
     const verifiedEmail = account.email;
     const createdOfflineAt = parseCreatedOfflineAt(req.body.createdOfflineAt);
+    // The bounded version of the same clock reading — what the survey itself
+    // is recorded under (see resolveOfflineSubmittedAt).
+    const submittedAt = resolveOfflineSubmittedAt(req.body.createdOfflineAt);
 
     // 5. Clean/validate the survey fields — strict, since this endpoint has
     // no session/auth to fall back on: a malformed or out-of-range value is
@@ -6575,7 +6653,8 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
         });
     }
 
-    const currentPeriod = getPeriodCovered();
+    // Same rule as syncOneSurvey: the half-year the survey was answered in.
+    const currentPeriod = getPeriodCovered(submittedAt || new Date());
     const isCspc = isCspcEmail(verifiedEmail);
 
     // 7. AI sentiment/topic analysis — a slow, non-database call — runs
@@ -6654,7 +6733,7 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
                 cc1: finalCc1, cc2: finalCc2, cc3: finalCc3, sqdValues,
                 comments: rawComments, serviceAvailed: finalServiceAvailed,
                 clientType: finalClientType, age: finalAge, gender: finalGender,
-                officeVisitedTime: finalOfficeVisitedTime, period: currentPeriod
+                officeVisitedTime: finalOfficeVisitedTime, period: currentPeriod, submittedAt
             }, SUBMISSION_SOURCE);
 
             if (precedence.supersede) {
@@ -6689,8 +6768,8 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
             };
 
             const [pendingResult] = await conn.query(
-                'INSERT INTO pending_survey_submissions (office_id, google_email, service_availed, payload, submission_source) VALUES (?, ?, ?, ?, ?)',
-                [finalOfficeId, verifiedEmail, finalServiceAvailed, JSON.stringify(pendingPayload), SUBMISSION_SOURCE]
+                'INSERT INTO pending_survey_submissions (office_id, google_email, service_availed, payload, submission_source, created_at) VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))',
+                [finalOfficeId, verifiedEmail, finalServiceAvailed, JSON.stringify(pendingPayload), SUBMISSION_SOURCE, submittedAt]
             );
 
             await conn.query(
@@ -6741,7 +6820,7 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
         sendOfflineSurveySyncedEmail(verifiedEmail, {
             officeName,
             serviceAvailed: finalServiceAvailed || 'Not specified',
-            submittedAt: new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short', timeZone: DISPLAY_TIME_ZONE }),
+            submittedAt: formatSubmittedAtForEmail(submittedAt),
             surveyResponseId: result.surveyResponseId
         });
         createClientNotification({
@@ -7300,7 +7379,7 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
             MAX(${OFFICE_REPORT_NAME_EXPR}) as office_report_name,
             MAX(s.service_availed) as service_availed,
             MAX(s.period_year_quarter) as period_year_quarter,
-            MAX(DATE_FORMAT(s.created_at, '%M %d, %Y')) as response_date,
+            MAX(s.created_at) as response_at,
             ${sqdScoreExpr(['s.sqd1'])} as sqd1,
             ${sqdScoreExpr(['s.sqd2'])} as sqd2,
             ${sqdScoreExpr(['s.sqd3'])} as sqd3,
@@ -7350,8 +7429,14 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
                 }));
             }
 
+            // The report's "Submitted <date>" — the latest response's date,
+            // printed in the display zone rather than the DB session's.
+            const stats = results[0] || {};
+            stats.response_date = formatZonedDateLong(stats.response_at);
+            delete stats.response_at;
+
             res.json({
-                stats: results[0] || {},
+                stats,
                 comments
             });
         });
@@ -7510,7 +7595,7 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                     else if (sentimentLower.includes('positive')) sentimentClass = 'bg-sentiment-positive';
                     else if (sentimentLower.includes('negative')) sentimentClass = 'bg-sentiment-negative';
 
-                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', officeName: row.office_name || 'N/A', topic: hasFeedback ? effectiveTopic : 'No feedback', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: displayComments || 'No comments provided.', date: row.formatted_date, dateRaw: row.created_at ? new Date(row.created_at).toISOString() : '', officeVisitedTime: row.office_visited_time_formatted || 'N/A' });
+                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', officeName: row.office_name || 'N/A', topic: hasFeedback ? effectiveTopic : 'No feedback', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: displayComments || 'No comments provided.', date: formatZonedDateLong(row.created_at) || row.formatted_date, dateRaw: row.created_at ? new Date(row.created_at).toISOString() : '', officeVisitedTime: row.office_visited_time_formatted || 'N/A' });
                 });
             }
             res.render('survey-records', { recordsByCluster, clusterRatings, TOPIC_TAXONOMY, SENTIMENT_VALUES });
@@ -7528,7 +7613,7 @@ app.get('/api/admin/survey-response/:id', ensureAdminAuth, noCache, (req, res) =
                s.topic_override, s.subtopic_override, s.sentiment_override,
                s.region, s.cc1, s.cc2, s.cc3,
                s.sqd0, s.sqd1, s.sqd2, s.sqd3, s.sqd4, s.sqd5, s.sqd6, s.sqd7, s.sqd8,
-               s.comments, s.period_year_quarter, s.google_email,
+               s.comments, s.period_year_quarter, s.google_email, s.created_at,
                DATE_FORMAT(s.created_at, '%M %d, %Y %h:%i %p') AS formatted_date,
                o.office_name, o.cluster_name,
                p.client_type, p.age, p.gender,
@@ -7546,6 +7631,7 @@ app.get('/api/admin/survey-response/:id', ensureAdminAuth, noCache, (req, res) =
         }
         if (!rows || rows.length === 0) return res.status(404).json({ success: false, message: 'Survey not found.' });
         const survey = rows[0];
+        survey.formatted_date = formatZonedDateTimeLong(survey.created_at) || survey.formatted_date;
         // The Survey Result modal is the same record surface as the
         // /survey-records table behind it, so it gets the same masking —
         // otherwise clicking "View Result" on a masked row would print the

@@ -265,7 +265,7 @@
                                         <td><%= r.officeName %></td>
                                         <td><%= r.topic %></td>
                                         <td class="text-center"><span class="badge-sentiment <%= badgeClass %>"><%= r.sentiment %></span></td>
-                                        <td class="text-center"><%= new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) %></td>
+                                        <td class="text-center"><%= new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: displayTimeZone }) %></td>
                                     </tr>
                                 <% }) %>
                             <% } else { %>

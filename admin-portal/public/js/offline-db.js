@@ -498,7 +498,13 @@ function runOfflineSurveySync() {
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
             body: JSON.stringify({
-                surveys: surveys.map(function (s) { return { localId: s.localId, payload: s.payload }; })
+                // createdOfflineAt is when the respondent finished the survey
+                // (savedAt is stamped when it was queued), so the server can
+                // record THAT time instead of the moment this sync ran.
+                surveys: surveys.map(function (s) {
+                    var when = s.createdOfflineAt || (s.savedAt ? new Date(s.savedAt).toISOString() : null);
+                    return { localId: s.localId, payload: s.payload, createdOfflineAt: when };
+                })
             })
         }, 30000).then(function (response) {
             if (!response.ok) return { syncedCount: 0, supersededCount: 0, failedResults: [] };

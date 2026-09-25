@@ -169,7 +169,7 @@
                 fullname: 'Admin', username: 'admin', gender: 'Male'
             };
             const avatarBg = admin.gender === 'Female' ? 'ec4899' : '0a1f44';
-            const memberSince = admin.created_at ? new Date(admin.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }) : null;
+            const memberSince = admin.created_at ? new Date(admin.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric', timeZone: displayTimeZone }) : null;
             const avatarSrc = admin.photo_url
                 ? admin.photo_url
                 : `https://ui-avatars.com/api/?name=${encodeURIComponent(admin.fullname)}&background=${avatarBg}&color=fff&bold=true&size=120`;
