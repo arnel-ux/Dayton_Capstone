@@ -297,6 +297,8 @@ html[data-bs-theme="dark"] .notif-panel {
 }
 .notif-item-delete:hover, .notif-item-delete:focus-visible { background: rgba(220, 53, 69, 0.12); color: #dc3545; }
 .notif-item-read:hover, .notif-item-read:focus-visible { background: var(--notif-accent-soft); color: var(--notif-accent); }
+.notif-panel-footer { flex: none; display: flex; align-items: center; justify-content: center; gap: 0.45rem; padding: 0.7rem 1rem; border-top: 1px solid var(--notif-line); font-size: 0.82rem; font-weight: 700; color: var(--notif-accent); text-decoration: none; }
+.notif-panel-footer:hover { background: var(--notif-unread-bg); }
 .notif-empty { padding: 2.4rem 1.25rem; text-align: center; color: var(--notif-muted); font-size: 0.85rem; }
 .notif-empty i { display: block; font-size: 1.6rem; margin-bottom: 0.5rem; opacity: 0.55; }
 

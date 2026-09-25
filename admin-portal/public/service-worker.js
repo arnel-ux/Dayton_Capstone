@@ -215,8 +215,12 @@ importScripts('/js/offline-db.js');
 // check. alerts.css is a CRITICAL precache entry served cache-first, so an
 // installed v50 worker would keep handing out the old stylesheet; the cache
 // name has to change for the corrected icons to reach devices already set up.
-const STATIC_CACHE = 'cspc-static-v51';
-const RUNTIME_CACHE = 'cspc-runtime-v51';
+//
+// v52: /css/office-shell.css only — the office bell panel gained a "Review
+// pending surveys" footer link. A cache name change is what makes installed
+// workers on other devices pick up the new stylesheet.
+const STATIC_CACHE = 'cspc-static-v52';
+const RUNTIME_CACHE = 'cspc-runtime-v52';
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 // Same-origin app-shell assets that are always safe to precache.

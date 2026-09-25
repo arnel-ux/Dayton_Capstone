@@ -87,6 +87,7 @@
                     </div>
                 </div>
                 <div id="officeNotifList" class="notif-list"></div>
+                <a href="/office-approvals" class="notif-panel-footer" id="officeNotifFooter"><i class="fas fa-hourglass-half"></i> Review pending surveys</a>
             </div>
         </div>
         <button type="button" id="officeFullscreenBtn" class="topbar-icon-btn" title="Toggle full screen" aria-label="Toggle full screen" aria-pressed="false">
@@ -464,22 +465,125 @@
             try { sessionStorage.setItem(ANNOUNCE_KEY, '1'); } catch (e) { /* storage blocked — may repeat, harmless */ }
         }
 
-        function announceOnLogin(count) {
-            if (count <= 0 || !window.AppAlert || !AppAlert.confirm) return;
+        // The reminder is its own centred card rather than AppAlert.confirm, so
+        // it never depends on the alert library being ready and always reads
+        // the same on every device: count, the latest few submissions, and two
+        // buttons. It is built once, on demand, and styled for both themes.
+        function ensurePopupStyles() {
+            if (document.getElementById('officePendingPopupCss')) return;
+            var css = document.createElement('style');
+            css.id = 'officePendingPopupCss';
+            css.textContent =
+                '.opp-backdrop{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,10,35,.55);backdrop-filter:blur(2px);animation:oppFade .18s ease}' +
+                '.opp-card{width:100%;max-width:420px;max-height:90vh;overflow:auto;background:#fff;color:#1a1436;border-radius:20px;padding:26px 24px 20px;text-align:center;box-shadow:0 30px 70px -20px rgba(15,10,35,.55);animation:oppPop .22s ease}' +
+                '.opp-icon{width:64px;height:64px;margin:0 auto 14px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;color:#fff;background:linear-gradient(135deg,#f59e0b,#f97316);box-shadow:0 10px 24px -10px rgba(249,115,22,.8)}' +
+                '.opp-title{font-size:1.2rem;font-weight:800;margin:0 0 6px}' +
+                '.opp-msg{font-size:.92rem;color:#64748b;margin:0 0 14px}' +
+                '.opp-msg strong{color:#ea580c;font-size:1.05rem}' +
+                '.opp-list{list-style:none;margin:0 0 16px;padding:0;text-align:left;border:1px solid #e5e7f0;border-radius:12px;overflow:hidden}' +
+                '.opp-list li{padding:9px 12px;font-size:.84rem;border-bottom:1px solid #eef0f6;display:flex;justify-content:space-between;gap:10px}' +
+                '.opp-list li:last-child{border-bottom:0}' +
+                '.opp-list .n{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+                '.opp-list .s{color:#94a3b8;white-space:nowrap;font-size:.76rem;align-self:center}' +
+                '.opp-more{padding:8px 12px;font-size:.78rem;color:#94a3b8;text-align:center;background:rgba(148,163,184,.08)}' +
+                '.opp-actions{display:flex;gap:10px}' +
+                '.opp-actions button{flex:1;min-height:44px;border-radius:12px;font-weight:700;font-size:.9rem;cursor:pointer}' +
+                '.opp-later{background:transparent;border:1.5px solid #cbd5e1;color:#475569}' +
+                '.opp-go{background:#2d1f57;border:1.5px solid #2d1f57;color:#fff}' +
+                '.opp-go:hover{background:#4b3a86}' +
+                'html[data-bs-theme="dark"] .opp-card{background:#1f1b33;color:#f1f0f8}' +
+                'html[data-bs-theme="dark"] .opp-msg{color:#a9a5c2}' +
+                'html[data-bs-theme="dark"] .opp-list{border-color:#3a3556}' +
+                'html[data-bs-theme="dark"] .opp-list li{border-color:#332e4d}' +
+                'html[data-bs-theme="dark"] .opp-later{border-color:#4a4468;color:#d6d3ea}' +
+                'html[data-bs-theme="dark"] .opp-go{background:#6d5bd0;border-color:#6d5bd0}' +
+                '@keyframes oppFade{from{opacity:0}to{opacity:1}}' +
+                '@keyframes oppPop{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:none}}';
+            document.head.appendChild(css);
+        }
+
+        function showPendingPopup(list) {
+            if (document.getElementById('officePendingPopup')) return;
+            ensurePopupStyles();
+            var count = list.length;
+            var wrap = document.createElement('div');
+            wrap.className = 'opp-backdrop';
+            wrap.id = 'officePendingPopup';
+            var card = document.createElement('div');
+            card.className = 'opp-card';
+            card.setAttribute('role', 'alertdialog');
+            card.setAttribute('aria-modal', 'true');
+            card.setAttribute('aria-labelledby', 'oppTitle');
+
+            var icon = document.createElement('div');
+            icon.className = 'opp-icon';
+            icon.innerHTML = '<i class="fas fa-hourglass-half"></i>';
+            var title = document.createElement('h3');
+            title.className = 'opp-title';
+            title.id = 'oppTitle';
+            title.textContent = 'Pending Surveys';
+            var msg = document.createElement('p');
+            msg.className = 'opp-msg';
+            msg.innerHTML = 'You have <strong></strong> waiting for your review.';
+            msg.querySelector('strong').textContent = count + (count === 1 ? ' pending survey' : ' pending surveys');
+
+            var ul = document.createElement('ul');
+            ul.className = 'opp-list';
+            list.slice(0, 3).forEach(function (it) {
+                var li = document.createElement('li');
+                var n = document.createElement('span'); n.className = 'n'; n.textContent = it.respondent;
+                var s = document.createElement('span'); s.className = 's'; s.textContent = relTime(it.createdAt);
+                li.appendChild(n); li.appendChild(s); ul.appendChild(li);
+            });
+            if (count > 3) {
+                var more = document.createElement('li');
+                more.className = 'opp-more';
+                more.textContent = '+ ' + (count - 3) + ' more';
+                ul.appendChild(more);
+            }
+
+            var actions = document.createElement('div');
+            actions.className = 'opp-actions';
+            var later = document.createElement('button');
+            later.type = 'button'; later.className = 'opp-later'; later.textContent = 'Later';
+            var go = document.createElement('button');
+            go.type = 'button'; go.className = 'opp-go';
+            go.textContent = ACTIVE_PAGE === 'pending' ? 'Got it' : 'Review now';
+            actions.appendChild(later); actions.appendChild(go);
+
+            [icon, title, msg, ul, actions].forEach(function (n) { card.appendChild(n); });
+            wrap.appendChild(card);
+            document.body.appendChild(wrap);
+
+            function close() {
+                document.removeEventListener('keydown', onKey);
+                if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+            }
+            function onKey(e) { if (e.key === 'Escape') close(); }
+            document.addEventListener('keydown', onKey);
+            later.addEventListener('click', close);
+            wrap.addEventListener('click', function (e) { if (e.target === wrap) close(); });
+            go.addEventListener('click', function () {
+                close();
+                if (ACTIVE_PAGE !== 'pending') window.location.href = '/office-approvals';
+            });
+            go.focus();
+        }
+
+        // Every open of the panel announces what is waiting, once per tab /
+        // app window (see ANNOUNCE_KEY) — and always right after a fresh login.
+        function announceOnLogin(list) {
+            if (!list || list.length <= 0) return;
             if (!welcome && alreadyAnnounced()) return;
             markAnnounced();
-            var msg = count === 1
-                ? 'You have 1 pending survey waiting for your review.'
-                : 'You have ' + count + ' pending surveys waiting for your review.';
-            AppAlert.confirm(msg, { title: 'Pending Surveys', confirmText: 'Review now', danger: false })
-                .then(function (ok) { if (ok && ACTIVE_PAGE !== 'pending') window.location.href = '/office-approvals'; });
+            showPendingPopup(list);
         }
         var ACTIVE_PAGE = <%- JSON.stringify(_active) %>;
 
         // AppAlert lives in layout/footer.ejs, parsed after this script.
         function boot() {
             load().then(function (list2) {
-                if (list2) announceOnLogin(list2.length);
+                if (list2) announceOnLogin(list2);
             });
         }
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

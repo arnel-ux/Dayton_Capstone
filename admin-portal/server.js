@@ -4436,6 +4436,36 @@ app.get('/office-approvals/status', ensureOfficeAuth, noCache, (req, res) => {
     );
 });
 
+// Feed for the office bell and the "you have pending surveys" popup. The
+// office layout (views/layout/office-shell.ejs) fetches this, but the route
+// was never registered — every call 404'd, so the bell always looked empty
+// and the popup never had a count to announce. The feed IS the office's live
+// pending queue (no notification rows to drift out of sync); read/dismissed
+// state stays in the staffer's browser, so nothing here writes anything.
+app.get('/office-approvals/notifications', ensureOfficeAuth, noCache, (req, res) => {
+    const officeId = req.adminSession.user.id;
+    db.query(
+        "SELECT id, service_availed, payload, created_at FROM pending_survey_submissions WHERE office_id = ? AND status = 'pending' ORDER BY created_at DESC, id DESC LIMIT 100",
+        [officeId],
+        (err, rows) => {
+            if (err) {
+                console.error('❌ [Office Notifications] Error loading pending queue:', err);
+                return res.status(500).json({ success: false, message: 'Server error loading notifications.' });
+            }
+            const notifications = (rows || []).map(r => {
+                const payload = parsePendingPayload(r.payload); // {} on a corrupt/unusable payload
+                return {
+                    id: r.id,
+                    respondent: payload.respondentName || 'Anonymous',
+                    service: r.service_availed || '',
+                    createdAt: r.created_at
+                };
+            });
+            res.json({ success: true, notifications });
+        }
+    );
+});
+
 app.get('/office-approvals', ensureOfficeAuth, noCache, (req, res) => {
     const officeId = req.adminSession.user.id;
     db.query(
