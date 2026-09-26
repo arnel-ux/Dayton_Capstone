@@ -337,7 +337,12 @@
             vertical-align: middle;
             cursor: default;
         }
-        .topic-cell { text-align: center; }
+        .topic-cell { text-align: center; white-space: normal; }
+        /* Multi-topic tagging project (2026-09-25): a comment can carry more
+           than one topic badge in the same cell — spaced and allowed to wrap
+           onto a second line instead of overflowing the column. */
+        .topic-cell .topic-badge { max-width: 160px; }
+        .topic-cell .topic-badge + .topic-badge { margin-left: 4px; }
 
         .bg-cr { background-color: #fee2e2; color: #ef4444; }
         .bg-aircon { background-color: #e0f2fe; color: #0ea5e9; }
@@ -658,7 +663,7 @@
                                                 <td class="name-cell" title="<%= record.name %>" data-bs-toggle="tooltip" data-bs-placement="top"><span class="respondent-name cell-truncate"><%= record.name %></span></td>
                                                 <td class="text-center text-muted small text-nowrap" title="<%= record.officeVisitedTime %>" data-bs-toggle="tooltip" data-bs-placement="top"><%= record.officeVisitedTime %></td>
                                                 <td class="comments-cell text-muted small" title="<%= record.comments %>" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="tooltip-wide-comment"><span class="cell-truncate"><%= record.comments %></span></td>
-                                                <td class="topic-cell"><span class="topic-badge <%= record.topicClass %>" title="<%= record.topic %>" data-bs-toggle="tooltip" data-bs-placement="top"><%= record.topic %></span></td>
+                                                <td class="topic-cell"><span class="topic-badge <%= record.topicClass %>" title="<%= record.topic %>" data-bs-toggle="tooltip" data-bs-placement="top"><%= record.topic %></span><% (record.extraTopics || []).forEach(extra => { %><span class="topic-badge <%= extra.topicClass %>" title="<%= extra.topic %>" data-bs-toggle="tooltip" data-bs-placement="top"><%= extra.topic %></span><% }) %></td>
                                                 <td class="text-center"><span class="sentiment-badge <%= record.sentimentClass %>"><%= record.sentiment %></span></td>
                                                 <td class="action-cell">
                                                     <button type="button" class="btn btn-view-result" onclick="openViewResult(<%= record.id %>)" title="View this respondent's full survey answers">
@@ -890,6 +895,15 @@
     const TOPIC_TAXONOMY = <%- JSON.stringify(TOPIC_TAXONOMY) %>;
     const SENTIMENT_VALUES = <%- JSON.stringify(SENTIMENT_VALUES) %>;
 
+    // Client-side mirror of shared/topicTaxonomy.js's combineTopic() — kept
+    // in sync by hand, same as that file's own note about topic_common.py.
+    function combineTopicClient(topic, subtopic) {
+        if (!topic) return null;
+        if (topic === 'No Feedback') return 'No Feedback';
+        if (!subtopic || subtopic === 'General') return topic;
+        return `${topic} - ${subtopic}`;
+    }
+
     function escapeHtml(str) {
         const div = document.createElement('div');
         div.textContent = str == null ? '' : String(str);
@@ -913,6 +927,24 @@
         `;
     }
 
+    // Multi-topic tagging project (2026-09-25): matches the server's own cap
+    // (see MAX_EXTRA_TOPICS in server.js) so the "Add Another Topic" button
+    // disables at the same limit the PATCH endpoint would otherwise reject.
+    const MAX_EXTRA_TOPICS = 4;
+
+    // Renders the read-only list of topics beyond the primary — used both on
+    // initial modal load and right after a save, so both paths render
+    // identically.
+    function renderExtraTopicsView(extraTopics) {
+        if (!extraTopics || !extraTopics.length) return '';
+        return extraTopics.map((t, i) => `
+            <div class="result-grid mt-2 pt-2 border-top">
+                ${analysisViewItem('Additional Topic ' + (i + 1), escapeHtml(t.topic || 'N/A'))}
+                ${analysisViewItem('Subtopic', escapeHtml(t.subtopic || 'N/A'))}
+            </div>
+        `).join('');
+    }
+
     function sentimentBadgeClass(sentiment) {
         const lower = (sentiment || '').toLowerCase();
         if (lower === 'no sentiment') return 'bg-sentiment-none';
@@ -930,18 +962,35 @@
     // instant visual feedback on the row right after a save — the next full
     // page load/refresh always re-derives the authoritative class from the
     // server, this is cosmetic only.
+    // Mirrors server.js's topicBadgeClassFor exactly (same taxonomy, same
+    // rules) — kept in sync by hand, same as this file's other server
+    // mirrors (combineTopicClient, TOPIC_TAXONOMY).
     function topicBadgeClass(topic) {
         const lower = (topic || '').toLowerCase();
         if (lower.startsWith('unclassified') || lower.startsWith('no feedback')) return 'bg-unclassified';
         if (lower.includes('restroom') || lower.includes('cleanliness')) return 'bg-cr';
         if (lower.includes('aircon') || lower.includes('cooling')) return 'bg-aircon';
-        if (lower.includes('facility') || lower.includes('equipment') || lower.includes('furniture') || lower.includes('seating') || lower.includes('power') || lower.includes('lighting')) return 'bg-facility';
-        if (lower.includes('staff') || lower.includes('fairness') || lower.includes('courtesy') || lower.includes('competence')) return 'bg-staff';
-        if (lower.includes('transaction')) return 'bg-transaction';
-        if (lower.includes('payment') || lower.includes('fees')) return 'bg-payment';
-        if (lower.includes('document') || lower.includes('credential') || lower.includes('enrollment') || lower.includes('registration')) return 'bg-docs';
-        if (lower.includes('online') || lower.includes('portal') || lower.includes('internet')) return 'bg-online';
-        if (lower.includes('health') || lower.includes('medical') || lower.includes('guidance') || lower.includes('counseling') || lower.includes('scholarship')) return 'bg-health';
+        if (
+            lower.includes('facilities and resources') || lower.includes('equipment') ||
+            lower.includes('furniture') || lower.includes('seating') ||
+            lower.includes('power') || lower.includes('lighting') ||
+            lower.includes('dormitory') || lower.includes('transportation service') ||
+            lower.includes('supplies and resources')
+        ) return 'bg-facility';
+        if (lower.includes('staff service') || lower.includes('fairness') || lower.includes('courtesy') || lower.includes('competence')) return 'bg-staff';
+        if (lower.includes('processing') || lower.includes('approval process') || lower.includes('service procedure')) return 'bg-transaction';
+        if (lower.includes('financial transaction')) return 'bg-payment';
+        if (
+            lower.includes('documents and records') || lower.includes('credential') ||
+            lower.includes('enrollment process') || lower.includes('academic transaction') ||
+            lower.includes('clearance process') || lower.includes('id services')
+        ) return 'bg-docs';
+        if (lower.includes('system and access') || lower.includes('ease of use') || lower.includes('internet service')) return 'bg-online';
+        if (
+            lower.includes('health service') || lower.includes('scholarship and assistance') ||
+            lower.includes('leave process') || lower.includes('library service') ||
+            lower.includes('research service') || lower.includes('accreditation process')
+        ) return 'bg-health';
         return 'bg-general';
     }
 
@@ -999,6 +1048,98 @@
         subtopicSelect.onchange = () => {
             syncCustomInput(subtopicCustomInput, subtopicSelect.value === 'Custom', '');
         };
+
+        rebuildExtraTopicRows();
+    }
+
+    // Multi-topic tagging project (2026-09-25) — everything below builds the
+    // removable, repeatable rows for topics beyond the primary. Each row uses
+    // its own local <select>/<input> elements (found via querySelector on the
+    // row itself) rather than fixed global ids, since any number of these can
+    // exist at once — unlike the single fixed primary Topic/Subtopic pair
+    // above.
+    function createExtraTopicRow(topicValue, subtopicValue) {
+        const row = document.createElement('div');
+        row.className = 'extra-topic-row result-grid mt-2 pt-2 border-top';
+        row.innerHTML = `
+            <div class="result-item">
+                <div class="label">Additional Topic</div>
+                <select class="form-select form-select-sm extra-topic-select"></select>
+                <input type="text" class="form-control form-control-sm mt-1 extra-topic-custom" placeholder="Type a custom topic" style="display:none;">
+            </div>
+            <div class="result-item">
+                <div class="label">Subtopic</div>
+                <select class="form-select form-select-sm extra-subtopic-select"></select>
+                <input type="text" class="form-control form-control-sm mt-1 extra-subtopic-custom" placeholder="Type a custom subtopic" style="display:none;">
+                <button type="button" class="btn btn-sm btn-outline-danger mt-1 extra-topic-remove" title="Remove this topic">
+                    <i class="fas fa-times me-1"></i> Remove
+                </button>
+            </div>
+        `;
+
+        const topicSelect = row.querySelector('.extra-topic-select');
+        const topicCustomInput = row.querySelector('.extra-topic-custom');
+        const subtopicSelect = row.querySelector('.extra-subtopic-select');
+        const subtopicCustomInput = row.querySelector('.extra-subtopic-custom');
+
+        const topicOptions = [...Object.keys(TOPIC_TAXONOMY), 'Custom'];
+        populateSelect(topicSelect, topicOptions, topicValue);
+        if (topicValue && !topicOptions.includes(topicValue)) topicSelect.value = 'Custom';
+        syncCustomInput(topicCustomInput, topicSelect.value === 'Custom', topicValue);
+
+        const subtopicOptionsFor = () => [...(topicSelect.value === 'Custom' ? [] : (TOPIC_TAXONOMY[topicSelect.value] || [])), 'Custom'];
+        populateSelect(subtopicSelect, subtopicOptionsFor(), subtopicValue);
+        if (subtopicValue && !subtopicOptionsFor().includes(subtopicValue)) subtopicSelect.value = 'Custom';
+        syncCustomInput(subtopicCustomInput, subtopicSelect.value === 'Custom', subtopicValue);
+
+        topicSelect.onchange = () => {
+            const isCustomTopic = topicSelect.value === 'Custom';
+            syncCustomInput(topicCustomInput, isCustomTopic, '');
+            populateSelect(subtopicSelect, subtopicOptionsFor(), null);
+            syncCustomInput(subtopicCustomInput, false, '');
+        };
+        subtopicSelect.onchange = () => {
+            syncCustomInput(subtopicCustomInput, subtopicSelect.value === 'Custom', '');
+        };
+        row.querySelector('.extra-topic-remove').onclick = () => {
+            row.remove();
+            updateAddTopicButtonState();
+        };
+
+        return row;
+    }
+
+    function updateAddTopicButtonState() {
+        const list = document.getElementById('analysisExtraTopicsList');
+        const addBtn = document.getElementById('analysisAddTopicBtn');
+        if (!list || !addBtn) return;
+        const atLimit = list.querySelectorAll('.extra-topic-row').length >= MAX_EXTRA_TOPICS;
+        addBtn.disabled = atLimit;
+        addBtn.title = atLimit ? `You can add at most ${MAX_EXTRA_TOPICS} additional topics.` : '';
+    }
+
+    function addExtraTopicRow() {
+        const list = document.getElementById('analysisExtraTopicsList');
+        if (!list) return;
+        if (list.querySelectorAll('.extra-topic-row').length >= MAX_EXTRA_TOPICS) {
+            AppAlert.toast('error', `You can add at most ${MAX_EXTRA_TOPICS} additional topics.`);
+            return;
+        }
+        list.appendChild(createExtraTopicRow(null, null));
+        updateAddTopicButtonState();
+    }
+
+    // Called every time "Edit Analysis" is opened (see resetAnalysisEditor
+    // above) — rebuilds from currentAnalysis.extraTopics, same "never leak an
+    // unsaved edit into the next session" rule as the primary select.
+    function rebuildExtraTopicRows() {
+        const list = document.getElementById('analysisExtraTopicsList');
+        if (!list) return;
+        list.innerHTML = '';
+        (currentAnalysis.extraTopics || []).forEach(t => {
+            list.appendChild(createExtraTopicRow(t.topic, t.subtopic));
+        });
+        updateAddTopicButtonState();
     }
 
     function initAnalysisEditor(s) {
@@ -1006,19 +1147,28 @@
             sentiment: s.effectiveSentiment,
             topic: s.effectiveTopic,
             subtopic: s.effectiveSubtopic,
+            extraTopics: (s.extraTopics || []).map(t => ({ topic: t.topic, subtopic: t.subtopic })),
         };
+        const extraTopicsView = document.getElementById('analysisExtraTopicsView');
+        if (extraTopicsView) extraTopicsView.innerHTML = renderExtraTopicsView(currentAnalysis.extraTopics);
         toggleAnalysisEdit(false);
     }
 
     function toggleAnalysisEdit(show) {
         const viewMode = document.getElementById('analysisViewMode');
+        const extraTopicsView = document.getElementById('analysisExtraTopicsView');
         const editMode = document.getElementById('analysisEditMode');
+        const extraTopicsList = document.getElementById('analysisExtraTopicsList');
+        const addTopicWrap = document.getElementById('analysisAddTopicWrap');
         const editActions = document.getElementById('analysisEditActions');
         const editBtn = document.getElementById('analysisEditBtn');
         if (!viewMode || !editMode) return;
         if (show) resetAnalysisEditor();
         viewMode.style.display = show ? 'none' : '';
+        if (extraTopicsView) extraTopicsView.style.display = show ? 'none' : '';
         editMode.style.display = show ? '' : 'none';
+        if (extraTopicsList) extraTopicsList.style.display = show ? '' : 'none';
+        if (addTopicWrap) addTopicWrap.style.display = show ? '' : 'none';
         editActions.style.display = show ? 'flex' : 'none';
         editBtn.style.display = show ? 'none' : '';
     }
@@ -1045,10 +1195,30 @@
             return;
         }
 
+        // Multi-topic tagging project (2026-09-25): gather every extra-topic
+        // row's Topic/Subtopic pair the same way as the primary above.
+        const extraTopics = [];
+        for (const row of document.querySelectorAll('#analysisExtraTopicsList .extra-topic-row')) {
+            const rTopicSelect = row.querySelector('.extra-topic-select');
+            const rTopicCustom = row.querySelector('.extra-topic-custom');
+            const rSubtopicSelect = row.querySelector('.extra-subtopic-select');
+            const rSubtopicCustom = row.querySelector('.extra-subtopic-custom');
+            const rIsCustomTopic = rTopicSelect.value === 'Custom';
+            const rIsCustomSubtopic = rSubtopicSelect.value === 'Custom';
+            const rTopicValue = rIsCustomTopic ? rTopicCustom.value.trim() : rTopicSelect.value;
+            const rSubtopicValue = rIsCustomSubtopic ? rSubtopicCustom.value.trim() : rSubtopicSelect.value;
+            if ((rIsCustomTopic && !rTopicValue) || (rIsCustomSubtopic && !rSubtopicValue)) {
+                AppAlert.toast('error', 'Please fill in or remove any incomplete additional topic.');
+                return;
+            }
+            extraTopics.push({ topic: rTopicValue, subtopic: rSubtopicValue });
+        }
+
         const payload = {
             sentiment: sentimentSelect.value,
             topic: topicValue,
             subtopic: subtopicValue,
+            extraTopics,
         };
 
         saveBtn.disabled = true;
@@ -1061,35 +1231,37 @@
             .then(({ ok, data }) => {
                 if (!ok || !data.success) throw new Error(data.message || 'Failed to save analysis.');
 
-                currentAnalysis = { ...payload };
+                // data.extraTopics comes back re-split from the server (same
+                // {topic, subtopic} shape as GET returns), so view mode and
+                // the next "Edit Analysis" open both reflect exactly what was
+                // actually stored, not just what was typed.
+                currentAnalysis = {
+                    sentiment: payload.sentiment, topic: payload.topic, subtopic: payload.subtopic,
+                    extraTopics: data.extraTopics || [],
+                };
 
                 document.getElementById('analysisViewMode').innerHTML =
                     analysisViewItem('Sentiment', renderSentimentBadge(payload.sentiment)) +
                     analysisViewItem('Topic', escapeHtml(payload.topic)) +
                     analysisViewItem('Subtopic', escapeHtml(payload.subtopic));
+                document.getElementById('analysisExtraTopicsView').innerHTML = renderExtraTopicsView(currentAnalysis.extraTopics);
 
                 toggleAnalysisEdit(false);
                 AppAlert.toast('success', 'Analysis updated successfully.');
 
                 // Reflect the correction in the underlying table row immediately,
                 // without a full page reload — the next real refresh re-derives
-                // this from the server the same way.
+                // this from the server the same way. Every badge in the cell is
+                // rebuilt from scratch since the count itself can now change.
                 const row = document.querySelector(`.record-row[data-id="${id}"]`);
                 if (row) {
-                    const topicBadge = row.querySelector('.topic-badge');
+                    const topicCell = row.querySelector('.topic-cell');
                     const sentimentBadge = row.querySelector('.sentiment-badge');
-                    if (topicBadge) {
-                        topicBadge.textContent = payload.topic;
-                        topicBadge.title = payload.topic;
-                        // Bootstrap already moved the original title into its own
-                        // attribute, so refresh that too or the tooltip stays stale.
-                        topicBadge.setAttribute('data-bs-original-title', payload.topic);
-                        const topicTip = bootstrap.Tooltip.getInstance(topicBadge);
-                        if (topicTip) {
-                            topicTip.setContent({ '.tooltip-inner': payload.topic });
-                        }
-                        topicBadge.removeAttribute('title');
-                        topicBadge.className = 'topic-badge ' + topicBadgeClass(payload.topic);
+                    if (topicCell) {
+                        const allTopics = [payload.topic, ...currentAnalysis.extraTopics.map(t => combineTopicClient(t.topic, t.subtopic))];
+                        topicCell.innerHTML = allTopics.map(t =>
+                            `<span class="topic-badge ${topicBadgeClass(t)}" title="${escapeHtml(t)}" data-bs-toggle="tooltip" data-bs-placement="top">${escapeHtml(t)}</span>`
+                        ).join('');
                     }
                     if (sentimentBadge) {
                         sentimentBadge.textContent = payload.sentiment;
@@ -1207,6 +1379,7 @@
                             ${ccItem('Topic', s.effectiveTopic || 'N/A')}
                             ${ccItem('Subtopic', s.effectiveSubtopic || 'N/A')}
                         </div>
+                        <div id="analysisExtraTopicsView"></div>
 
                         <div id="analysisEditMode" class="result-grid" style="display:none;">
                             <div class="result-item">
@@ -1223,6 +1396,12 @@
                                 <select class="form-select form-select-sm" id="analysisSubtopicSelect"></select>
                                 <input type="text" class="form-control form-control-sm mt-1" id="analysisSubtopicCustomInput" placeholder="Type a custom subtopic" style="display:none;">
                             </div>
+                        </div>
+                        <div id="analysisExtraTopicsList" style="display:none;"></div>
+                        <div style="display:none;" id="analysisAddTopicWrap">
+                            <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="analysisAddTopicBtn" onclick="addExtraTopicRow()">
+                                <i class="fas fa-plus me-1"></i> Add Another Topic
+                            </button>
                         </div>
                         <div id="analysisEditActions" class="d-flex gap-2 justify-content-end mt-3" style="display:none;">
                             <button type="button" class="btn btn-sm btn-secondary" onclick="toggleAnalysisEdit(false)">Cancel</button>
@@ -1638,21 +1817,27 @@
                 // for comments the AI never analyzed) and no no-feedback case
                 // left to render.
                 const aiSentiment = c.sentiment;
-                const aiTopic = c.topic;
+                // Multi-topic tagging project (2026-09-25): a comment can
+                // carry more than one topic (see /api/report-data's
+                // extraTopics) — every one of them prints as its own pill
+                // and counts toward Dominant Topic, not just the primary.
+                const allTopics = [c.topic, ...(c.extraTopics || [])];
 
                 if (aiSentiment === 'Positive') pos++;
                 else if (aiSentiment === 'Negative') neg++;
                 else neu++;
-                topics[aiTopic] = (topics[aiTopic] || 0) + 1;
+                allTopics.forEach(t => { topics[t] = (topics[t] || 0) + 1; });
 
                 let badgeClass = 'bg-neu';
                 if (aiSentiment === 'Positive') badgeClass = 'bg-pos';
                 if (aiSentiment === 'Negative') badgeClass = 'bg-neg';
 
+                const topicPills = allTopics.map(t => `<span class="topic-pill">${escapeHtml(t)}</span>`).join(' ');
+
                 tbody.innerHTML += `<tr>
                     <td class="text-center">${index + 1}</td>
                     <td>${escapeHtml(c.comments)}</td>
-                    <td class="text-center"><span class="topic-pill">${escapeHtml(aiTopic)}</span></td>
+                    <td class="text-center">${topicPills}</td>
                     <td class="text-center"><span class="badge-sentiment ${badgeClass}">${escapeHtml(aiSentiment)}</span></td>
                 </tr>`;
             });

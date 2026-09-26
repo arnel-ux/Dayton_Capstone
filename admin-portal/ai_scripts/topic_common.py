@@ -90,162 +90,188 @@ def _matched_spans(lowered, keywords):
 
 
 # ---------------------------------------------------------------------------
-# TOPIC TAXONOMY
-# Split into topics specific enough that an admin reading a feedback report
-# can tell what a comment is about from its topic tag alone, without opening
-# the comment text. Grouped conceptually:
-#   - Speed/process:      Queueing and Waiting Time, Transaction,
-#                          Process Efficiency
-#   - Systems:             Ease of Use, Online System and Portal,
-#                          Internet Connection
-#   - Physical facility:   Aircon and Cooling, Restroom, Cleanliness,
-#                          Seating and Furniture, Power and Lighting,
-#                          Facilities and Equipment (narrow fallback)
-#   - People:              Courtesy and Attitude,
-#                          Staff Competence and Knowledge,
-#                          Fairness and Equal Treatment,
-#                          Bystanders and Loitering
-#   - Transaction-specific: Payment and Fees, Document and Credential
-#                          Processing, Enrollment and Registration,
-#                          Scholarship and Financial Assistance
-#   - Service-specific:    Health and Medical Services,
-#                          Guidance and Counseling Services
-#   - Information:          Communication and Information
+# TOPIC TAXONOMY (rewritten 2026-09-22 — pure-AI classification project)
 #
-# "Facilities and Equipment" is a narrower fallback for physical-facility
-# comments that don't name one of the more specific facility subtypes
-# (e.g. "sirang gusto", generic "pasilidad") — it also covers library,
-# dormitory, and transportation complaints via item-level refinement (see
-# TOPIC_ITEM_KEYWORDS) since those are physical/logistics services without
-# enough distinct comment volume to justify their own top-level topic.
-# Likewise "Courtesy and Attitude" doubles as the default bucket for
-# demeanor-related comments that don't clearly single out competence or
-# fairness specifically — item-level refinement (see TOPIC_ITEM_KEYWORDS)
-# further breaks it down by WHO the attitude complaint is about (staff,
-# student, faculty, guard, etc.) instead of assuming it's always staff.
+# Redesigned around one rule: a Topic/Subtopic label must be SENTIMENT-NEUTRAL
+# — it names what the comment is ABOUT, never whether that thing was good or
+# bad (that judgment belongs entirely to the separate sentiment axis). The old
+# taxonomy violated this in a few places (e.g. "Transaction - Slow"/
+# "Transaction - Fast" baked a sentiment judgment into the subtopic itself),
+# which is exactly the pattern this rewrite removes — see the former
+# _transaction_subtopic, now deleted; "Transaction" is folded into
+# "Processing - Processing Time" and sentiment alone carries the slow/fast
+# verdict, matching every other topic's convention.
 #
-# "Restroom" and "Cleanliness" were split from the single combined
-# "Restroom and Cleanliness" topic on 2026-08-31 — a comment about general
-# office/area messiness (e.g. "makalat ang office nila") was landing on a
-# label that literally says "Restroom" even though no restroom was involved
-# at all, which read as a misclassification to admins reviewing the tag.
-# Restroom-specific words (banyo/CR/toilet, and the supplies used there)
-# stay in "Restroom"; general tidiness/dirtiness words with no restroom word
-# present go to "Cleanliness".
-#
-# "Bystanders and Loitering" was added 2026-08-31 — comments about idle
-# people/outsiders hanging around ("nakatambay", "mga standby") were
-# previously falling through to either "General Feedback" or, worse, getting
-# misread by the AI fallback as a "Facilities and Equipment - Building/
-# Structure" comment purely because a physical-location word like "building"
-# appeared nearby, even though the complaint is about people, not the
-# structure.
-#
-# Health and Medical Services, Guidance and Counseling Services, and
-# Scholarship and Financial Assistance were added 2026-08-24 after
-# cross-checking the taxonomy against cqa_db.sql's actual `services` table —
-# these are real, distinct CSPC offices (Health Services Unit; Guidance and
-# Counseling; scholarship processing under Student Affairs and Services /
-# Cash Unit) that previously had no topic anchor at all and would silently
-# fall into General Feedback.
-#
-# "General Feedback" is deliberately NOT a zero-shot candidate (see
-# classify_topic in heavy_model.py) — it's a low-confidence fallback only, so
-# a comment is never routed there just because it edged out the other
-# hypotheses.
+# This taxonomy merges the previous physical-facility/behavioral topics
+# (which already had well-tuned Taglish keyword coverage — kept largely
+# as-is below) with a broader set of administrative/service-process topics
+# covering the college's non-facility offices (registrar, HR, cash unit,
+# scholarships, ICT, library, dormitory, travel orders, etc.), consolidating
+# topics that meant the same thing under one neutral name and removing
+# duplicates. Topics with no keyword list below are intentionally
+# keyword-free — Gemini (the classifier for online comments, and the
+# fallback for offline comments the lexicon doesn't anchor) is the only
+# thing that ever resolves them; hand-authoring exhaustive Taglish keyword
+# coverage for every administrative micro-category is not worth the
+# maintenance cost the old lexicon-first design paid for the common,
+# high-volume categories below.
 # ---------------------------------------------------------------------------
 candidate_topics = [
-    "Queueing and Waiting Time",
-    "Transaction",
-    "Process Efficiency",
-    "Ease of Use",
-    "Online System and Portal",
-    "Internet Connection",
-    "Aircon and Cooling",
-    "Restroom",
-    "Cleanliness",
-    "Seating and Furniture",
-    "Power and Lighting",
-    "Facilities and Equipment",
-    "Courtesy and Attitude",
-    "Staff Competence and Knowledge",
-    "Fairness and Equal Treatment",
-    "Bystanders and Loitering",
-    "Payment and Fees",
-    "Document and Credential Processing",
-    "Enrollment and Registration",
+    "Processing",
+    "Service Procedure",
+    "Requirements",
+    "Approval Process",
     "Communication and Information",
-    "Health and Medical Services",
-    "Guidance and Counseling Services",
-    "Scholarship and Financial Assistance",
+    "Staff Service",
+    "Documents and Records",
+    "System and Access",
+    "Ease of Use",
+    "Internet Service",
+    "Scheduling and Availability",
+    "Financial Transaction",
+    "Facilities and Resources",
+    "Bystanders and Loitering",
+    "Scholarship and Assistance",
+    "Enrollment Process",
+    "Academic Transaction",
+    "Health Service",
+    "Clearance Process",
+    "Leave Process",
+    "Accreditation Process",
+    "Complaint Handling",
+    "ID Services",
+    "Dormitory Service",
+    "Supplies and Resources",
+    "Transportation Service",
+    "Library Service",
+    "Research Service",
+    "General Service",
 ]
 
 # ---------------------------------------------------------------------------
 # TAGLISH KEYWORD ANCHORS
-# Zero-shot NLI models are weakest exactly where local feedback lives: short
-# Taglish phrases like "mahina ang aircon". These lexicons do two jobs:
-#   1. Feed a richer, example-laden hypothesis to the zero-shot model so it
-#      has concrete Taglish anchors to match against (the "few-shot" context
-#      an NLI model can actually use, since it has no true few-shot mode).
-#   2. Provide a small deterministic score boost/tiebreak when a comment
-#      contains one of these unambiguous object-noun keywords, and power the
-#      fast offline heuristic path entirely on their own.
-# Only *object nouns* or unambiguous compound phrases are used as anchors —
+# Only object nouns or unambiguous compound phrases are used as anchors —
 # never bare descriptors like "mabagal"/"mahina"/"malinis" alone, since those
-# are ambiguous across every category (slow queue vs slow wifi vs weak
-# aircon, clean restroom vs clean process) and would misfire.
-#
-# Dict order matters for keyword_topic_override's tie-break: on an equal
-# keyword-hit count, whichever topic is listed FIRST wins. So the more
-# specific sub-buckets of a group are listed before that group's broad
-# fallback bucket (e.g. "Fairness and Equal Treatment" and "Staff Competence
-# and Knowledge" before the generic "Staff Courtesy and Attitude" catch-all;
-# the four specific facility subtypes before the generic "Facilities and
-# Equipment" catch-all).
+# are ambiguous across every category and would misfire. A keyword hit here
+# wins the topic outright over Gemini (see keyword_topic_override) — as of
+# 2026-09-25 (see analyze.py's module comment), no production classification
+# path calls this at all anymore; both online and offline comments go
+# straight to Gemini (see heavy_model.analyze_pure_ai). This dict is only
+# still consulted by the junk-detector's "is this actually real vocabulary"
+# guard below, and by test_accuracy.py's lexicon-only scoring.
 # ---------------------------------------------------------------------------
 TOPIC_KEYWORDS = {
-    "Queueing and Waiting Time": [
+    "Processing": [
         "pila", "linya", "queue", "queueing", "waiting line", "numero",
-        # Bare "hintay"/"antay" only ever appear in real feedback with a verb
-        # affix glued directly onto the root (nag-, -in-, pina-...-an, etc.),
-        # so \bhintay\b never actually matches "naghintay"/"hinihintay" — the
-        # word boundary sits at the affix, not the root. Listing the common
-        # inflected forms explicitly is cheaper and safer than a generic
-        # affix-stripping regex (which risks false-positive stems on
-        # unrelated words).
         "hintay", "naghintay", "naghihintay", "hinihintay", "hinintay",
         "pinaghihintayan", "maghintay",
         "antay", "umaantay", "inaantay", "antayin",
         "priority number", "numbering system",
+        "transaction", "pag-transact", "processing time",
+        "release ng resulta", "ma-release", "na-release",
+        ("processing", 0.75),
     ],
-    "Internet Connection": [
-        "internet", "wifi", "wi-fi", "signal", "network", "koneksyon",
-        "walang signal", "walang internet",
+    "Service Procedure": [
+        "hassle-free", "hassle free", "walang abala", "walang hassle",
+        "streamlined", "isang beses lang", "isang hakbang lang", "one-stop",
+        "maraming hakbang", "madaming hakbang", "kumplikado",
+        ("proseso", 0.5), ("process", 0.5),
+        "referral", "irefer", "i-refer", "pinadala sa ibang office",
     ],
-    "Online System and Portal": [
+    "Requirements": [
+        "requirements", "kakailanganin", "kailangang dokumento",
+        "kulang na requirements", "incomplete requirements",
+        "kulang sa requirements", "hindi kumpleto ang requirements",
+        "eligibility", "kwalipikado", "hindi kwalipikado",
+        "hindi qualified", "not qualified", "not eligible",
+    ],
+    "Approval Process": [
+        "approval", "aprubado", "approve", "na-approve", "ina-approve",
+        "endorsement", "endorso", "signature", "pirma", "lagda",
+        "pending approval", "hindi pa naaprubahan", "hindi pa na-approve",
+    ],
+    "Communication and Information": [
+        "impormasyon", "information", "communication", "announcement", "abiso",
+        "notice", "paalala", "text blast", "walang paalam", "walang reply",
+        "hindi sumasagot", "no response", "not informed", "nobody informed",
+        "no update", "walang update", "no updates", "walang updates", "email",
+        "iba-iba sagot", "iba't ibang sagot", "magkaibang sagot",
+        "kanya-kanyang sagot", "conflicting information",
+        "contradicting information", "inconsistent information",
+        "nagkontra-kontra",
+    ],
+    "Staff Service": [
+        # Fairness/equal-treatment anchors
+        "palakasan", "walang palakasan", "paboritism", "favoritism",
+        "nepotism", "bias", "unfair", "hindi patas", "walang katarungan",
+        "may kilala",
+        # Competence/knowledge anchors
+        "hindi marunong", "hindi madunong", "walang alam", "not knowledgeable",
+        "incompetent", "hindi alam ng",
+        "hindi sanay", "untrained", "kulang sa training", "hindi sigurado sa sagot",
+        "hindi updated", "hindi na updated", "hindi pa updated", "outdated",
+        ("sanay", 0.5),
+        # Assistance/accommodation anchors
+        "accommodate", "accommodating", "accommodation",
+        "inasikaso", "inaasikaso", "aasikasuhin", "asikaso",
+        "pinansin", "pinapansin", "entertained",
+        "walang assistance", "walang tumutulong", "poor assistance",
+        "poor service", "bad attitude", "unhelpful", "not helpful",
+        "technical assistance", "it support", "tulong teknikal",
+        # Generic courtesy/demeanor anchors (role nouns weighted low, same as
+        # before, so synonym-stacking on one person never outranks a specific
+        # complaint elsewhere)
+        ("staff", 0.5), ("staffs", 0.5), ("kawani", 0.5), ("empleyado", 0.5),
+        ("tauhan", 0.5), ("employee", 0.5), ("receptionist", 0.5),
+        ("guard", 0.5), ("security", 0.5), ("clerk", 0.5), ("faculty", 0.5),
+        ("professor", 0.5), ("guro", 0.5), ("adviser", 0.5),
+        ("ma'am", 0.5), ("sir", 0.5),
+        "bastos", "hindi magalang", "suplado", "suplada", "masungit",
+        "mabait", "mababait", "magalang", "magagalang", "courteous",
+        "respectful", "approachable", "friendly",
+        "masusungit", "rude", "disrespectful", "unfriendly",
+    ],
+    "Documents and Records": [
+        "transcript", "tor", "diploma", "certification", "certificate",
+        "credentials", "cav", "transcript of records", "honorable dismissal",
+        "diploma ko", "good moral", "form 137", "form 138",
+        "certificate of grades", "identification card", "id card", "school id",
+        "leave of absence", "certificate of employment", "service record",
+        "personnel record", "201 file",
+    ],
+    "System and Access": [
         "portal", "website", "web site", "sias", "online system",
         "log-in", "login", "log in", "e-services", "e-portal", "online account",
-        # Weighted below default: "online form" alone is a softer/shared
-        # anchor with Ease of Use's confusion descriptors (a comment naming
-        # both, e.g. "nalilito ako sa online form", is really about the form
-        # being confusing, not the portal itself) — see Ease of Use below.
         ("online form", 0.75),
-        # 2026-08-30: unambiguous digital-system-failure vocabulary, distinct
-        # from the physical-facility "sira"/broken anchors elsewhere — these
-        # only ever describe software/system behavior, never a physical
-        # object, so safe as standalone anchors here.
         "glitch", "glitchy", "buggy", "crashed", "crashing", "nag-crash",
         "nag-hang", "hanging", "nag-error", "system error",
+        "account activation", "i-activate", "account recovery",
+        "forgot password", "reset password",
     ],
-    # "mainit"/"init" (hot/heat) and "malamig"/"lamig" (cold) added — a
-    # room-temperature complaint doesn't always name the aircon itself
-    # ("mainit sa office" never mentions "aircon" at all), so the bare
-    # temperature descriptor needs to anchor this topic on its own, not only
-    # the equipment noun. "napaka-"/"sobrang"/"masyadong" prefixed forms are
-    # listed explicitly (same convention as the rest of this file, e.g.
-    # "hindi marunong"/"hindi madunong" above) since _kw_pattern's word
-    # boundaries don't match a concatenated intensifier prefix.
-    "Aircon and Cooling": [
+    "Ease of Use": [
+        ("user-friendly", 1.5), ("user friendly", 1.5),
+        "madaling gamitin",
+        "mahirap gamitin", "nakakalito", "nalilito", "confusing na sundin",
+    ],
+    "Internet Service": [
+        "internet", "wifi", "wi-fi", "signal", "network", "koneksyon",
+        "walang signal", "walang internet", "internet access",
+        "internet subscription", "renewal of internet",
+    ],
+    "Scheduling and Availability": [
+        "schedule", "iskedyul", "appointment", "walang schedule",
+        "walang appointment", "exam schedule", "entrance exam schedule",
+        "walang available na slot", "no available slot", "fully booked",
+    ],
+    "Financial Transaction": [
+        "bayad", "babayaran", "nagbayad", "nagbabayad", "magbayad", "binayaran",
+        "fee", "fees", "singil", "kabayaran", "resibo",
+        "official receipt", "sobrang mahal ang bayad", "tuition", "tuition fee",
+        "petty cash", "reimbursement", "liquidation", "statement of account",
+        "account balance", "remittance", "claim for payment",
+    ],
+    "Facilities and Resources": [
+        # Aircon/cooling
         "aircon", "air-con", "air condition", "aircondition", "air conditioning",
         "electric fan", "bentilador", "pabentilador",
         "mainit", "ang init", "sobrang init", "napakainit", "napaka init",
@@ -255,54 +281,15 @@ TOPIC_KEYWORDS = {
         "walang aircon", "walang air con", "sira ang aircon", "sirang aircon",
         "mahina ang aircon", "mahina aircon", "walang ventilation",
         "poor ventilation", "kulang ventilation", "walang bentilasyon",
-    ],
-    # Restroom-specific words only — split from the old combined "Restroom
-    # and Cleanliness" topic on 2026-08-31 (see candidate_topics comment
-    # above) so a general "malinis"/"marumi" comment with no restroom word
-    # doesn't get tagged with a label that says "Restroom".
-    "Restroom": [
+        # Restroom
         "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
-        # Found missing during 2026-08-29 testing: a supplies complaint
-        # ("walang tissue/sabon") is common enough on its own (without the
-        # comment also naming "banyo"/"CR") to deserve its own anchor,
-        # rather than only being reachable when paired with a restroom word.
         "tissue", "sabon",
-    ],
-    # General tidiness/dirtiness — no restroom word required. "makalat"
-    # (messy/cluttered) and "magulo" (disorganized/messy) added 2026-08-31
-    # after a real comment ("makalat ang office nila") had no anchor at all
-    # in either the old combined topic or this one.
-    #
-    # Weighted 1.5 (the bare location nouns in Restroom/Office-type topics
-    # stay at the default 1): a comment like "napakabaho ng CR" previously
-    # tied 1-1 against "Restroom" (bare "cr") and lost the tie-break purely
-    # because "Restroom" is listed earlier in this dict — even though the
-    # ACTUAL complaint (baho = smell) is a cleanliness issue, "cr" is just
-    # the location. Per the taxonomy: the issue word must outrank a bare
-    # location noun, so a real cleanliness descriptor now always wins that
-    # tie instead of losing it by dict-order accident.
-    #
-    # Deliberately HYGIENE-ONLY (dirt/dust/smell/sanitation) — appearance
-    # words ("pangit", "kaaya-aya", "unpresentable", ...) were removed from
-    # here 2026-09 and moved to Facilities and Equipment's own Appearance/
-    # Presentation item instead. "Di kaaya-ayang tignan ang office" is not
-    # evidence of anything being unclean; conflating the two meant an
-    # appearance-only complaint with no dirt/smell/mess word at all was
-    # still being tagged Cleanliness, which overstates what the respondent
-    # actually said. A comment naming BOTH ("pangit at madumi") still
-    # correctly resolves to Cleanliness on its own merits — "madumi" alone
-    # already outweighs "office" the same way it always has.
-    "Cleanliness": [
+        # Cleanliness (general, not restroom-specific)
         ("kalinisan", 1.5), ("cleanliness", 1.5), ("malinis", 1.5),
         ("marumi", 1.5), ("rumi", 1.5), ("dumi", 1.5), ("madumi", 1.5),
         ("makalat", 1.5), ("kalat", 1.5), ("magulo", 1.5),
         ("dirty", 1.5), ("unclean", 1.5), ("not clean", 1.5),
         ("maalikabok", 1.5), ("alikabok", 1.5), ("dusty", 1.5),
-        # Intensifier prefix is listed both concatenated ("napakabaho") and
-        # spaced ("napaka baho") — real typing varies, and _kw_pattern's
-        # word-boundary matching treats these as two genuinely different
-        # strings (no boundary exists inside "napakabaho" for a bare "baho"
-        # to match through).
         ("mabaho", 1.5), ("ambaho", 1.5), ("napakabaho", 1.5),
         ("napaka baho", 1.5), ("sobrang baho", 1.5), ("ang baho", 1.5),
         ("masyadong mabaho", 1.5), ("masangsang", 1.5), ("mabahong amoy", 1.5),
@@ -311,637 +298,160 @@ TOPIC_KEYWORDS = {
         ("poor sanitation", 1.5), ("filthy", 1.5), ("messy", 1.5),
         ("napakalinis", 1.5), ("napaka linis", 1.5), ("sobrang linis", 1.5),
         ("maayos at malinis", 1.5), ("well cleaned", 1.5), ("sanitary", 1.5),
-    ],
-    "Seating and Furniture": [
+        # Seating and furniture
         "upuan", "silya", "mesa", "bangko", "furniture", "chairs", "seats", "muwebles",
-    ],
-    "Power and Lighting": [
+        # Power and lighting
         "kuryente", "ilaw", "brownout", "blackout", "lighting", "power outage",
         "walang kuryente",
-    ],
-    # Unambiguous compound phrases naming a fairness/impartiality concern —
-    # listed before the generic staff bucket so it wins the tie-break.
-    # "walang palakasan" is lifted straight from the SQD7 survey question
-    # itself, so it's a strong, unambiguous anchor for real client phrasing.
-    "Fairness and Equal Treatment": [
-        "palakasan", "walang palakasan", "paboritism", "favoritism",
-        "nepotism", "bias", "unfair", "hindi patas", "walang katarungan",
-        "may kilala",
-    ],
-    # Unambiguous compound phrases naming a knowledge/competence gap, as
-    # opposed to bare attitude/manners complaints — also listed before the
-    # generic staff bucket.
-    "Staff Competence and Knowledge": [
-        # "madunong" is the dialectal/Bicol-influenced d-for-r rendering of
-        # "marunong" (same intervocalic d~r alternation as dumi/marumi ->
-        # madumi below) — CSPC is in the Bicol region, so this spelling shows
-        # up in real feedback alongside the standard form.
-        "hindi marunong", "hindi madunong", "walang alam", "not knowledgeable", "incompetent",
-        # "hindi alam ng [role]" (third-person: THAT PERSON doesn't know) is a
-        # distinct grammatical pattern from "hindi ko alam" (first-person: I
-        # don't know, self-reflective, unrelated to staff at all — already
-        # used unambiguously elsewhere, e.g. General Feedback comments) —
-        # found missing during 2026-08-29 fresh-comment testing, where "Hindi
-        # alam ng clerk yung sagot" fell through to the generic Staff
-        # Courtesy bucket (via the weighted "clerk" role-noun) instead.
-        "hindi alam ng",
-        "hindi sanay", "untrained", "kulang sa training", "hindi sigurado sa sagot",
-        "hindi updated", "hindi na updated", "hindi pa updated", "outdated",
-        # Bare "sanay" (accustomed/skilled at a job) is a real positive
-        # competence signal on its own ("sanay naman sila sa trabaho nila")
-        # but is more ambiguous than the object nouns elsewhere in this file
-        # (could describe being used to something unrelated to a job) — kept
-        # at reduced weight so it never outranks a more specific competing
-        # topic, only wins when nothing else does.
-        ("sanay", 0.5),
-    ],
-    # Generic demeanor/attitude bucket: role nouns with no more specific
-    # competence/fairness phrase present. Listed after those two so a
-    # comment naming both (e.g. "yung guard, walang palakasan") resolves to
-    # the more specific bucket instead.
-    #
-    # Renamed from "Staff Courtesy and Attitude" on 2026-08-31 — a comment
-    # about STUDENTS being rude ("masungit ang mga estudyante") was landing
-    # on a topic label that literally says "Staff", which read as wrong to
-    # admins even though the plain attitude words below (masungit, bastos,
-    # ...) are unambiguous regardless of who the subject is. WHO the comment
-    # is about is captured at the item level instead (see
-    # TOPIC_ITEM_KEYWORDS["Courtesy and Attitude"]) so the top-level topic
-    # itself no longer assumes "staff".
-    #
-    # Deliberately does NOT include "estudyante"/"student" as a role noun
-    # here (unlike "staff"/"kawani"/... below) — student/mag-aaral is FAR
-    # more likely than the staff-role nouns to appear in a comment that has
-    # nothing to do with anyone's demeanor at all (e.g. "dami ng estudyante"
-    # about crowding, or an enrollment-count remark), so it would wrongly
-    # win this topic on its own. It's only used for item-level refinement
-    # once an unambiguous attitude word below has already resolved the
-    # topic, not as a topic-resolving signal by itself.
-    #
-    # Role nouns (staff/kawani/empleyado/...) are near-synonyms for "this
-    # names a specific person/group" rather than independent signals, so
-    # they're weighted 0.5 each — otherwise a comment naming two synonyms
-    # for the same person (e.g. "yung staff... parang bagong empleyado")
-    # could outscore a single specific phrase in another bucket (e.g. Staff
-    # Competence's "hindi sigurado sa sagot") purely by synonym-stacking.
-    # "bastos" is a real, unambiguous courtesy signal on its own, so it
-    # keeps the default weight of 1.
-    "Courtesy and Attitude": [
-        # "staffs" (common plural typo) added alongside "staff" — the bare
-        # word boundary regex \bstaff\b never matched "staffs" (the boundary
-        # after "staff" sits between two word characters, "f" and "s", not
-        # an actual boundary), so real feedback that pluralized it this way
-        # (very common in Taglish) scored zero role-noun signal before this.
-        ("staff", 0.5), ("staffs", 0.5), ("kawani", 0.5), ("empleyado", 0.5),
-        ("tauhan", 0.5), ("employee", 0.5), ("receptionist", 0.5),
-        ("guard", 0.5), ("security", 0.5), ("clerk", 0.5), ("faculty", 0.5),
-        ("professor", 0.5), ("guro", 0.5), ("adviser", 0.5),
-        ("ma'am", 0.5), ("sir", 0.5),
-        "bastos", "hindi magalang", "suplado", "suplada", "masungit",
-        # Generic attitude/demeanor descriptors — added so a comment
-        # praising or criticizing "sila" (unspecified people) without naming
-        # a role or a specific complaint phrase still anchors this topic.
-        # Previously these words existed only in the SENTIMENT lexicon
-        # (FAST_POSITIVE_WORDS/FAST_NEGATIVE_WORDS), so e.g. "Mababait sila"
-        # scored zero topic signal at all and fell through to General
-        # Feedback despite being an unambiguous courtesy judgment. Bare
-        # "friendly" is safe to include here because the one collision risk
-        # ("user-friendly", an Ease of Use keyword) is handled by weighting
-        # that keyword up below instead of leaving this one out.
-        "mabait", "mababait", "magalang", "magagalang", "courteous",
-        "respectful", "approachable", "friendly",
-        "masungit", "masusungit", "rude", "disrespectful", "unfriendly",
-        # Accommodation/assistance — previously entirely missing from this
-        # topic (and from every other topic): "hindi maayos yung pag
-        # accommodate ng staffs" had no topic anchor at all before this
-        # ("accommodate" matched nothing, and "staffs" didn't match "staff"
-        # — see above), so it fell all the way through to General Feedback
-        # despite being a clear staff-service complaint. Weighted like
-        # "bastos" (1, not 0.5) since these are specific enough complaints
-        # on their own, unlike the bare role nouns above.
-        "accommodate", "accommodating", "accommodation",
-        "inasikaso", "inaasikaso", "aasikasuhin", "asikaso",
-        "pinansin", "pinapansin", "entertained",
-        "walang assistance", "walang tumutulong", "poor assistance",
-        "poor service", "bad attitude", "unhelpful", "not helpful",
-    ],
-    # Idle outsiders/non-clients hanging around the area — a people/noise
-    # complaint, not a facility or staff complaint. Added 2026-08-31 after a
-    # real comment ("sobrang ingay ng mga standby dun") had no anchor
-    # anywhere and fell through to "General Feedback", and a related comment
-    # ("madaming nakatambay sa building nila") was misread by the AI
-    # fallback as a "Facilities and Equipment - Building/Structure" issue
-    # purely because "building" appeared nearby. "standby" here is the local
-    # slang sense (== "tambay"/loiterer), not the English "on standby"
-    # sense — safe in this survey-comment context.
-    "Bystanders and Loitering": [
-        "tambay", "nakatambay", "istambay", "mga tambay", "standby",
-        "mga standby", "loitering", "loiterers",
-        # "-um-" infix conjugations of "tambay" (to loiter) — same affixed-root
-        # gap as "hintay"/"naghintay" above: the word boundary sits at the
-        # infix, not the root, so bare \btambay\b never matches these on its
-        # own. Covers present ("tumatambay"), the casual/contracted form some
-        # users type for it ("tumambay"), future ("tatambay"), and the mag-
-        # affix variant some users use instead ("nagtatambay"/"nagtambay").
-        "tumatambay", "tumambay", "tatambay", "nagtatambay", "nagtambay",
-    ],
-    "Payment and Fees": [
-        # Same affixed-root gap as "hintay" above — "nagbayad"/"magbabayad"
-        # etc. never matched bare \bbayad\b.
-        "bayad", "babayaran", "nagbayad", "nagbabayad", "magbayad", "binayaran",
-        "fee", "fees", "singil", "kabayaran", "resibo",
-        "official receipt", "sobrang mahal ang bayad", "tuition", "tuition fee",
-        # 2026-08-30 cross-check against cqa_db.sql's `services` table —
-        # "Requesting for Reimbursement/Liquidation of Petty Cash Expenses"
-        # (Cash Unit) and "Requesting Statement of Student Accounts
-        # Balances" (Accounting Unit) were real services with zero coverage.
-        "petty cash", "reimbursement", "liquidation", "statement of account",
-        "account balance",
-    ],
-    "Document and Credential Processing": [
-        "transcript", "tor", "diploma", "certification", "certificate",
-        "credentials", "cav", "transcript of records", "honorable dismissal",
-        "diploma ko", "good moral", "form 137", "form 138",
-        "certificate of grades", "identification card", "id card", "school id",
-        "grade change", "correction of grades", "change of grade",
-        # Found missing 2026-08-29 cross-checking cqa_db.sql's `services`
-        # table against the taxonomy — "Requesting for Clearance" (Accounting
-        # Unit) is a real, distinct CSPC service with zero coverage before
-        # this, and clearance is a very commonly complained-about process at
-        # Philippine schools (needed before enrollment/graduation/release of
-        # records).
-        "clearance",
-        # 2026-08-30 second cross-check against cqa_db.sql's `services` table —
-        # HR-office document requests (Leave of Absence, Certificate of
-        # Employment, Service Record) had zero coverage; these are real,
-        # distinct document/credential requests even though the requester is
-        # an employee rather than a student.
-        "leave of absence", "certificate of employment", "service record",
-    ],
-    "Enrollment and Registration": [
-        "enrollment", "enrolment", "pagpapatala", "nagpatala", "nagpapatala",
-        "magpapatala", "ipatala", "registration", "rehistrasyon",
-        "matriculation", "cross-enrollment", "re-admission", "shifting",
-        "mag-shift", "nag-shift",
-        # Found missing 2026-08-29 alongside "clearance" above — "Applying
-        # for Graduation" (Registrar) had zero coverage. Deliberately only
-        # the unambiguous English terms — "pagtapos"/"pagtatapos" (to
-        # finish/end) is far too generic in Tagalog (finishing a line,
-        # finishing a process, etc.) to use safely as an anchor here.
-        "graduation", "commencement", "graduating",
-        # 2026-08-30 cross-check: "Applying for College/Graduate Entrance
-        # Examination" (Student Testing and Admission) and "Adding/Dropping
-        # of Subjects" (Registrar) were both real services with zero
-        # coverage. "exam"/"pagsusulit" alone are too generic (could mean any
-        # academic exam unrelated to admission), so anchored as the specific
-        # compound phrases actually used for this service.
-        "entrance exam", "entrance examination", "college entrance exam",
-        "add/drop", "adding of subjects", "dropping of subjects",
-        "drop subject", "dropping subject",
-    ],
-    "Communication and Information": [
-        "impormasyon", "information", "communication", "announcement", "abiso",
-        "notice", "paalala", "text blast", "walang paalam", "walang reply",
-        "hindi sumasagot", "no response", "not informed", "nobody informed",
-        "no update", "walang update", "no updates", "walang updates", "email",
-        # Found missing during 2026-08-29 testing: comments about getting a
-        # different answer from every person asked kept getting misread as
-        # Staff Competence or Process Efficiency — this is really about
-        # information consistency, not any one staff member's skill or the
-        # number of steps involved, so it gets its own unambiguous anchor.
-        "iba-iba sagot", "iba't ibang sagot", "magkaibang sagot",
-        "kanya-kanyang sagot", "conflicting information",
-        "contradicting information", "inconsistent information",
-        "nagkontra-kontra",
-    ],
-    # "transaction" is the unambiguous object-noun anchor for any comment
-    # about the transaction itself (as opposed to "Queueing" — waiting for
-    # your turn — or "Process Efficiency" — how simple the steps were).
-    # Renamed from "Transaction Speed" (2026-09): the old name baked in an
-    # assumption this topic was always about speed, which is exactly the bug
-    # that caused a plain "Hindi maayos yung transaction" (no speed/duration
-    # word anywhere) to get labeled a duration complaint. This topic anchor
-    # only ever decides that the comment is ABOUT the transaction — whether
-    # it's specifically about speed is now decided by _transaction_subtopic
-    # (see item_label_override) using explicit slow/fast evidence words, not
-    # by the mere presence of "transaction".
-    "Transaction": [
-        "transaction", "pag-transact", "processing time", "release ng resulta",
-        "ma-release", "na-release",
-        # Bare "processing" (not just the "processing time" phrase) — e.g.
-        # "sobrang bagal ng processing" names no other object noun at all.
-        # Weighted below default like "proseso"/"process" in Process
-        # Efficiency below (same reasoning: on its own it's a soft signal,
-        # easily outranked by a more specific competing topic).
-        ("processing", 0.75),
-    ],
-    # Compound Taglish/English phrases that unambiguously describe the
-    # process itself being simple/tedious, not any specific object.
-    "Process Efficiency": [
-        "hassle-free", "hassle free", "walang abala", "walang hassle",
-        "streamlined", "isang beses lang", "isang hakbang lang", "one-stop",
-        # "madaming" is the dialectal d-for-r rendering of "maraming" (see
-        # the Staff Competence "madunong" note above for the same alternation).
-        "maraming hakbang", "madaming hakbang", "kumplikado",
-        # Low-weight generic fallback: "the process" alone is too vague to
-        # win against a topic with a real specific anchor (e.g. "proseso ng
-        # enrollment" still resolves to Enrollment), but it's better than no
-        # signal at all for a bare "ang bagal ng proseso" complaint that
-        # names no other specific object.
-        ("proseso", 0.5), ("process", 0.5),
-    ],
-    "Ease of Use": [
-        # Weighted above the default 1 (2026-09, alongside adding bare
-        # "friendly" as a Courtesy and Attitude anchor below) so a genuine
-        # "user-friendly" mention still wins outright — otherwise "friendly"
-        # matching inside "user-friendly" (there IS a word boundary at the
-        # hyphen) would tie Ease of Use against Courtesy and Attitude on a
-        # comment that says nothing else, and Courtesy would win the tie
-        # purely by being declared earlier in this dict.
-        ("user-friendly", 1.5), ("user friendly", 1.5),
-        "madaling gamitin",
-        "mahirap gamitin", "nakakalito", "nalilito", "confusing na sundin",
-    ],
-    # Broad physical-facility fallback — only object nouns that don't already
-    # belong to one of the more specific facility subtypes above. Also
-    # covers library, dormitory, and transportation via item-level
-    # refinement (TOPIC_ITEM_KEYWORDS) — see candidate_topics comment.
-    "Facilities and Equipment": [
+        # Equipment/appearance/building/parking (excludes library/dormitory/
+        # transportation, which are their own topics below)
         "pasilidad", "kagamitan", "equipment", "facilities", "aparatus",
-        "makina", "istruktura", "parking", "paradahan",
-        "library", "aklatan", "librong hiniram", "libro", "book", "books",
-        "dormitory", "dorm", "bed space", "boarding house",
-        "transportation", "sasakyan", "service vehicle", "shuttle",
-        "printer", "computer lab", "computer laboratory", "computer shop",
-        # Appearance/presentation — moved here from "Cleanliness" 2026-09 (see
-        # that topic's comment). These describe how a place LOOKS, which is a
-        # judgment about upkeep/presentation, not a claim of dirt or odor —
-        # "pangit tignan ang office" carries no hygiene evidence at all, so it
-        # belongs under this broader physical-facility topic instead. Weighted
-        # 1.5 to match Cleanliness's own issue-word weighting, so an
-        # appearance complaint reliably outranks a bare location noun the
-        # same way a real cleanliness complaint already does.
+        "makina", "istruktura", "parking", "paradahan", "printer",
+        "computer lab", "computer laboratory", "computer shop",
         ("pangit", 1.5), ("pangit tignan", 1.5), ("pangit tingnan", 1.5),
         ("di magandang tignan", 1.5), ("hindi magandang tignan", 1.5),
         ("di magandang tingnan", 1.5), ("hindi magandang tingnan", 1.5),
         ("di kaaya aya", 1.5), ("hindi kaaya aya", 1.5), ("kaaya aya", 1.5),
-        ("kaaya-aya", 1.5), ("di kaayang aya", 1.5), ("hindi kaayang aya", 1.5),
-        ("kaayang aya", 1.5),
-        ("di kaayang ayang", 1.5), ("hindi kaayang ayang", 1.5),
-        ("kaayang ayang", 1.5),
-        # "kaaya ayang"/"kaaya-ayang" (linker "-ng" attached before "tignan",
-        # e.g. "kaaya-ayang tignan") is yet another real spelling, distinct
-        # from "kaayang ayang"/"kaayang aya" above — Filipino attaches the
-        # linker to whichever syllable precedes the following word, so both
-        # renderings occur in real feedback.
-        ("di kaaya ayang", 1.5), ("hindi kaaya ayang", 1.5),
-        ("kaaya ayang", 1.5),
-        ("di kaaya-ayang", 1.5), ("hindi kaaya-ayang", 1.5),
-        ("kaaya-ayang", 1.5),
-        ("hindi presentable", 1.5), ("di presentable", 1.5),
+        ("kaaya-aya", 1.5), ("hindi presentable", 1.5), ("di presentable", 1.5),
         ("unpresentable", 1.5), ("unattractive", 1.5),
         ("unpleasant looking", 1.5), ("poor appearance", 1.5),
         ("poorly maintained", 1.5),
-        # Positive appearance — kept distinct from Cleanliness's own positive
-        # vocabulary ("malinis", "napakalinis", ...), same split as negative.
-        # Deliberately NOT bare "maganda"/"presentable" as topic anchors: both
-        # are too generic on their own (regression-tested — "maganda naman
-        # siguro pero wala akong masabi, ordinaryo lang" is filler/no-topic
-        # text, not a facility-appearance comment, and got mis-tagged when
-        # bare "maganda" was tried here). Same "ambiguous bare descriptor"
-        # problem this file already avoids elsewhere (see FAST_POSITIVE_WORDS'
-        # note on "asikaso"). Only compound/phrase forms, which are specific
-        # enough to reliably mean facility appearance, are used as anchors.
         ("maayos tignan", 1.5), ("maayos tingnan", 1.5),
         ("pleasant looking", 1.5), ("well maintained", 1.5),
     ],
-    "Health and Medical Services": [
-        "clinic", "klinika", "doktor", "doctor", "dentista", "dentist",
-        "dental", "medical certificate", "gamot", "nurse", "nars",
-        "konsultasyon", "check-up", "checkup", "medical consultation",
+    "Bystanders and Loitering": [
+        "tambay", "nakatambay", "istambay", "mga tambay", "standby",
+        "mga standby", "loitering", "loiterers",
+        "tumatambay", "tumambay", "tatambay", "nagtatambay", "nagtambay",
     ],
-    "Guidance and Counseling Services": [
-        "guidance office", "guidance councilor", "guidance counselor",
-        "counseling", "counselor", "guidance", "pagpapayo",
-    ],
-    "Scholarship and Financial Assistance": [
+    "Scholarship and Assistance": [
         "scholarship", "iskolarship", "iskolar", "scholar",
-        "financial assistance", "grants-in-aid", "scholarship grant",
-        # "grant" bare — verified no collision with any other topic's
-        # keyword list (checked 2026-09-19); in this school's Taglish survey
-        # comments it's used exclusively for scholarship/financial-assistance
-        # disbursements, never as a verb elsewhere in the corpus.
-        "grant",
-        # Wrong/insufficient disbursement-amount phrasing — enumerated across
-        # the common Tagalog qualifier+particle forms (mali/maling/kulang x
-        # ang/yung/na x amount/halaga) rather than the literal reported
-        # sentence, since the connecting particle varies comment to comment.
-        # Deliberately NOT bare "amount"/"halaga"/"mali"/"kulang" as topic
-        # anchors — those are generic enough to misfire on unrelated Payment
-        # and Fees or other complaints (same "ambiguous bare descriptor" trap
-        # already avoided elsewhere in this file). Weighted 1.5 (same
-        # convention as other intensified/compound phrases in this file) so
-        # a comment that also happens to mention "resibo" (Payment and Fees'
-        # own anchor, weight 1) still resolves here instead of tying and
-        # falling to whichever topic is listed first in this dict.
+        "financial assistance", "grants-in-aid", "scholarship grant", "grant",
         ("mali ang amount", 1.5), ("mali yung amount", 1.5), ("maling amount", 1.5),
         ("mali ang halaga", 1.5), ("mali yung halaga", 1.5), ("maling halaga", 1.5),
         ("kulang ang amount", 1.5), ("kulang yung amount", 1.5), ("kulang na amount", 1.5),
         ("kulang ang halaga", 1.5), ("kulang yung halaga", 1.5), ("kulang na halaga", 1.5),
     ],
+    "Enrollment Process": [
+        "enrollment", "enrolment", "pagpapatala", "nagpatala", "nagpapatala",
+        "magpapatala", "ipatala", "registration", "rehistrasyon",
+        "matriculation", "cross-enrollment", "re-admission", "shifting",
+        "mag-shift", "nag-shift",
+    ],
+    "Academic Transaction": [
+        "add/drop", "adding of subjects", "dropping of subjects",
+        "drop subject", "dropping subject",
+        "grade change", "correction of grades", "change of grade",
+        "graduation", "commencement", "graduating",
+        "entrance exam", "entrance examination", "college entrance exam",
+    ],
+    "Health Service": [
+        "clinic", "klinika", "doktor", "doctor", "dentista", "dentist",
+        "dental", "medical certificate", "gamot", "nurse", "nars",
+        "konsultasyon", "check-up", "checkup", "medical consultation",
+    ],
+    "Clearance Process": [
+        "clearance",
+    ],
+    "Leave Process": [
+        "leave of absence", "sick leave", "vacation leave", "bakasyon leave",
+    ],
+    "Accreditation Process": [
+        "accreditation", "akreditasyon", "accredit",
+    ],
+    "Complaint Handling": [
+        "grievance", "sumbong", "hinaing",
+    ],
+    "ID Services": [
+        "identification card", "id card", "school id", "employee id",
+        "id printing",
+    ],
+    "Dormitory Service": [
+        "dormitory", "dorm", "bed space", "boarding house",
+    ],
+    "Supplies and Resources": [
+        "supplies", "materials", "accountable forms", "office supplies",
+    ],
+    "Transportation Service": [
+        "transportation", "sasakyan", "service vehicle", "shuttle",
+    ],
+    "Library Service": [
+        "library", "aklatan", "librong hiniram", "libro", "book", "books",
+        "borrowing", "hiram ng libro", "pagsauli ng libro", "returning books",
+    ],
+    "Research Service": [
+        "research assistance", "pananaliksik", "research consultation",
+    ],
+    # "General Service" and "Service Procedure"'s referral-only phrasing are
+    # deliberately kept sparse — see the module comment above. These are
+    # only ever reached via Gemini (online) or the Gemini fallback (offline).
 }
 
 # ---------------------------------------------------------------------------
 # ITEM-LEVEL REFINEMENT (topic -> "{Topic} - {Specific Item}")
 # One more level of specificity than TOPIC_KEYWORDS, applied only AFTER a
-# topic has already been resolved by keyword_topic_override. Not every topic
-# has a meaningful item breakdown (e.g. "Queueing and Waiting Time" doesn't
-# name a physical thing), so only the topics below ever get a " - Item"
-# suffix — everything else stays at the plain topic label. This keeps the
-# taxonomy "only the applicable topic" specific, per admin's request, instead
-# of forcing an item guess onto every comment.
+# topic has already been resolved by keyword_topic_override. Every item
+# label is sentiment-neutral by design (see the taxonomy module comment
+# above) — an item never encodes whether the thing it names was good or bad,
+# only what it was. Not every topic has a meaningful item breakdown; those
+# without one stay at the plain topic label.
 #
-# Each entry is an ORDERED list of (item_label, keywords) — order matters for
-# the tie-break in item_label_override, same convention as TOPIC_KEYWORDS:
-# on an equal keyword-hit count, the first-listed item wins, so the more
-# specific/common item for that topic should be listed first.
-#
-# item_label already includes the full "{Topic} - {Item}" text so badge/color
-# matching in server.js (which does substring .includes() checks like
-# "aircon" or "facility") keeps working unchanged — the parent topic's own
-# keyword is still present as a substring of the combined label.
+# Each entry is an ORDERED list of (item_label, keywords) — on an equal
+# keyword-hit count, the first-listed item wins, so the more specific/common
+# item for that topic is listed first.
 # ---------------------------------------------------------------------------
 TOPIC_ITEM_KEYWORDS = {
-    "Queueing and Waiting Time": [
-        ("Queueing and Waiting Time - Numbering System", [
-            "numero", "priority number", "numbering system",
-        ]),
-        ("Queueing and Waiting Time - Long Lines", [
-            "pila", "linya", "queue", "queueing", "waiting line",
+    "Processing": [
+        ("Processing - Waiting Time", [
+            "pila", "linya", "queue", "queueing", "waiting line", "numero",
             "hintay", "naghintay", "naghihintay", "hinihintay", "hinintay",
             "pinaghihintayan", "maghintay",
             "antay", "umaantay", "inaantay", "antayin",
+            "priority number", "numbering system",
+        ]),
+        ("Processing - Release Time", [
+            "release ng resulta", "ma-release", "na-release", "release",
+        ]),
+        ("Processing - Processing Time", [
+            "transaction", "pag-transact", "processing time",
+            ("processing", 0.75),
         ]),
     ],
-    # "Transaction" deliberately has NO entry here — its subtopic
-    # (General/Slow/Fast) is decided by the evidence-gated _transaction_subtopic
-    # function instead of generic keyword-count matching (see
-    # item_label_override's special case for this topic, and the module
-    # comment above _transaction_subtopic).
-    "Process Efficiency": [
-        ("Process Efficiency - Complexity/Red Tape", [
-            "maraming hakbang", "madaming hakbang", "kumplikado",
+    "Service Procedure": [
+        ("Service Procedure - Referral Process", [
+            "referral", "irefer", "i-refer", "pinadala sa ibang office",
         ]),
-        ("Process Efficiency - Simplicity", [
+        ("Service Procedure - Process Steps", [
+            "maraming hakbang", "madaming hakbang", "kumplikado",
             "hassle-free", "hassle free", "walang abala", "walang hassle",
             "streamlined", "isang beses lang", "isang hakbang lang", "one-stop",
         ]),
-    ],
-    "Ease of Use": [
-        ("Ease of Use - Confusing Design", [
-            "mahirap gamitin", "nakakalito", "nalilito", "confusing na sundin",
-        ]),
-        ("Ease of Use - User-Friendly Design", [
-            "user-friendly", "user friendly", "madaling gamitin",
+        ("Service Procedure - Submission Process", [
+            ("proseso", 0.5), ("process", 0.5),
         ]),
     ],
-    "Aircon and Cooling": [
-        # Equipment-noun items listed FIRST: when a comment names the actual
-        # broken/missing unit (e.g. "sira ang aircon, sobrang init"), that's
-        # the more specific, actionable complaint — the temperature is a
-        # symptom of it, not a separate issue. A comment naming ONLY a
-        # temperature word (no aircon/fan mentioned at all, e.g. "mainit sa
-        # office") still resolves correctly to Temperature/Ventilation below
-        # since it's the only item with any match at all.
-        ("Aircon and Cooling - Electric Fan", ["electric fan", "bentilador", "pabentilador"]),
-        ("Aircon and Cooling - Air Conditioning Unit", [
-            "aircon", "air-con", "air condition", "aircondition", "air conditioning",
-            "walang aircon", "walang air con", "sira ang aircon", "sirang aircon",
-            "mahina ang aircon", "mahina aircon",
+    "Requirements": [
+        ("Requirements - Requirement Completeness", [
+            "kulang na requirements", "incomplete requirements",
+            "kulang sa requirements", "hindi kumpleto ang requirements",
         ]),
-        ("Aircon and Cooling - Temperature/Ventilation", [
-            "mainit", "ang init", "sobrang init", "napakainit", "napaka init",
-            "masyadong mainit", "too hot", "very hot", "hot room", "hot office",
-            "stuffy", "kulob", "maalinsangan", "malamig", "sobrang lamig",
-            "napakalamig", "too cold", "very cold", "walang ventilation",
-            "poor ventilation", "kulang ventilation", "walang bentilasyon",
+        ("Requirements - Eligibility", [
+            "eligibility", "kwalipikado", "hindi kwalipikado",
+            "hindi qualified", "not qualified", "not eligible",
+        ]),
+        ("Requirements - Requirement Clarity", [
+            "requirements", "kakailanganin", "kailangang dokumento",
         ]),
     ],
-    "Restroom": [
-        ("Restroom - Supplies (Soap/Tissue)", [
-            "tissue", "sabon",
+    "Approval Process": [
+        ("Approval Process - Signature/Endorsement", [
+            "endorsement", "endorso", "signature", "pirma", "lagda",
         ]),
-        ("Restroom - Restroom/CR", [
-            "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
+        ("Approval Process - Approval Status", [
+            "pending approval", "hindi pa naaprubahan", "hindi pa na-approve",
         ]),
-    ],
-    # Cleanliness itself previously had NO item breakdown at all — every
-    # cleanliness comment landed at the bare "Cleanliness" label with no
-    # location. LOCATION is the item here (the issue is always "cleanliness"
-    # — that's the topic already); "Restroom/CR" is listed first since it's
-    # the single most common cleanliness complaint location, reusing the
-    # exact same CR/banyo keywords as the Restroom topic above rather than a
-    # separate list, so the two stay in sync automatically. "Office" is the
-    # fallback default (last, per this file's tie-break convention: first
-    # listed wins a tie, so more specific locations must come before it) —
-    # matches the existing default used elsewhere in this codebase (e.g.
-    # `client_type` defaulting to 'Citizen') when no more specific location
-    # is actually named.
-    "Cleanliness": [
-        ("Cleanliness - Restroom/CR", [
-            "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
-        ]),
-        ("Cleanliness - Classroom", ["classroom", "class room", "silid aralan"]),
-        ("Cleanliness - Laboratory", [
-            "laboratory", "lab", "computer laboratory", "computer lab",
-        ]),
-        ("Cleanliness - Library", ["library", "aklatan", "lib"]),
-        ("Cleanliness - Canteen", ["canteen", "cafeteria"]),
-        ("Cleanliness - Clinic", ["clinic", "klinika"]),
-        ("Cleanliness - Waiting Area", ["waiting area", "waiting room"]),
-        ("Cleanliness - Hallway/Corridor", ["hallway", "corridor", "pasilyo"]),
-        ("Cleanliness - Lobby", ["lobby"]),
-        ("Cleanliness - Grounds", [
-            "grounds", "campus", "surroundings", "paligid", "labas",
-        ]),
-        ("Cleanliness - Office", ["office", "opisina", "room"]),
-    ],
-    "Seating and Furniture": [
-        ("Seating and Furniture - Chairs", ["upuan", "silya", "chairs", "seats"]),
-        ("Seating and Furniture - Tables", ["mesa"]),
-        ("Seating and Furniture - Benches", ["bangko"]),
-        ("Seating and Furniture - General Furniture", ["furniture", "muwebles"]),
-    ],
-    "Power and Lighting": [
-        ("Power and Lighting - Power Outage", [
-            "kuryente", "brownout", "blackout", "power outage", "walang kuryente",
-        ]),
-        ("Power and Lighting - Lighting", ["ilaw", "lighting"]),
-    ],
-    "Facilities and Equipment": [
-        ("Facilities and Equipment - Appearance/Presentation", [
-            "pangit", "pangit tignan", "pangit tingnan",
-            "di magandang tignan", "hindi magandang tignan",
-            "di magandang tingnan", "hindi magandang tingnan",
-            "di kaaya aya", "hindi kaaya aya", "kaaya aya", "kaaya-aya",
-            "di kaayang aya", "hindi kaayang aya", "kaayang aya",
-            "di kaayang ayang", "hindi kaayang ayang", "kaayang ayang",
-            "di kaaya ayang", "hindi kaaya ayang", "kaaya ayang",
-            "di kaaya-ayang", "hindi kaaya-ayang", "kaaya-ayang",
-            "hindi presentable", "di presentable", "unpresentable",
-            "unattractive", "unpleasant looking", "poor appearance",
-            "poorly maintained",
-            "maayos tignan", "maayos tingnan", "pleasant looking",
-            "well maintained",
-        ]),
-        ("Facilities and Equipment - Parking", ["parking", "paradahan"]),
-        ("Facilities and Equipment - Library", [
-            "library", "aklatan", "librong hiniram", "libro", "book", "books",
-        ]),
-        ("Facilities and Equipment - Dormitory/Housing", [
-            "dormitory", "dorm", "bed space", "boarding house",
-        ]),
-        ("Facilities and Equipment - Transportation", [
-            "transportation", "sasakyan", "service vehicle", "shuttle",
-        ]),
-        ("Facilities and Equipment - Equipment/Machine", [
-            "kagamitan", "equipment", "makina", "aparatus", "printer",
-            "computer lab", "computer laboratory", "computer shop",
-        ]),
-        ("Facilities and Equipment - Building/Structure", ["istruktura"]),
-    ],
-    "Online System and Portal": [
-        ("Online System and Portal - Login/Account", [
-            "log-in", "login", "log in", "online account",
-        ]),
-        ("Online System and Portal - Website", ["website", "web site"]),
-        ("Online System and Portal - System Errors/Bugs", [
-            "glitch", "glitchy", "buggy", "crashed", "crashing", "nag-crash",
-            "nag-hang", "hanging", "nag-error", "system error",
-        ]),
-        ("Online System and Portal - Online System", [
-            "portal", "sias", "online form", "online system", "e-services", "e-portal",
-        ]),
-    ],
-    "Internet Connection": [
-        ("Internet Connection - Wifi", ["wifi", "wi-fi"]),
-        ("Internet Connection - Signal", [
-            "signal", "network", "walang signal", "koneksyon", "walang internet",
-        ]),
-    ],
-    "Fairness and Equal Treatment": [
-        ("Fairness and Equal Treatment - Favoritism", [
-            "palakasan", "walang palakasan", "paboritism", "favoritism", "nepotism",
-            "may kilala",
-        ]),
-        ("Fairness and Equal Treatment - Bias/Unequal Treatment", [
-            "bias", "unfair", "hindi patas", "walang katarungan",
-        ]),
-    ],
-    "Staff Competence and Knowledge": [
-        ("Staff Competence and Knowledge - Training Gap", [
-            "hindi sanay", "untrained", "kulang sa training",
-        ]),
-        ("Staff Competence and Knowledge - Knowledge/Answer Accuracy", [
-            "hindi marunong", "hindi madunong", "walang alam", "not knowledgeable",
-            "incompetent", "hindi sigurado sa sagot",
-        ]),
-    ],
-    "Document and Credential Processing": [
-        # Compound/specific phrases listed before the generic "Certification"
-        # catch-all so e.g. "good moral certificate" (which also contains the
-        # bare word "certificate") resolves to the more specific bucket on a
-        # tied keyword-hit count, same tie-break convention as TOPIC_KEYWORDS.
-        ("Document and Credential Processing - Transcript of Records", [
-            "transcript", "tor", "transcript of records",
-        ]),
-        ("Document and Credential Processing - Diploma", ["diploma", "diploma ko"]),
-        ("Document and Credential Processing - Honorable Dismissal", [
-            "honorable dismissal",
-        ]),
-        ("Document and Credential Processing - Good Moral Certificate", [
-            "good moral",
-        ]),
-        ("Document and Credential Processing - Academic Records", [
-            "form 137", "form 138", "certificate of grades",
-        ]),
-        ("Document and Credential Processing - ID Card", [
-            "identification card", "id card", "school id",
-        ]),
-        ("Document and Credential Processing - Grade Change/Correction", [
-            "grade change", "correction of grades", "change of grade",
-        ]),
-        # Listed before the generic "Certification" catch-all below, same
-        # tie-break reasoning as "Good Moral Certificate" above — "certificate
-        # of employment" also contains the bare word "certificate".
-        ("Document and Credential Processing - HR Employee Records", [
-            "leave of absence", "certificate of employment", "service record",
-        ]),
-        ("Document and Credential Processing - Certification", [
-            "certification", "certificate", "cav",
-        ]),
-        ("Document and Credential Processing - Clearance", ["clearance"]),
-    ],
-    "Enrollment and Registration": [
-        ("Enrollment and Registration - Graduation", [
-            "graduation", "commencement", "graduating",
-        ]),
-        ("Enrollment and Registration - Matriculation", ["matriculation"]),
-        ("Enrollment and Registration - Cross-Enrollment", ["cross-enrollment"]),
-        ("Enrollment and Registration - Re-admission", ["re-admission"]),
-        ("Enrollment and Registration - Shifting", ["shifting"]),
-        ("Enrollment and Registration - Entrance Examination", [
-            "entrance exam", "entrance examination", "college entrance exam",
-        ]),
-        ("Enrollment and Registration - Adding/Dropping of Subjects", [
-            "add/drop", "adding of subjects", "dropping of subjects",
-            "drop subject", "dropping subject",
-        ]),
-        ("Enrollment and Registration - Enrollment/Registration Process", [
-            "enrollment", "enrolment", "pagpapatala", "nagpatala", "nagpapatala",
-            "magpapatala", "ipatala", "registration", "rehistrasyon",
-        ]),
-    ],
-    "Payment and Fees": [
-        ("Payment and Fees - Official Receipt", ["resibo", "official receipt"]),
-        ("Payment and Fees - Tuition Fee", ["tuition", "tuition fee"]),
-        ("Payment and Fees - Petty Cash Reimbursement/Liquidation", [
-            "petty cash", "reimbursement", "liquidation",
-        ]),
-        ("Payment and Fees - Statement of Account", [
-            "statement of account", "account balance",
-        ]),
-        ("Payment and Fees - Fees", [
-            "bayad", "babayaran", "nagbayad", "nagbabayad", "magbayad", "binayaran",
-            "fee", "fees", "singil", "kabayaran", "sobrang mahal ang bayad",
-        ]),
-    ],
-    # Ordered most-specific-role first, then the general "who" split
-    # (Student vs. Staff/Employee), same tie-break convention as elsewhere
-    # in this file — a comment naming e.g. both "guard" and "staff" resolves
-    # to the more specific Security Guard item.
-    "Courtesy and Attitude": [
-        # Listed first — a comment naming both an accommodation phrase AND a
-        # bare role noun (e.g. "hindi maayos mag-accommodate yung staff")
-        # resolves to the more specific item, same tie-break convention as
-        # the rest of this file.
-        ("Courtesy and Attitude - Accommodation/Assistance", [
-            "accommodate", "accommodating", "accommodation",
-            "inasikaso", "inaasikaso", "aasikasuhin", "asikaso",
-            "pinansin", "pinapansin", "entertained",
-            "walang assistance", "walang tumutulong", "poor assistance",
-            "unhelpful", "not helpful",
-        ]),
-        ("Courtesy and Attitude - Security Guard", ["guard", "security"]),
-        ("Courtesy and Attitude - Front Desk/Clerk", ["receptionist", "clerk"]),
-        ("Courtesy and Attitude - Faculty/Adviser", [
-            "faculty", "professor", "guro", "adviser",
-        ]),
-        ("Courtesy and Attitude - Student", [
-            "estudyante", "mag-aaral", "student", "students",
-        ]),
-        ("Courtesy and Attitude - Staff/Employee", [
-            "staff", "staffs", "kawani", "empleyado", "tauhan", "employee",
+        ("Approval Process - Approval Time", [
+            "approval", "aprubado", "approve", "na-approve", "ina-approve",
         ]),
     ],
     "Communication and Information": [
@@ -951,108 +461,286 @@ TOPIC_ITEM_KEYWORDS = {
             "contradicting information", "inconsistent information",
             "nagkontra-kontra",
         ]),
-        ("Communication and Information - Schedule/Policy Changes", [
-            "walang paalam",
-        ]),
         ("Communication and Information - Response to Inquiries", [
             "walang reply", "hindi sumasagot", "no response",
+        ]),
+        ("Communication and Information - Status Update", [
+            "no update", "walang update", "no updates", "walang updates",
+            "not informed", "nobody informed", "walang paalam",
         ]),
         ("Communication and Information - Announcements", [
             "announcement", "abiso", "notice", "paalala", "text blast",
         ]),
     ],
-    # Health, Guidance, and Scholarship previously had no item breakdown at
-    # all (added 2026-08-24 with only a top-level topic — see the
-    # candidate_topics comment above), so every comment landed at the plain
-    # topic label with no further specificity. Health's keyword list already
-    # spans clearly distinct services (dental vs. general consult vs.
-    # medicine vs. paperwork), so it gets the same kind of breakdown as the
-    # other topics above.
-    "Health and Medical Services": [
-        ("Health and Medical Services - Dental Services", [
-            "dentista", "dentist", "dental",
+    "Staff Service": [
+        ("Staff Service - Fairness/Equal Treatment", [
+            "palakasan", "walang palakasan", "paboritism", "favoritism",
+            "nepotism", "bias", "unfair", "hindi patas", "walang katarungan",
+            "may kilala",
         ]),
-        ("Health and Medical Services - Medical Certificate", [
-            "medical certificate",
+        ("Staff Service - Staff Competence", [
+            "hindi marunong", "hindi madunong", "walang alam", "not knowledgeable",
+            "incompetent", "hindi sigurado sa sagot", "hindi sanay", "untrained",
+            "kulang sa training", "hindi alam ng",
         ]),
-        ("Health and Medical Services - Medicine/Supplies", ["gamot"]),
-        ("Health and Medical Services - Consultation/Check-up", [
+        ("Staff Service - Technical Assistance", [
+            "technical assistance", "it support", "tulong teknikal",
+        ]),
+        ("Staff Service - Staff Assistance", [
+            "accommodate", "accommodating", "accommodation",
+            "inasikaso", "inaasikaso", "aasikasuhin", "asikaso",
+            "pinansin", "pinapansin", "entertained",
+            "walang assistance", "walang tumutulong", "poor assistance",
+            "poor service", "unhelpful", "not helpful",
+        ]),
+        ("Staff Service - Staff Courtesy", [
+            ("staff", 0.5), ("staffs", 0.5), ("kawani", 0.5), ("empleyado", 0.5),
+            ("tauhan", 0.5), ("employee", 0.5), ("receptionist", 0.5),
+            ("guard", 0.5), ("security", 0.5), ("clerk", 0.5), ("faculty", 0.5),
+            ("professor", 0.5), ("guro", 0.5), ("adviser", 0.5),
+            ("ma'am", 0.5), ("sir", 0.5),
+            "bastos", "hindi magalang", "suplado", "suplada", "masungit",
+            "mabait", "mababait", "magalang", "magagalang", "courteous",
+            "respectful", "approachable", "friendly",
+            "masusungit", "rude", "disrespectful", "unfriendly", "bad attitude",
+        ]),
+    ],
+    "Documents and Records": [
+        ("Documents and Records - Transcript of Records", [
+            "transcript", "tor", "transcript of records",
+        ]),
+        ("Documents and Records - Diploma", ["diploma", "diploma ko"]),
+        ("Documents and Records - Honorable Dismissal", ["honorable dismissal"]),
+        ("Documents and Records - Good Moral Certificate", ["good moral"]),
+        ("Documents and Records - Academic Records", [
+            "form 137", "form 138", "certificate of grades",
+        ]),
+        ("Documents and Records - HR Employee Records", [
+            "certificate of employment", "service record", "personnel record",
+            "201 file",
+        ]),
+        ("Documents and Records - Certification", [
+            "certification", "certificate", "cav",
+        ]),
+    ],
+    "System and Access": [
+        ("System and Access - Login Access", [
+            "log-in", "login", "log in", "online account",
+        ]),
+        ("System and Access - Account Activation", [
+            "account activation", "i-activate",
+        ]),
+        ("System and Access - Account Recovery", [
+            "account recovery", "forgot password", "reset password",
+        ]),
+        ("System and Access - System Availability", [
+            "glitch", "glitchy", "buggy", "crashed", "crashing", "nag-crash",
+            "nag-hang", "hanging", "nag-error", "system error",
+        ]),
+        ("System and Access - Account Access", [
+            "portal", "sias", "online form", "online system", "e-services",
+            "e-portal", "website", "web site",
+        ]),
+    ],
+    "Ease of Use": [
+        ("Ease of Use - Form/Portal Usability", [
+            ("user-friendly", 1.5), ("user friendly", 1.5), "madaling gamitin",
+            "mahirap gamitin", "nakakalito", "nalilito", "confusing na sundin",
+        ]),
+    ],
+    "Internet Service": [
+        ("Internet Service - Account Renewal", [
+            "internet subscription", "renewal of internet",
+        ]),
+        ("Internet Service - Connectivity", [
+            "wifi", "wi-fi", "signal", "network", "walang signal", "koneksyon",
+            "walang internet",
+        ]),
+        ("Internet Service - Service Availability", [
+            "internet", "internet access",
+        ]),
+    ],
+    "Scheduling and Availability": [
+        ("Scheduling and Availability - Exam Schedule", [
+            "exam schedule", "entrance exam schedule",
+        ]),
+        ("Scheduling and Availability - Appointment Availability", [
+            "appointment", "walang appointment",
+        ]),
+        ("Scheduling and Availability - Service Availability", [
+            "schedule", "iskedyul", "walang schedule",
+            "walang available na slot", "no available slot", "fully booked",
+        ]),
+    ],
+    "Financial Transaction": [
+        ("Financial Transaction - Official Receipt", ["resibo", "official receipt"]),
+        ("Financial Transaction - Tuition Fee", ["tuition", "tuition fee"]),
+        ("Financial Transaction - Reimbursement Process", ["reimbursement"]),
+        ("Financial Transaction - Liquidation Process", ["liquidation", "petty cash"]),
+        ("Financial Transaction - Account Balance", [
+            "statement of account", "account balance",
+        ]),
+        ("Financial Transaction - Remittance Processing", ["remittance"]),
+        ("Financial Transaction - Claim Processing", ["claim for payment"]),
+        ("Financial Transaction - Payment Processing", [
+            "bayad", "babayaran", "nagbayad", "nagbabayad", "magbayad", "binayaran",
+            "fee", "fees", "singil", "kabayaran", "sobrang mahal ang bayad",
+        ]),
+    ],
+    "Facilities and Resources": [
+        ("Facilities and Resources - Aircon/Cooling", [
+            "electric fan", "bentilador", "pabentilador",
+            "aircon", "air-con", "air condition", "aircondition", "air conditioning",
+            "walang aircon", "walang air con", "sira ang aircon", "sirang aircon",
+            "mahina ang aircon", "mahina aircon",
+            "mainit", "ang init", "sobrang init", "napakainit", "napaka init",
+            "masyadong mainit", "too hot", "very hot", "hot room", "hot office",
+            "stuffy", "kulob", "maalinsangan", "malamig", "sobrang lamig",
+            "napakalamig", "too cold", "very cold", "walang ventilation",
+            "poor ventilation", "kulang ventilation", "walang bentilasyon",
+        ]),
+        ("Facilities and Resources - Restroom Condition", [
+            "tissue", "sabon",
+            "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
+        ]),
+        ("Facilities and Resources - Cleanliness", [
+            ("kalinisan", 1.5), ("cleanliness", 1.5), ("malinis", 1.5),
+            ("marumi", 1.5), ("rumi", 1.5), ("dumi", 1.5), ("madumi", 1.5),
+            ("makalat", 1.5), ("kalat", 1.5), ("magulo", 1.5),
+            ("dirty", 1.5), ("unclean", 1.5), ("not clean", 1.5),
+            ("maalikabok", 1.5), ("alikabok", 1.5), ("dusty", 1.5),
+            ("mabaho", 1.5), ("ambaho", 1.5), ("napakabaho", 1.5),
+            ("napaka baho", 1.5), ("sobrang baho", 1.5), ("ang baho", 1.5),
+            ("masyadong mabaho", 1.5), ("masangsang", 1.5), ("mabahong amoy", 1.5),
+            ("amoy mabaho", 1.5), ("smelly", 1.5), ("stinky", 1.5),
+            ("foul smell", 1.5), ("bad smell", 1.5), ("unsanitary", 1.5),
+            ("poor sanitation", 1.5), ("filthy", 1.5), ("messy", 1.5),
+            ("napakalinis", 1.5), ("napaka linis", 1.5), ("sobrang linis", 1.5),
+            ("maayos at malinis", 1.5), ("well cleaned", 1.5), ("sanitary", 1.5),
+        ]),
+        ("Facilities and Resources - Seating/Furniture", [
+            "upuan", "silya", "mesa", "bangko", "furniture", "chairs", "seats", "muwebles",
+        ]),
+        ("Facilities and Resources - Power/Lighting", [
+            "kuryente", "ilaw", "brownout", "blackout", "lighting", "power outage",
+            "walang kuryente",
+        ]),
+        # Split 2026-09-25 from a single conflated "Equipment Condition" item
+        # that mixed appearance-judgment phrases with actual equipment nouns
+        # under one label — a comment naming neither ("hindi maayos yung
+        # opisina", no equipment, no specific appearance phrase) was still
+        # landing on "Equipment Condition" via Gemini because that item's
+        # own example hint (its first 3 keywords) was "pangit, pangit
+        # tignan, pangit tingnan", nothing to do with equipment at all, so
+        # the label Gemini picked didn't match what its own hint told it to
+        # match on. Listed with Equipment/Machine first so a comment naming
+        # BOTH a device and an appearance phrase (e.g. "pangit ang printer")
+        # resolves to the more specific Equipment/Machine on a tie.
+        ("Facilities and Resources - Equipment/Machine", [
+            "kagamitan", "equipment", "makina", "aparatus", "printer",
+            "computer lab", "computer laboratory", "computer shop",
+        ]),
+        ("Facilities and Resources - Appearance/Condition", [
+            ("pangit", 1.5), ("pangit tignan", 1.5), ("pangit tingnan", 1.5),
+            ("di magandang tignan", 1.5), ("hindi magandang tignan", 1.5),
+            ("di magandang tingnan", 1.5), ("hindi magandang tingnan", 1.5),
+            ("di kaaya aya", 1.5), ("hindi kaaya aya", 1.5), ("kaaya aya", 1.5),
+            ("kaaya-aya", 1.5), ("hindi presentable", 1.5), ("di presentable", 1.5),
+            ("unpresentable", 1.5), ("unattractive", 1.5),
+            ("unpleasant looking", 1.5), ("poor appearance", 1.5),
+            ("poorly maintained", 1.5),
+            ("maayos tignan", 1.5), ("maayos tingnan", 1.5),
+            ("pleasant looking", 1.5), ("well maintained", 1.5),
+        ]),
+        ("Facilities and Resources - Building/Structure", ["istruktura"]),
+        ("Facilities and Resources - Parking", ["parking", "paradahan"]),
+        ("Facilities and Resources - Resource Availability", ["pasilidad", "facilities"]),
+    ],
+    "Scholarship and Assistance": [
+        ("Scholarship and Assistance - Grant Amount", [
+            ("mali ang amount", 1.5), ("mali yung amount", 1.5), ("maling amount", 1.5),
+            ("mali ang halaga", 1.5), ("mali yung halaga", 1.5), ("maling halaga", 1.5),
+            ("kulang ang amount", 1.5), ("kulang yung amount", 1.5), ("kulang na amount", 1.5),
+            ("kulang ang halaga", 1.5), ("kulang yung halaga", 1.5), ("kulang na halaga", 1.5),
+            "grant",
+        ]),
+        ("Scholarship and Assistance - Application Process", [
+            "scholarship", "iskolarship", "iskolar", "scholar",
+        ]),
+        ("Scholarship and Assistance - Grant Release", [
+            "financial assistance", "grants-in-aid", "scholarship grant",
+        ]),
+    ],
+    "Enrollment Process": [
+        ("Enrollment Process - Matriculation", ["matriculation"]),
+        ("Enrollment Process - Cross-Enrollment", ["cross-enrollment"]),
+        ("Enrollment Process - Re-admission", ["re-admission"]),
+        ("Enrollment Process - Shifting", ["shifting", "mag-shift", "nag-shift"]),
+        ("Enrollment Process - Enrollment Procedure", [
+            "enrollment", "enrolment", "pagpapatala", "nagpatala", "nagpapatala",
+            "magpapatala", "ipatala", "registration", "rehistrasyon",
+        ]),
+    ],
+    "Academic Transaction": [
+        ("Academic Transaction - Subject Adjustment", [
+            "add/drop", "adding of subjects", "dropping of subjects",
+            "drop subject", "dropping subject",
+        ]),
+        ("Academic Transaction - Grade Correction", [
+            "grade change", "correction of grades", "change of grade",
+        ]),
+        ("Academic Transaction - Graduation Application", [
+            "graduation", "commencement", "graduating",
+        ]),
+        ("Academic Transaction - Entrance Examination", [
+            "entrance exam", "entrance examination", "college entrance exam",
+        ]),
+    ],
+    "Health Service": [
+        ("Health Service - Dental Services", ["dentista", "dentist", "dental"]),
+        ("Health Service - Certificate Release", ["medical certificate"]),
+        ("Health Service - Medicine/Supplies", ["gamot"]),
+        ("Health Service - Consultation/Treatment", [
             "clinic", "klinika", "doktor", "doctor", "nurse", "nars",
             "konsultasyon", "check-up", "checkup", "medical consultation",
         ]),
     ],
-    "Scholarship and Financial Assistance": [
-        ("Scholarship and Financial Assistance - Financial Assistance/Grants-in-Aid", [
-            "financial assistance", "grants-in-aid",
+    "ID Services": [
+        ("ID Services - ID Printing", ["id printing", "employee id"]),
+        ("ID Services - ID Application", [
+            "identification card", "id card", "school id",
         ]),
-        ("Scholarship and Financial Assistance - Scholarship Application/Grant", [
-            "scholarship", "iskolarship", "iskolar", "scholar", "scholarship grant",
+    ],
+    "Library Service": [
+        ("Library Service - Return Process", [
+            "pagsauli ng libro", "returning books",
         ]),
-        ("Scholarship and Financial Assistance - Insufficient Amount", [
-            "grant", "kulang", "insufficient", "hindi sapat",
-            "mali ang amount", "mali yung amount", "maling amount",
-            "mali ang halaga", "mali yung halaga", "maling halaga",
-            "kulang ang amount", "kulang yung amount", "kulang na amount",
-            "kulang ang halaga", "kulang yung halaga", "kulang na halaga",
+        ("Library Service - Borrowing Process", [
+            "borrowing", "hiram ng libro", "librong hiniram",
         ]),
+        ("Library Service - Book Availability", [
+            "library", "aklatan", "libro", "book", "books",
+        ]),
+    ],
+    # No keyword coverage — these two are reachable only through Gemini (see
+    # the taxonomy module comment above), never through keyword_topic_override/
+    # item_label_override's lexicon matching. Still registered here (even with
+    # empty keyword lists) so gemini_model.ALL_TOPICS actually includes them as
+    # valid outputs, matching shared/topicTaxonomy.js's admin-override dropdown.
+    "Complaint Handling": [
+        ("Complaint Handling - Response", []),
+        ("Complaint Handling - Follow-up", []),
+        ("Complaint Handling - Resolution Process", []),
+    ],
+    "General Service": [
+        ("General Service - Service Information", []),
+        ("General Service - Service Accessibility", []),
+        ("General Service - Overall Process", []),
     ],
 }
 
 
-# ---------------------------------------------------------------------------
-# TRANSACTION SUBTOPIC — evidence-gated, not keyword-count-based like every
-# other topic's item breakdown. The old "Transaction Speed" item logic fired
-# on the bare word "transaction" alone (its item list literally anchored
-# "Transaction Duration" on ["transaction", "pag-transact"] — the SAME words
-# that already decided the top-level topic), so any transaction comment with
-# no speed/duration language at all ("Hindi maayos yung transaction") still
-# got labeled a duration complaint. This function requires actual slow/fast
-# vocabulary — reusing the sentiment lexicon's own negation machinery
-# (_keyword_spans/_is_negated) so "Hindi mabilis ang transaction" doesn't
-# score Fast just because "mabilis" appears.
-# ---------------------------------------------------------------------------
-TRANSACTION_SLOW_WORDS = [
-    "slow", "mabagal", "matagal", "tagal", "bagal", "katagal", "antagal",
-    "too long", "took too long", "waiting too long", "delay", "delayed",
-    "naantala", "na-delay", "nadelay",
-]
-TRANSACTION_FAST_WORDS = [
-    "fast", "quick", "quickly", "mabilis", "efficient", "efficiently",
-    "agad", "instant", "agad natapos", "natapos agad",
-]
-
-
-def _transaction_subtopic(text):
-    """
-    "Transaction - General" (default — no speed/duration evidence either
-    way), "Transaction - Slow", or "Transaction - Fast". Scored per-clause
-    with the same negation lookback as lexicon_sentiment, so a negated slow
-    word counts as fast evidence and vice versa, instead of a negated
-    "mabilis" being ignored (and wrongly reading as neutral-toward-Fast) or
-    counted as Fast outright.
-    """
-    lowered = text.lower()
-    slow_count = 0
-    fast_count = 0
-    for clause in re.split(r'[.,;:!?]+', lowered):
-        clause = clause.strip()
-        if not clause:
-            continue
-        for s, _e in _keyword_spans(clause, TRANSACTION_SLOW_WORDS):
-            if _is_negated(clause, s):
-                fast_count += 1
-            else:
-                slow_count += 1
-        for s, _e in _keyword_spans(clause, TRANSACTION_FAST_WORDS):
-            if _is_negated(clause, s):
-                slow_count += 1
-            else:
-                fast_count += 1
-    if slow_count > fast_count:
-        return "Transaction - Slow"
-    if fast_count > slow_count:
-        return "Transaction - Fast"
-    return "Transaction - General"
+GENERAL_FEEDBACK = "General Feedback"
 
 
 def item_label_override(topic, text):
@@ -1060,22 +748,27 @@ def item_label_override(topic, text):
     Best-matching "{topic} - {item}" label for a topic that already resolved
     via keyword_topic_override, or None if that topic has no item breakdown
     or the text doesn't name any specific item within it. Same
-    count-then-order tie-break as keyword_topic_override, scoped to the
-    winning topic's own item list.
+    weighted-sum-then-order tie-break as keyword_topic_override, scoped to
+    the winning topic's own item list.
 
-    "Transaction" is special-cased to always resolve via _transaction_subtopic
-    instead of the generic keyword-count path above — see that function's
-    docstring.
+    Bug fixed 2026-09-26: this used to score each item by len(_matched_spans(...))
+    — literally counting matches — which silently ignored every keyword's
+    declared weight (e.g. Cleanliness's ("madumi", 1.5) counted as a plain
+    1, same as a bare 1-weighted location noun). That meant an issue-specific
+    word like "madumi" (dirty) could never actually outrank a bare location
+    noun like "cr" the way the weight was designed to guarantee — it silently
+    fell back to whichever item happened to be listed first, defeating the
+    entire point of weighting items at all. "madumi ang cr sa office" is
+    exactly this case: Cleanliness's weighted "madumi" (1.5) must beat
+    Restroom Condition's bare "cr" (1), not tie with it.
     """
-    if topic == "Transaction":
-        return _transaction_subtopic(text)
     groups = TOPIC_ITEM_KEYWORDS.get(topic)
     if not groups:
         return None
     lowered = text.lower()
     hits = {}
     for item_label, keywords in groups:
-        count = len(_matched_spans(lowered, keywords))
+        count = sum(weight for _, _, weight in _matched_spans(lowered, keywords))
         if count:
             hits[item_label] = count
     if not hits:
@@ -1088,214 +781,25 @@ def item_label_override(topic, text):
     return None
 
 
-GENERAL_FEEDBACK = "General Feedback"
-
 # ---------------------------------------------------------------------------
-# TWO-STAGE ZERO-SHOT
-# The keyword lexicon above resolves most Taglish comments instantly and
-# never touches the model. Zero-shot is the fallback for the minority of
-# comments with no keyword anchor (typically plain English or phrasing the
-# lexicon doesn't cover). Running every specific candidate through the model
-# on every such comment is both slower (more candidates = more compute, and
-# CPU zero-shot is already the heaviest step in the pipeline) and,
-# empirically, *less* accurate — close-in-meaning subtypes spread across the
-# same single classification pass dilute the model's confidence on the
-# correct broad category.
-#
-# So the fallback is staged instead:
-#   Stage 1 — classify against the broad categories below (one entry per
-#             conceptual group). Fast: short hypotheses, one pass.
-#   Stage 2 — only runs if stage 1's winner is a broad bucket that has
-#             specific subtypes (Facilities and Equipment, or Staff and
-#             Service Quality), and picks which specific subtype fits, or
-#             falls back to the group's generic bucket if none clearly fits.
-#             This means the extra compute for specificity is only spent on
-#             comments that are actually in that group.
-# Candidate labels are short noun phrases fed through HYPOTHESIS_TEMPLATE,
-# NOT full hand-written sentences. This matches the simple "This example is
-# about {}."-style template these MNLI/XNLI zero-shot checkpoints are
-# actually calibrated against — empirically it scores meaningfully better
-# *and* faster than long custom sentence hypotheses (fewer tokens per
-# candidate, and no lexical-overlap artifacts from stuffing example nouns
-# into the hypothesis text, e.g. a hypothesis that name-drops "internet,
-# wifi" was found to spuriously win on totally unrelated comments just from
-# surface word overlap). Taglish examples belong in keyword_topic_override's
-# lexicon instead, which is exactly what handles Taglish/local-language
-# input already — this template only ever runs on comments that lexicon
-# didn't already resolve.
+# OFFICE-AWARE HINT
+# Superseded by gemini_model.py's own office_hint (free-text office/cluster
+# name passed straight into the Gemini prompt as soft context — see its
+# PROMPT_TEMPLATE) now that Gemini, not a zero-shot model, is the fallback.
 # ---------------------------------------------------------------------------
-HYPOTHESIS_TEMPLATE = "This text is about {}."
-
-BROAD_TOPICS = [
-    "Queueing and Waiting Time",
-    "Transaction",
-    "Process Efficiency",
-    "Ease of Use",
-    "Online System and Portal",
-    "Internet Connection",
-    "Facilities and Equipment",
-    "Staff and Service Quality",
-    "Payment and Fees",
-    "Document and Credential Processing",
-    "Enrollment and Registration",
-    "Communication and Information",
-    "Health and Medical Services",
-    "Guidance and Counseling Services",
-    "Scholarship and Financial Assistance",
-]
-
-BROAD_LABELS = {
-    "Queueing and Waiting Time": "long queues or waiting in line",
-    "Transaction": "the speed of the transaction itself",
-    "Process Efficiency": "the process being simple or complicated",
-    "Ease of Use": "a system or form being easy or hard to use",
-    "Online System and Portal": "an online portal, website, or system account",
-    "Internet Connection": "internet or wifi connectivity problems",
-    "Facilities and Equipment": "physical facilities or equipment, like aircon, restrooms, or furniture",
-    "Staff and Service Quality": "staff behavior, competence, or fairness",
-    "Payment and Fees": "fees, payments, or receipts",
-    "Document and Credential Processing": "processing of documents, certificates, or credentials",
-    "Enrollment and Registration": "enrollment, registration, or matriculation",
-    "Communication and Information": "how clearly information or updates were communicated",
-    # More concrete/distinctive phrasing than a plain "clinic, doctor,
-    # dentist" list — testing on 2026-08-24 found that shorter, more generic
-    # phrasing here acted as a false attractor in zero-shot, winning with
-    # 35-49% confidence on unrelated comments (a rude guard, a nice staff
-    # member, favoritism, a queue complaint). This wording measurably fixed
-    # that false-attraction in the same test (though zero-shot topic
-    # classification for this specific label group remains generally
-    # unreliable regardless of wording — most genuine health/medical
-    # comments are still resolved via the TOPIC_KEYWORDS lexicon above, not
-    # this zero-shot fallback, which is only reached when the lexicon has no
-    # hit at all).
-    "Health and Medical Services": "seeing a doctor, dentist, or nurse at the campus health clinic for a checkup or treatment",
-    "Guidance and Counseling Services": "guidance counseling or the guidance office",
-    "Scholarship and Financial Assistance": "a scholarship grant or financial assistance",
-}
-
-# broad-topic key -> the specific taxonomy label used when a comment lands
-# on that broad bucket but stage 2 doesn't clear its own threshold (or the
-# group has no stage 2 at all). Most groups map to themselves 1:1; the two
-# grouped buckets (facility / staff) map down to their generic sub-label.
-BROAD_TO_SPECIFIC_FALLBACK = {
-    "Facilities and Equipment": "Facilities and Equipment",
-    "Staff and Service Quality": "Courtesy and Attitude",
-}
-
-FACILITY_SUBTOPICS = [
-    "Aircon and Cooling",
-    "Restroom",
-    "Cleanliness",
-    "Seating and Furniture",
-    "Power and Lighting",
-    "Facilities and Equipment",
-]
-
-FACILITY_LABELS = {
-    "Aircon and Cooling": "the aircon, electric fan, or room temperature",
-    "Restroom": "the restroom or comfort room specifically",
-    "Cleanliness": "the overall cleanliness or tidiness of the place, not specifically the restroom",
-    "Seating and Furniture": "chairs, benches, tables, or other furniture",
-    "Power and Lighting": "electricity, brownouts, or lighting",
-    "Facilities and Equipment": "some other physical facility, building, or equipment issue",
-}
-
-STAFF_SUBTOPICS = [
-    "Courtesy and Attitude",
-    "Staff Competence and Knowledge",
-    "Fairness and Equal Treatment",
-]
-
-STAFF_LABELS = {
-    "Courtesy and Attitude": "someone (staff, faculty, or a student) being polite, rude, or courteous",
-    "Staff Competence and Knowledge": "staff being knowledgeable or skilled at their job",
-    "Fairness and Equal Treatment": "staff treating everyone fairly and without favoritism",
-}
-
-# Stage-2 group registry: broad topic -> (candidate list, label map).
-SUBTOPIC_GROUPS = {
-    "Facilities and Equipment": (FACILITY_SUBTOPICS, FACILITY_LABELS),
-    "Staff and Service Quality": (STAFF_SUBTOPICS, STAFF_LABELS),
-}
-
-# Confidence floors for each stage. Below the floor, the comment genuinely
-# doesn't lean toward any specific theme in that stage, so it stays at the
-# broader/safer answer instead of forcing a low-confidence specific guess.
-# With ~12 broad candidates a uniform/no-signal read is well under 0.10 each,
-# and a real winner clears ~0.20+ in practice; with 3-5 subtypes uniform is
-# ~0.20-0.33.
-GENERAL_FALLBACK_THRESHOLD = 0.20
-SUBTOPIC_THRESHOLD = 0.25
-
-broad_label_list = [BROAD_LABELS[t] for t in BROAD_TOPICS]
-broad_label_to_topic = {v: k for k, v in BROAD_LABELS.items()}
-
-# ---------------------------------------------------------------------------
-# OFFICE-AWARE HINT (soft, additive — never a hard override)
-# The comment text is always the primary signal: keyword hits above resolve
-# a comment outright regardless of which office the survey was for, and this
-# hint only ever nudges the zero-shot STAGE 1 score by a small additive
-# amount before picking the top broad category. That keeps a comment about
-# "walang wifi" tagged Internet Connection even on the Registrar's survey —
-# the office only breaks genuine near-ties (e.g. a vague "maganda naman"
-# style comment with no strong lexical signal in any direction) instead of
-# steering a comment that already has a clear textual answer.
-#
-# Matched against office_name/cluster_name substrings so it stays correct as
-# offices are added/renamed, instead of hardcoding office IDs.
-# ---------------------------------------------------------------------------
-OFFICE_HINT_KEYWORDS = {
-    "Payment and Fees": ["accounting", "cashier", "budget", "finance"],
-    "Document and Credential Processing": ["registrar", "records"],
-    "Enrollment and Registration": ["registrar", "records", "admission"],
-    "Facilities and Equipment": ["general services", "supply", "motorpool"],
-    "Communication and Information": ["information", "public affairs", "ict", "mis"],
-    "Online System and Portal": ["ict", "mis", "information technology"],
-    "Health and Medical Services": ["health services", "clinic", "dental"],
-    "Guidance and Counseling Services": ["guidance", "counseling"],
-    "Scholarship and Financial Assistance": ["scholarship", "cash unit", "student affairs"],
-}
-
-# Small enough to only decide a near-tie (stage-1 scores of otherwise
-# similar candidates typically differ by single-digit-percent margins at the
-# uncertain end of the distribution); nowhere near enough to overturn a
-# comment with genuine textual signal for a different category.
-OFFICE_HINT_BOOST = 0.05
-
-
-def office_hint_topics(office_text):
-    """
-    Broad topics to nudge for a given office/cluster name string, or an
-    empty set if nothing matches. Case-insensitive substring match against
-    OFFICE_HINT_KEYWORDS.
-    """
-    if not office_text:
-        return set()
-    lowered = office_text.lower()
-    return {
-        topic for topic, needles in OFFICE_HINT_KEYWORDS.items()
-        if any(needle in lowered for needle in needles)
-    }
 
 
 def keyword_topic_override(text):
     """
     Best-matching topic by object-noun keyword count, or None if no keyword
-    hit at all. Empirically, the zero-shot topic model's read on short
-    Taglish phrases is unreliable even with a richer hypothesis template —
-    e.g. "mahina ang aircon" can score highest on an unrelated category and
-    lowest on the correct one. A small additive score boost can't close a
-    gap that size, so a keyword hit on these curated, unambiguous
-    local-language nouns wins outright instead of just nudging the model.
-    The zero-shot model is kept as the fallback for comments that don't
-    contain any of these anchors.
-
-    (Tried flipping this — AI first, lexicon as fallback — on 2026-08-24;
-    reverted after measuring the regression. See heavy_model.classify_topic's
-    docstring for the concrete numbers and the reason a confidence gate
-    can't safely make that swap: the model lands similar confidence on both
-    correct and incorrect top picks for this data, so no threshold cleanly
-    separates them.)
+    hit at all. As of 2026-09-25 (see analyze.py's module comment), no
+    production comment is actually CLASSIFIED via this function anymore —
+    every online and offline comment goes straight to Gemini (see
+    heavy_model.analyze_pure_ai). This function is still called two ways:
+    detect_junk_topic's "is this actually real vocabulary" guard below (not
+    a classification, just a safety check), and heavy_model.analyze()'s
+    lexicon-first hybrid, kept only for test_accuracy.py's lexicon-only
+    scoring.
     """
     lowered = text.lower()
     hits = {}
@@ -1317,26 +821,23 @@ def keyword_topic_override(text):
 # Used two ways:
 #   1. The offline/fast path (fast_sentiment): no model at all, this is the
 #      entire answer.
-#   2. The heavy/live path (heavy_model.classify_sentiment): tried FIRST,
-#      before the transformer. Empirically, the multilingual sentiment
-#      transformer (tabularisai/multilingual-sentiment-analysis) is
-#      miscalibrated on short Tagalog/Taglish text in exactly the way the
-#      topic zero-shot model is miscalibrated on Taglish topics (see
-#      keyword_topic_override's docstring): plainly positive Tagalog
-#      sentences ("mabilis na-release yung resulta ko", "hassle-free talaga")
-#      routinely score highest on Neutral, and negated phrases ("walang
-#      palakasan dito, pantay-pantay lahat") can score highest on Very
-#      Negative because the model reacts to the raw negative-coded word
-#      inside the negation instead of the negation itself. A small additive
-#      boost can't fix a gap that size, so — same convention as topic
-#      keywords — a clear lexicon hit wins outright and the transformer is
-#      reserved for text with no keyword coverage (nuanced English, genuinely
-#      mixed reviews, sarcasm), which is exactly where it adds real value.
-#      (Tried the opposite ordering — AI first, lexicon as a confidence-gated
-#      fallback — on 2026-08-24; reverted after measuring the regression from
-#      114/117 to 94/117 on the sentiment test suite, for the same root
-#      cause as the topic model: the transformer's confidence doesn't
-#      reliably separate its right answers from its wrong ones on this data.)
+#   2. The offline HYBRID path (heavy_model.analyze): tried FIRST, before
+#      Gemini. Empirically, a general-purpose multilingual sentiment
+#      transformer (tried and replaced — see heavy_model.py's docstring) is
+#      miscalibrated on short Tagalog/Taglish text in exactly the way a
+#      zero-shot topic model is miscalibrated on Taglish topics: plainly
+#      positive Tagalog sentences ("mabilis na-release yung resulta ko",
+#      "hassle-free talaga") routinely score highest on Neutral, and negated
+#      phrases ("walang palakasan dito, pantay-pantay lahat") can score
+#      highest on Very Negative because the model reacts to the raw
+#      negative-coded word inside the negation instead of the negation
+#      itself. A small additive boost can't fix a gap that size, so — same
+#      convention as topic keywords — a clear lexicon hit wins outright and
+#      Gemini is reserved for text with no keyword coverage.
+#
+# The ONLINE path (heavy_model.analyze_pure_ai) never calls this — Gemini
+# alone decides sentiment there, per the 2026-09-22 decision that AI speed/
+# consistency for live comments takes priority over the lexicon.
 #
 # Negation handling: a NEGATOR word ("hindi", "wala", "walang", "di", "huwag",
 # "ayaw", "not", "no", "never", "without") found in the up-to-3 words
@@ -1362,19 +863,8 @@ FAST_NEGATIVE_WORDS = [
     "poor", "bad", "slow", "broken", "rude", "worst", "terrible", "awful",
     "annoying", "frustrating", "difficult", "messy", "disappoint",
     "disappointed", "disappointing", "disappointment",
-    # English/short-descriptor gaps found in 2026-08-26 testing (~150-case
-    # multi-office suite) — plainly negative on their own, unlike the bare
-    # ambiguous descriptors this file otherwise avoids, so safe as standalone
-    # anchors: outages/outdated things, being late, and "dirty"/"confusing"
-    # which oddly only had Tagalog coverage (marumi/nalilito) before this.
     "dirty", "confusing", "outdated", "late", "lost", "not working",
     "brownout", "blackout", "power outage",
-    # Communication-failure phrasing: these were previously anchored only in
-    # TOPIC_KEYWORDS' Communication and Information group (a topic signal),
-    # but they are just as clearly a *negative sentiment* signal on their own
-    # and were missing from the sentiment lexicon entirely, so a plain
-    # "the office never replied" comment fell through to Neutral/the
-    # transformer instead of resolving outright like other lexicon hits.
     "walang paalam", "walang reply", "hindi sumasagot", "hindi sinagot",
     "hindi sumagot", "walang sagot", "no response", "no reply",
     "never replied", "not informed", "nobody informed",
@@ -1382,27 +872,10 @@ FAST_NEGATIVE_WORDS = [
     "wala pang balita", "walang balita",
     "walang wifi", "walang internet", "no wifi", "no internet", "no signal",
     "walang stock", "out of stock", "no stock",
-    # Price complaints — deliberately compound/intensified phrases, not the
-    # bare word "mahal" (which also means "dear/beloved" in Tagalog and would
-    # misfire on unrelated positive text), same collision-avoidance approach
-    # as SENTIMENT_COLLISION_PHRASES below.
     "sobrang mahal", "napakamahal", "masyadong mahal", "overpriced",
     "too expensive",
-    # Staff-attitude descriptors found missing from both the sentiment and
-    # topic lexicons — "bastos" was the only unambiguous negative attitude
-    # word covered before this, but these are just as common and just as
-    # unambiguous (unlike bare "mabagal"-style descriptors, they only ever
-    # describe a person's demeanor).
     "suplado", "suplada", "masungit", "sungit", "mayabang",
-    # Found missing during 2026-08-29 fresh-comment testing: "nagla-lag"/
-    # "lumalag" (lagging) is a common, unambiguous system-slowness complaint
-    # with no other meaning in this context, same category as "sira"/"hindi
-    # gumagana" above.
     "nagla-lag", "lumalag", "laggy",
-    # 2026-08-30 vocabulary pass — additional common Tagalog/English/Taglish
-    # words found NOT covered by either lexicon, distinct from words already
-    # present above. Only added words that are unambiguous negative signals
-    # on their own (same bar as everything else in this list).
     "nakakabwisit", "nakakagalit", "nakakadismaya", "nakakapagod",
     "walang silbi", "walang kwenta na", "walang malasakit", "pabaya",
     "abusado", "walang modo", "walang disiplina", "naantala", "na-delay",
@@ -1412,58 +885,20 @@ FAST_NEGATIVE_WORDS = [
     "unreliable", "chaotic", "disorganized", "incomplete", "faulty",
     "malfunctioning", "glitch", "glitchy", "buggy", "crashed", "crashing",
     "nag-crash", "nag-hang", "hanging",
-    # "antagal" (informal contraction of "ang tagal") — verified missing:
-    # "tagal"/"matagal"/"bagal" above only match their own word boundary, and
-    # "antagal" has no word boundary between "an" and "tagal" (concatenated,
-    # not two separate words), so it never matched any existing entry.
     "antagal",
-    # Temperature complaints — same word as the Aircon and Cooling topic
-    # anchor above, but needed here too since sentiment and topic are scored
-    # independently; without this, "mainit sa office" resolved the topic
-    # correctly but scored no sentiment at all (stayed Neutral).
     "mainit", "ang init", "sobrang init", "napakainit", "napaka init",
     "masyadong mainit", "maalinsangan", "kulob", "too hot", "very hot",
-    # Cleanliness/odor complaints — "malinis"/"marumi"/"madumi" already exist
-    # via the Cleanliness topic keywords (which double as this file's own
-    # sentiment signal there), but smell specifically had zero coverage in
-    # either lexicon.
     "mabaho", "ambaho", "napakabaho", "napaka baho", "sobrang baho",
     "ang baho", "masyadong mabaho", "masangsang",
     "mabahong amoy", "amoy mabaho", "smelly", "stinky", "foul smell",
     "bad smell", "unsanitary",
-    # Appearance/presentability — "di kaaya-aya"/"hindi kaaya-aya" is caught
-    # by the existing negation mechanism against "kaaya-aya" (already a
-    # FAST_POSITIVE_WORDS entry below), but a bare negative descriptor with
-    # no positive counterpart to negate ("pangit", "unpresentable") had no
-    # anchor at all.
     "pangit", "unpresentable", "hindi presentable", "unattractive",
     "poor appearance", "poorly maintained",
-    # Staff accommodation/assistance — "hindi accommodating"/"not helpful"
-    # already negate correctly via the existing mechanism (see
-    # "accommodating"/"helpful" in FAST_POSITIVE_WORDS), but these bare
-    # negative phrasings have no positive counterpart to negate against.
     "hindi inaasikaso", "di inaasikaso", "hindi pinapansin", "di pinapansin",
     "walang assistance", "walang tumutulong", "poor assistance", "poor service",
     "bad attitude",
-    # Courtesy/attitude morphological variants missing before this fix —
-    # "masungit"/"rude" were covered but not their reduplicated-plural form
-    # ("masusungit", used when describing a plural "sila") or these common
-    # English synonyms.
     "masusungit", "disrespectful", "unfriendly",
-    # "mali"/"maling"/"incorrect" — plain, unambiguous negative descriptors
-    # that had no sentiment anchor at all, e.g. "Mali yung amount na
-    # nailagay sa receipt ko" scored no sentiment despite clearly complaining.
-    # Deliberately NOT bare "wrong" — collides with the common English idiom
-    # "nothing wrong with it" (meaning fine/neutral), which this file's
-    # NEGATOR_WORDS list can't catch since "nothing" isn't a recognized
-    # negator; found via regression suite per this file's root-cause rule.
     "mali", "maling", "incorrect",
-    # Queue-length descriptors — "matagal"/"tagal"/"antagal" above cover
-    # waiting *duration*, but "mahaba"/"haba" (long) describing the queue
-    # itself was missing entirely, e.g. "masyadong mahaba ang pila" scored no
-    # sentiment. Deliberately compound/intensified phrases, not the bare word
-    # "mahaba" (ambiguous elsewhere, e.g. "mahabang buhok" = long hair),
-    # same collision-avoidance approach as the "mahal" price phrases above.
     "mahaba ang pila", "mahabang pila", "napakahaba ang pila",
     "sobrang haba ng pila", "ang haba ng pila", "long line", "long queue",
 ]
@@ -1472,10 +907,6 @@ FAST_POSITIVE_WORDS = [
     "masaya", "masayang", "maayos", "ayos naman", "okay naman", "ok naman",
     "walang problema", "walang reklamo", "pantay", "patas", "madali",
     "kadali", "mahusay", "sanay", "stable", "malinaw", "maalaga", "magiliw",
-    # "marunong"/"madunong" are the standard and dialectal (d-for-r, common in
-    # this Bicol-region school's feedback) spellings of "knowledgeable" — a
-    # bare positive here so "hindi marunong"/"hindi madunong" correctly flip
-    # to Negative via the existing negation handling below.
     "marunong", "madunong",
     "propesyonal", "tulong", "tumulong", "tinulungan",
     "walang abala", "walang hassle", "isang beses lang", "isang hakbang lang",
@@ -1485,54 +916,15 @@ FAST_POSITIVE_WORDS = [
     "hassle free", "streamlined", "efficient", "smooth", "convenient",
     "fair", "equal", "commend", "professional", "professionally", "professionalism",
     "appreciate", "appreciated",
-    # Common attitude/manner descriptors missing before this fix — only
-    # "mabait" was covered; "magalang" (polite) is just as common and
-    # unambiguous, since (unlike bare "mabagal"-style words) it only ever
-    # describes demeanor.
     "magalang", "matulungin", "maasikaso",
-    # 2026-08-30 vocabulary pass — same rationale as the FAST_NEGATIVE_WORDS
-    # addition above: real words a client would plausibly write that weren't
-    # covered yet, unambiguous enough to stand alone as a positive anchor.
     "maagap", "matiyaga", "masipag", "accommodating", "approachable",
     "considerate", "welcoming", "sulit", "astig", "solid", "top-notch",
     "seamless", "responsive", "on-time", "prompt",
     "organized", "spot on", "kaaya-aya", "mapagkalinga",
-    # "all goods" — plural "goods" doesn't match the bare "good" anchor above
-    # (\b...\b word-boundary matching requires a boundary right after "good",
-    # which the trailing "s" removes), e.g. "All goods transaction" scored no
-    # sentiment. Added as its own phrase rather than a bare "goods" anchor,
-    # since "goods" alone is a neutral noun (products) and only reads
-    # positive in this "all goods"/complete-transaction idiom.
     "all goods",
-    # NOTE: "asikaso"/"inaasikaso"/"pinapansin" deliberately do NOT appear
-    # here as bare sentiment anchors (tried and reverted — see git history):
-    # against the project's existing regression suite (test_accuracy.py)
-    # they mis-scored several genuinely nuanced Taglish sentences that use
-    # "(na/nag-)asikaso" in ways the surrounding context reverses (e.g.
-    # "parang gustong-gusto na akong umalis, halatang ayaw makipag-usap"
-    # after "yung nag-asikaso sa akin" is actually a complaint, not praise).
-    # Same "ambiguous bare descriptor" problem this file already avoids
-    # elsewhere (see the TAGLISH KEYWORD ANCHORS module comment above:
-    # "never bare descriptors... since those are ambiguous"). The specific,
-    # unambiguous negative PHRASES ("hindi inaasikaso", "di pinapansin", ...)
-    # are still covered directly in FAST_NEGATIVE_WORDS above, and
-    # "accommodate"/"asikaso"/etc remain safe as TOPIC (not sentiment)
-    # keywords — a topic mis-tag is a much smaller consequence than a
-    # flipped sentiment polarity, so that risk/reward tradeoff is different.
-    #
-    # Cleanliness — intensified positive forms ("napakalinis" etc.) needed
-    # here too since sentiment and topic are scored independently; without
-    # this, "Napakalinis ng laboratory" resolved no sentiment at all.
     "napakalinis", "napaka linis", "sobrang linis", "maayos at malinis",
     "very clean", "well maintained",
-    # Appearance — bare positive so "di/hindi kaayang aya(ng)" correctly
-    # negates via the existing negation mechanism, same reasoning as
-    # inaasikaso/asikaso above. "kaaya-aya" (hyphenated) was already covered.
     "kaayang aya", "kaayang ayang", "kaaya ayang", "kaaya-ayang",
-    # Courtesy/attitude morphological variants missing before this fix —
-    # "mabait"/"magalang" were covered but not their reduplicated-plural form
-    # ("mababait"/"magagalang", used when describing a plural "sila") or
-    # these common English synonyms.
     "mababait", "magagalang", "courteous", "respectful",
 ]
 
@@ -1672,35 +1064,32 @@ def fast_sentiment(text):
 # "General Feedback" — that label means "meaningful feedback that doesn't fit
 # a more specific topic," not "the classifier didn't understand this."
 #
-# Originally added 2026-08-29 to catch pure numbers/symbols only (returning
-# separate "Numbers"/"Random Letters" labels). Extended 2026-09 after finding
-# it missed short gibberish ("XZ", "Hfrrg" — too few letters for the old
-# length>=10 floor) and longer keyboard-mash that still happens to contain a
-# few vowels ("hahhdahsdhas" — 12 letters, 3 vowels, a 25% ratio that clears
-# the old 15% floor despite having no plausible syllable structure), and
-# after finding greetings ("Hello po", "Hi") were sailing through entirely
-# (real words, real vowels — just not feedback about a service). All three
-# sub-cases are now unified under one label, since the admin-facing goal is
-# the same for all of them: "there is nothing here to classify."
+# This is now also the ENTIRE keyword-lexicon footprint of the ONLINE
+# classification path (see heavy_model.analyze_pure_ai) — every comment that
+# clears this gate goes straight to Gemini with no keyword matching at all —
+# both online AND offline, as of 2026-09-25 (see analyze.py's module
+# comment). The keyword lexicon above (TOPIC_KEYWORDS/TOPIC_ITEM_KEYWORDS/
+# sentiment words) is no longer used to classify any production comment; it
+# still runs as this function's own "is this actually real vocabulary" guard
+# below, and backs heavy_model.analyze()'s hybrid for test_accuracy.py's
+# lexicon-only scoring.
 #
 # Order of checks:
 #   1. Known-vocabulary guard — if the comment already matches a topic or
 #      sentiment keyword, it is real content by definition and must never be
 #      flagged as junk on letter-shape alone (e.g. a bare "CR" comment is a
 #      genuine, if terse, Restroom-topic keyword — two letters, zero vowels).
-#   2. Numbers-only / symbols-only (unchanged from the original version).
+#   2. Numbers-only / symbols-only.
 #   3. Greeting/courtesy-particle-only ("Hello po", "Hi", "Hi po", "po po").
-#   4. Whole-comment vowel-ratio check (original gibberish heuristic, kept as
-#      a secondary net for junk spread across multiple short tokens).
+#   4. Whole-comment vowel-ratio check (gibberish heuristic, kept as a
+#      secondary net for junk spread across multiple short tokens).
 #   5. Per-token check: every alphabetic token (len>=2) is "suspicious"
 #      (zero vowels, or len>=8 with a consonant run>=4 — no real
 #      English/Tagalog/Taglish word looks like that) and there's at least one
 #      such token.
 # Anything with a real recognizable word anywhere in it returns None and
 # falls through to the normal lexicon/Gemini path — this is deliberately
-# conservative in the direction of keeping real feedback classified normally
-# (see check #1 and the admin's original request that a real comment with a
-# typo must never be misread as gibberish).
+# conservative in the direction of keeping real feedback classified normally.
 # ---------------------------------------------------------------------------
 UNCLASSIFIED_NO_FEEDBACK = "No Feedback - No Feedback"
 

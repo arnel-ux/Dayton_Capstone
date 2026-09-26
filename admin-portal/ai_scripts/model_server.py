@@ -2,14 +2,15 @@
 Persistent local HTTP wrapper around heavy_model.py. server.js spawns this
 once when the admin portal starts (see startModelServer in server.js) and
 sends every live-comment analysis request here instead of spawning a fresh
-`python analyze.py` process per comment — that used to mean reloading ~1GB
-of transformer weights from disk on every single submission. Loading them
-once at startup and keeping the process warm turns each comment's analysis
-from "load models + infer" into just "infer".
+`python analyze.py` process per comment.
 
-Not used for offline-synced comments (see analyze.py) — those intentionally
-skip the heavy models entirely via the fast lexicon path, so they never hit
-this server.
+This is the ONLINE classification path: every comment that reaches
+heavy_model.analyze_pure_ai() here is classified by Gemini alone, with no
+keyword-lexicon matching (see that function's docstring). Offline-synced
+comments never hit this server at all — they go through analyze.py's own
+process-per-comment path instead, which (as of 2026-09-25) calls this same
+analyze_pure_ai() function too, just via a fresh subprocess rather than this
+persistent one.
 """
 import os
 import sys
@@ -46,11 +47,13 @@ def analyze_route():
     # what server.js's analyzeComment() already expects for "no real
     # classification" in every other case.
     if is_no_feedback(comment):
-        return jsonify({"sentiment": None, "topic": None})
+        return jsonify({"sentiment": None, "topics": None})
 
     try:
-        sentiment, topic = heavy_model.analyze(comment, office_hint=office_hint)
-        return jsonify({"sentiment": sentiment, "topic": topic})
+        # topics is always a non-empty list (multi-topic tagging project,
+        # 2026-09-25) — see heavy_model.analyze_pure_ai's docstring.
+        sentiment, topics = heavy_model.analyze_pure_ai(comment, office_hint=office_hint)
+        return jsonify({"sentiment": sentiment, "topics": topics})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

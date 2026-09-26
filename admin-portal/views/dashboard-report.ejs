@@ -263,7 +263,7 @@
                                     <tr>
                                         <td class="text-center"><%= i + 1 %></td>
                                         <td><%= r.officeName %></td>
-                                        <td><%= r.topic %></td>
+                                        <td><%= [r.topic, ...(r.extraTopics || [])].join(', ') %></td>
                                         <td class="text-center"><span class="badge-sentiment <%= badgeClass %>"><%= r.sentiment %></span></td>
                                         <td class="text-center"><%= new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: displayTimeZone }) %></td>
                                     </tr>

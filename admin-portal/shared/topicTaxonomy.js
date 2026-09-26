@@ -5,19 +5,26 @@
 // dropdowns and the endpoint's allowlist both read from this one file rather
 // than each hand-typing their own copy of the topic list.
 //
+// Rewritten 2026-09-22 (pure-AI classification project) around one rule:
+// every Topic/Subtopic name is SENTIMENT-NEUTRAL — it names what the comment
+// is about, never whether that thing was good or bad (sentiment is the
+// separate axis that carries that judgment). This is also why "Transaction"
+// no longer gets its own General/Slow/Fast subtopics (that baked a sentiment
+// judgment into the subtopic itself) — it's folded into "Processing -
+// Processing Time", with sentiment alone carrying the slow/fast verdict, the
+// same as every other topic.
+//
 // The AI classifier (admin-portal/ai_scripts/topic_common.py) is the
 // authority for the actual keyword-matching logic and stores its result as a
 // single "{Topic} - {Item}" string (or a bare "{Topic}" when no specific item
 // matched — see splitTopic below). Every topic here has "General" listed
 // first, representing exactly that "topic matched, no specific item" case,
-// EXCEPT "Transaction" (whose three subtopics are already General/Slow/Fast
-// by design — see topic_common.py's _transaction_subtopic) and "No Feedback"
-// (whose one subtopic is also "No Feedback" — a comment that has nothing
-// meaningful to classify, not a "General" case at all). The topic names and
-// item labels below are kept textually in sync with topic_common.py's
-// candidate_topics/TOPIC_ITEM_KEYWORDS by hand, since Python and Node can't
-// literally share one source file across the language boundary — if the
-// Python taxonomy changes, update this file to match.
+// EXCEPT "No Feedback" (whose one subtopic is also "No Feedback" — a comment
+// that has nothing meaningful to classify, not a "General" case at all). The
+// topic names and item labels below are kept textually in sync with
+// topic_common.py's candidate_topics/TOPIC_ITEM_KEYWORDS by hand, since
+// Python and Node can't literally share one source file across the language
+// boundary — if the Python taxonomy changes, update this file to match.
 //
 // Both the Topic and Subtopic dropdowns also carry a trailing "Custom" entry
 // (appended at render time, not stored in this object — see
@@ -27,29 +34,35 @@
 // non-empty topic/subtopic string (within column length limits) for exactly
 // this reason — it does not require the pair to appear together here.
 const TOPIC_TAXONOMY = {
-    "Queueing and Waiting Time": ["General", "Numbering System", "Long Lines"],
-    "Transaction": ["General", "Slow", "Fast"],
-    "Process Efficiency": ["General", "Complexity/Red Tape", "Simplicity"],
-    "Ease of Use": ["General", "Confusing Design", "User-Friendly Design"],
-    "Online System and Portal": ["General", "Login/Account", "Website", "System Errors/Bugs", "Online System"],
-    "Internet Connection": ["General", "Wifi", "Signal"],
-    "Aircon and Cooling": ["General", "Electric Fan", "Air Conditioning Unit", "Temperature/Ventilation"],
-    "Restroom": ["General", "Supplies (Soap/Tissue)", "Restroom/CR"],
-    "Cleanliness": ["General", "Restroom/CR", "Classroom", "Laboratory", "Library", "Canteen", "Clinic", "Waiting Area", "Hallway/Corridor", "Lobby", "Grounds", "Office"],
-    "Seating and Furniture": ["General", "Chairs", "Tables", "Benches", "General Furniture"],
-    "Power and Lighting": ["General", "Power Outage", "Lighting"],
-    "Facilities and Equipment": ["General", "Appearance/Presentation", "Parking", "Library", "Dormitory/Housing", "Transportation", "Equipment/Machine", "Building/Structure"],
-    "Courtesy and Attitude": ["General", "Accommodation/Assistance", "Security Guard", "Front Desk/Clerk", "Faculty/Adviser", "Student", "Staff/Employee"],
-    "Staff Competence and Knowledge": ["General", "Training Gap", "Knowledge/Answer Accuracy"],
-    "Fairness and Equal Treatment": ["General", "Favoritism", "Bias/Unequal Treatment"],
+    "Processing": ["General", "Waiting Time", "Release Time", "Processing Time"],
+    "Service Procedure": ["General", "Referral Process", "Process Steps", "Submission Process"],
+    "Requirements": ["General", "Requirement Completeness", "Eligibility", "Requirement Clarity"],
+    "Approval Process": ["General", "Signature/Endorsement", "Approval Status", "Approval Time"],
+    "Communication and Information": ["General", "Inconsistent/Contradicting Information", "Response to Inquiries", "Status Update", "Announcements"],
+    "Staff Service": ["General", "Fairness/Equal Treatment", "Staff Competence", "Technical Assistance", "Staff Assistance", "Staff Courtesy"],
+    "Documents and Records": ["General", "Transcript of Records", "Diploma", "Honorable Dismissal", "Good Moral Certificate", "Academic Records", "HR Employee Records", "Certification"],
+    "System and Access": ["General", "Login Access", "Account Activation", "Account Recovery", "System Availability", "Account Access"],
+    "Ease of Use": ["General", "Form/Portal Usability"],
+    "Internet Service": ["General", "Account Renewal", "Connectivity", "Service Availability"],
+    "Scheduling and Availability": ["General", "Exam Schedule", "Appointment Availability", "Service Availability"],
+    "Financial Transaction": ["General", "Official Receipt", "Tuition Fee", "Reimbursement Process", "Liquidation Process", "Account Balance", "Remittance Processing", "Claim Processing", "Payment Processing"],
+    "Facilities and Resources": ["General", "Aircon/Cooling", "Restroom Condition", "Cleanliness", "Seating/Furniture", "Power/Lighting", "Equipment/Machine", "Appearance/Condition", "Building/Structure", "Parking", "Resource Availability"],
     "Bystanders and Loitering": ["General"],
-    "Payment and Fees": ["General", "Official Receipt", "Tuition Fee", "Petty Cash Reimbursement/Liquidation", "Statement of Account", "Fees"],
-    "Document and Credential Processing": ["General", "Transcript of Records", "Diploma", "Honorable Dismissal", "Good Moral Certificate", "Academic Records", "ID Card", "Grade Change/Correction", "HR Employee Records", "Certification", "Clearance"],
-    "Enrollment and Registration": ["General", "Graduation", "Matriculation", "Cross-Enrollment", "Re-admission", "Shifting", "Entrance Examination", "Adding/Dropping of Subjects", "Enrollment/Registration Process"],
-    "Communication and Information": ["General", "Inconsistent/Contradicting Information", "Schedule/Policy Changes", "Response to Inquiries", "Announcements"],
-    "Health and Medical Services": ["General", "Dental Services", "Medical Certificate", "Medicine/Supplies", "Consultation/Check-up"],
-    "Guidance and Counseling Services": ["General"],
-    "Scholarship and Financial Assistance": ["General", "Financial Assistance/Grants-in-Aid", "Scholarship Application/Grant"],
+    "Scholarship and Assistance": ["General", "Grant Amount", "Application Process", "Grant Release"],
+    "Enrollment Process": ["General", "Matriculation", "Cross-Enrollment", "Re-admission", "Shifting", "Enrollment Procedure"],
+    "Academic Transaction": ["General", "Subject Adjustment", "Grade Correction", "Graduation Application", "Entrance Examination"],
+    "Health Service": ["General", "Dental Services", "Certificate Release", "Medicine/Supplies", "Consultation/Treatment"],
+    "Clearance Process": ["General"],
+    "Leave Process": ["General"],
+    "Accreditation Process": ["General"],
+    "Complaint Handling": ["General", "Response", "Follow-up", "Resolution Process"],
+    "ID Services": ["General", "ID Printing", "ID Application"],
+    "Dormitory Service": ["General"],
+    "Supplies and Resources": ["General"],
+    "Transportation Service": ["General"],
+    "Library Service": ["General", "Return Process", "Borrowing Process", "Book Availability"],
+    "Research Service": ["General"],
+    "General Service": ["General", "Service Information", "Service Accessibility", "Overall Process"],
     "General Feedback": ["General"],
     "No Feedback": ["No Feedback"],
 };
@@ -93,13 +106,12 @@ function splitTopic(topicString) {
 // string stay consistent whether a row was AI-classified or admin-corrected.
 // A null/undefined subtopic, or the "General" subtopic, collapses to the bare
 // topic — mirroring splitTopic's bare-form handling above — EXCEPT
-// "Transaction" (whose raw AI form always spells out "Transaction - General",
-// never bare — see _transaction_subtopic) and "No Feedback" (whose only
-// subtopic, "No Feedback", is itself the bare form).
+// "No Feedback" (whose only subtopic, "No Feedback", is itself the bare
+// form).
 function combineTopic(topic, subtopic) {
     if (!topic) return null;
     if (topic === "No Feedback") return "No Feedback";
-    if (topic !== "Transaction" && (!subtopic || subtopic === "General")) return topic;
+    if (!subtopic || subtopic === "General") return topic;
     return `${topic} - ${subtopic}`;
 }
 

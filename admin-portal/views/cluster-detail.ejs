@@ -991,22 +991,28 @@
             comments.forEach((c, index) => {
                 // Real analyzed comments only — see the filter above.
                 const sentiment = c.sentiment;
-                const topic = c.topic;
+                // Multi-topic tagging project (2026-09-25): a comment can
+                // carry more than one topic (see /api/report-data's
+                // extraTopics) — every one of them prints as its own pill
+                // and counts toward Dominant Topic, not just the primary.
+                const allTopics = [c.topic, ...(c.extraTopics || [])];
 
                 if (sentiment === 'Positive') pos++;
                 else if (sentiment === 'Negative') neg++;
                 else neu++;
 
-                topics[topic] = (topics[topic] || 0) + 1;
+                allTopics.forEach(t => { topics[t] = (topics[t] || 0) + 1; });
 
                 let badgeClass = 'bg-neu';
                 if (sentiment === 'Positive') badgeClass = 'bg-pos';
                 else if (sentiment === 'Negative') badgeClass = 'bg-neg';
 
+                const topicPills = allTopics.map(t => `<span class="topic-pill">${escapeHtml(t)}</span>`).join(' ');
+
                 rows += `<tr>
                     <td class="text-center">${index + 1}</td>
                     <td>${escapeHtml(c.comments)}</td>
-                    <td class="text-center"><span class="topic-pill">${escapeHtml(topic)}</span></td>
+                    <td class="text-center">${topicPills}</td>
                     <td class="text-center"><span class="badge-sentiment ${badgeClass}">${escapeHtml(sentiment)}</span></td>
                 </tr>`;
             });
