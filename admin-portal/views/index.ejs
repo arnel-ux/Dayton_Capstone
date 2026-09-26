@@ -2008,7 +2008,7 @@
                                 // Only the main bar view's x-axis is a cluster/office name — the
                                 // drilldown doughnut's labels are "Satisfied"/"Needs Improvement".
                                 if (view === 'main' && chartId === 'c2' && clusterFullNames[idx]) return clusterFullNames[idx];
-                                if (view === 'main' && chartId === 'c3' && officeFullNames[officeIndexMap[idx]]) return officeFullNames[officeIndexMap[idx]];
+                                if (view === 'main' && chartId === 'c3' && officeFullNames[getVisibleOfficeIndices()[idx]]) return officeFullNames[getVisibleOfficeIndices()[idx]];
                                 return items[0].label || '';
                             },
                             label: function(context) {
@@ -2031,13 +2031,13 @@
                                         totalResp = pData.clusterResp[context.dataIndex];
                                         realPercent = pData.clusterSat[context.dataIndex];
                                     } else {
-                                        const realIdx = officeIndexMap[context.dataIndex];
+                                        const realIdx = getVisibleOfficeIndices()[context.dataIndex];
                                         totalResp = pData.officeResp[realIdx];
                                         realPercent = pData.officeSat[realIdx];
                                     }
-                                    if (realPercent === null) return ['No ratings yet', `Respondents: ${totalResp}`];
+                                    if (realPercent === null || realPercent === undefined) return ['No ratings yet', `Respondents: ${totalResp || 0}`];
                                     let satResp = Math.round((realPercent / 100) * totalResp) || 0;
-                                    return [`Satisfaction: ${realPercent}%`, `Respondents: ${satResp}`];
+                                    return [`Satisfaction: ${realPercent}%`, `Respondents: ${totalResp || 0}`];
                                 }
 
                                 let label = context.dataset.label || context.label || '';
@@ -2086,11 +2086,14 @@
 
             if (id === 'c3') {
                 if (view === 'main') {
-                    const labels = officeIndexMap.map(i => officeLabels[i]);
+                    // Every office is listed on the axis, but a bar is only drawn once
+                    // the office has at least one survey response (null = no bar).
+                    const labels = officeIndexMap.map(i => officeLabels[i] || '');
                     // Same 0%-but-real-data nudge as c2 above, applied per visible office.
                     const data = officeIndexMap.map(i => {
                         const v = dataP.officeSat[i];
-                        return (v === null || (v <= 0 && dataP.officeResp[i] > 0)) ? 1.5 : v;
+                        if (!(Number(dataP.officeResp[i]) > 0) || v === undefined) return null;
+                        return (v === null || v <= 0) ? 1.5 : v;
                     });
                     const config = { type: 'bar', data: { labels, datasets: [{ label: 'Satisfaction (%)', data, backgroundColor: (c) => dataP.officeSat[officeIndexMap[c.dataIndex]] === null ? noRatingColor : barGradient(c, 'rgba(37, 29, 58,0.75)', 'rgba(90,124,214,0.9)'), hoverBackgroundColor: (c) => dataP.officeSat[officeIndexMap[c.dataIndex]] === null ? noRatingHoverColor : barGradient(c, 'rgba(37, 29, 58,0.9)', 'rgba(90,124,214,1)'), borderRadius: 10, borderSkipped: false, maxBarThickness: 40, categoryPercentage: 0.65, barPercentage: 0.75 }] }, options: { ...baseOptions, scales: barScales } };
                     config._officeIndexMap = officeIndexMap;
