@@ -659,7 +659,7 @@
             margin: 0 auto;
             /* Carousel shows exactly one card, centered: the viewport is one card
                wide (plus even side padding) and clips its neighbours. */
-            --card-w: min(88vw, 60rem);
+            --card-w: min(92vw, 70rem);
             width: min(100vw, calc(var(--card-w) + 4rem));
         }
 
@@ -676,7 +676,7 @@
             background: rgba(10,20,40,0.28);
             backdrop-filter: blur(20px) saturate(150%); -webkit-backdrop-filter: blur(20px) saturate(150%);
             display: flex; flex-direction: column;
-            height: 63vh; min-width: var(--card-w, min(88vw, 60rem)); flex-shrink: 0;
+            height: 66vh; min-height: 28rem; min-width: var(--card-w, min(92vw, 70rem)); flex-shrink: 0;
             opacity: 0; transform: translateY(60px);
             transition: opacity 0.6s ease-out, transform 0.6s ease-out, box-shadow 0.25s ease, border-color 0.25s ease;
             border: 1px solid rgba(255,255,255,0.22); border-top: 3px solid var(--card-accent, var(--gold-400));
@@ -2555,6 +2555,9 @@
                             }
                         } else {
                             card.classList.remove('visible');
+                            // Off-screen again → re-arm, so the chart replays its
+                            // reveal animation on every slide that brings it back.
+                            delete card.dataset.revealed;
                         }
                     });
                 }, { root: viewport, threshold: 0.1 });
