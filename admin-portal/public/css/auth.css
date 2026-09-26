@@ -1383,3 +1383,30 @@ html, body {
     height: auto;
     margin-bottom: 0.5rem !important;
 }
+
+/* Desktop / tablet: a larger headline and a card that hangs lower.
+   Only spacer variables and the title size are set here. The drop and the gap
+   are the shrinkable spacers described above, so on a short window they still
+   collapse before the fold is touched — the lower position only shows up where
+   there is height to spare. Placed last so it wins over the height tiers. */
+@media (min-width: 768px) {
+    .login-wrapper {
+        --auth-drop: clamp(1rem, 5vh, 3.5rem);
+        --auth-gap-max: clamp(0.25rem, 1vh, 0.75rem);
+    }
+    .header-container { margin-bottom: 0.75rem; }
+    .main-title { font-size: clamp(1.75rem, 4vh, 2.6rem); }
+
+    /* Fixed, not shrinkable: the header and the card start at the same spot on
+       every auth page and in both the Login and Register tabs. The shrinkable
+       spacers gave up different amounts for the taller Register card than for
+       the Login card, so the header and card jumped when the tab switched. */
+    .login-wrapper::before {
+        flex: 0 0 auto;
+        height: var(--auth-drop);
+    }
+    .login-wrapper .auth-gap {
+        flex: 0 0 auto;
+        height: var(--auth-gap-max);
+    }
+}

@@ -285,6 +285,17 @@
             body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .btn-register-google { font-size: 1rem; min-height: 52px; }
         }
 
+        /* One header size for every state of the auth card (Login tab, Register
+           tab, offline) and every screen size, so the title, subtitle and
+           Login/Register switch never change size when the tab or connection
+           changes. The `body .card-custom` prefix outranks the per-breakpoint
+           trims in auth.css and above. */
+        body .card-custom h4 { font-size: 1.35rem; margin-bottom: 0.4rem; }
+        body .card-custom .divider-soft { margin: 0.5rem auto 0.6rem; }
+        body .card-custom #cardSubtitle { display: block; font-size: 0.95rem; margin-bottom: 0.8rem; }
+        body .card-custom .auth-switch { margin-bottom: 0.8rem; }
+        body .card-custom .auth-switch-btn { font-size: 0.9rem; min-height: 40px; }
+
         /* ---- Fold trims for the two step lists ---- */
         @media (max-width: 480px) {
             .auth-switch { margin-bottom: 0.7rem; }
@@ -459,8 +470,6 @@
 
         <div class="header-container">
             <h1 class="main-title">Office Of Center For Quality Assurance (CQA)</h1>
-            <p class="sub-title">Digital Client Satisfaction Survey of Camarines Sur Polytechnic Colleges</p>
-            <h2 class="portal-text" id="portalBadge">Register Portal</h2>
         </div>
 
         <!-- The gap between the heading and the card. An element rather than a
