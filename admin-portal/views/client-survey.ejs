@@ -430,21 +430,11 @@
             -webkit-tap-highlight-color: transparent;
         }
         .lang-switch-track:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-        .lang-switch-flag {
-            position: absolute; inset: 0;
-            opacity: 0; transition: opacity 0.25s ease;
+        .lang-switch-track { transition: background-color 0.25s ease; }
+        .lang-switch-track[aria-checked="true"] {
+            background: var(--brand);
+            box-shadow: 0 1px 3px rgba(15,23,42,0.22), inset 0 0 0 1px rgba(255,255,255,0.18);
         }
-        .lang-switch-flag svg {
-            width: 100%; height: 100%; display: block;
-            /* An inline <svg> is not a replaced element, so object-fit does
-               nothing to it — the "cover" behaviour comes from
-               preserveAspectRatio="xMidYMid slice" on the element itself
-               (see the markup). The track is 2:1 and the flags' viewBox is
-               2:1, so nothing is actually cropped at either size; slice is
-               there so a future track ratio fills rather than letterboxes. */
-        }
-        .lang-switch-track[aria-checked="false"] .lang-switch-flag.is-en,
-        .lang-switch-track[aria-checked="true"] .lang-switch-flag.is-tl { opacity: 1; }
         .lang-switch-knob {
             position: absolute; top: 3px; left: 3px;
             width: 28px; height: 28px; border-radius: 50%;
@@ -454,7 +444,7 @@
         }
         .lang-switch-track[aria-checked="true"] .lang-switch-knob { transform: translateX(34px); }
         @media (prefers-reduced-motion: reduce) {
-            .lang-switch-knob, .lang-switch-flag { transition: none; }
+            .lang-switch-knob, .lang-switch-track { transition: none; }
         }
         [data-bs-theme="dark"] .lang-switch-track {
             background: rgba(255,255,255,0.08);
@@ -3336,12 +3326,6 @@
                             aria-label="Survey language — English or Tagalog"
                             title="Switch survey language (English / Tagalog)"
                             onclick="setLanguage(currentLang === 'en' ? 'tl' : 'en')">
-                        <span class="lang-switch-flag is-en" aria-hidden="true">
-                            <svg viewBox="0 0 60 30" preserveAspectRatio="xMidYMid slice" focusable="false"><defs><clipPath id="langFlagUkClip"><path d="M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z"/></clipPath></defs><path d="M0,0 v30 h60 v-30 z" fill="#012169"/><path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/><path d="M0,0 L60,30 M60,0 L0,30" clip-path="url(#langFlagUkClip)" stroke="#C8102E" stroke-width="4"/><path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/><path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/></svg>
-                        </span>
-                        <span class="lang-switch-flag is-tl" aria-hidden="true">
-                            <svg viewBox="0 0 60 30" preserveAspectRatio="xMidYMid slice" focusable="false"><path d="M0,0 h60 v15 h-60 z" fill="#0038A8"/><path d="M0,15 h60 v15 h-60 z" fill="#CE1126"/><path d="M0,0 L25.98,15 L0,30 Z" fill="#fff"/><circle cx="7.6" cy="15" r="3.1" fill="#FCD116"/><path d="M7.6,8.7 L8.7,13.1 L12.6,10.8 L10.3,14.7 L14.7,15 L10.3,15.3 L12.6,19.2 L8.7,16.9 L7.6,21.3 L6.5,16.9 L2.6,19.2 L4.9,15.3 L0.5,15 L4.9,14.7 L2.6,10.8 L6.5,13.1 Z" fill="#FCD116"/><path d="M3.20,2.00L3.56,3.11L4.72,3.11L3.78,3.79L4.14,4.89L3.20,4.21L2.26,4.89L2.62,3.79L1.68,3.11L2.84,3.11Z" fill="#FCD116"/><path d="M3.20,24.80L3.56,25.91L4.72,25.91L3.78,26.59L4.14,27.69L3.20,27.01L2.26,27.69L2.62,26.59L1.68,25.91L2.84,25.91Z" fill="#FCD116"/><path d="M21.40,13.40L21.76,14.51L22.92,14.51L21.98,15.19L22.34,16.29L21.40,15.61L20.46,16.29L20.82,15.19L19.88,14.51L21.04,14.51Z" fill="#FCD116"/></svg>
-                        </span>
                         <span class="lang-switch-knob"></span>
                     </button>
                     <span class="lang-switch-label" id="lang-label-tl" aria-hidden="true">TL</span>
@@ -4135,159 +4119,87 @@
 </div>
 
 <% if (showOnboarding) { %>
-<!-- First-time Setup Wizard — shown once, right after registration, on this
-     account's first /client-survey load (see showOnboarding in server.js).
-     Static backdrop + no close button on purpose: the "Skip Tour" link is the
-     one deliberate way out, so this always resolves to a POST
-     /api/onboarding-complete instead of silently reappearing next login. -->
-<div class="modal fade" id="onboardingWizardModal" tabindex="-1" aria-labelledby="onboardingWizardLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg onboarding-dialog">
-        <div class="modal-content">
-            <div class="modal-header onboarding-header">
-                <h5 class="modal-title fw-bold onboarding-title" id="onboardingWizardLabel"><i class="bi bi-stars me-1"></i> Welcome to the CQA Client Portal</h5>
-                <button type="button" class="btn btn-link btn-sm text-secondary text-decoration-none ms-auto onboarding-skip-btn" onclick="finishOnboarding()" title="Skip this tour">Skip Tour</button>
-            </div>
-            <div class="modal-body onboarding-body">
-                <div class="onboarding-step active" data-onboarding-step="1">
-                    <div class="text-center mb-3"><i class="bi bi-house-heart-fill text-primary onboarding-icon"></i></div>
-                    <h5 class="fw-semibold text-center mb-2">You're all set up!</h5>
-                    <p class="text-secondary text-center mb-0">Your account is ready. Here's a quick look at what you can do from this portal — it only takes a moment.</p>
-                </div>
-                <div class="onboarding-step" data-onboarding-step="2" hidden>
-                    <div class="text-center mb-3"><i class="bi bi-clipboard2-check-fill text-primary onboarding-icon"></i></div>
-                    <h5 class="fw-semibold text-center mb-2">Take a Survey</h5>
-                    <p class="text-secondary text-center mb-0">After availing any CSPC office's service, go to <strong>Take Survey</strong> to rate your experience. It's quick, confidential, and helps offices improve.</p>
-                </div>
-                <div class="onboarding-step" data-onboarding-step="3" hidden>
-                    <div class="text-center mb-3"><i class="bi bi-wifi-off text-primary onboarding-icon"></i></div>
-                    <h5 class="fw-semibold text-center mb-2">No Internet? No Problem</h5>
-                    <p class="text-secondary text-center mb-0">Since you've already registered while online, you can open this survey link even without an internet connection and submit it offline — your response is saved on this device and syncs automatically once you're back online.</p>
-                </div>
-                <div class="onboarding-step" data-onboarding-step="4" hidden>
-                    <div class="text-center mb-3"><i class="bi bi-clock-history text-primary onboarding-icon"></i></div>
-                    <h5 class="fw-semibold text-center mb-2">Track Your History</h5>
-                    <p class="text-secondary text-center mb-0">The <strong>History</strong> tab keeps every survey you've submitted, along with its review status, so you can check back anytime.</p>
-                </div>
-                <div class="onboarding-step" data-onboarding-step="5" hidden>
-                    <div class="text-center mb-3"><i class="bi bi-person-fill text-primary onboarding-icon"></i></div>
-                    <h5 class="fw-semibold text-center mb-2">Manage Your Profile</h5>
-                    <p class="text-secondary text-center mb-0">Visit <strong>Profile</strong> to update your name, set a local password, or check the account details tied to your surveys.</p>
-                </div>
-
-                <!-- Steps 6-8 cover the three controls that are always on
-                     screen but were never explained anywhere: the bell, the
-                     dark-mode button and the language switch. Each one shows
-                     the control EXACTLY as it looks in the interface (.onboarding-
-                     chip renders the real icon), because "the bell in the top
-                     right" is only findable if you already know what you are
-                     looking for. -->
-                <div class="onboarding-step" data-onboarding-step="6" hidden>
-                    <div class="text-center mb-3"><i class="bi bi-bell-fill text-primary onboarding-icon"></i></div>
-                    <h5 class="fw-semibold text-center mb-2">Notifications</h5>
-                    <p class="text-secondary text-center mb-2">The bell in the top-right corner tells you when a survey you submitted has been reviewed or approved. A red dot means something new is waiting.</p>
-                    <p class="text-center mb-0">
-                        <span class="onboarding-chip"><i class="bi bi-bell"></i><span class="onboarding-chip-dot"></span></span>
-                        <span class="onboarding-chip-note">Top-right of the header</span>
-                    </p>
-                </div>
-                <div class="onboarding-step" data-onboarding-step="7" hidden>
-                    <div class="text-center mb-3"><i class="bi bi-moon-stars-fill text-primary onboarding-icon"></i></div>
-                    <h5 class="fw-semibold text-center mb-2">Light or Dark Mode</h5>
-                    <p class="text-secondary text-center mb-2">The round button in the bottom-right corner switches between light and dark. Your choice is remembered on this device, so the portal opens the way you left it.</p>
-                    <p class="text-center mb-0">
-                        <span class="onboarding-chip"><i class="bi bi-moon"></i></span>
-                        <span class="onboarding-chip-note">Bottom-right of the screen</span>
-                    </p>
-                </div>
-                <div class="onboarding-step" data-onboarding-step="8" hidden>
-                    <div class="text-center mb-3"><i class="bi bi-translate text-primary onboarding-icon"></i></div>
-                    <h5 class="fw-semibold text-center mb-2">English or Tagalog</h5>
-                    <p class="text-secondary text-center mb-2">Inside <strong>Take Survey</strong>, the <strong>EN / TL</strong> switch at the top of the card translates the whole survey. You can flip it at any point — your answers are kept.</p>
-                    <p class="text-center mb-0">
-                        <span class="onboarding-chip onboarding-chip-wide">EN&nbsp;<i class="bi bi-toggle-on"></i>&nbsp;TL</span>
-                        <span class="onboarding-chip-note">Top of the survey card</span>
-                    </p>
-                </div>
-
-                <!-- Filled by renderOnboardingStep() from the number of steps
-                     actually in the markup. It used to be five hand-written
-                     spans, which is a second place to remember to edit — and
-                     the one that silently goes wrong, since a missing dot
-                     breaks nothing loudly. -->
-                <div class="text-center mt-4" id="onboardingDots"></div>
-            </div>
-            <div class="modal-footer onboarding-footer">
-                <button type="button" class="btn btn-outline-secondary onboarding-back-btn" id="onboardingBackBtn" onclick="onboardingStep(-1)" hidden>Back</button>
-                <button type="button" class="btn btn-primary px-4 onboarding-next-btn" id="onboardingNextBtn" onclick="onboardingStep(1)">Next</button>
-            </div>
+<!-- First-time Setup Wizard — an interactive spotlight tour. Shown once, right
+     after registration, on this account's first /client-survey load (see
+     showOnboarding in server.js). Instead of a modal that DESCRIBES controls,
+     the dimmed ring (#obRing) glides to the real control each step talks about
+     and #obCard explains it beside it. "Skip Tour" is the one deliberate way
+     out, so this always resolves to a POST /api/onboarding-complete instead of
+     silently reappearing next login. Steps live in ONBOARDING_STEPS (script). -->
+<div id="onboardingWizard" class="ob-root" hidden role="dialog" aria-modal="true" aria-labelledby="obTitle">
+    <div class="ob-blocker"></div>
+    <div id="obRing" class="ob-ring"></div>
+    <div id="obCard" class="ob-card">
+        <div class="ob-card-top">
+            <span class="ob-step-count" id="obCount"></span>
+            <button type="button" class="ob-skip" onclick="finishOnboarding()" title="Skip this tour">Skip Tour</button>
+        </div>
+        <div class="ob-icon-wrap"><i id="obIcon" class="bi bi-stars"></i></div>
+        <h5 class="ob-title" id="obTitle"></h5>
+        <p class="ob-text" id="obText"></p>
+        <div class="ob-dots" id="onboardingDots"></div>
+        <div class="ob-actions">
+            <button type="button" class="btn btn-outline-secondary ob-btn" id="onboardingBackBtn" onclick="onboardingStep(-1)" hidden>Back</button>
+            <button type="button" class="btn btn-primary ob-btn ob-next" id="onboardingNextBtn" onclick="onboardingStep(1)">Next</button>
         </div>
     </div>
 </div>
 <style>
-    .onboarding-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--bs-secondary-bg, #dee2e6); margin: 0 4px; transition: background-color .2s ease; }
-    .onboarding-dot.active { background: var(--bs-primary); }
+    .ob-root { position: fixed; inset: 0; z-index: 2000; }
+    .ob-root[hidden] { display: none; }
+    .ob-blocker { position: absolute; inset: 0; }   /* swallows clicks on the page behind */
 
-    /* A miniature of the real control, so the step points at something the
-       eye can then find on screen rather than describing it in words. */
-    .onboarding-chip {
-        position: relative;
-        display: inline-flex; align-items: center; justify-content: center;
-        width: 38px; height: 38px;
-        border-radius: 11px;
+    /* The ring IS the dimmer: a huge box-shadow darkens everything except the
+       cut-out, and because top/left/width/height are transitioned, the cut-out
+       visibly travels from one control to the next. */
+    .ob-ring {
+        position: fixed; top: 50%; left: 50%; width: 0; height: 0;
+        border-radius: 12px; pointer-events: none;
+        box-shadow: 0 0 0 100vmax rgba(8, 12, 24, 0.68);
+        transition: top .65s cubic-bezier(.65,0,.25,1), left .65s cubic-bezier(.65,0,.25,1),
+                    width .65s cubic-bezier(.65,0,.25,1), height .65s cubic-bezier(.65,0,.25,1),
+                    border-radius .65s ease;
+    }
+    .ob-root.ob-nofx .ob-ring, .ob-root.ob-nofx .ob-card { transition: none; }
+    .ob-ring::after {
+        content: ''; position: absolute; inset: -3px; border-radius: inherit;
+        border: 2px solid #60a5fa; opacity: 0;
+    }
+    .ob-ring.has-target::after { opacity: 1; animation: obPulse 1.6s ease-out infinite; }
+    @keyframes obPulse {
+        0%   { box-shadow: 0 0 0 0 rgba(96,165,250,.65); }
+        100% { box-shadow: 0 0 0 14px rgba(96,165,250,0); }
+    }
+
+    .ob-card {
+        position: fixed; width: min(360px, calc(100vw - 24px));
+        background: var(--bs-body-bg, #fff); color: var(--bs-body-color, #1e293b);
         border: 1px solid var(--bs-border-color, #dee2e6);
-        background: var(--bs-body-bg, #fff);
-        color: var(--bs-body-color, #1e293b);
-        font-size: 1rem;
-        vertical-align: middle;
+        border-radius: 16px; padding: 1rem 1.15rem 1.05rem;
+        box-shadow: 0 18px 50px rgba(0,0,0,.35);
+        transition: top .65s cubic-bezier(.65,0,.25,1), left .65s cubic-bezier(.65,0,.25,1);
+        max-height: calc(100vh - 24px); overflow-y: auto;
     }
-    .onboarding-chip-wide { width: auto; padding: 0 0.7rem; border-radius: 999px; font-size: 0.85rem; font-weight: 600; }
-    .onboarding-chip-dot {
-        position: absolute; top: 6px; right: 7px;
-        width: 8px; height: 8px; border-radius: 50%;
-        background: #ef4444;
-        box-shadow: 0 0 0 2px var(--bs-body-bg, #fff);
-    }
-    .onboarding-chip-note {
-        display: inline-block;
-        margin-left: 0.55rem;
-        vertical-align: middle;
-        font-size: 0.82rem;
-        color: var(--bs-secondary-color, #6c757d);
-    }
+    .ob-card.is-swapping .ob-icon-wrap, .ob-card.is-swapping .ob-title, .ob-card.is-swapping .ob-text { opacity: 0; transform: translateY(6px); }
+    .ob-icon-wrap, .ob-title, .ob-text { transition: opacity .28s ease, transform .28s ease; }
+    .ob-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: .5rem; }
+    .ob-step-count { font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--bs-secondary-color, #6c757d); }
+    .ob-skip { background: none; border: 0; color: var(--bs-secondary-color, #6c757d); font-size: .85rem; padding: .35rem .25rem; min-height: 36px; }
+    .ob-skip:hover { color: var(--bs-body-color); text-decoration: underline; }
+    .ob-icon-wrap { font-size: 1.7rem; color: var(--bs-primary); line-height: 1; margin-bottom: .35rem; }
+    .ob-title { font-weight: 700; margin: 0 0 .3rem; font-size: 1.1rem; }
+    .ob-text { color: var(--bs-secondary-color, #6c757d); font-size: .92rem; margin: 0 0 .85rem; }
+    .ob-text strong { color: var(--bs-body-color); }
+    .ob-dots { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: .85rem; }
+    .onboarding-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bs-secondary-bg, #dee2e6); transition: background-color .2s ease, width .2s ease; }
+    .onboarding-dot.active { background: var(--bs-primary); width: 20px; border-radius: 4px; }
+    .ob-actions { display: flex; gap: .5rem; }
+    .ob-btn { min-height: 42px; }
+    .ob-next { margin-left: auto; padding-left: 1.4rem; padding-right: 1.4rem; }
 
-    /* Bootstrap's modal-dialog is already full-width-minus-margin below the
-       sm breakpoint, and modal-dialog-scrollable caps modal-content's height
-       to the viewport so short/landscape phones scroll the body text instead
-       of pushing the footer buttons off-screen — the rules below only tune
-       spacing/touch-target size, they don't reimplement responsiveness. */
-    .onboarding-icon { font-size: 2.4rem; }
-    .onboarding-body { min-height: 220px; }
-    .onboarding-header { flex-wrap: nowrap; gap: 0.5rem; }
-    .onboarding-skip-btn { flex: 0 0 auto; white-space: nowrap; min-height: 44px; }
-    .onboarding-footer { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; }
-    .onboarding-back-btn, .onboarding-next-btn { min-height: 44px; }
-    .onboarding-next-btn { margin-left: auto; }
-
-    @media (max-width: 575.98px) {
-        /* Bootstrap's own xs modal margin (0.5rem) already prevents edge-to-
-           edge overflow; this only trims internal padding/text sizes so the
-           5-dot progress row and both footer buttons never need to wrap or
-           clip on narrow (320-360px) screens. */
-        .onboarding-title { font-size: 1rem; }
-        .onboarding-icon { font-size: 2rem; }
-        .onboarding-body { min-height: 0; padding: 1rem; }
-        .onboarding-body h5 { font-size: 1.05rem; }
-        .onboarding-body p { font-size: 0.9rem; }
-        .onboarding-footer { flex-wrap: nowrap; }
-        .onboarding-back-btn, .onboarding-next-btn { flex: 1 1 0; padding-left: 0.75rem; padding-right: 0.75rem; }
-        .onboarding-next-btn { margin-left: 0; }
-        /* The tour is longer than it was, so the dot row has to survive a
-           320px screen: tighter dots, and allowed to wrap rather than force
-           the dialog to scroll sideways. */
-        #onboardingDots { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
-        .onboarding-dot { margin: 0; }
-        .onboarding-chip { width: 34px; height: 34px; font-size: 0.95rem; }
-        .onboarding-chip-note { display: block; margin-left: 0; margin-top: 0.35rem; font-size: 0.78rem; }
+    @media (prefers-reduced-motion: reduce) {
+        .ob-ring, .ob-card, .ob-icon-wrap, .ob-title, .ob-text { transition: none; }
+        .ob-ring.has-target::after { animation: none; }
     }
 </style>
 <% } %>
@@ -8247,16 +8159,40 @@ document.getElementById('agreeTermsStage1').addEventListener('change', function 
 
 // ==========================================
 // First-time Setup Wizard (see showOnboarding in server.js's /client-survey
-// route, and the #onboardingWizardModal markup this drives)
+// route, and the #onboardingWizard markup this drives)
 // ==========================================
-// Counted from the markup rather than hard-coded. It was a literal 5 sitting
-// a few hundred lines away from the five <div data-onboarding-step> elements
-// and the five dot spans — three places that had to agree, where adding a
-// step silently stranded the last one behind a "Next" that finished the tour.
-const ONBOARDING_STEP_COUNT = document.querySelectorAll('.onboarding-step').length;
+// Each step names the REAL control it is about (selector). The ring glides to
+// it and the card explains it; steps with no selector are centred. `view`
+// switches the SPA view first (the language switch only exists inside Take
+// Survey) and `sidebar` opens the off-canvas sidebar on phones.
+const ONBOARDING_STEPS = [
+    { icon: 'bi-house-heart-fill', title: "You're all set up!",
+      text: "Your account is ready. Let's take a quick tour — I'll point at each part of the portal as we go." },
+    { icon: 'bi-clipboard2-check-fill', title: 'Take Survey', sidebar: true,
+      target: '.sidebar-nav .nav-item-link[data-view="survey"]',
+      text: 'After availing any CSPC office\'s service, click <strong>Take Survey</strong> to rate your experience. It\'s quick, confidential, and helps offices improve.' },
+    { icon: 'bi-clock-history', title: 'Track Your History', sidebar: true,
+      target: '.sidebar-nav .nav-item-link[data-view="history"]',
+      text: 'The <strong>History</strong> tab keeps every survey you\'ve submitted, along with its review status, so you can check back anytime.' },
+    { icon: 'bi-person-fill', title: 'Manage Your Profile', sidebar: true,
+      target: '.sidebar-nav .nav-item-link[data-view="profile"]',
+      text: 'Open <strong>Profile</strong> to update your name, set a local password, or check the account details tied to your surveys.' },
+    { icon: 'bi-bell-fill', title: 'Notifications',
+      target: '#btn-notif-bell',
+      text: 'This bell tells you when a survey you submitted has been reviewed or approved. A red dot means something new is waiting.' },
+    { icon: 'bi-moon-stars-fill', title: 'Light or Dark Mode',
+      target: '#themeToggleBtn',
+      text: 'This round button switches between light and dark. Your choice is remembered on this device.' },
+    { icon: 'bi-translate', title: 'English or Tagalog', view: 'survey',
+      target: '#lang-toggle-group',
+      text: 'Flip this <strong>EN / TL</strong> switch to translate the whole survey. You can change it at any point — your answers are kept.' },
+    { icon: 'bi-wifi-off', title: 'No Internet? No Problem', view: 'home',
+      text: 'Since you\'ve already registered while online, you can open this survey link even without a connection and submit it offline — your response is saved on this device and syncs automatically once you\'re back online.' }
+];
+const ONBOARDING_STEP_COUNT = ONBOARDING_STEPS.length;
 let onboardingCurrentStep = 1;
+let onboardingRunId = 0;   // guards against a stale async step finishing after a newer one
 
-// The dots are generated for the same reason — one step, one dot, always.
 function buildOnboardingDots() {
     const wrap = document.getElementById('onboardingDots');
     if (!wrap || wrap.childElementCount) return;
@@ -8268,23 +8204,109 @@ function buildOnboardingDots() {
     }
 }
 
-function renderOnboardingStep() {
+function onboardingIsMobile() { return window.innerWidth < 992; }
+
+function onboardingSetSidebar(open) {
+    const sb = document.getElementById('clientSidebar');
+    const bd = document.getElementById('sidebarBackdrop');
+    if (!sb) return;
+    if (onboardingIsMobile()) {
+        sb.classList.toggle('show', open);
+        if (bd) bd.classList.remove('show');   // the tour's own dimmer replaces the backdrop
+    } else if (open) {
+        setSidebarCollapsed(false);
+    }
+}
+
+// Places the ring over the target (or collapses it to the centre) and the card
+// beside it, on whichever side has room, clamped inside the viewport.
+function positionOnboarding(step) {
+    const ring = document.getElementById('obRing');
+    const card = document.getElementById('obCard');
+    if (!ring || !card) return;
+    const vw = window.innerWidth, vh = window.innerHeight, gap = 16, m = 12;
+    const el = step.target ? document.querySelector(step.target) : null;
+    const r = el ? el.getBoundingClientRect() : null;
+    const usable = r && r.width > 0 && r.height > 0;
+    const cw = card.offsetWidth, ch = card.offsetHeight;
+    let top, left;
+
+    if (usable) {
+        const pad = 6;
+        ring.classList.add('has-target');
+        ring.style.top = (r.top - pad) + 'px';
+        ring.style.left = (r.left - pad) + 'px';
+        ring.style.width = (r.width + pad * 2) + 'px';
+        ring.style.height = (r.height + pad * 2) + 'px';
+
+        const room = { bottom: vh - r.bottom, top: r.top, right: vw - r.right, left: r.left };
+        let side = 'bottom';
+        if (room.right >= cw + gap + m && (r.height < 90 || room.bottom < ch + gap)) side = 'right';
+        else if (room.bottom >= ch + gap + m) side = 'bottom';
+        else if (room.top >= ch + gap + m) side = 'top';
+        else if (room.left >= cw + gap + m) side = 'left';
+
+        if (side === 'right')      { left = r.right + gap; top = r.top + r.height / 2 - ch / 2; }
+        else if (side === 'left')  { left = r.left - gap - cw; top = r.top + r.height / 2 - ch / 2; }
+        else if (side === 'top')   { top = r.top - gap - ch; left = r.left + r.width / 2 - cw / 2; }
+        else                       { top = r.bottom + gap; left = r.left + r.width / 2 - cw / 2; }
+    } else {
+        // No target: a zero-size ring in the middle still dims the whole page.
+        ring.classList.remove('has-target');
+        ring.style.top = '50%'; ring.style.left = '50%';
+        ring.style.width = '0px'; ring.style.height = '0px';
+        top = (vh - ch) / 2; left = (vw - cw) / 2;
+    }
+    card.style.left = Math.min(Math.max(left, m), Math.max(m, vw - cw - m)) + 'px';
+    card.style.top = Math.min(Math.max(top, m), Math.max(m, vh - ch - m)) + 'px';
+}
+
+async function renderOnboardingStep() {
+    const run = ++onboardingRunId;
     buildOnboardingDots();
-    document.querySelectorAll('.onboarding-step').forEach(el => {
-        const isActive = Number(el.getAttribute('data-onboarding-step')) === onboardingCurrentStep;
-        el.hidden = !isActive;
-        el.classList.toggle('active', isActive);
-    });
+    const step = ONBOARDING_STEPS[onboardingCurrentStep - 1];
+    const card = document.getElementById('obCard');
+
+    // 1) Fade the old copy out while the ring/card stay where they are, and
+    //    pause the tracker so it doesn't snap to a control that's about to go.
+    onboardingGliding = true;
+    document.getElementById('onboardingWizard').classList.remove('ob-nofx');
+    card.classList.add('is-swapping');
+    await new Promise(res => setTimeout(res, 180));
+    if (run !== onboardingRunId) return;
+
+    // 2) Swap the copy while it is invisible, so the card is already its new
+    //    height when it starts to move (no jump on arrival).
+    document.getElementById('obCount').textContent = 'Step ' + onboardingCurrentStep + ' of ' + ONBOARDING_STEP_COUNT;
+    document.getElementById('obIcon').className = 'bi ' + step.icon;
+    document.getElementById('obTitle').textContent = step.title;
+    document.getElementById('obText').innerHTML = step.text;
     document.querySelectorAll('.onboarding-dot').forEach(el => {
         el.classList.toggle('active', Number(el.getAttribute('data-dot')) === onboardingCurrentStep);
     });
     const backBtn = document.getElementById('onboardingBackBtn');
     const nextBtn = document.getElementById('onboardingNextBtn');
-    if (backBtn) backBtn.hidden = onboardingCurrentStep === 1;
-    if (nextBtn) nextBtn.textContent = onboardingCurrentStep === ONBOARDING_STEP_COUNT ? 'Get Started' : 'Next';
-    // Screen readers otherwise get no signal that the dialog's content
-    // changed under them — the heading is the same element every time.
-    if (nextBtn) nextBtn.setAttribute('aria-label', nextBtn.textContent + ' (step ' + onboardingCurrentStep + ' of ' + ONBOARDING_STEP_COUNT + ')');
+    backBtn.hidden = onboardingCurrentStep === 1;
+    nextBtn.textContent = onboardingCurrentStep === ONBOARDING_STEP_COUNT ? 'Get Started' : 'Next';
+    nextBtn.setAttribute('aria-label', nextBtn.textContent + ' (step ' + onboardingCurrentStep + ' of ' + ONBOARDING_STEP_COUNT + ')');
+
+    // Get the target on screen before measuring it.
+    if (step.view && typeof switchView === 'function') switchView(step.view);
+    onboardingSetSidebar(!!step.sidebar);
+    const el = step.target ? document.querySelector(step.target) : null;
+    if (el && !step.sidebar) el.scrollIntoView({ block: 'center', inline: 'nearest' });
+    // The mobile sidebar slides in over ~300ms; measure after it settles.
+    await new Promise(res => setTimeout(res, step.sidebar && onboardingIsMobile() ? 340 : (step.view ? 420 : 30)));
+    if (run !== onboardingRunId) return;
+
+    // Glide to the target once; afterwards onboardingTrack() snaps to it
+    // without easing, so a late layout shift can never leave the ring behind.
+    onboardingLastRect = '';
+    positionOnboarding(step);
+    setTimeout(() => { if (run === onboardingRunId) onboardingGliding = false; }, 650);
+    // Text fades back in as the card is mid-glide, not after it has stopped.
+    setTimeout(() => { if (run === onboardingRunId) card.classList.remove('is-swapping'); }, 180);
+    nextBtn.focus({ preventScroll: true });
 }
 
 function onboardingStep(delta) {
@@ -8297,14 +8319,49 @@ function onboardingStep(delta) {
     renderOnboardingStep();
 }
 
+function onboardingKeydown(e) {
+    if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); onboardingStep(1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); onboardingStep(-1); }
+    else if (e.key === 'Escape') { e.preventDefault(); finishOnboarding(); }
+}
+function onboardingReposition() { positionOnboarding(ONBOARDING_STEPS[onboardingCurrentStep - 1]); }
+
+// Keeps the ring glued to its target. Views fade/slide in, fonts load, the
+// keyboard opens, the page scrolls, the window rotates — any of them moves the
+// control after it was first measured. Cheap: it only acts when the rect
+// actually changed, and drops the easing so the ring follows instead of lagging.
+let onboardingGliding = false;
+let onboardingLastRect = '';
+let onboardingTrackId = 0;
+function onboardingTrack() {
+    const step = ONBOARDING_STEPS[onboardingCurrentStep - 1];
+    const el = step && step.target ? document.querySelector(step.target) : null;
+    const r = el ? el.getBoundingClientRect() : null;
+    const key = (r ? [r.top, r.left, r.width, r.height].map(Math.round).join(',') : 'none') + '|' + window.innerWidth + 'x' + window.innerHeight;
+    if (key !== onboardingLastRect && !onboardingGliding) {
+        const root = document.getElementById('onboardingWizard');
+        if (root && !root.hidden) {
+            root.classList.add('ob-nofx');
+            positionOnboarding(step);
+            onboardingLastRect = key;
+        }
+    }
+    onboardingTrackId = requestAnimationFrame(onboardingTrack);
+}
+
 // Called on Finish AND on Skip Tour — both mean "don't show this again",
 // so both hit the same endpoint. Best-effort: even if the request fails
-// (e.g. connectivity), the modal still closes rather than trapping the user;
+// (e.g. connectivity), the tour still closes rather than trapping the user;
 // it will simply be offered again on this account's next /client-survey load.
 async function finishOnboarding() {
-    const modalEl = document.getElementById('onboardingWizardModal');
-    const instance = modalEl && bootstrap.Modal.getOrCreateInstance(modalEl);
-    if (instance) instance.hide();
+    onboardingRunId++;
+    cancelAnimationFrame(onboardingTrackId);
+    document.removeEventListener('keydown', onboardingKeydown);
+    window.removeEventListener('resize', onboardingReposition);
+    onboardingSetSidebar(false);
+    if (typeof switchView === 'function') switchView('home');
+    const root = document.getElementById('onboardingWizard');
+    if (root) root.hidden = true;
     try {
         await fetch('/api/onboarding-complete', { method: 'POST' });
     } catch (e) { /* best-effort — see comment above */ }
@@ -8312,12 +8369,16 @@ async function finishOnboarding() {
 
 <% if (showOnboarding) { %>
 // Called directly (not on DOMContentLoaded) — this script block sits right
-// before </body>, after #onboardingWizardModal in the markup, matching the
+// before </body>, after #onboardingWizard in the markup, matching the
 // rest of this file's "Initial Load Setup" calls just below.
-renderOnboardingStep();
 (function () {
-    const modalEl = document.getElementById('onboardingWizardModal');
-    if (modalEl) new bootstrap.Modal(modalEl).show();
+    const root = document.getElementById('onboardingWizard');
+    if (!root) return;
+    root.hidden = false;
+    document.addEventListener('keydown', onboardingKeydown);
+    window.addEventListener('resize', onboardingReposition);
+    renderOnboardingStep();
+    onboardingTrack();
 })();
 <% } %>
 
