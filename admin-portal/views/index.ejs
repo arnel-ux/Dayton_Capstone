@@ -811,7 +811,9 @@
         }
 
         @media (max-width: 62rem) {
-            .chart-card { min-width: 90vw; height: 55vh; }
+            .dashboard-container { --card-w: 90vw; width: 100vw; max-width: 100%; }
+            .charts-track { padding-left: 5vw; padding-right: 5vw; gap: 10vw; }
+            .chart-card { min-width: 90vw; max-width: 90vw; height: 55vh; margin: 0; }
             /* Single-row compact header: logo left, hamburger + login right.
                The 2-row stacked version (logo+title on row 1, hamburger+login
                on row 2) read as cluttered/misaligned — this is the standard
@@ -920,7 +922,7 @@
             .header-text-container { min-width: 0; }
         }
         @media (max-width: 36rem) {
-            .chart-card { min-width: 90vw; height: 38vh; }
+            .chart-card { min-width: 90vw; max-width: 90vw; height: 38vh; min-height: 24rem; }
             .about-section, .org-section { padding-left: var(--sp-2); padding-right: var(--sp-2); }
             /* Hamburger button was 44px (desktop/tablet base rule) on every
                screen it appears on — sized down to a denser 36px square to
