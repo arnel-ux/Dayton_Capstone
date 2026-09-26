@@ -656,11 +656,15 @@
            the hero .bg-image/.bg-overlay show straight through. */
         .dashboard-container {
             display: flex; align-items: center; width: 100%; position: relative; overflow: hidden; z-index: 1;
-            margin: 0 auto; max-width: 100rem;
+            margin: 0 auto;
+            /* Carousel shows exactly one card, centered: the viewport is one card
+               wide (plus even side padding) and clips its neighbours. */
+            --card-w: min(88vw, 60rem);
+            width: min(100vw, calc(var(--card-w) + 4rem));
         }
 
         .charts-track {
-            display: flex; gap: var(--sp-5); padding: var(--sp-2) var(--sp-4); align-items: stretch;
+            display: flex; gap: var(--sp-5); padding: var(--sp-2) calc((min(100vw, var(--card-w) + 4rem) - var(--card-w)) / 2); align-items: stretch;
             will-change: transform; touch-action: pan-y;
         }
 
@@ -672,7 +676,7 @@
             background: rgba(10,20,40,0.28);
             backdrop-filter: blur(20px) saturate(150%); -webkit-backdrop-filter: blur(20px) saturate(150%);
             display: flex; flex-direction: column;
-            height: 63vh; min-width: min(88vw, 60rem); flex-shrink: 0;
+            height: 63vh; min-width: var(--card-w, min(88vw, 60rem)); flex-shrink: 0;
             opacity: 0; transform: translateY(60px);
             transition: opacity 0.6s ease-out, transform 0.6s ease-out, box-shadow 0.25s ease, border-color 0.25s ease;
             border: 1px solid rgba(255,255,255,0.22); border-top: 3px solid var(--card-accent, var(--gold-400));
@@ -1221,12 +1225,6 @@
                 </div>
             </section>
 
-            <!-- "Services" already lives in the top nav, so no duplicate CTA here —
-                 just the scroll cue, sitting directly under the dashboard cards. -->
-            <div class="hero-scroll-cue">
-                <span class="hero-scroll-cue-text">Scroll</span>
-                <i class="fas fa-chevron-down hero-scroll-cue-icon"></i>
-            </div>
         </section>
 
         <!-- ================= OUR SERVICES SECTION ================= -->
@@ -2498,30 +2496,8 @@
                     setX(-scrollPos);
                 }
 
-                // Only an actual press/tap on the track stops the auto-scroll — hovering
-                // over it without pressing does not, and releasing resumes immediately.
-                viewport.addEventListener('wheel', (e) => {
-                    e.preventDefault();
-                    isInteracting = true;
-                    scrollPos += e.deltaY;
-                    wrapAndApply();
-                    clearTimeout(viewport.interactionTimeout);
-                    viewport.interactionTimeout = setTimeout(() => isInteracting = false, 1500);
-                }, { passive: false });
-
-                viewport.addEventListener('pointerdown', (e) => {
-                    isDragging = true;
-                    dragStartX = e.clientX;
-                    dragStartScroll = scrollPos;
-                    viewport.setPointerCapture(e.pointerId);
-                });
-                viewport.addEventListener('pointermove', (e) => {
-                    if (!isDragging) return;
-                    scrollPos = dragStartScroll + (dragStartX - e.clientX);
-                    wrapAndApply();
-                });
-                viewport.addEventListener('pointerup', () => { isDragging = false; });
-                viewport.addEventListener('pointercancel', () => { isDragging = false; });
+                // The carousel moves only on its own 5s timer: wheel/scroll and drag
+                // no longer move it, so page scrolling over it just scrolls the page.
 
                 // The marquee used to keep spinning — and re-triggering each chart's
                 // 8s canvas reveal animation every time a card crossed the intersection
@@ -2538,14 +2514,30 @@
                 }, { threshold: 0 });
                 dashboardVisibilityObserver.observe(viewport);
 
-                function autoScrollTrack() {
-                    if (dashboardOnScreen && !isInteracting && !isDragging) {
-                        scrollPos += speed;
-                        wrapAndApply();
-                    }
-                    requestAnimationFrame(autoScrollTrack);
+                // Carousel: instead of drifting continuously, the track rests on a
+                // card for 5 seconds, then slides one card over (looping through the
+                // cloned set). Dragging/wheel still work and hold the timer off.
+                const cardStep = originalCards.length > 1
+                    ? originalCards[1].offsetLeft - originalCards[0].offsetLeft
+                    : resetPoint;
+                const slideState = { v: 0 };
+                let sliding = false;
+                function slideToNextCard() {
+                    if (!dashboardOnScreen || isInteracting || isDragging || sliding || !cardStep) return;
+                    sliding = true;
+                    slideState.v = scrollPos;
+                    const target = (Math.round(scrollPos / cardStep) + 1) * cardStep;
+                    gsap.to(slideState, {
+                        v: target, duration: 0.9, ease: 'power2.inOut',
+                        onUpdate: () => {
+                            if (isDragging) return;
+                            scrollPos = slideState.v;
+                            wrapAndApply();
+                        },
+                        onComplete: () => { sliding = false; }
+                    });
                 }
-                autoScrollTrack();
+                setInterval(slideToNextCard, 5000);
 
                 const cardObserver = new IntersectionObserver((entries) => {
                     entries.forEach(entry => {
