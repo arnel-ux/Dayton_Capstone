@@ -1008,9 +1008,30 @@
         @media (prefers-reduced-motion: reduce) {
             * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
         }
+        /* NPC DPO/DPS registration splash: shown first on every load/refresh,
+           dismissed by a click/tap/keypress anywhere. */
+        #npc-splash{position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:opacity .35s ease}
+        #npc-splash.hide{opacity:0;pointer-events:none}
+        #npc-splash .npc-card{background:#fff;border-radius:18px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.4);box-sizing:border-box;max-width:92vw;max-height:94vh;max-height:94dvh;display:flex}
+        #npc-splash img{display:block;width:auto;height:auto;max-width:min(480px,calc(92vw - 40px));max-height:calc(94vh - 40px);max-height:calc(94dvh - 40px);object-fit:contain}
+        @media (max-width:480px){#npc-splash .npc-card{padding:12px;border-radius:14px}#npc-splash img{max-width:calc(92vw - 24px);max-height:calc(94dvh - 24px)}}
+        @media (min-width:1200px){#npc-splash img{max-width:min(560px,calc(92vw - 40px))}}
     </style>
 </head>
 <body>
+    <div id="npc-splash" role="button" aria-label="Continue to landing page" tabindex="0">
+        <div class="npc-card">
+            <img src="/images/npc-dpo-dps-registered.png" alt="National Privacy Commission DPO/DPS Registered">
+        </div>
+    </div>
+    <script>
+        (function () {
+            var s = document.getElementById('npc-splash');
+            function close() { s.classList.add('hide'); setTimeout(function () { s.remove(); }, 400); }
+            s.addEventListener('click', close);
+            document.addEventListener('keydown', function () { if (document.getElementById('npc-splash')) close(); });
+        })();
+    </script>
 
     <div class="bg-image"></div>
     <div class="bg-overlay"></div>

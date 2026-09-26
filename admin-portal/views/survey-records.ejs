@@ -378,15 +378,15 @@
             background-color: var(--primary-indigo) !important;
             color: #fff !important;
             border: 1px solid var(--primary-indigo) !important;
-            font-size: 0.76rem;
+            font-size: 0.68rem;
             font-weight: 700;
-            padding: var(--sp-2) var(--sp-3);
+            padding: 4px var(--sp-2);
             border-radius: var(--radius-sm);
             white-space: nowrap;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            min-width: 128px;
+            min-width: 100px;
             transition: background-color 0.15s ease, transform 0.15s ease;
         }
         .btn-view-result:hover,
@@ -1081,6 +1081,14 @@
                     if (topicBadge) {
                         topicBadge.textContent = payload.topic;
                         topicBadge.title = payload.topic;
+                        // Bootstrap already moved the original title into its own
+                        // attribute, so refresh that too or the tooltip stays stale.
+                        topicBadge.setAttribute('data-bs-original-title', payload.topic);
+                        const topicTip = bootstrap.Tooltip.getInstance(topicBadge);
+                        if (topicTip) {
+                            topicTip.setContent({ '.tooltip-inner': payload.topic });
+                        }
+                        topicBadge.removeAttribute('title');
                         topicBadge.className = 'topic-badge ' + topicBadgeClass(payload.topic);
                     }
                     if (sentimentBadge) {
