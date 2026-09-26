@@ -1372,3 +1372,14 @@ html, body {
     .sent-notice,
     .verified-notice { padding-block: 0.6rem; font-size: 0.8rem; margin-bottom: 0.75rem; }
 }
+
+/* One CSPC logo size on every auth card (login, client login, forgot/reset
+   password, complete registration), at every breakpoint. The attribute
+   selector keeps the Google profile photo on complete-google-registration
+   out of it — that is an avatar, not the logo. Specificity is above the
+   per-breakpoint `.card-custom .cqa-logo` width ladder, so it wins throughout. */
+.card-custom img.cqa-logo[alt="CSPC Logo"] {
+    width: 72px;
+    height: auto;
+    margin-bottom: 0.5rem !important;
+}

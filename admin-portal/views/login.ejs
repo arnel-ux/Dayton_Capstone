@@ -247,9 +247,43 @@
            would leave a dangling gap above the card's bottom padding. */
         body.is-offline #offlineSurveyBtn { margin-bottom: 0 !important; }
 
+        /* Offline hides the form, so the card has height to spare — spend it on
+           breathing room and larger type instead of the tight online density.
+           Scoped to .is-offline; the online layout is untouched. */
+        body.is-offline .card-custom h4 { font-size: 1.35rem; margin-bottom: 0.4rem; }
+        body.is-offline .card-custom .divider-soft { margin: 0.5rem auto 0.7rem; }
+        body.is-offline #cardSubtitle { display: block; font-size: 0.95rem; margin-bottom: 1rem; }
+        body.is-offline #offlineLoginNotice { font-size: 0.95rem; padding: 0.85rem 1rem; margin-bottom: 1rem; }
+        body.is-offline #offlineLoginNotice span { font-size: 0.95rem; line-height: 1.45; }
+        body.is-offline #offlineStepsGuide { padding: 1rem 1rem; margin-bottom: 1.1rem; }
+        body.is-offline #offlineStepsGuide .auth-steps-title { font-size: 0.85rem; margin-bottom: 0.8rem; }
+        body.is-offline #offlineStepsGuide .auth-step { gap: 0.75rem; }
+        body.is-offline #offlineStepsGuide .auth-step + .auth-step { margin-top: 0.85rem; }
+        body.is-offline #offlineStepsGuide .auth-step p { font-size: 0.95rem; line-height: 1.5; }
+        body.is-offline #offlineSurveyBtn { font-size: 1.05rem; padding-block: 0.85rem; min-height: 54px; }
+
         /* The home button is bottom-centre at every size and in both states now
            (see /css/auth.css), so the overrides that used to pull it back down
            here for the offline layout are gone — there is nothing left to undo. */
+
+        /* Register tab on a phone: the card sits well above the fold with room
+           to spare, so enlarge the logo and type. Scoped with :has() to the
+           Register panel being visible, so the Login tab (reCAPTCHA, tighter
+           fold) and the offline layout keep their own sizing. */
+        @media (max-width: 480px) {
+            body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) h4 { font-size: 1.35rem; }
+            body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .divider-soft { margin: 0.5rem auto 0.6rem; }
+            body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) #cardSubtitle { font-size: 0.95rem; margin-bottom: 0.8rem; }
+            body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .auth-switch { margin-bottom: 0.8rem; }
+            body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .auth-switch-btn { font-size: 0.9rem; min-height: 40px; }
+            body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .reg-email-chip { font-size: 0.85rem; padding: 0.5rem 0.7rem; }
+            body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .reg-emails { gap: 0.45rem; margin-bottom: 0.8rem; }
+            body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .auth-steps { padding: 0.9rem 1rem; margin-bottom: 1rem; }
+            body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .auth-steps-title { font-size: 0.85rem; margin-bottom: 0.7rem; }
+            body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .auth-step + .auth-step { margin-top: 0.75rem; }
+            body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .auth-step p { font-size: 0.95rem; line-height: 1.45; }
+            body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .btn-register-google { font-size: 1rem; min-height: 52px; }
+        }
 
         /* ---- Fold trims for the two step lists ---- */
         @media (max-width: 480px) {
