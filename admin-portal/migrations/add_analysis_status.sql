@@ -1,0 +1,39 @@
+-- ============================================================================
+-- Adds analysis_status to survey_responses — part of the pure-AI
+-- classification project (2026-09-22).
+--
+-- A live comment is inserted with a PLACEHOLDER topic/sentiment while
+-- Gemini analyzes it in the background (see server.js's
+-- insertVerifiedSurveyOnConnection / analyzeComment), then an async UPDATE
+-- fills in the real result moments later. Without this column, an admin
+-- could briefly see the placeholder ('General Feedback'/'Neutral') on
+-- /survey-records, the dashboard, or the notification bell, only to have it
+-- change a moment later — exactly the "null or conflict while the AI is
+-- still reading it" this column exists to prevent.
+--
+-- 'pending' rows are excluded from every admin-facing display (see
+-- HAS_AI_ANALYSIS_SQL and the analysis_status filters on /survey-records,
+-- /api/admin/survey-response/:id, and /api/admin/notifications in
+-- server.js) until the async classification UPDATE flips them to
+-- 'completed'. Comments synced from the offline queue (/sync-surveys,
+-- /api/offline-surveys/verify-and-sync) already await analysis BEFORE the
+-- row is inserted, so they are always inserted as 'completed' directly —
+-- only the live /submit-survey and /office-approvals/:id/approve paths ever
+-- insert a 'pending' row.
+--
+-- DEFAULT 'completed' is deliberate for existing rows: every historical row
+-- was already fully analyzed (or is a genuine no-feedback row) long before
+-- this column existed, so none of them should newly disappear from any view.
+--
+-- Safe/non-destructive: one new NOT NULL column with a default, no data
+-- migration, no rows modified.
+--
+-- Note: server.js already applies this automatically on startup (adds the
+-- column if missing). This file is provided only for manually applying the
+-- same change outside of starting the server.
+--
+--   mysql -u root cqa_db < admin-portal/migrations/add_analysis_status.sql
+-- ============================================================================
+
+ALTER TABLE survey_responses
+  ADD COLUMN IF NOT EXISTS analysis_status ENUM('pending','completed') NOT NULL DEFAULT 'completed';

@@ -34,7 +34,7 @@ const EFFECTIVE_TOPIC_SQL = `
     CASE
         WHEN s.topic_override IS NULL THEN s.topic
         WHEN s.topic_override = 'No Feedback' THEN 'No Feedback'
-        WHEN s.topic_override <> 'Transaction' AND (s.subtopic_override IS NULL OR s.subtopic_override = 'General') THEN s.topic_override
+        WHEN s.subtopic_override IS NULL OR s.subtopic_override = 'General' THEN s.topic_override
         ELSE CONCAT(s.topic_override, ' - ', s.subtopic_override)
     END
 `;
@@ -77,7 +77,19 @@ const NO_AI_RESULT_TOPIC_SQL = `(
 // s.topic IS NOT NULL stays keyed to the RAW column (an override must never
 // resurrect a survey whose respondent wrote nothing at all); the junk-topic
 // test above is the part that honours overrides.
-const HAS_AI_ANALYSIS_SQL = `(s.topic IS NOT NULL AND NOT ${NO_AI_RESULT_TOPIC_SQL})`;
+//
+// s.analysis_status = 'completed' (added 2026-09-22, pure-AI classification
+// project): a live comment is inserted with a PLACEHOLDER topic/sentiment
+// while Gemini is still analyzing it in the background (see
+// insertVerifiedSurveyOnConnection's analysisPending handling) — that
+// placeholder is a non-NULL string, so without this check a still-analyzing
+// comment would already "have AI analysis" by the tests above and briefly
+// show a wrong/about-to-change topic or sentiment. Requiring 'completed'
+// here means every query built on HAS_AI_ANALYSIS_SQL (dashboard/report
+// topic & sentiment breakdowns, and HAS_REAL_COMMENT_SQL's comment listing
+// below) simply treats a still-analyzing comment as "nothing to show yet",
+// exactly like a genuine no-feedback row, until the analysis finishes.
+const HAS_AI_ANALYSIS_SQL = `(s.topic IS NOT NULL AND s.analysis_status = 'completed' AND NOT ${NO_AI_RESULT_TOPIC_SQL})`;
 const REPORT_TOPIC_SQL = `CASE WHEN ${HAS_AI_ANALYSIS_SQL} THEN (${EFFECTIVE_TOPIC_SQL}) ELSE NULL END`;
 const REPORT_SENTIMENT_SQL = `CASE WHEN ${HAS_AI_ANALYSIS_SQL} THEN (${EFFECTIVE_SENTIMENT_SQL}) ELSE NULL END`;
 
@@ -529,19 +541,74 @@ function findSurveyByClientSubmissionId(clientSubmissionId) {
 // life as canonical_status='canonical' (the column default); a caller that
 // just superseded an older canonical row does that as a separate UPDATE in
 // the same transaction (see submitCanonicalSurvey).
+// Bulk-inserts a comment's EXTRA topics (everything beyond the primary,
+// which lives on survey_responses.topic itself — see
+// createSurveyResponseTopicsTableQuery's comment) on an existing transactional
+// connection. No-op for an empty/undefined list. sort_order preserves the
+// array order Gemini/the lexicon returned, so display always matches how the
+// classifier itself ranked them.
+async function insertExtraTopicsOnConnection(conn, surveyResponseId, extraTopics) {
+    if (!extraTopics || !extraTopics.length) return;
+    const values = [];
+    const placeholders = extraTopics.map((topic, i) => {
+        values.push(surveyResponseId, topic, i);
+        return '(?, ?, ?)';
+    }).join(', ');
+    await conn.query(
+        `INSERT INTO survey_response_topics (survey_response_id, topic, sort_order) VALUES ${placeholders}`,
+        values
+    );
+}
+
+// Same as above, but on the shared pooled `db` (callback-style, not a
+// transactional connection) — used by the fire-and-forget async
+// classification callbacks (see /submit-survey and
+// /office-approvals/:id/approve), which run well after their own insert's
+// transaction already committed.
+function insertExtraTopics(surveyResponseId, extraTopics) {
+    if (!extraTopics || !extraTopics.length) return;
+    const values = [];
+    const placeholders = extraTopics.map((topic, i) => {
+        values.push(surveyResponseId, topic, i);
+        return '(?, ?, ?)';
+    }).join(', ');
+    db.query(
+        `INSERT INTO survey_response_topics (survey_response_id, topic, sort_order) VALUES ${placeholders}`,
+        values,
+        (err) => { if (err) console.error('❌ Error inserting extra topics:', err); }
+    );
+}
+
 async function insertVerifiedSurveyOnConnection(conn, googleEmail, fields, submissionSource) {
     const {
-        officeId, respondentName, topic, sentiment, region, cc1, cc2, cc3,
+        officeId, respondentName, topics, sentiment, region, cc1, cc2, cc3,
         sqdValues, comments, serviceAvailed, clientType, age, gender, officeVisitedTime, period,
-        clientSubmissionId, submittedAt
+        clientSubmissionId, submittedAt, analysisPending
     } = fields;
 
     // Same reasoning as finalizeVerifiedSurvey above — a no-feedback comment
     // gets NULL, never the placeholder default, since nothing ever corrects
     // it afterward for a comment that has no real content to (re-)analyze.
     const noFeedback = isNoFeedbackComment(comments);
-    const finalTopic = noFeedback ? null : (topic || 'General Feedback');
+    // `topics` is a list (multi-topic tagging project, 2026-09-25) — only
+    // the FIRST/primary one is stored on this row itself; any extras are
+    // inserted into survey_response_topics below once the id is known. A
+    // caller whose analysis hasn't run yet (analysisPending — see below)
+    // passes no topics at all here, same as before.
+    const topicsList = Array.isArray(topics) ? topics.filter(Boolean) : (topics ? [topics] : []);
+    const finalTopic = noFeedback ? null : (topicsList[0] || 'General Feedback');
     const finalSentiment = noFeedback ? null : (sentiment || 'Neutral');
+    // `analysisPending` is set by a caller that hasn't run AI analysis yet
+    // and will fire it asynchronously AFTER this insert (see /submit-survey
+    // and /office-approvals/:id/approve) — those rows start 'pending' so
+    // they're excluded from every admin-facing display until the later
+    // UPDATE flips them to 'completed' (see HAS_AI_ANALYSIS_SQL). A
+    // no-feedback comment is always 'completed' immediately regardless —
+    // there is no analysis coming for it, ever. Every other caller
+    // (offline sync, offline verify-and-sync) already awaited analysis
+    // BEFORE calling this function, so its rows are 'completed' from the
+    // start too.
+    const finalAnalysisStatus = (!noFeedback && analysisPending) ? 'pending' : 'completed';
     // `submittedAt` is WHEN THE CLIENT SUBMITTED, supplied only by a caller
     // that is replaying an already-submitted survey — today that is the office
     // approval route, which passes the pending row's own server-stamped
@@ -559,17 +626,27 @@ async function insertVerifiedSurveyOnConnection(conn, googleEmail, fields, submi
     // arrived instead of landing silently in the past.
     const [insertResult] = await conn.query(
         `INSERT INTO survey_responses
-         (office_id, respondent_name, topic, sentiment, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email, service_availed, client_submission_id, submission_source, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`,
+         (office_id, respondent_name, topic, sentiment, region, cc1, cc2, cc3, sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8, comments, period_year_quarter, google_email, service_availed, client_submission_id, submission_source, analysis_status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`,
         [
             officeId, respondentName, finalTopic, finalSentiment, region,
             cc1, cc2, cc3,
             sqdValues[0], sqdValues[1], sqdValues[2], sqdValues[3], sqdValues[4], sqdValues[5], sqdValues[6], sqdValues[7], sqdValues[8],
             comments || 'N/A', period, googleEmail, serviceAvailed, clientSubmissionId || null, submissionSource || 'legacy_unknown',
+            finalAnalysisStatus,
             submittedAt || null
         ]
     );
     const surveyResponseId = insertResult.insertId;
+
+    // Any topics beyond the primary — only ever populated here for a caller
+    // that already has the full list at insert time (offline sync paths,
+    // which await analysis before calling this function); the live/approval
+    // paths pass no topics yet and add extras later via insertExtraTopics
+    // once their own async analysis resolves.
+    if (!noFeedback) {
+        await insertExtraTopicsOnConnection(conn, surveyResponseId, topicsList.slice(1));
+    }
 
     // Same timestamp as its survey_responses row, for the same reason — the
     // two are one submission and must never disagree about when it happened.
@@ -1426,12 +1503,13 @@ function saveLandingSection(section, fields) {
     return current[section];
 }
 
-// Runs a comment through the full transformer sentiment/topic pipeline via
-// ai_scripts/analyze.py, spawning a fresh Python process. This reloads the
-// models from disk every call, so it's only used as a fallback for the live
-// path (model server unreachable) and as the normal path for offline-synced
-// comments (see analyzeComment below), which take the fast lexicon branch
-// inside analyze.py instead of this heavy branch.
+// Runs a comment through analyze.py, spawning a fresh Python process. This
+// loads the Gemini client fresh every call, so it's slower than the
+// persistent model server — used as a fallback for the live path (model
+// server unreachable) and as the normal path for every offline-synced
+// comment (see analyzeComment below), which (as of 2026-09-25) gets the
+// exact same pure-Gemini classification as a live comment, just via this
+// per-comment process instead of the persistent model server.
 function analyzeViaPythonScript(comment, offline, officeHint) {
     return new Promise((resolve) => {
         try {
@@ -1440,7 +1518,7 @@ function analyzeViaPythonScript(comment, offline, officeHint) {
 
             pythonProcess.on('error', (err) => {
                 console.error("❌ [AI] Could not start Python. Is it installed?", err);
-                resolve({ sentiment: 'Neutral', topic: 'General Feedback' });
+                resolve({ sentiment: 'Neutral', topics: ['General Feedback'] });
             });
 
             pythonProcess.stdin.write(JSON.stringify({ comment: String(comment), offline: !!offline, office: officeHint || '' }));
@@ -1455,20 +1533,22 @@ function analyzeViaPythonScript(comment, offline, officeHint) {
                     const jsonMatch = aiOutput.match(/\{[\s\S]*\}/);
                     if (jsonMatch) {
                         const aiResult = JSON.parse(jsonMatch[0]);
-                        if (aiResult.sentiment && aiResult.topic) {
-                            return resolve({ sentiment: aiResult.sentiment, topic: aiResult.topic });
+                        // topics is a non-empty array (multi-topic tagging project,
+                        // 2026-09-25) — see gemini_model.classify's docstring.
+                        if (aiResult.sentiment && Array.isArray(aiResult.topics) && aiResult.topics.length) {
+                            return resolve({ sentiment: aiResult.sentiment, topics: aiResult.topics });
                         }
                     }
                     console.error("❌ [AI Parsing Error]: Could not find JSON.\nRaw Output:", aiOutput);
-                    resolve({ sentiment: 'Neutral', topic: 'General Feedback' });
+                    resolve({ sentiment: 'Neutral', topics: ['General Feedback'] });
                 } catch (e) {
                     console.error("❌ [AI Execution Error]:", e.message);
-                    resolve({ sentiment: 'Neutral', topic: 'General Feedback' });
+                    resolve({ sentiment: 'Neutral', topics: ['General Feedback'] });
                 }
             });
         } catch (err) {
             console.error("❌ [AI] Unexpected error launching analysis:", err);
-            resolve({ sentiment: 'Neutral', topic: 'General Feedback' });
+            resolve({ sentiment: 'Neutral', topics: ['General Feedback'] });
         }
     });
 }
@@ -1508,7 +1588,7 @@ function parsePendingPayload(raw) {
 // nowhere, which is how a report could be generated with all three rules
 // meaning to apply and only this one actually running.
 
-// Resolves { sentiment, topic } for a comment. Used by both the live
+// Resolves { sentiment, topics } for a comment. Used by both the live
 // /submit-survey route (fire-and-forget, applied via an UPDATE after the
 // fact) and the /sync-surveys batch route (awaited before the row is even
 // inserted). Never rejects — a missing/blank/no-feedback comment resolves
@@ -1518,19 +1598,21 @@ function parsePendingPayload(raw) {
 // one bad comment can never crash a batch sync.
 //
 // `offline` should be true for comments coming from the /sync-surveys queue
-// (submitted while the client was offline, synced later in bulk) — those
-// always go through analyze.py's fast local-heuristic path (no model
-// loading at all, so a plain per-call spawn is already fast). Live comments
-// (`offline` false) go to the persistent model server for near-instant
-// analysis, only falling back to spawning analyze.py (slow — reloads the
-// models) if the model server is unreachable.
+// (submitted while the client was offline, synced later in bulk) — as of
+// 2026-09-25 these get the exact same pure-Gemini classification as a live
+// comment (see analyze.py's module comment for why the offline-only
+// keyword-lexicon hybrid was reverted), just via a fresh analyze.py
+// subprocess per comment rather than the persistent model server. Live
+// comments (`offline` false) go to the persistent model server for
+// near-instant analysis, only falling back to spawning analyze.py (slower —
+// loads the Gemini client fresh) if the model server is unreachable.
 // officeId: optional office_id whose cached office/cluster name is passed to
 // the classifier as a soft topic hint (see topic_common.py's
 // office_hint_topics) — never a hard override, just a tie-break nudge.
 function analyzeComment(comment, offline = false, officeId = null) {
     return new Promise((resolve) => {
         if (isNoFeedbackComment(comment)) {
-            return resolve({ sentiment: null, topic: null });
+            return resolve({ sentiment: null, topics: null });
         }
 
         const officeHint = officeId != null ? getOfficeHint(officeId) : null;
@@ -1561,10 +1643,12 @@ function analyzeComment(comment, offline = false, officeId = null) {
         })
             .then((res) => res.ok ? res.json() : Promise.reject(new Error(`Model server responded ${res.status}`)))
             .then((aiResult) => {
-                if (aiResult.sentiment && aiResult.topic) {
-                    return resolve({ sentiment: aiResult.sentiment, topic: aiResult.topic });
+                // topics is a non-empty array (multi-topic tagging project,
+                // 2026-09-25) — see gemini_model.classify's docstring.
+                if (aiResult.sentiment && Array.isArray(aiResult.topics) && aiResult.topics.length) {
+                    return resolve({ sentiment: aiResult.sentiment, topics: aiResult.topics });
                 }
-                throw new Error('Model server response missing sentiment/topic');
+                throw new Error('Model server response missing sentiment/topics');
             })
             .catch((err) => {
                 console.error("❌ [AI Model Server] Request failed, falling back to per-comment script:", err.message);
@@ -2707,6 +2791,24 @@ CREATE TABLE IF NOT EXISTS survey_responses (
     FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE
 );`;
 
+// Multi-topic tagging project (2026-09-25): a comment that clearly names
+// multiple distinct things (see gemini_model.py's MAX_TOPICS) gets more than
+// one topic. survey_responses.topic stays the PRIMARY/first topic exactly as
+// before — every existing dashboard/report/notification query keeps working
+// unchanged against it — and this table holds only the EXTRA topics beyond
+// the first, so "all topics for this comment" is `topic` UNION this table's
+// rows (ordered by sort_order, which preserves Gemini's own array order).
+// A no-feedback/junk comment never gets a row here (no analysis to name a
+// second topic from).
+const createSurveyResponseTopicsTableQuery = `
+CREATE TABLE IF NOT EXISTS survey_response_topics (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    survey_response_id INT NOT NULL,
+    topic VARCHAR(150) NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    FOREIGN KEY (survey_response_id) REFERENCES survey_responses(id) ON DELETE CASCADE
+);`;
+
 // 3b. Table para sa Services ng bawat Office (ginagamit ng dependent
 // "Service Availed" dropdown sa client-survey.ejs — see #serviceSelect)
 const createServicesTableQuery = `
@@ -3304,6 +3406,28 @@ db.query(createClustersTableQuery, (err) => {
                         db.query("ALTER TABLE survey_responses ADD COLUMN topic_override VARCHAR(150) NULL", () => {});
                         db.query("ALTER TABLE survey_responses ADD COLUMN subtopic_override VARCHAR(100) NULL", () => {});
                         db.query("ALTER TABLE survey_responses ADD COLUMN sentiment_override VARCHAR(20) NULL", () => {});
+
+                        // Pure-AI classification project (2026-09-22): a live comment is
+                        // inserted with a placeholder topic/sentiment while Gemini analyzes
+                        // it in the background (see insertVerifiedSurveyOnConnection's
+                        // analysisPending handling) — 'pending' rows are excluded from every
+                        // admin-facing display (survey-records, dashboard/report topic &
+                        // sentiment breakdowns, the notification bell — see
+                        // HAS_AI_ANALYSIS_SQL) until the async classification UPDATE flips
+                        // them to 'completed', so an admin never sees a placeholder result
+                        // that's about to change. Historical rows default to 'completed' —
+                        // they were already fully analyzed (or are genuine no-feedback rows)
+                        // long before this column existed, so none of them should newly
+                        // disappear from any view.
+                        db.query("ALTER TABLE survey_responses ADD COLUMN analysis_status ENUM('pending','completed') NOT NULL DEFAULT 'completed'", () => {});
+
+                        // Multi-topic tagging project (2026-09-25) — see
+                        // createSurveyResponseTopicsTableQuery's own comment.
+                        db.query(createSurveyResponseTopicsTableQuery, (err) => {
+                            if (err) console.error('❌ Error creating survey_response_topics table:', err);
+                            else console.log('✅ survey_response_topics table verified/created successfully!');
+                        });
+                        db.query("CREATE INDEX idx_survey_response_topics_response_id ON survey_response_topics(survey_response_id)", () => {});
 
                         // ---- Online-vs-Offline canonical precedence (data-consistency fix) ----
                         // Which channel actually created this row, server-derived at insert
@@ -4716,7 +4840,8 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
         }
 
         surveyResponseId = await insertVerifiedSurveyOnConnection(conn, googleEmail, {
-            officeId: payload.officeId, respondentName: payload.respondentName, topic: payload.topic,
+            officeId: payload.officeId, respondentName: payload.respondentName,
+            topics: payload.topic ? [payload.topic] : (payload.topics || null),
             sentiment: payload.sentiment, region: payload.region, cc1: payload.cc1, cc2: payload.cc2, cc3: payload.cc3,
             sqdValues: payload.sqdValues, comments: payload.comments, serviceAvailed: payload.serviceAvailed,
             clientType: payload.clientType, age: payload.age, gender: payload.gender,
@@ -4725,7 +4850,12 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
             // approval is replaying (server-stamped when the client submitted,
             // never client-supplied) — so the response keeps the time the office
             // saw in its Pending list instead of being re-dated to this approval.
-            submittedAt: row.created_at
+            submittedAt: row.created_at,
+            // payload.topic(s)/sentiment were never AI-analyzed at queue time
+            // (see /submit-survey and syncOneSurvey's non-CSPC branches, which
+            // queue with topics: []) — analysis runs asynchronously AFTER this
+            // insert, below, same as the live path.
+            analysisPending: true
         }, row.submission_source || 'offline_sync');
 
         if (precedence.supersede) {
@@ -4790,9 +4920,16 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
     // timing — AI analysis only if this submission's payload didn't already
     // carry a sentiment/topic (mirrors finalizeVerifiedSurvey's own tail).
     if (!isNoFeedbackComment(payload.comments)) {
-        analyzeComment(payload.comments, false, payload.officeId).then(({ sentiment: aiSentiment, topic: aiTopic }) => {
-            if (aiSentiment && aiTopic) {
-                db.query('UPDATE survey_responses SET sentiment = ?, topic = ? WHERE id = ?', [aiSentiment, aiTopic, surveyResponseId]);
+        analyzeComment(payload.comments, false, payload.officeId).then(({ sentiment: aiSentiment, topics: aiTopics }) => {
+            // See the identical /submit-survey comment: analysis_status must
+            // always reach 'completed', even on a degraded classification,
+            // so the row is never invisible forever.
+            if (aiSentiment && aiTopics && aiTopics.length) {
+                const [primaryTopic, ...extraTopics] = aiTopics;
+                db.query("UPDATE survey_responses SET sentiment = ?, topic = ?, analysis_status = 'completed' WHERE id = ?", [aiSentiment, primaryTopic, surveyResponseId]);
+                insertExtraTopics(surveyResponseId, extraTopics);
+            } else {
+                db.query("UPDATE survey_responses SET analysis_status = 'completed' WHERE id = ?", [surveyResponseId]);
             }
         });
     }
@@ -5869,12 +6006,16 @@ app.post('/submit-survey', ensureClientAuth, async (req, res) => {
 
     const sqdValues = [sqd0, sqd1, sqd2, sqd3, sqd4, sqd5, sqd6, sqd7, sqd8].map(cleanInt);
     const fields = {
-        officeId: finalOfficeId, respondentName: finalName, topic: cleanStr(topic),
+        officeId: finalOfficeId, respondentName: finalName, topics: cleanStr(topic) ? [cleanStr(topic)] : [],
         region: finalRegion, cc1: cleanStr(cc1), cc2: cleanStr(cc2), cc3: cleanStr(cc3),
         sqdValues, comments: cleanStr(comments), serviceAvailed: finalServiceAvailed,
         clientType: finalClientType, age: finalAge, gender: finalGender,
         officeVisitedTime: finalOfficeVisitedTime, period: getPeriodCovered(),
-        clientSubmissionId: finalClientSubmissionId
+        clientSubmissionId: finalClientSubmissionId,
+        // AI analysis runs asynchronously AFTER this insert (fire-and-forget,
+        // below) — see insertVerifiedSurveyOnConnection's analysisPending
+        // handling for why this row starts 'pending' instead of 'completed'.
+        analysisPending: true
     };
     console.log("📤 [Survey Final Fields] (after profile merge, what actually gets stored):", fields);
 
@@ -5919,10 +6060,19 @@ app.post('/submit-survey', ensureClientAuth, async (req, res) => {
             });
 
             if (!isNoFeedbackComment(fields.comments)) {
-                analyzeComment(fields.comments, false, finalOfficeId).then(({ sentiment: aiSentiment, topic: aiTopic }) => {
-                    if (aiSentiment && aiTopic) {
-                        db.query('UPDATE survey_responses SET sentiment = ?, topic = ? WHERE id = ?', [aiSentiment, aiTopic, surveyResponseId]);
-                        console.log(`✅ [AI Success] ID: ${surveyResponseId} | Sentiment: ${aiSentiment} | Topic: ${aiTopic}`);
+                analyzeComment(fields.comments, false, finalOfficeId).then(({ sentiment: aiSentiment, topics: aiTopics }) => {
+                    // Always flips analysis_status to 'completed', even on a
+                    // degraded/failed classification (analyzeComment never
+                    // rejects, but a bad API key etc. could still leave
+                    // aiSentiment/aiTopics falsy) — a row must never stay
+                    // 'pending' forever and invisible to every admin view.
+                    if (aiSentiment && aiTopics && aiTopics.length) {
+                        const [primaryTopic, ...extraTopics] = aiTopics;
+                        db.query("UPDATE survey_responses SET sentiment = ?, topic = ?, analysis_status = 'completed' WHERE id = ?", [aiSentiment, primaryTopic, surveyResponseId]);
+                        insertExtraTopics(surveyResponseId, extraTopics);
+                        console.log(`✅ [AI Success] ID: ${surveyResponseId} | Sentiment: ${aiSentiment} | Topics: ${aiTopics.join(', ')}`);
+                    } else {
+                        db.query("UPDATE survey_responses SET analysis_status = 'completed' WHERE id = ?", [surveyResponseId]);
                     }
                 });
             }
@@ -6008,7 +6158,7 @@ async function syncOneSurvey(googleEmail, body, clientSubmissionId, createdOffli
     if (finalClientSubmissionId) {
         const existing = await findSurveyByClientSubmissionId(finalClientSubmissionId);
         if (existing) {
-            return { success: true, alreadySynced: true, surveyResponseId: existing.id, sentiment: 'Neutral', topic: 'General Feedback' };
+            return { success: true, alreadySynced: true, surveyResponseId: existing.id, sentiment: 'Neutral', topics: ['General Feedback'] };
         }
     }
 
@@ -6060,7 +6210,7 @@ async function syncOneSurvey(googleEmail, body, clientSubmissionId, createdOffli
     if (!isCspcEmail(googleEmail)) {
         try {
             await queuePendingSurveyWithPrecedence(finalOfficeId, googleEmail, finalServiceAvailed, {
-                officeId: finalOfficeId, respondentName: finalName, topic: null, region: finalRegion,
+                officeId: finalOfficeId, respondentName: finalName, topics: [], region: finalRegion,
                 cc1: cleanStr(cc1), cc2: cleanStr(cc2), cc3: cleanStr(cc3), sqdValues,
                 comments: cleanStr(comments), serviceAvailed: finalServiceAvailed,
                 clientType: finalClientType, age: finalAge, gender: finalGender,
@@ -6107,18 +6257,19 @@ async function syncOneSurvey(googleEmail, body, clientSubmissionId, createdOffli
     // Await the AI analysis BEFORE inserting — analyzeComment() never throws,
     // so a failed/unreachable analyze.py just yields the Neutral/General
     // Feedback fallback here instead of aborting this survey's sync.
-    // offline=true routes this through analyze.py's fast local heuristic
-    // path instead of loading the transformer models for every synced item.
+    // offline=true routes this through analyze.py's pure-Gemini path (see
+    // that script's module comment, 2026-09-25) — the same classification a
+    // live comment gets, just via a fresh subprocess per synced item.
     let sentiment = null;
-    let topic = null;
+    let topics = null;
     try {
         const aiResult = await analyzeComment(comments, true, finalOfficeId);
         sentiment = aiResult.sentiment;
-        topic = aiResult.topic;
+        topics = aiResult.topics;
     } catch (err) {
         console.error("❌ [Sync] AI analysis threw unexpectedly, defaulting:", err);
         sentiment = 'Neutral';
-        topic = 'General Feedback';
+        topics = ['General Feedback'];
     }
 
     let surveyResponseId, supersededId;
@@ -6131,7 +6282,7 @@ async function syncOneSurvey(googleEmail, body, clientSubmissionId, createdOffli
         // ground), so a second precedence check here is authoritative and
         // simply repeats the same read if nothing changed.
         const result = await submitCanonicalSurvey(googleEmail, {
-            officeId: finalOfficeId, respondentName: finalName, topic, sentiment, region: finalRegion,
+            officeId: finalOfficeId, respondentName: finalName, topics, sentiment, region: finalRegion,
             cc1: cleanStr(cc1), cc2: cleanStr(cc2), cc3: cleanStr(cc3), sqdValues,
             comments: cleanStr(comments), serviceAvailed: finalServiceAvailed,
             clientType: finalClientType, age: finalAge, gender: finalGender,
@@ -6154,7 +6305,7 @@ async function syncOneSurvey(googleEmail, body, clientSubmissionId, createdOffli
         return { success: false, message: "Database insertion error: " + err.message };
     }
 
-    console.log(`✅ [Sync Success] ID: ${surveyResponseId} | Sentiment: ${sentiment || 'Neutral'} | Topic: ${topic || 'General Feedback'}`);
+    console.log(`✅ [Sync Success] ID: ${surveyResponseId} | Sentiment: ${sentiment || 'Neutral'} | Topics: ${(topics && topics.length ? topics : ['General Feedback']).join(', ')}`);
     if (supersededId) {
         console.log(`⚠️ [Sync Precedence] Offline sync ID ${surveyResponseId} unexpectedly superseded canonical row ${supersededId} — should never happen for an offline_sync-sourced insert.`);
     }
@@ -6165,7 +6316,7 @@ async function syncOneSurvey(googleEmail, body, clientSubmissionId, createdOffli
         message: "Survey synced and analyzed successfully!",
         surveyResponseId,
         sentiment: sentiment || 'Neutral',
-        topic: topic || 'General Feedback'
+        topics: (topics && topics.length) ? topics : ['General Feedback']
     };
 }
 
@@ -6659,14 +6810,14 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
 
     // 7. AI sentiment/topic analysis — a slow, non-database call — runs
     // BEFORE opening any DB connection/transaction/lock, never while one is
-    // held open. Mirrors syncOneSurvey's offline=true fast-heuristic path.
+    // held open. Mirrors syncOneSurvey's offline=true pure-Gemini path.
     let sentiment = 'Neutral';
-    let topic = 'General Feedback';
+    let topics = ['General Feedback'];
     if (isCspc) {
         try {
             const aiResult = await analyzeComment(rawComments, true, finalOfficeId);
             sentiment = aiResult.sentiment || sentiment;
-            topic = aiResult.topic || topic;
+            topics = (aiResult.topics && aiResult.topics.length) ? aiResult.topics : topics;
         } catch (err) {
             console.error('❌ [Offline Verify] AI analysis threw unexpectedly, defaulting:', err);
         }
@@ -6729,7 +6880,7 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
         if (isCspc) {
             console.log('[Offline Verify] CSPC branch selected');
             const surveyResponseId = await insertVerifiedSurveyOnConnection(conn, verifiedEmail, {
-                officeId: finalOfficeId, respondentName: finalName, topic, sentiment, region: finalRegion,
+                officeId: finalOfficeId, respondentName: finalName, topics, sentiment, region: finalRegion,
                 cc1: finalCc1, cc2: finalCc2, cc3: finalCc3, sqdValues,
                 comments: rawComments, serviceAvailed: finalServiceAvailed,
                 clientType: finalClientType, age: finalAge, gender: finalGender,
@@ -6760,7 +6911,7 @@ app.post('/api/offline-surveys/verify-and-sync', offlineVerifyLimiter, async (re
             // authenticated /sync-surveys path already does for these
             // accounts.
             const pendingPayload = {
-                officeId: finalOfficeId, respondentName: finalName, topic: null, region: finalRegion,
+                officeId: finalOfficeId, respondentName: finalName, topics: [], region: finalRegion,
                 cc1: finalCc1, cc2: finalCc2, cc3: finalCc3, sqdValues,
                 comments: rawComments, serviceAvailed: finalServiceAvailed,
                 clientType: finalClientType, age: finalAge, gender: finalGender,
@@ -7032,14 +7183,31 @@ function loadDashboardData(req, callback) {
                             });
                             const sentimentTotal = sentimentBreakdown.Positive + sentimentBreakdown.Neutral + sentimentBreakdown.Negative;
 
+                            // Multi-topic tagging project (2026-09-25): a
+                            // comment can carry more than one topic (see
+                            // survey_response_topics) — UNIONing the primary
+                            // (from survey_responses.topic) with every extra
+                            // topic is what makes this ranking count each
+                            // topic mention, not just whichever one a
+                            // comment happened to land on first. The second
+                            // branch's JOIN naturally contributes nothing
+                            // for a comment with no extras — its primary
+                            // already came from the first branch.
                             const topicsQuery = `
-                                SELECT ${REPORT_TOPIC_SQL} AS topic, COUNT(*) AS c
-                                FROM survey_responses s
-                                ${dateWhere ? `${dateWhere} AND` : 'WHERE'} (${HAS_AI_ANALYSIS_SQL} AND s.topic <> '')
-                                GROUP BY ${REPORT_TOPIC_SQL} ORDER BY c DESC LIMIT 6
+                                SELECT topic, COUNT(*) AS c FROM (
+                                    SELECT ${REPORT_TOPIC_SQL} AS topic
+                                    FROM survey_responses s
+                                    ${dateWhere ? `${dateWhere} AND` : 'WHERE'} (${HAS_AI_ANALYSIS_SQL} AND s.topic <> '')
+                                    UNION ALL
+                                    SELECT srt.topic AS topic
+                                    FROM survey_responses s
+                                    JOIN survey_response_topics srt ON srt.survey_response_id = s.id
+                                    ${dateWhere ? `${dateWhere} AND` : 'WHERE'} (${HAS_AI_ANALYSIS_SQL} AND s.topic <> '')
+                                ) all_topics
+                                GROUP BY topic ORDER BY c DESC LIMIT 6
                             `;
 
-                            db.query(topicsQuery, dateParams, (err, topicRows) => {
+                            db.query(topicsQuery, [...dateParams, ...dateParams], (err, topicRows) => {
                                 logErr('top topics')(err);
                                 const maxTopicCount = (topicRows && topicRows[0]) ? topicRows[0].c : 0;
                                 const topTopics = (topicRows || []).map(r => ({
@@ -7058,7 +7226,14 @@ function loadDashboardData(req, callback) {
                                 `;
                                 db.query(recentQuery, dateParams, (err, recentRows) => {
                                     logErr('recent submissions')(err);
-                                    const recentSubmissions = (recentRows || []).map(r => ({
+
+                                    // Multi-topic tagging project (2026-09-25): dashboard.ejs's
+                                    // live "Recent Submissions" table AND dashboard-report.ejs's
+                                    // PDF-exportable version of the same table both read this one
+                                    // array — attaching extra topics here fixes both at once,
+                                    // same as /api/report-data's identical attachment.
+                                    const ids = (recentRows || []).map(r => r.id);
+                                    const buildRecentSubmissions = (extraTopicsMap) => (recentRows || []).map(r => ({
                                         officeName: r.office_name,
                                         cluster: r.cluster_name || 'Unassigned Cluster',
                                         // No AI result means none is shown — the old
@@ -7067,23 +7242,44 @@ function loadDashboardData(req, callback) {
                                         sentiment: r.sentiment || NO_FEEDBACK_LABEL,
                                         sentimentTone: sentimentTone(r.sentiment),
                                         topic: r.topic || NO_FEEDBACK_LABEL,
+                                        extraTopics: r.topic ? (extraTopicsMap.get(r.id) || []) : [],
                                         date: r.created_at
                                     }));
 
-                                    getMergedPeriodOptions((periodOptions) => {
-                                        callback({
-                                            dashboardData: { overallRating: overallAvgScore, overallLevel: interpretation, periodCoveredLabel: selectedPeriod || 'All Periods' },
-                                            chartData: chartData, clusterCards: clusterCards, satisfactionRate: overallAvgScore,
-                                            totalRespondents: totalRespondents, totalOffices: totalOffices, reportData: reportData,
-                                            overallClusterTotal: overallClusterTotal,
-                                            periodOptions: periodOptions, selectedPeriod: selectedPeriod || '',
-                                            hasQueryParam: hasQueryParam,
-                                            sentimentBreakdown: sentimentBreakdown, sentimentTotal: sentimentTotal,
-                                            topTopics: topTopics, recentSubmissions: recentSubmissions,
-                                            topOffices: topOffices, bottomOffices: bottomOffices,
-                                            clusterOptions: CLUSTER_REPORT_ORDER
+                                    const withRecentSubmissions = (recentSubmissions) => {
+                                        getMergedPeriodOptions((periodOptions) => {
+                                            callback({
+                                                dashboardData: { overallRating: overallAvgScore, overallLevel: interpretation, periodCoveredLabel: selectedPeriod || 'All Periods' },
+                                                chartData: chartData, clusterCards: clusterCards, satisfactionRate: overallAvgScore,
+                                                totalRespondents: totalRespondents, totalOffices: totalOffices, reportData: reportData,
+                                                overallClusterTotal: overallClusterTotal,
+                                                periodOptions: periodOptions, selectedPeriod: selectedPeriod || '',
+                                                hasQueryParam: hasQueryParam,
+                                                sentimentBreakdown: sentimentBreakdown, sentimentTotal: sentimentTotal,
+                                                topTopics: topTopics, recentSubmissions: recentSubmissions,
+                                                topOffices: topOffices, bottomOffices: bottomOffices,
+                                                clusterOptions: CLUSTER_REPORT_ORDER
+                                            });
                                         });
-                                    });
+                                    };
+
+                                    if (!ids.length) return withRecentSubmissions(buildRecentSubmissions(new Map()));
+                                    db.query(
+                                        `SELECT survey_response_id, topic FROM survey_response_topics WHERE survey_response_id IN (${ids.map(() => '?').join(',')}) ORDER BY survey_response_id, sort_order`,
+                                        ids,
+                                        (extraErr, extraRows) => {
+                                            const extraTopicsMap = new Map();
+                                            if (!extraErr && extraRows) {
+                                                extraRows.forEach(r => {
+                                                    if (!extraTopicsMap.has(r.survey_response_id)) extraTopicsMap.set(r.survey_response_id, []);
+                                                    extraTopicsMap.get(r.survey_response_id).push(r.topic);
+                                                });
+                                            } else if (extraErr) {
+                                                console.error('❌ [Dashboard] Error loading extra topics for recent submissions:', extraErr);
+                                            }
+                                            withRecentSubmissions(buildRecentSubmissions(extraTopicsMap));
+                                        }
+                                    );
                                 });
                             });
                         });
@@ -7404,7 +7600,12 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
         // is non-empty text, so a plain TRIM() <> '' test used to let it through and
         // the report listed it as a comment nobody wrote. The report is the written
         // comments, so those rows never leave the database now.
-        const commentsQuery = `SELECT s.comments, ${REPORT_SENTIMENT_SQL} AS sentiment, ${REPORT_TOPIC_SQL} AS topic FROM survey_responses s LEFT JOIN offices o ON s.office_id = o.id WHERE ${HAS_REAL_COMMENT_SQL}${commentsWhere}`;
+        //
+        // s.id is selected so extra topics (multi-topic tagging project,
+        // 2026-09-25 — see survey_response_topics) can be attached below; it
+        // is stripped back out of each comment object before the response is
+        // sent, since no view has ever needed a raw row id here before.
+        const commentsQuery = `SELECT s.id, s.comments, ${REPORT_SENTIMENT_SQL} AS sentiment, ${REPORT_TOPIC_SQL} AS topic FROM survey_responses s LEFT JOIN offices o ON s.office_id = o.id WHERE ${HAS_REAL_COMMENT_SQL}${commentsWhere}`;
 
         db.query(commentsQuery, queryParams, (err, commentsResult) => {
             // Last gate before a comment becomes a line on a signed document.
@@ -7416,11 +7617,11 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
             // against the text itself, here, and masks any profanity in what
             // survives. See shared/commentFilter.js for why each rule is
             // written to keep a borderline comment rather than drop it.
-            const comments = [];
+            const kept = [];
             for (const row of (commentsResult || [])) {
                 const verdict = prepareReportComment(row.comments);
                 if (!verdict.include) continue;
-                comments.push(Object.assign({}, row, {
+                kept.push(Object.assign({}, row, {
                     comments: verdict.text,
                     // Lets a view mark a masked row if it ever wants to; the
                     // printed templates deliberately do not, since an asterisk
@@ -7435,10 +7636,43 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
             stats.response_date = formatZonedDateLong(stats.response_at);
             delete stats.response_at;
 
-            res.json({
-                stats,
-                comments
-            });
+            // Multi-topic tagging project (2026-09-25): every report/print
+            // page that lists comments (report.ejs, cluster-detail.ejs,
+            // survey-records.ejs's per-respondent report) shows only
+            // `c.topic` (the primary) unless `c.extraTopics` is attached
+            // here too — without this, a comment Gemini tagged with two
+            // topics silently printed as if it only had one, everywhere a
+            // report is generated.
+            const ids = kept.map(c => c.id);
+            const attachExtraTopics = (extraTopicsMap) => {
+                const comments = kept.map(row => {
+                    const { id, ...comment } = row;
+                    comment.extraTopics = extraTopicsMap.get(id) || [];
+                    return comment;
+                });
+                res.json({
+                    stats,
+                    comments
+                });
+            };
+
+            if (!ids.length) return attachExtraTopics(new Map());
+            db.query(
+                `SELECT survey_response_id, topic FROM survey_response_topics WHERE survey_response_id IN (${ids.map(() => '?').join(',')}) ORDER BY survey_response_id, sort_order`,
+                ids,
+                (extraErr, extraRows) => {
+                    const extraTopicsMap = new Map();
+                    if (!extraErr && extraRows) {
+                        extraRows.forEach(r => {
+                            if (!extraTopicsMap.has(r.survey_response_id)) extraTopicsMap.set(r.survey_response_id, []);
+                            extraTopicsMap.get(r.survey_response_id).push(r.topic);
+                        });
+                    } else if (extraErr) {
+                        console.error('❌ [Report Data] Error loading extra topics:', extraErr);
+                    }
+                    attachExtraTopics(extraTopicsMap);
+                }
+            );
         });
     });
 });
@@ -7510,6 +7744,41 @@ app.post('/api/report-data-by-cluster', ensureAdminAuth, (req, res) => {
     });
 });
 
+// Badge color for one topic string (bare topic or "{Topic} - {Item}") — used
+// for both the primary topic and every extra topic (multi-topic tagging
+// project, 2026-09-25) on /survey-records, so every badge in a row is
+// colored the same consistent way regardless of which slot it's in. Caller
+// handles the "no feedback at all" case itself (bg-no-feedback), since that
+// depends on the ROW, not any one topic string.
+function topicBadgeClassFor(topic) {
+    const topicLower = (topic || '').toLowerCase();
+    if (topicLower.startsWith('unclassified') || topicLower.startsWith('no feedback')) return 'bg-unclassified';
+    if (topicLower.includes('restroom') || topicLower.includes('cleanliness')) return 'bg-cr';
+    if (topicLower.includes('aircon') || topicLower.includes('cooling')) return 'bg-aircon';
+    if (
+        topicLower.includes('facilities and resources') || topicLower.includes('equipment') ||
+        topicLower.includes('furniture') || topicLower.includes('seating') ||
+        topicLower.includes('power') || topicLower.includes('lighting') ||
+        topicLower.includes('dormitory') || topicLower.includes('transportation service') ||
+        topicLower.includes('supplies and resources')
+    ) return 'bg-facility';
+    if (topicLower.includes('staff service') || topicLower.includes('fairness') || topicLower.includes('courtesy') || topicLower.includes('competence')) return 'bg-staff';
+    if (topicLower.includes('processing') || topicLower.includes('approval process') || topicLower.includes('service procedure')) return 'bg-transaction';
+    if (topicLower.includes('financial transaction')) return 'bg-payment';
+    if (
+        topicLower.includes('documents and records') || topicLower.includes('credential') ||
+        topicLower.includes('enrollment process') || topicLower.includes('academic transaction') ||
+        topicLower.includes('clearance process') || topicLower.includes('id services')
+    ) return 'bg-docs';
+    if (topicLower.includes('system and access') || topicLower.includes('ease of use') || topicLower.includes('internet service')) return 'bg-online';
+    if (
+        topicLower.includes('health service') || topicLower.includes('scholarship and assistance') ||
+        topicLower.includes('leave process') || topicLower.includes('library service') ||
+        topicLower.includes('research service') || topicLower.includes('accreditation process')
+    ) return 'bg-health';
+    return 'bg-general';
+}
+
 // ==========================================
 // DYNAMIC SURVEY RECORDS ROUTE
 // ==========================================
@@ -7527,6 +7796,10 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
             ratingResults.forEach(r => { clusterRatings[r.cluster_name || 'Other Offices'] = parseFloat(r.rating).toFixed(2); });
         }
         
+        // analysis_status = 'completed': a row whose AI analysis is still
+        // running (see HAS_AI_ANALYSIS_SQL's comment) is excluded from this
+        // table entirely, not just its topic/sentiment badge — it appears
+        // once Gemini finishes, usually within a few seconds.
         const recordsQuery = `
             SELECT s.id, s.respondent_name, s.topic, s.sentiment,
                    s.topic_override, s.subtopic_override, s.sentiment_override,
@@ -7535,10 +7808,19 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
             FROM survey_responses s
             JOIN offices o ON s.office_id = o.id
             LEFT JOIN client_profiles p ON p.survey_response_id = s.id
-            WHERE s.canonical_status = 'canonical'
+            WHERE s.canonical_status = 'canonical' AND s.analysis_status = 'completed'
             ORDER BY o.cluster_name, s.created_at DESC
         `;
         db.query(recordsQuery, (err, results) => {
+            // Multi-topic tagging project (2026-09-25): extra topics beyond
+            // the primary (survey_responses.topic) live in a child table —
+            // fetched once here as a survey_response_id -> [topic, ...] map
+            // instead of one query per row.
+            const responseIds = (results || []).map(r => r.id);
+            const extraTopicsQuery = responseIds.length
+                ? `SELECT survey_response_id, topic FROM survey_response_topics WHERE survey_response_id IN (${responseIds.map(() => '?').join(',')}) ORDER BY survey_response_id, sort_order`
+                : null;
+            const withExtraTopics = (extraTopicsMap) => {
             const recordsByCluster = {};
             if (results) {
                 results.forEach(row => {
@@ -7559,24 +7841,7 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                     // columns (see /api/admin/survey-response/:id/analysis).
                     const effectiveTopic = hasFeedback ? (row.topic_override || row.topic) : null;
                     const effectiveSentimentRaw = row.sentiment_override || (hasFeedback ? (row.sentiment || 'Neutral') : null);
-
-                    let badgeClass = 'bg-general';
-                    const topicLower = (effectiveTopic || '').toLowerCase();
-                    if (!hasFeedback) badgeClass = 'bg-no-feedback';
-                    else if (topicLower.startsWith('unclassified') || topicLower.startsWith('no feedback')) badgeClass = 'bg-unclassified';
-                    else if (topicLower.includes('restroom') || topicLower.includes('cleanliness')) badgeClass = 'bg-cr';
-                    else if (topicLower.includes('aircon') || topicLower.includes('cooling')) badgeClass = 'bg-aircon';
-                    else if (
-                        topicLower.includes('facility') || topicLower.includes('equipment') ||
-                        topicLower.includes('furniture') || topicLower.includes('seating') ||
-                        topicLower.includes('power') || topicLower.includes('lighting')
-                    ) badgeClass = 'bg-facility';
-                    else if (topicLower.includes('staff') || topicLower.includes('fairness') || topicLower.includes('courtesy') || topicLower.includes('competence')) badgeClass = 'bg-staff';
-                    else if (topicLower.includes('transaction')) badgeClass = 'bg-transaction';
-                    else if (topicLower.includes('payment') || topicLower.includes('fees')) badgeClass = 'bg-payment';
-                    else if (topicLower.includes('document') || topicLower.includes('credential') || topicLower.includes('enrollment') || topicLower.includes('registration')) badgeClass = 'bg-docs';
-                    else if (topicLower.includes('online') || topicLower.includes('portal') || topicLower.includes('internet')) badgeClass = 'bg-online';
-                    else if (topicLower.includes('health') || topicLower.includes('medical') || topicLower.includes('guidance') || topicLower.includes('counseling') || topicLower.includes('scholarship')) badgeClass = 'bg-health';
+                    const badgeClass = hasFeedback ? topicBadgeClassFor(effectiveTopic) : 'bg-no-feedback';
 
                     // Profanity is masked HERE too, not only on the signed
                     // report. /survey-records is read on a shared office
@@ -7595,10 +7860,32 @@ app.get('/survey-records', ensureAdminAuth, noCache, (req, res) => {
                     else if (sentimentLower.includes('positive')) sentimentClass = 'bg-sentiment-positive';
                     else if (sentimentLower.includes('negative')) sentimentClass = 'bg-sentiment-negative';
 
-                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', officeName: row.office_name || 'N/A', topic: hasFeedback ? effectiveTopic : 'No feedback', topicClass: badgeClass, sentiment: sentimentValue, sentimentClass, comments: displayComments || 'No comments provided.', date: formatZonedDateLong(row.created_at) || row.formatted_date, dateRaw: row.created_at ? new Date(row.created_at).toISOString() : '', officeVisitedTime: row.office_visited_time_formatted || 'N/A' });
+                    // Multi-topic tagging project (2026-09-25): any topics
+                    // beyond the primary, each rendered as its own small
+                    // badge in the same cell — see extraTopicsMap above.
+                    const extraTopics = hasFeedback
+                        ? (extraTopicsMap.get(row.id) || []).map(t => ({ topic: t, topicClass: topicBadgeClassFor(t) }))
+                        : [];
+
+                    recordsByCluster[cluster].push({ id: row.id, name: row.respondent_name || 'Anonymous', officeName: row.office_name || 'N/A', topic: hasFeedback ? effectiveTopic : 'No feedback', topicClass: badgeClass, extraTopics, sentiment: sentimentValue, sentimentClass, comments: displayComments || 'No comments provided.', date: formatZonedDateLong(row.created_at) || row.formatted_date, dateRaw: row.created_at ? new Date(row.created_at).toISOString() : '', officeVisitedTime: row.office_visited_time_formatted || 'N/A' });
                 });
             }
             res.render('survey-records', { recordsByCluster, clusterRatings, TOPIC_TAXONOMY, SENTIMENT_VALUES });
+            };
+
+            if (!extraTopicsQuery) return withExtraTopics(new Map());
+            db.query(extraTopicsQuery, responseIds, (extraErr, extraRows) => {
+                const extraTopicsMap = new Map();
+                if (!extraErr && extraRows) {
+                    extraRows.forEach(r => {
+                        if (!extraTopicsMap.has(r.survey_response_id)) extraTopicsMap.set(r.survey_response_id, []);
+                        extraTopicsMap.get(r.survey_response_id).push(r.topic);
+                    });
+                } else if (extraErr) {
+                    console.error('❌ [Survey Records] Error loading extra topics:', extraErr);
+                }
+                withExtraTopics(extraTopicsMap);
+            });
         });
     });
 });
@@ -7621,7 +7908,7 @@ app.get('/api/admin/survey-response/:id', ensureAdminAuth, noCache, (req, res) =
         FROM survey_responses s
         JOIN offices o ON s.office_id = o.id
         LEFT JOIN client_profiles p ON p.survey_response_id = s.id
-        WHERE s.id = ?
+        WHERE s.id = ? AND s.analysis_status = 'completed'
         LIMIT 1
     `;
     db.query(query, [req.params.id], (err, rows) => {
@@ -7642,18 +7929,47 @@ app.get('/api/admin/survey-response/:id', ensureAdminAuth, noCache, (req, res) =
         survey.effectiveSentiment = survey.sentiment_override || (hasFeedback ? (survey.sentiment || 'Neutral') : null);
         survey.effectiveTopic = survey.topic_override || aiSplit.topic;
         survey.effectiveSubtopic = survey.subtopic_override || aiSplit.subtopic;
-        res.json({ success: true, survey });
+
+        // Multi-topic tagging project (2026-09-25): any topics beyond the
+        // primary, each split into {topic, subtopic} the same way as above —
+        // there is no separate override column for these (see
+        // survey_response_topics' table comment), an admin edit replaces
+        // these rows outright via the PATCH endpoint below.
+        if (!hasFeedback) {
+            survey.extraTopics = [];
+            return res.json({ success: true, survey });
+        }
+        db.query(
+            'SELECT topic FROM survey_response_topics WHERE survey_response_id = ? ORDER BY sort_order',
+            [survey.id],
+            (extraErr, extraRows) => {
+                if (extraErr) console.error('❌ Error loading extra topics for admin view:', extraErr);
+                survey.extraTopics = (extraRows || []).map(r => splitTopic(r.topic));
+                res.json({ success: true, survey });
+            }
+        );
     });
 });
 
 // Admin correction of the AI's sentiment/topic/subtopic read on one survey
 // response's comment (Survey Result modal "Edit Analysis"). The comment text
-// itself is never editable here or anywhere else in this route. Validated
-// against the same TOPIC_TAXONOMY the modal's dropdowns are built from, so an
-// impossible Topic/Subtopic combination can never reach the database — see
-// shared/topicTaxonomy.js. Stored in separate *_override columns (see the
-// add_survey_analysis_overrides migration) so the AI's original `topic`/
-// `sentiment` columns are never overwritten by a correction.
+// itself is never editable here or anywhere else in this route. Topic/
+// subtopic are intentionally NOT restricted to TOPIC_TAXONOMY's known pairs —
+// the modal's "Custom" option lets an admin type any topic/subtopic text, so
+// validation only guards against empty/oversized input rather than a fixed
+// allowlist. The PRIMARY topic/subtopic are stored in separate *_override
+// columns (see the add_survey_analysis_overrides migration) so the AI's
+// original `topic`/`sentiment` columns are never overwritten by a
+// correction.
+//
+// Multi-topic tagging project (2026-09-25): any topics beyond the primary
+// (`extraTopics` in the request body) replace whatever was in
+// survey_response_topics outright — that table has no override column of
+// its own (unlike the primary), so there is no "AI original vs. admin
+// corrected" distinction to preserve for these; an admin can freely add,
+// remove, or edit them and the previous set is simply gone.
+const MAX_EXTRA_TOPICS = 4;
+
 app.patch('/api/admin/survey-response/:id/analysis', ensureAdminAuth, async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
@@ -7663,11 +7979,6 @@ app.patch('/api/admin/survey-response/:id/analysis', ensureAdminAuth, async (req
     if (!SENTIMENT_VALUES.includes(req.body?.sentiment)) {
         return res.status(400).json({ success: false, message: 'Invalid sentiment value.' });
     }
-    // Topic/subtopic are intentionally NOT restricted to TOPIC_TAXONOMY's
-    // known pairs — the modal's "Custom" option lets an admin type any
-    // topic/subtopic text, so this only guards against empty/oversized input
-    // (matching the topic_override/subtopic_override column widths) rather
-    // than a fixed allowlist.
     const sentiment = req.body.sentiment;
     const topic = typeof req.body.topic === 'string' ? req.body.topic.trim() : '';
     const subtopic = typeof req.body.subtopic === 'string' ? req.body.subtopic.trim() : '';
@@ -7678,8 +7989,30 @@ app.patch('/api/admin/survey-response/:id/analysis', ensureAdminAuth, async (req
         return res.status(400).json({ success: false, message: 'Please enter a subtopic between 1 and 100 characters.' });
     }
 
+    const rawExtras = Array.isArray(req.body.extraTopics) ? req.body.extraTopics : [];
+    if (rawExtras.length > MAX_EXTRA_TOPICS) {
+        return res.status(400).json({ success: false, message: `You can add at most ${MAX_EXTRA_TOPICS} additional topics.` });
+    }
+    const extraTopicStrings = [];
+    for (const entry of rawExtras) {
+        const t = typeof entry?.topic === 'string' ? entry.topic.trim() : '';
+        const st = typeof entry?.subtopic === 'string' ? entry.subtopic.trim() : '';
+        if (!t || t.length > 100 || !st || st.length > 100) {
+            return res.status(400).json({ success: false, message: 'Each additional topic and subtopic must be 1-100 characters.' });
+        }
+        const combined = combineTopic(t, st);
+        if (!combined || combined.length > 150) {
+            return res.status(400).json({ success: false, message: 'One of the additional topic/subtopic combinations is too long.' });
+        }
+        extraTopicStrings.push(combined);
+    }
+
+    let conn;
     try {
-        const result = await dbQuery(
+        conn = await db.promise().getConnection();
+        await conn.beginTransaction();
+
+        const [result] = await conn.query(
             'UPDATE survey_responses SET topic_override = ?, subtopic_override = ?, sentiment_override = ? WHERE id = ?',
             [topic, subtopic, sentiment, id]
         );
@@ -7689,13 +8022,35 @@ app.patch('/api/admin/survey-response/:id/analysis', ensureAdminAuth, async (req
         // value) — an existence check disambiguates the two instead of
         // assuming the former.
         if (!result || result.affectedRows === 0) {
-            const existing = await dbQuery('SELECT id FROM survey_responses WHERE id = ? LIMIT 1', [id]);
+            const [existing] = await conn.query('SELECT id FROM survey_responses WHERE id = ? LIMIT 1', [id]);
             if (!existing || existing.length === 0) {
+                await conn.rollback();
+                conn.release();
                 return res.status(404).json({ success: false, message: 'Survey response not found.' });
             }
         }
-        res.json({ success: true, effectiveSentiment: sentiment, effectiveTopic: topic, effectiveSubtopic: subtopic });
+
+        await conn.query('DELETE FROM survey_response_topics WHERE survey_response_id = ?', [id]);
+        if (extraTopicStrings.length) {
+            const values = [];
+            const placeholders = extraTopicStrings.map((t, i) => { values.push(id, t, i); return '(?, ?, ?)'; }).join(', ');
+            await conn.query(
+                `INSERT INTO survey_response_topics (survey_response_id, topic, sort_order) VALUES ${placeholders}`,
+                values
+            );
+        }
+
+        await conn.commit();
+        conn.release();
+        res.json({
+            success: true, effectiveSentiment: sentiment, effectiveTopic: topic, effectiveSubtopic: subtopic,
+            extraTopics: extraTopicStrings.map(splitTopic)
+        });
     } catch (err) {
+        if (conn) {
+            try { await conn.rollback(); } catch (rollbackErr) { /* connection may already be unusable */ }
+            conn.release();
+        }
         console.error('❌ [Survey Records] Failed to save admin analysis override:', err);
         res.status(500).json({ success: false, message: 'Server error saving analysis.' });
     }
@@ -7854,7 +8209,7 @@ app.get('/api/admin/notifications', ensureAdminAuth, noCache, (req, res) => {
                         COALESCE(s.recorded_at, s.created_at) AS recorded_at, o.office_name
                  FROM survey_responses s
                  JOIN offices o ON o.id = s.office_id
-                 WHERE s.canonical_status = 'canonical'
+                 WHERE s.canonical_status = 'canonical' AND s.analysis_status = 'completed'
                  ORDER BY recorded_at DESC, s.id DESC
                  LIMIT ${ADMIN_NOTIFICATION_LIMIT}`,
                 (err2, rows) => {
@@ -7870,6 +8225,7 @@ app.get('/api/admin/notifications', ensureAdminAuth, noCache, (req, res) => {
                         `SELECT COUNT(*) AS unseen
                          FROM survey_responses
                          WHERE canonical_status = 'canonical'
+                           AND analysis_status = 'completed'
                            AND COALESCE(recorded_at, created_at) > COALESCE(?, NOW())`,
                         [seenAt],
                         (err3, countRows) => {
