@@ -290,8 +290,7 @@
             vertical-align: middle;
             font-size: 0.86rem;
             color: var(--text-main);
-            height: 52px;
-            overflow: hidden;
+            min-height: 52px;
         }
         .table tbody tr:last-child td { border-bottom: none; }
         .table tbody tr.record-row:hover td { background: var(--surface-subtle); }
@@ -341,7 +340,7 @@
         /* Multi-topic tagging project (2026-09-25): a comment can carry more
            than one topic badge in the same cell — spaced and allowed to wrap
            onto a second line instead of overflowing the column. */
-        .topic-cell .topic-badge { max-width: 160px; }
+        .topic-cell .topic-badge { max-width: 190px; margin-bottom: 4px; }
         .topic-cell .topic-badge + .topic-badge { margin-left: 4px; }
 
         .bg-cr { background-color: #fee2e2; color: #ef4444; }
@@ -640,9 +639,9 @@
                                         <col style="width: 10%;">
                                         <col style="width: 12%;">
                                         <col style="width: 17%;">
-                                        <col style="width: 18%;">
-                                        <col style="width: 15%;">
-                                        <col style="width: 11%;">
+                                        <col style="width: 16%;">
+                                        <col style="width: 20%;">
+                                        <col style="width: 8%;">
                                         <col style="width: 17%;">
                                     </colgroup>
                                     <thead>
