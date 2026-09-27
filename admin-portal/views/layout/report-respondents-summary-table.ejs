@@ -1,0 +1,62 @@
+<%
+/* "SUMMARY OF RESPONDENTS" table — No. / Name of Office / Number of Respondents,
+   grouped per cluster (numbering restarts at 1 in each cluster, matching the
+   official printed CQA respondent-count report), closed by one institution-wide
+   TOTAL row at the very end. No per-cluster subtotal — only the final TOTAL.
+   Expects:
+     `reportData` — the same array every other cluster report renders, i.e.
+       [{ clusterName, offices: [{name, respondents, ...}] }] already in
+       CLUSTER_REPORT_ORDER — see buildOrderedClusterReport in server.js.
+     `totalRespondentsAll` — sum of every office's respondents in reportData,
+       printed in the closing TOTAL row. */
+const _clusters = typeof reportData !== 'undefined' && Array.isArray(reportData) ? reportData : [];
+const _grandTotal = typeof totalRespondentsAll !== 'undefined' ? totalRespondentsAll : 0;
+/* Same reporting-minimum flag as report-cluster-table.ejs/report-overall-cluster-table.ejs
+   (fewer than 10 respondents) — flags the row so downloadRespondentsSummaryPDF's
+   watermark, keyed off this same .office-insufficient class, stamps only the pages
+   that actually contain one of these offices. Not shown as anything visible while
+   just viewing — see report.css. */
+const _isThin = (office) => (office.respondents || 0) < 10;
+%>
+<table class="cluster-report-table respondents-summary-table">
+    <colgroup>
+        <col style="width: 8%">
+        <col style="width: 62%">
+        <col style="width: 30%">
+    </colgroup>
+    <thead>
+        <tr>
+            <th colspan="2">Name of Office</th>
+            <th class="score-col">Number of Respondents</th>
+        </tr>
+    </thead>
+    <% if (_clusters.length > 0) { %>
+        <% _clusters.forEach((cluster, clusterIndex) => { %>
+            <% if (clusterIndex > 0) { %>
+                <tbody class="cluster-gap"><tr><td colspan="3"></td></tr></tbody>
+            <% } %>
+            <tbody class="cluster-section" <% if (/academic/i.test(cluster.clusterName)) { %>data-cluster="academic"<% } %>>
+                <tr class="cluster-row"><td colspan="3"><%= cluster.clusterName %></td></tr>
+                <% cluster.offices.forEach((office, i) => { %>
+                    <tr class="<%= _isThin(office) ? 'office-insufficient' : '' %>">
+                        <td class="text-center"><%= i + 1 %></td>
+                        <td><%= office.name %></td>
+                        <td class="score-col">
+                            <%= office.respondents || 0 %>
+                        </td>
+                    </tr>
+                <% }) %>
+            </tbody>
+        <% }) %>
+        <tbody>
+            <tr class="cluster-total-row overall-cluster-row">
+                <td colspan="2" class="text-end">TOTAL</td>
+                <td class="score-col"><%= _grandTotal %></td>
+            </tr>
+        </tbody>
+    <% } else { %>
+        <tbody>
+            <tr><td colspan="3" class="text-center py-3 text-muted">No survey response submissions loaded yet for this period.</td></tr>
+        </tbody>
+    <% } %>
+</table>

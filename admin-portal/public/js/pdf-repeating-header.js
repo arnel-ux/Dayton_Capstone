@@ -406,11 +406,17 @@
      *   markup is hidden during capture so it is not printed twice, and the
      *   bottom margin is widened to `heightIn` so content can never run
      *   underneath it.
-     * @param {{text: string, onPages?: (pageNum: number, totalPages: number) => boolean, section?: string}} [watermark] -
+     * @param {{text: string, onPages?: (pageNum: number, totalPages: number) => boolean, section?: string, rowSelector?: string}} [watermark] -
      *   pass this to stamp a translucent diagonal caution watermark (e.g. "INSUFFICIENT
      *   RESPONDENTS") on every page, or only `onPages`/`section` pages as with `footer`.
-     *   The caller decides `text`/whether to pass `watermark` at all based on its
-     *   own respondent-count threshold — this module only draws it.
+     *   `rowSelector` is for a multi-office table (Per Cluster / Overall Cluster /
+     *   Summary of Respondents report): it stamps only the pages that actually
+     *   contain a matching row (e.g. `.office-insufficient`, an office below the
+     *   reporting minimum) instead of every page or a whole section, since a
+     *   single page can otherwise mix offices above and below the threshold. Takes
+     *   priority over `section`/`onPages` when given. The caller decides
+     *   `text`/whether to pass `watermark` at all based on its own respondent-count
+     *   threshold — this module only draws it.
      */
     async function exportRepeatingHeaderPdf({ elementId, filename, opt, headerHeightIn, headerHideSelectors, getHeaderForPage, sections, columnHeader, avoidSplitSelector, forcePageBreakSelectors, footer, watermark }) {
         const element = document.getElementById(elementId);
@@ -545,6 +551,17 @@
             for (const key in sectionRanges) { if (sectionRanges[key].start < firstStart) { firstStart = sectionRanges[key].start; firstKey = key; } }
             return firstKey;
         };
+        // Which physical pages actually contain a `watermark.rowSelector` match,
+        // read the same way computeSectionRanges reads a section's start — real,
+        // final position in the already-paginated clone — rather than assumed
+        // from the untouched offsets forceStartOnFreshPage's spacers would throw
+        // off if measured before them.
+        const watermarkPages = (watermark && watermark.rowSelector)
+            ? new Set(Array.from(measureRoot.querySelectorAll(watermark.rowSelector)).map((el) =>
+                Math.floor(topWithinElement(measureRoot, el) / pageContentHeightPx) + 1
+            ))
+            : null;
+
         const resolvedGetHeaderForPage = sections
             ? (pageNum) => {
                 const key = sectionForPage(pageNum);
@@ -572,6 +589,7 @@
                 );
                 if (footerShows) drawFooter(pdf, footer, page, totalPages);
                 const watermarkShows = watermark && watermark.text && (
+                    watermarkPages ? watermarkPages.has(page) :
                     watermark.section && sectionRanges ? sectionForPage(page) === watermark.section :
                     watermark.onPages ? watermark.onPages(page, totalPages) :
                     true

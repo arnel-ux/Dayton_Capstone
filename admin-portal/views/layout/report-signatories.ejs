@@ -5,7 +5,12 @@
    the original printed report (Prepared left, Reviewed right, Noted below Prepared,
    legend below Reviewed) instead of one flat row of signatories.
    These are CSPC's existing official CQA report signatories, already used
-   identically on report.ejs / cluster-detail.ejs / survey-records.ejs. */
+   identically on report.ejs / cluster-detail.ejs / survey-records.ejs.
+   `showInterpretationLegend` (default true) hides the legend for a report that
+   never prints a score/interpretation to begin with — e.g. Summary of Respondents,
+   which only counts respondents and has nothing for the 95/90/80/60 scale to
+   explain. */
+const _showLegend = typeof showInterpretationLegend === 'undefined' || showInterpretationLegend;
 %>
 <div class="cluster-report-signatures">
     <div class="sig-cell">
@@ -26,7 +31,9 @@
         <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
         <p class="sig-title">SUC President III</p>
     </div>
-    <div class="sig-cell">
-        <%- include('interpretation-legend') %>
-    </div>
+    <% if (_showLegend) { %>
+        <div class="sig-cell">
+            <%- include('interpretation-legend') %>
+        </div>
+    <% } %>
 </div>

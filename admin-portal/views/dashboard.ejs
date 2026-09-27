@@ -727,7 +727,7 @@
 
         /* --- REPORT MODAL INTERFACE STYLES --- */
         .cluster-report-table .overall-cluster-row td { border-top: 2px solid #000; font-weight: 800; }
-        #reportModal, #overallClusterReportModal, #dashboardReportModal {
+        #reportModal, #overallClusterReportModal, #respondentsSummaryModal, #dashboardReportModal {
             display: none;
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.7); z-index: 9999; overflow-y: auto; padding: 20px;
@@ -766,7 +766,7 @@
             #wrapper, .modal-controls { display: none !important; }
             /* Only the modal actually opened (inline display:block from JS) prints —
                this rule repositions it for print without forcing the other one open. */
-            #reportModal, #overallClusterReportModal, #dashboardReportModal { position: absolute; background: white; padding: 0; left: 0; top: 0; width: 100%; }
+            #reportModal, #overallClusterReportModal, #respondentsSummaryModal, #dashboardReportModal { position: absolute; background: white; padding: 0; left: 0; top: 0; width: 100%; }
             .modal-report-container { margin: 0; box-shadow: none; max-width: 100%; padding: 0; }
             .print-footer { break-inside: avoid; page-break-inside: avoid; }
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -844,6 +844,7 @@
                         <ul class="dropdown-menu dropdown-menu-end shadow-sm">
                             <li><a class="dropdown-item" href="#" onclick="openReportModal(); return false;"><i class="fas fa-file-alt me-2 text-muted"></i> Per Cluster Report</a></li>
                             <li><a class="dropdown-item" href="#" onclick="openOverallClusterReportModal(); return false;"><i class="fas fa-layer-group me-2 text-muted"></i> Overall Cluster Report</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="openRespondentsSummaryModal(); return false;"><i class="fas fa-users me-2 text-muted"></i> Summary of Respondents</a></li>
                             <li><a class="dropdown-item" href="#" onclick="openDashboardReportModal(); return false;"><i class="fas fa-chart-line me-2 text-muted"></i> Dashboard Report</a></li>
                         </ul>
                     </div>
@@ -1218,6 +1219,29 @@
                 }) %>
 
             <%- include('layout/report-signatories') %>
+        </div>
+    </div>
+</div>
+
+<div id="respondentsSummaryModal">
+    <div class="modal-report-container shadow-lg">
+        <div class="modal-controls">
+            <button onclick="downloadRespondentsSummaryPDF()" class="btn btn-danger btn-sm px-3"><i class="fas fa-file-pdf me-1"></i> Export PDF</button>
+            <button onclick="closeRespondentsSummaryModal()" class="btn btn-dark btn-sm px-3">Close</button>
+        </div>
+
+        <div id="printableRespondentsSummaryDocument">
+            <%- include('layout/report-header', { showSQDFormCode: false }) %>
+
+            <h5 class="print-title">Client Satisfaction Measurement Survey Result<br>Overall Citizen/ Client Satisfaction Survey Result per Cluster</h5>
+            <p class="print-period">Period covered : <%= typeof dashboardData !== 'undefined' ? dashboardData.periodCoveredLabel : 'All Periods' %></p>
+
+            <%- include('layout/report-respondents-summary-table', {
+                    reportData: typeof reportData !== 'undefined' ? reportData : [],
+                    totalRespondentsAll: typeof totalRespondentsAll !== 'undefined' ? totalRespondentsAll : 0
+                }) %>
+
+            <%- include('layout/report-signatories', { showInterpretationLegend: false }) %>
         </div>
     </div>
 </div>
@@ -1997,6 +2021,11 @@ function downloadPDF() {
         // layout pixels and moves the whole block to the next page only if it
         // would otherwise be cut.
         avoidSplitSelector: '.cluster-report-signatures',
+        // The Academic Cluster block is long enough to straddle a page break
+        // mid-office-list; forcing it to start on a fresh page keeps it whole
+        // instead of getting cut off partway down the page — same fix as
+        // downloadRespondentsSummaryPDF.
+        forcePageBreakSelectors: ['[data-cluster="academic"]'],
         columnHeader: {
             startYIn: 1.85,
             columns: [
@@ -2004,7 +2033,12 @@ function downloadPDF() {
                 { label: 'OVERALL SCORE', widthPct: 0.16, align: 'center' },
                 { label: 'INTERPRETATION', widthPct: 0.20, align: 'center' }
             ]
-        }
+        },
+        // Same caution watermark as the SQD scorecard's own PDF (see downloadPDF
+        // in report.ejs), stamped only on the pages that actually contain an
+        // office below the 10-respondent reporting minimum — see .office-insufficient
+        // in report-cluster-table.ejs.
+        watermark: { text: 'INSUFFICIENT RESPONDENTS', rowSelector: '.office-insufficient' }
     });
 }
 
@@ -2042,6 +2076,9 @@ function downloadOverallClusterPDF() {
         headerHideSelectors: ['.report-header-block', '.print-title', '.print-period', '.cluster-report-table thead'],
         getHeaderForPage: () => header,
         avoidSplitSelector: '.cluster-report-signatures',
+        // Same fix as the PER CLUSTER export — keep the Academic Cluster block
+        // from getting cut off partway down a page.
+        forcePageBreakSelectors: ['[data-cluster="academic"]'],
         columnHeader: {
             startYIn: 1.85,
             columns: [
@@ -2049,7 +2086,58 @@ function downloadOverallClusterPDF() {
                 { label: 'OVERALL SCORE', widthPct: 0.16, align: 'center' },
                 { label: 'INTERPRETATION', widthPct: 0.20, align: 'center' }
             ]
-        }
+        },
+        watermark: { text: 'INSUFFICIENT RESPONDENTS', rowSelector: '.office-insufficient' }
+    });
+}
+
+function openRespondentsSummaryModal() {
+    document.getElementById('respondentsSummaryModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeRespondentsSummaryModal() {
+    document.getElementById('respondentsSummaryModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+function downloadRespondentsSummaryPDF() {
+    // Same document identity as the other cluster reports (see downloadPDF /
+    // downloadOverallClusterPDF) — only the subtitle and the two printed
+    // columns differ: no scoring here, just each office's respondent count,
+    // numbered per cluster and closed by one institution-wide TOTAL row.
+    const periodText = document.querySelector('#printableRespondentsSummaryDocument .print-period')?.textContent.trim() || '';
+    const header = { title: 'Client Satisfaction Measurement Survey Result', subtitle: 'Overall Citizen/ Client Satisfaction Survey Result per Cluster', period: periodText };
+
+    const opt = {
+        margin:       [0, 0.5, 0.45, 0.5],
+        filename:     'CSPC-CSM-Summary-of-Respondents.pdf',
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false, letterRendering: true, scrollY: 0, backgroundColor: '#ffffff' },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
+        pagebreak:    { mode: ['css', 'legacy'], avoid: ['.cluster-row', '.cluster-total-row', '.cluster-report-signatures', 'tr'] }
+    };
+
+    exportRepeatingHeaderPdf({
+        elementId: 'printableRespondentsSummaryDocument',
+        filename: opt.filename,
+        opt,
+        headerHeightIn: 2.15,
+        headerHideSelectors: ['.report-header-block', '.print-title', '.print-period', '.cluster-report-table thead'],
+        getHeaderForPage: () => header,
+        avoidSplitSelector: '.cluster-report-signatures',
+        // The Academic Cluster block is long enough to straddle a page break
+        // mid-office-list; forcing it to start on a fresh page keeps it whole
+        // instead of getting cut off partway down page 1.
+        forcePageBreakSelectors: ['[data-cluster="academic"]'],
+        columnHeader: {
+            startYIn: 1.85,
+            columns: [
+                { label: 'NAME OF OFFICE', widthPct: 0.70, align: 'center' },
+                { label: 'NUMBER OF RESPONDENTS', widthPct: 0.30, align: 'center' }
+            ]
+        },
+        watermark: { text: 'INSUFFICIENT RESPONDENTS', rowSelector: '.office-insufficient' }
     });
 }
 

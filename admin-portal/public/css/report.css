@@ -140,14 +140,13 @@
 .cluster-report-table .cluster-total-row { break-inside: avoid; page-break-inside: avoid; }
 .cluster-report-signatures { break-inside: avoid; page-break-inside: avoid; }
 
-/* ---- Insufficient-respondents flag (report-cluster-table.ejs / report-overall-cluster-table.ejs) ----
+/* ---- Insufficient-respondents flag (report-cluster-table.ejs / report-overall-cluster-table.ejs /
+   report-respondents-summary-table.ejs) ----
    Below CSPC's 10-respondent reporting minimum (including a blank/no-response
-   office), captured as-is by html2canvas into the PDF the same as the rest of
-   the table — no separate jsPDF drawing needed for this per-row flag. */
-.office-insufficient td { background: #fdecea; }
-.office-insufficient .score-col { color: #b71c1c; }
-.insufficient-tag { display: block; font-size: 8px; font-weight: bold; color: #b71c1c; margin-top: 2px; }
-.insufficient-legend { margin-top: 10px; font-size: 10px; font-style: italic; color: #b71c1c; }
+   office). Deliberately carries NO visible styling of its own while viewing —
+   the row only exists to be found by downloadPDF's `watermark.rowSelector`
+   (see public/js/pdf-repeating-header.js), which stamps the caution watermark
+   on the exported PDF's affected pages. Nothing marks these rows on screen. */
 
 /* ---- Letter-size print / PDF page setup ----
    Applies to both native browser print (window.print()) and html2pdf's CSS

@@ -212,11 +212,8 @@
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label for="reportType">Report to Generate</label>
-                        <select id="reportType" name="reportType" class="form-select form-select-sm" title="Choose which report to generate">
-                            <option value="sqd" selected>SQD Result Report</option>
-                            <option value="respondents">Number of Respondents</option>
-                        </select>
+                        <label>Report to Generate</label>
+                        <div class="form-control form-control-sm" style="background-color: var(--bs-secondary-bg, #e9ecef);">SQD Result Report</div>
                     </div>
                     <button type="button" class="btn btn-primary btn-sm btn-generate" onclick="renderOfficeReport()" title="Generate a report based on the selected filters">
                         <i class="fas fa-file-invoice me-1"></i> Generate
@@ -708,11 +705,9 @@
         function renderOfficeReport() {
             const officeSelect = document.getElementById('officeFilter');
             const periodSelect = document.getElementById('periodCovered');
-            const reportTypeSelect = document.getElementById('reportType');
             const serviceSelect = document.getElementById('serviceFilter');
             const officeId = officeSelect.value;
             const periodCovered = periodSelect.value;
-            const reportType = reportTypeSelect.value;
             // Blank = every service the office offers; otherwise only the respondents
             // who availed of this one service feed the report's computation.
             const serviceAvailed = serviceSelect.value;
@@ -755,14 +750,12 @@
             document.getElementById('officeReportPeriodSqd').innerText = periodLabel;
             document.getElementById('officeReportPeriod2').innerText = periodLabel;
 
-            // The SQD Result Report prints as a three-page packet:
+            // The SQD Result Report always prints as a three-page packet:
             //   page 1 — Number of Respondents (SQD 0 / SQD 1-8 bucket breakdown)
             //   page 2 — SQD Result (Percentage/Rating scorecard)
             //   page 3 — Written Comments & AI Analytics
-            // "Number of Respondents" on its own is just page 1 of that packet.
-            const isFullPacket = reportType !== 'respondents';
-            document.getElementById('reportPageSqd').classList.toggle('d-none', !isFullPacket);
-            document.getElementById('reportPage2').classList.toggle('d-none', !isFullPacket);
+            document.getElementById('reportPageSqd').classList.remove('d-none');
+            document.getElementById('reportPage2').classList.remove('d-none');
             // Page 1 carries its own plain signature block always, alongside the
             // official Prepared/Interpretation/Noted/Reviewed grid the scorecard
             // page (page 2) carries for the full packet — every page of the
@@ -796,9 +789,7 @@
                     // Page 1 (bucket breakdown) always renders; the scorecard page only
                     // when the full SQD Result packet was asked for.
                     updateOfficeReportStats(data.stats || {});
-                    if (reportType === 'sqd') {
-                        updatePercentageTable(data.stats || {});
-                    }
+                    updatePercentageTable(data.stats || {});
                     updateOfficeReportComments(data.comments || []);
 
                     // Report + export buttons only become visible after a successful generate.
@@ -1141,7 +1132,6 @@
 
             const office = text('officeReportTitle1');
             const service = text('officeReportService1');
-            const isFullPacket = document.getElementById('reportType').value !== 'respondents';
 
             const BUCKET_COLUMNS = [
                 'Service Quality', 'Strongly Agree', 'Agree', 'Neither Agree or Disagree',
@@ -1156,7 +1146,7 @@
                     ['Service Availed', service],
                     ['Period Covered', text('officeReportPeriod1')],
                     ['Number of Respondents', text('officeReportTotal1')],
-                    ['Report', isFullPacket ? 'SQD Result Report' : 'Number of Respondents'],
+                    ['Report', 'SQD Result Report'],
                     ['Generated', new Date().toLocaleString()]
                 ]
             }];
@@ -1164,35 +1154,30 @@
             sections.push({ title: 'SQD 0 RESULTS', columns: BUCKET_COLUMNS, rows: rowsOf('#sqd0Body tr', 9) });
             sections.push({ title: 'SQD 1-8 RESULTS', columns: BUCKET_COLUMNS, rows: rowsOf('#sqd18Body tr', 9) });
 
-            // Pages 2 and 3 only exist for the full SQD packet; exporting their
-            // empty markup would put a scorecard of zeroes in the file for a
-            // report that never claimed to compute one.
-            if (isFullPacket) {
-                sections.push({
-                    title: 'SERVICE QUALITY DIMENSIONS',
-                    columns: ['Service Quality Dimension', 'Percentage', 'Rating'],
-                    rows: rowsOf('#percentageReportTable tbody tr', 3)
-                });
-                sections.push({
-                    title: 'AI FEEDBACK SENTIMENT & TOPIC ANALYTICS',
-                    columns: ['Measure', 'Value'],
-                    rows: [
-                        ['Analyzed Feedbacks', text('officeReportTotal2')],
-                        ['Positive', text('off_aiPos')],
-                        ['Neutral', text('off_aiNeu')],
-                        ['Negative', text('off_aiNeg')],
-                        ['Dominant Topic', text('off_aiDomTopic')]
-                    ]
-                });
-                const commentRows = rowsOf('#officeReportCommentsBody tr', 4);
-                sections.push({
-                    title: 'WRITTEN COMMENTS/SUGGESTIONS',
-                    columns: ['No.', 'Written Comment/Suggestion', 'AI Modeled Topic', 'AI Sentiment'],
-                    rows: commentRows.length
-                        ? commentRows
-                        : [['', 'NO WRITTEN COMMENTS AND SUGGESTIONS REFLECTED IN ANY OF THE INSTRUMENTS', '', '']]
-                });
-            }
+            sections.push({
+                title: 'SERVICE QUALITY DIMENSIONS',
+                columns: ['Service Quality Dimension', 'Percentage', 'Rating'],
+                rows: rowsOf('#percentageReportTable tbody tr', 3)
+            });
+            sections.push({
+                title: 'AI FEEDBACK SENTIMENT & TOPIC ANALYTICS',
+                columns: ['Measure', 'Value'],
+                rows: [
+                    ['Analyzed Feedbacks', text('officeReportTotal2')],
+                    ['Positive', text('off_aiPos')],
+                    ['Neutral', text('off_aiNeu')],
+                    ['Negative', text('off_aiNeg')],
+                    ['Dominant Topic', text('off_aiDomTopic')]
+                ]
+            });
+            const commentRows = rowsOf('#officeReportCommentsBody tr', 4);
+            sections.push({
+                title: 'WRITTEN COMMENTS/SUGGESTIONS',
+                columns: ['No.', 'Written Comment/Suggestion', 'AI Modeled Topic', 'AI Sentiment'],
+                rows: commentRows.length
+                    ? commentRows
+                    : [['', 'NO WRITTEN COMMENTS AND SUGGESTIONS REFLECTED IN ANY OF THE INSTRUMENTS', '', '']]
+            });
 
             ReportCsv.download(`CSM_Report_${ReportCsv.safeName(office)}_${ReportCsv.stamp()}.csv`, sections);
         }

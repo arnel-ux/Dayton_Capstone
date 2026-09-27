@@ -7114,12 +7114,13 @@ function loadDashboardData(req, callback) {
                         SELECT
                             o.cluster_name,
                             o.office_name,
+                            ${OFFICE_REPORT_NAME_EXPR} AS report_name,
                             COUNT(s.id) as office_volume,
                             ${sqdScoreExpr(ALL_SQD_COLS)} as office_score
                         FROM offices o
                         LEFT JOIN survey_responses s ON o.id = s.office_id${dateWhereAnd}
                         WHERE o.is_archived = 0
-                        GROUP BY o.id, o.cluster_name, o.office_name
+                        GROUP BY o.id, o.cluster_name, o.office_name, o.full_name
                         ORDER BY o.cluster_name, o.office_name
                     `;
 
@@ -7144,10 +7145,14 @@ function loadDashboardData(req, callback) {
 
                                 let score = parseFloat(row.office_score || 0);
                                 const cell = scoreCell(row.office_volume, row.office_score, interpretForDashboard);
-                                clustersMap[cName].offices.push({ name: row.office_name, score: cell.score, interpretation: cell.interpretation, respondents: row.office_volume || 0 });
+                                // Every report prints the office's spelled-out name (report_name),
+                                // never the short office_name staff use internally to pick it from
+                                // a dropdown — same convention as OFFICE_REPORT_NAME_EXPR everywhere
+                                // else a report names an office.
+                                clustersMap[cName].offices.push({ name: row.report_name, score: cell.score, interpretation: cell.interpretation, respondents: row.office_volume || 0 });
 
                                 if (row.office_volume > 0) {
-                                    rankedOffices.push({ name: row.office_name, cluster: cName, score, respondents: row.office_volume });
+                                    rankedOffices.push({ name: row.report_name, cluster: cName, score, respondents: row.office_volume });
                                 }
                             });
                         }
@@ -7168,6 +7173,13 @@ function loadDashboardData(req, callback) {
                         // with no respondents at all has no score to average, so including it
                         // would just be dividing by offices that never took part. An office WITH
                         // respondents stays in even when it scored 0.00%: that is a real result.
+                        // Summed straight from the same rows the respondents-summary table prints
+                        // (one row per non-archived office), not the separate whole-table COUNT(*)
+                        // above — that query has no office join/is_archived filter, so a response
+                        // left behind on an archived office would make the two disagree. Summing
+                        // the printed rows keeps the report's own TOTAL always equal to what's above it.
+                        const totalRespondentsAll = (reportRows || []).reduce((sum, row) => sum + (row.office_volume || 0), 0);
+
                         const scoredOffices = (reportRows || []).filter(row => (row.office_volume || 0) > 0);
                         const officeScores = scoredOffices.map(row => parseFloat(row.office_score || 0));
                         const officeScoreSum = officeScores.reduce((sum, score) => sum + score, 0);
@@ -7262,7 +7274,7 @@ function loadDashboardData(req, callback) {
                                                 dashboardData: { overallRating: overallAvgScore, overallLevel: interpretation, periodCoveredLabel: selectedPeriod || 'All Periods' },
                                                 chartData: chartData, clusterCards: clusterCards, satisfactionRate: overallAvgScore,
                                                 totalRespondents: totalRespondents, totalOffices: totalOffices, reportData: reportData,
-                                                overallClusterTotal: overallClusterTotal,
+                                                overallClusterTotal: overallClusterTotal, totalRespondentsAll: totalRespondentsAll,
                                                 periodOptions: periodOptions, selectedPeriod: selectedPeriod || '',
                                                 hasQueryParam: hasQueryParam,
                                                 sentimentBreakdown: sentimentBreakdown, sentimentTotal: sentimentTotal,
@@ -7461,11 +7473,11 @@ app.get('/print', ensureAdminAuth, noCache, (req, res) => {
                     });
 
                     const officeQuery = `
-                        SELECT o.cluster_name, o.office_name, COUNT(s.id) as office_volume, ${sqdScoreExpr(ALL_SQD_COLS)} as office_score
+                        SELECT o.cluster_name, o.office_name, ${OFFICE_REPORT_NAME_EXPR} AS report_name, COUNT(s.id) as office_volume, ${sqdScoreExpr(ALL_SQD_COLS)} as office_score
                         FROM offices o
                         LEFT JOIN survey_responses s ON o.id = s.office_id${dateWhereAnd}
                         WHERE o.is_archived = 0
-                        GROUP BY o.id, o.cluster_name, o.office_name
+                        GROUP BY o.id, o.cluster_name, o.office_name, o.full_name
                         ORDER BY o.cluster_name, o.office_name
                     `;
                     db.query(officeQuery, dateParams, (err, officeRows) => {
@@ -7477,7 +7489,9 @@ app.get('/print', ensureAdminAuth, noCache, (req, res) => {
                                 clustersMap[cName] = { clusterName: cName, offices: [] };
                             }
                             const cell = scoreCell(row.office_volume, row.office_score, interpretFor);
-                            clustersMap[cName].offices.push({ name: row.office_name, score: cell.score, interpretation: cell.interpretation, respondents: row.office_volume || 0 });
+                            // Full spelled-out name, same as every other report — see
+                            // OFFICE_REPORT_NAME_EXPR.
+                            clustersMap[cName].offices.push({ name: row.report_name, score: cell.score, interpretation: cell.interpretation, respondents: row.office_volume || 0 });
                         });
 
                         // PER CLUSTER report order with each cluster's own TOTAL row —

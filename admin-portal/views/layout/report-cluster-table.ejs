@@ -13,11 +13,10 @@
    number (see scoreCell in server.js) — print that as-is, never as "N/A%". */
 const _pct = (value) => (value === 'N/A' || value === null || value === undefined || value === '') ? 'N/A' : `${value}%`;
 /* An office below CSPC's reporting minimum (fewer than 10 respondents, including
-   zero/blank offices) gets flagged so a thin, unrepresentative sample can't be
-   read as a finished result sitting next to fully-sampled offices in the same
-   table. Same threshold as the SQD scorecard's own PDF watermark. */
+   zero/blank offices) gets flagged .office-insufficient so downloadPDF's watermark
+   can find it — see report.css. Not shown as anything visible while just viewing;
+   only the exported PDF gets the caution watermark on the affected pages. */
 const _isThin = (office) => (office.respondents || 0) < 10;
-const _anyThin = typeof reportData !== 'undefined' && reportData.some(c => c.offices.some(_isThin));
 %>
 <table class="cluster-report-table">
     <colgroup>
@@ -37,14 +36,13 @@ const _anyThin = typeof reportData !== 'undefined' && reportData.some(c => c.off
             <% if (clusterIndex > 0) { %>
                 <tbody class="cluster-gap"><tr><td colspan="3"></td></tr></tbody>
             <% } %>
-            <tbody class="cluster-section">
+            <tbody class="cluster-section" <% if (/academic/i.test(cluster.clusterName)) { %>data-cluster="academic"<% } %>>
                 <tr class="cluster-row"><td colspan="3"><%= cluster.clusterName.toUpperCase() %></td></tr>
                 <% cluster.offices.forEach((office) => { %>
                     <tr class="<%= _isThin(office) ? 'office-insufficient' : '' %>">
                         <td><%= office.name %></td>
                         <td class="score-col">
                             <%= _pct(office.score) %>
-                            <% if (_isThin(office)) { %><span class="insufficient-tag">⚠ Insufficient Respondents</span><% } %>
                         </td>
                         <td class="inter-col"><%= office.interpretation %></td>
                     </tr>
@@ -62,6 +60,3 @@ const _anyThin = typeof reportData !== 'undefined' && reportData.some(c => c.off
         </tbody>
     <% } %>
 </table>
-<% if (_anyThin) { %>
-    <p class="insufficient-legend">⚠ Insufficient Respondents — fewer than 10 responses collected for the office in the period shown.</p>
-<% } %>
