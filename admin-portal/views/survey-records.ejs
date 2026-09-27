@@ -340,8 +340,12 @@
         /* Multi-topic tagging project (2026-09-25): a comment can carry more
            than one topic badge in the same cell — spaced and allowed to wrap
            onto a second line instead of overflowing the column. */
-        .topic-cell .topic-badge { max-width: 190px; margin-bottom: 4px; }
-        .topic-cell .topic-badge + .topic-badge { margin-left: 4px; }
+        /* Fixed (not max-) width so every badge in a multi-topic cell lines up
+           at the same size instead of each one shrinking to its own text —
+           stacked one per line (not side-by-side) since a shared fixed width
+           leaves no room for two to sit next to each other. */
+        .topic-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .topic-cell .topic-badge { width: 190px; }
 
         .bg-cr { background-color: #fee2e2; color: #ef4444; }
         .bg-aircon { background-color: #e0f2fe; color: #0ea5e9; }
