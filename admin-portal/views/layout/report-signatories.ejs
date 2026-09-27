@@ -1,9 +1,11 @@
 <%
 /* Shared bottom section for the PER CLUSTER-style official report (dashboard.ejs's
-   report modal, print.ejs): Prepared by / Reviewed by / Noted by signature blocks
-   plus the Interpretation of Results legend, laid out as a 2x2 grid so it matches
-   the original printed report (Prepared left, Reviewed right, Noted below Prepared,
-   legend below Reviewed) instead of one flat row of signatories.
+   report modal, print.ejs): Prepared by / Reviewed by / Noted by signature
+   blocks in a 2-column grid (Prepared left, Reviewed right, Noted below
+   Prepared, nothing below Reviewed), then the Interpretation of Results
+   legend below that — per the user's explicit instruction that the
+   signatories sit above the legend here (unlike the SQD report's own footer,
+   views/layout/sqd-report-footer.ejs, which puts its legend first).
    These are CSPC's existing official CQA report signatories, already used
    identically on report.ejs / cluster-detail.ejs / survey-records.ejs.
    `showInterpretationLegend` (default true) hides the legend for a report that
@@ -13,27 +15,27 @@
 const _showLegend = typeof showInterpretationLegend === 'undefined' || showInterpretationLegend;
 %>
 <div class="cluster-report-signatures">
-    <div class="sig-cell">
+    <div class="sig-cell sig-prepared">
         <p class="sig-label">Prepared by:</p>
         <div class="sig-space"></div>
         <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
         <p class="sig-title">AOV-CQA</p>
     </div>
-    <div class="sig-cell">
+    <div class="sig-cell sig-reviewed">
         <p class="sig-label">Reviewed by:</p>
         <div class="sig-space"></div>
         <p class="sig-name">JOCELYN O. JINTALAN, DBA</p>
         <p class="sig-title">ISO Chair</p>
     </div>
-    <div class="sig-cell">
+    <div class="sig-cell sig-noted">
         <p class="sig-label">Noted by:</p>
         <div class="sig-space"></div>
         <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
         <p class="sig-title">SUC President III</p>
     </div>
-    <% if (_showLegend) { %>
-        <div class="sig-cell">
-            <%- include('interpretation-legend') %>
-        </div>
-    <% } %>
 </div>
+<% if (_showLegend) { %>
+    <div class="cluster-interpretation-standalone">
+        <%- include('interpretation-legend') %>
+    </div>
+<% } %>

@@ -72,19 +72,32 @@
 .cluster-report-table .cluster-gap td { border: none; padding: 0; height: 8px; }
 
 /* ---- PER CLUSTER signature/legend block (views/layout/report-signatories.ejs) ----
-   2x2 grid: Prepared (top-left), Reviewed (top-right), Noted (bottom-left),
-   Interpretation legend (bottom-right) — matches the original printed layout. */
-.cluster-report-signatures { display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; row-gap: 12px; margin-top: 10px; font-size: 9.5pt; color: #000; }
+   Mirrors the SQD report's own footer layout (.sqd-interpretation-standalone +
+   .sqd-signature-grid below) per the user's explicit instruction to match it:
+   the legend is a standalone block, right-aligned, sitting right under the
+   table; then a plain 2-column grid holds Prepared by / Reviewed by / Noted by
+   in that DOM order, which places Prepared left / Reviewed right on row one
+   and Noted alone on the left of row two (nothing across from it). */
+.cluster-interpretation-standalone { width: 38%; margin: 4px 0 16px auto; font-size: 9pt; color: #000; }
+.cluster-interpretation-standalone .interpretation-legend { font-size: 9pt; }
+.cluster-interpretation-standalone .legend-title { font-weight: bold; margin-bottom: 4px; }
+.cluster-interpretation-standalone .legend-table { border-collapse: collapse; width: 100%; }
+.cluster-interpretation-standalone .legend-table td { border: none; padding: 1px 6px 1px 0; }
+.cluster-interpretation-standalone .legend-range { font-style: italic; width: 42%; }
+.cluster-interpretation-standalone .legend-desc { padding-left: 10px !important; }
+.cluster-report-signatures {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 40px;
+    row-gap: 12px;
+    margin-top: 14px;
+    font-size: 9.5pt;
+    color: #000;
+}
 .cluster-report-signatures .sig-label { margin: 0; font-size: 9.5pt; }
 .cluster-report-signatures .sig-space { height: 20px; }
 .cluster-report-signatures .sig-name { margin: 0 0 2px; font-weight: bold; text-decoration: underline; text-transform: uppercase; font-size: 9.5pt; }
 .cluster-report-signatures .sig-title { margin: 0; font-size: 9pt; color: #333; }
-.cluster-report-signatures .interpretation-legend { font-size: 9pt; }
-.cluster-report-signatures .legend-title { font-weight: bold; margin-bottom: 4px; }
-.cluster-report-signatures .legend-table { border-collapse: collapse; }
-.cluster-report-signatures .legend-table td { border: none; padding: 1px 6px 1px 0; }
-.cluster-report-signatures .legend-range { font-style: italic; }
-.cluster-report-signatures .legend-desc { padding-left: 10px !important; }
 
 /* ---- SQD report title/office/period section ----
    SQD-report-only (report.ejs, cluster-detail.ejs, survey-records.ejs's SQD
@@ -139,6 +152,7 @@
 .cluster-report-table tr { break-inside: avoid; page-break-inside: avoid; }
 .cluster-report-table .cluster-total-row { break-inside: avoid; page-break-inside: avoid; }
 .cluster-report-signatures { break-inside: avoid; page-break-inside: avoid; }
+.cluster-interpretation-standalone { break-inside: avoid; page-break-inside: avoid; }
 
 /* ---- Insufficient-respondents flag (report-cluster-table.ejs / report-overall-cluster-table.ejs /
    report-respondents-summary-table.ejs) ----
@@ -215,6 +229,7 @@
     .cluster-report-table tr { break-inside: avoid; page-break-inside: avoid; }
     .cluster-report-table .cluster-total-row { break-inside: avoid; page-break-inside: avoid; }
     .cluster-report-signatures { break-inside: avoid; page-break-inside: avoid; }
+    .cluster-interpretation-standalone { break-inside: avoid; page-break-inside: avoid; }
 
     .report-table, .print-table {
         width: 100%;

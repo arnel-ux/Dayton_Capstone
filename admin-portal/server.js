@@ -1912,6 +1912,13 @@ const DISPLAY_TIME_ZONE = process.env.DISPLAY_TIME_ZONE || 'Asia/Manila';
 // lists), and need the same zone for the same reason.
 app.locals.displayTimeZone = DISPLAY_TIME_ZONE;
 
+// Cache-busting query string for report.css (views/layout/report-*.ejs's
+// <link>), so a CSS edit shows up on refresh instead of the browser silently
+// keeping the old stylesheet (static files carry no Cache-Control here, but
+// browsers still heuristically cache them). Changes once per server start/
+// deploy, which is the only time report.css can actually change.
+app.locals.assetVersion = Date.now();
+
 // The zone's UTC offset at a given instant, derived by formatting the same
 // instant both ways and differencing them. The Philippines has no DST, so this is a
 // constant +08:00 in practice; computing it per-instant keeps the helpers

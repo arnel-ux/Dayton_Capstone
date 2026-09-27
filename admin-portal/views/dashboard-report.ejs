@@ -5,7 +5,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
          views/layout/report-footer.ejs) — see public/css/report.css. -->
-    <link rel="stylesheet" href="/css/report.css">
+    <link rel="stylesheet" href="/css/report.css?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '' %>">
 
     <style>
         /* No outer border/shadow — html2pdf captures this element as-is, so any

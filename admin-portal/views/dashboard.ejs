@@ -7,7 +7,7 @@
     <script src="/js/pdf-repeating-header.js?v=2"></script>
     <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
          views/layout/report-footer.ejs) — see public/css/report.css. -->
-    <link rel="stylesheet" href="/css/report.css">
+    <link rel="stylesheet" href="/css/report.css?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '' %>">
 
     <style>
         /* ============================================================
