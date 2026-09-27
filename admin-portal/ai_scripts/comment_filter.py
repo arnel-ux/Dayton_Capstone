@@ -1,6 +1,6 @@
 """
 Junk/no-feedback detection for survey comments — split out of topic_common.py
-on 2026-09-28 into its own package so it's easy to locate on its own, separate
+on 2026-09-28 into its own module so it's easy to locate on its own, separate
 from the AI taxonomy (which stays in topic_common.py, since gemini_model.py
 reads it directly to build Gemini's prompt).
 
