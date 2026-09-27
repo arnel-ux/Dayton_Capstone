@@ -1,21 +1,48 @@
 """
-Shared taxonomy, keyword anchors, and lightweight heuristics used by both
-analyze.py (CLI / standalone fallback) and heavy_model.py (persistent
-model-server path). Keeping this in one module means the fast/offline
-heuristic path and the full model path can never silently drift apart.
+Shared taxonomy and junk-detection heuristics used by both analyze.py (CLI /
+offline-sync path) and heavy_model.py (persistent model-server path, and the
+same functions analyze.py calls directly). Keeping this in one module means
+the two entry points can never silently drift apart.
+
+2026-09-27 cleanup: the keyword-based classification lexicon (TOPIC_KEYWORDS,
+the sentiment word lists, keyword_topic_override, item_label_override,
+lexicon_sentiment, fast_sentiment/fast_topic) has been removed. It was the
+fallback classifier before the pure-AI classification project (2026-09-22)
+and briefly a lexicon-first hybrid for offline-synced comments after that,
+but neither role survived: online comments have called Gemini exclusively
+since 2026-09-22, and offline-synced comments have too since 2026-09-25 (see
+analyze.py's module comment) — no production path has classified a single
+comment via keyword matching since. What remains here:
+  - is_no_feedback / NO_FEEDBACK_PHRASES: still the first gate every comment
+    passes through, unchanged.
+  - candidate_topics / TOPIC_ITEM_KEYWORDS: NOT dead — this is the taxonomy
+    itself. gemini_model.py reads it to build Gemini's prompt guide, its
+    example-keyword hints, and the JSON schema's valid-output enum. Deleting
+    this would break Gemini, not just the old lexicon.
+  - detect_junk_topic and everything it depends on (greeting/gibberish/
+    keyboard-mash detection): still the ONLY thing that runs before Gemini is
+    ever called, for every comment, online and offline alike — this is what
+    catches blanks, "N/A"-style placeholders, emoji/symbol-only text,
+    keyboard mash, and greeting-only comments for free, without spending an
+    API call. Its own "is this actually real vocabulary" guard now reads
+    directly from TOPIC_ITEM_KEYWORDS (see _collect_known_vocab_tokens)
+    instead of the deleted lexicon — verified before this cleanup that no
+    real short word (e.g. "cr", "id") was uniquely covered only by the
+    deleted lists.
 """
 import re
 
 # ---------------------------------------------------------------------------
-# NO-FEEDBACK DETECTION — must run BEFORE any lexicon/AI classification.
+# NO-FEEDBACK DETECTION — must run BEFORE any AI classification.
 # A blank comment or an explicit "nothing to say" placeholder ("N/A", "none",
 # "no comment", ...) has no actual content to classify — forcing it through
-# the lexicon/AI pipeline previously produced a fabricated "General Feedback
-# / Neutral" result, which reads to an admin as a real (if generic) opinion
-# rather than "this respondent didn't write anything." Callers (analyze.py,
-# model_server.py, server.js's analyzeComment) must check this FIRST and
-# short-circuit to no classification at all (topic=None, sentiment=None) —
-# see each caller for how that maps to the database (NULL, not a string).
+# the classification pipeline previously produced a fabricated "General
+# Feedback / Neutral" result, which reads to an admin as a real (if generic)
+# opinion rather than "this respondent didn't write anything." Callers
+# (analyze.py, model_server.py, server.js's analyzeComment) must check this
+# FIRST and short-circuit to no classification at all (topic=None,
+# sentiment=None) — see each caller for how that maps to the database (NULL,
+# not a string).
 # ---------------------------------------------------------------------------
 NO_FEEDBACK_PHRASES = {
     "na", "n/a", "none", "nil", "no comment", "no comments", "not applicable",
@@ -47,74 +74,39 @@ def is_no_feedback(text):
     return stripped in NO_FEEDBACK_PHRASES
 
 # ---------------------------------------------------------------------------
-# HYPHEN-TOLERANT KEYWORD MATCHING
-# Real feedback typed by Filipino users on a phone keyboard very often drops
-# hyphens ("naghang" / "nag hang" instead of "nag-hang", "wifi" instead of
-# "wi-fi") — added 2026-08-30 after finding "nag-hang"/"nag-crash" wouldn't
-# match the far more common unhyphenated typing. Rather than hand-listing 2-3
-# spelling variants of every hyphenated keyword in every list below (easy to
-# forget on the next addition), every keyword's hyphen is compiled as an
-# OPTIONAL separator that also matches a space or nothing at all — so a
-# single entry like "nag-hang" already covers "nag-hang", "nag hang", and
-# "naghang" everywhere keywords are matched (TOPIC_KEYWORDS,
-# TOPIC_ITEM_KEYWORDS, the sentiment lexicon, neutral phrases, and collision
-# phrases all go through this one helper).
+# HYPHEN-TOLERANT MATCHING — still used by the junk-detector's greeting-phrase
+# check below (_is_greeting_or_particle_only), which needs to match a phrase
+# like "good morning" regardless of exact spacing/hyphenation.
 # ---------------------------------------------------------------------------
 def _kw_pattern(kw):
     escaped = re.escape(kw).replace('\\-', '[- ]?')
     return r'\b' + escaped + r'\b'
 
 
-def _matched_spans(lowered, keywords):
-    """
-    Non-overlapping (start, end, weight) match spans for a keyword list
-    (plain strings, weight 1, or (keyword, weight) tuples). When two
-    keywords in the SAME list match overlapping text — e.g. "wifi" and
-    "wi-fi" both matching the same word now that _kw_pattern treats the
-    hyphen as optional, or a pre-existing intentional duplicate like
-    "one-stop"/"one stop" — only the first-listed keyword's match is kept,
-    so one real mention is never double-counted as two hits. Added
-    2026-08-30 alongside _kw_pattern: hyphen-tolerant matching would
-    otherwise silently inflate counts for every keyword list that already
-    carries both a hyphenated and unhyphenated spelling of the same term.
-    """
-    spans = []
-    for entry in keywords:
-        kw, weight = entry if isinstance(entry, tuple) else (entry, 1)
-        for m in re.finditer(_kw_pattern(kw), lowered):
-            s, e = m.start(), m.end()
-            if any(s < e2 and e > s2 for s2, e2, _ in spans):
-                continue
-            spans.append((s, e, weight))
-    return spans
-
-
 # ---------------------------------------------------------------------------
 # TOPIC TAXONOMY (rewritten 2026-09-22 — pure-AI classification project)
 #
-# Redesigned around one rule: a Topic/Subtopic label must be SENTIMENT-NEUTRAL
+# This is Gemini's entire classification universe — gemini_model.py builds
+# its prompt guide, its per-item example hints, and its JSON schema's
+# valid-output enum directly from candidate_topics and TOPIC_ITEM_KEYWORDS
+# below. Do not remove or rename anything here without also checking
+# gemini_model.py's TOPIC_DESCRIPTIONS (which must have an entry for every
+# topic listed here).
+#
+# Designed around one rule: a Topic/Subtopic label must be SENTIMENT-NEUTRAL
 # — it names what the comment is ABOUT, never whether that thing was good or
 # bad (that judgment belongs entirely to the separate sentiment axis). The old
 # taxonomy violated this in a few places (e.g. "Transaction - Slow"/
 # "Transaction - Fast" baked a sentiment judgment into the subtopic itself),
-# which is exactly the pattern this rewrite removes — see the former
-# _transaction_subtopic, now deleted; "Transaction" is folded into
-# "Processing - Processing Time" and sentiment alone carries the slow/fast
-# verdict, matching every other topic's convention.
+# which is exactly the pattern this rewrite removes — "Transaction" is folded
+# into "Processing - Processing Time" and sentiment alone carries the
+# slow/fast verdict, matching every other topic's convention.
 #
-# This taxonomy merges the previous physical-facility/behavioral topics
-# (which already had well-tuned Taglish keyword coverage — kept largely
-# as-is below) with a broader set of administrative/service-process topics
-# covering the college's non-facility offices (registrar, HR, cash unit,
-# scholarships, ICT, library, dormitory, travel orders, etc.), consolidating
-# topics that meant the same thing under one neutral name and removing
-# duplicates. Topics with no keyword list below are intentionally
-# keyword-free — Gemini (the classifier for online comments, and the
-# fallback for offline comments the lexicon doesn't anchor) is the only
-# thing that ever resolves them; hand-authoring exhaustive Taglish keyword
-# coverage for every administrative micro-category is not worth the
-# maintenance cost the old lexicon-first design paid for the common,
-# high-volume categories below.
+# This taxonomy merges the previous physical-facility/behavioral topics with
+# a broader set of administrative/service-process topics covering the
+# college's non-facility offices (registrar, HR, cash unit, scholarships,
+# ICT, library, dormitory, travel orders, etc.), consolidating topics that
+# meant the same thing under one neutral name and removing duplicates.
 # ---------------------------------------------------------------------------
 candidate_topics = [
     "Processing",
@@ -149,256 +141,18 @@ candidate_topics = [
 ]
 
 # ---------------------------------------------------------------------------
-# TAGLISH KEYWORD ANCHORS
-# Only object nouns or unambiguous compound phrases are used as anchors —
-# never bare descriptors like "mabagal"/"mahina"/"malinis" alone, since those
-# are ambiguous across every category and would misfire. A keyword hit here
-# wins the topic outright over Gemini (see keyword_topic_override) — as of
-# 2026-09-25 (see analyze.py's module comment), no production classification
-# path calls this at all anymore; both online and offline comments go
-# straight to Gemini (see heavy_model.analyze_pure_ai). This dict is only
-# still consulted by the junk-detector's "is this actually real vocabulary"
-# guard below, and by test_accuracy.py's lexicon-only scoring.
-# ---------------------------------------------------------------------------
-TOPIC_KEYWORDS = {
-    "Processing": [
-        "pila", "linya", "queue", "queueing", "waiting line", "numero",
-        "hintay", "naghintay", "naghihintay", "hinihintay", "hinintay",
-        "pinaghihintayan", "maghintay",
-        "antay", "umaantay", "inaantay", "antayin",
-        "priority number", "numbering system",
-        "transaction", "pag-transact", "processing time",
-        "release ng resulta", "ma-release", "na-release",
-        ("processing", 0.75),
-    ],
-    "Service Procedure": [
-        "hassle-free", "hassle free", "walang abala", "walang hassle",
-        "streamlined", "isang beses lang", "isang hakbang lang", "one-stop",
-        "maraming hakbang", "madaming hakbang", "kumplikado",
-        ("proseso", 0.5), ("process", 0.5),
-        "referral", "irefer", "i-refer", "pinadala sa ibang office",
-    ],
-    "Requirements": [
-        "requirements", "kakailanganin", "kailangang dokumento",
-        "kulang na requirements", "incomplete requirements",
-        "kulang sa requirements", "hindi kumpleto ang requirements",
-        "eligibility", "kwalipikado", "hindi kwalipikado",
-        "hindi qualified", "not qualified", "not eligible",
-    ],
-    "Approval Process": [
-        "approval", "aprubado", "approve", "na-approve", "ina-approve",
-        "endorsement", "endorso", "signature", "pirma", "lagda",
-        "pending approval", "hindi pa naaprubahan", "hindi pa na-approve",
-    ],
-    "Communication and Information": [
-        "impormasyon", "information", "communication", "announcement", "abiso",
-        "notice", "paalala", "text blast", "walang paalam", "walang reply",
-        "hindi sumasagot", "no response", "not informed", "nobody informed",
-        "no update", "walang update", "no updates", "walang updates", "email",
-        "iba-iba sagot", "iba't ibang sagot", "magkaibang sagot",
-        "kanya-kanyang sagot", "conflicting information",
-        "contradicting information", "inconsistent information",
-        "nagkontra-kontra",
-    ],
-    "Staff Service": [
-        # Fairness/equal-treatment anchors
-        "palakasan", "walang palakasan", "paboritism", "favoritism",
-        "nepotism", "bias", "unfair", "hindi patas", "walang katarungan",
-        "may kilala",
-        # Competence/knowledge anchors
-        "hindi marunong", "hindi madunong", "walang alam", "not knowledgeable",
-        "incompetent", "hindi alam ng",
-        "hindi sanay", "untrained", "kulang sa training", "hindi sigurado sa sagot",
-        "hindi updated", "hindi na updated", "hindi pa updated", "outdated",
-        ("sanay", 0.5),
-        # Assistance/accommodation anchors
-        "accommodate", "accommodating", "accommodation",
-        "inasikaso", "inaasikaso", "aasikasuhin", "asikaso",
-        "pinansin", "pinapansin", "entertained",
-        "walang assistance", "walang tumutulong", "poor assistance",
-        "poor service", "bad attitude", "unhelpful", "not helpful",
-        "technical assistance", "it support", "tulong teknikal",
-        # Generic courtesy/demeanor anchors (role nouns weighted low, same as
-        # before, so synonym-stacking on one person never outranks a specific
-        # complaint elsewhere)
-        ("staff", 0.5), ("staffs", 0.5), ("kawani", 0.5), ("empleyado", 0.5),
-        ("tauhan", 0.5), ("employee", 0.5), ("receptionist", 0.5),
-        ("guard", 0.5), ("security", 0.5), ("clerk", 0.5), ("faculty", 0.5),
-        ("professor", 0.5), ("guro", 0.5), ("adviser", 0.5),
-        ("ma'am", 0.5), ("sir", 0.5),
-        "bastos", "hindi magalang", "suplado", "suplada", "masungit",
-        "mabait", "mababait", "magalang", "magagalang", "courteous",
-        "respectful", "approachable", "friendly",
-        "masusungit", "rude", "disrespectful", "unfriendly",
-    ],
-    "Documents and Records": [
-        "transcript", "tor", "diploma", "certification", "certificate",
-        "credentials", "cav", "transcript of records", "honorable dismissal",
-        "diploma ko", "good moral", "form 137", "form 138",
-        "certificate of grades", "identification card", "id card", "school id",
-        "leave of absence", "certificate of employment", "service record",
-        "personnel record", "201 file",
-    ],
-    "System and Access": [
-        "portal", "website", "web site", "sias", "online system",
-        "log-in", "login", "log in", "e-services", "e-portal", "online account",
-        ("online form", 0.75),
-        "glitch", "glitchy", "buggy", "crashed", "crashing", "nag-crash",
-        "nag-hang", "hanging", "nag-error", "system error",
-        "account activation", "i-activate", "account recovery",
-        "forgot password", "reset password",
-    ],
-    "Ease of Use": [
-        ("user-friendly", 1.5), ("user friendly", 1.5),
-        "madaling gamitin",
-        "mahirap gamitin", "nakakalito", "nalilito", "confusing na sundin",
-    ],
-    "Internet Service": [
-        "internet", "wifi", "wi-fi", "signal", "network", "koneksyon",
-        "walang signal", "walang internet", "internet access",
-        "internet subscription", "renewal of internet",
-    ],
-    "Scheduling and Availability": [
-        "schedule", "iskedyul", "appointment", "walang schedule",
-        "walang appointment", "exam schedule", "entrance exam schedule",
-        "walang available na slot", "no available slot", "fully booked",
-    ],
-    "Financial Transaction": [
-        "bayad", "babayaran", "nagbayad", "nagbabayad", "magbayad", "binayaran",
-        "fee", "fees", "singil", "kabayaran", "resibo",
-        "official receipt", "sobrang mahal ang bayad", "tuition", "tuition fee",
-        "petty cash", "reimbursement", "liquidation", "statement of account",
-        "account balance", "remittance", "claim for payment",
-    ],
-    "Facilities and Resources": [
-        # Aircon/cooling
-        "aircon", "air-con", "air condition", "aircondition", "air conditioning",
-        "electric fan", "bentilador", "pabentilador",
-        "mainit", "ang init", "sobrang init", "napakainit", "napaka init",
-        "masyadong mainit", "too hot", "very hot", "hot room", "hot office",
-        "stuffy", "kulob", "maalinsangan",
-        "malamig", "sobrang lamig", "napakalamig", "too cold", "very cold",
-        "walang aircon", "walang air con", "sira ang aircon", "sirang aircon",
-        "mahina ang aircon", "mahina aircon", "walang ventilation",
-        "poor ventilation", "kulang ventilation", "walang bentilasyon",
-        # Restroom
-        "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
-        "tissue", "sabon",
-        # Cleanliness (general, not restroom-specific)
-        ("kalinisan", 1.5), ("cleanliness", 1.5), ("malinis", 1.5),
-        ("marumi", 1.5), ("rumi", 1.5), ("dumi", 1.5), ("madumi", 1.5),
-        ("makalat", 1.5), ("kalat", 1.5), ("magulo", 1.5),
-        ("dirty", 1.5), ("unclean", 1.5), ("not clean", 1.5),
-        ("maalikabok", 1.5), ("alikabok", 1.5), ("dusty", 1.5),
-        ("mabaho", 1.5), ("ambaho", 1.5), ("napakabaho", 1.5),
-        ("napaka baho", 1.5), ("sobrang baho", 1.5), ("ang baho", 1.5),
-        ("masyadong mabaho", 1.5), ("masangsang", 1.5), ("mabahong amoy", 1.5),
-        ("amoy mabaho", 1.5), ("smelly", 1.5), ("stinky", 1.5),
-        ("foul smell", 1.5), ("bad smell", 1.5), ("unsanitary", 1.5),
-        ("poor sanitation", 1.5), ("filthy", 1.5), ("messy", 1.5),
-        ("napakalinis", 1.5), ("napaka linis", 1.5), ("sobrang linis", 1.5),
-        ("maayos at malinis", 1.5), ("well cleaned", 1.5), ("sanitary", 1.5),
-        # Seating and furniture
-        "upuan", "silya", "mesa", "bangko", "furniture", "chairs", "seats", "muwebles",
-        # Power and lighting
-        "kuryente", "ilaw", "brownout", "blackout", "lighting", "power outage",
-        "walang kuryente",
-        # Equipment/appearance/building/parking (excludes library/dormitory/
-        # transportation, which are their own topics below)
-        "pasilidad", "kagamitan", "equipment", "facilities", "aparatus",
-        "makina", "istruktura", "parking", "paradahan", "printer",
-        "computer lab", "computer laboratory", "computer shop",
-        ("pangit", 1.5), ("pangit tignan", 1.5), ("pangit tingnan", 1.5),
-        ("di magandang tignan", 1.5), ("hindi magandang tignan", 1.5),
-        ("di magandang tingnan", 1.5), ("hindi magandang tingnan", 1.5),
-        ("di kaaya aya", 1.5), ("hindi kaaya aya", 1.5), ("kaaya aya", 1.5),
-        ("kaaya-aya", 1.5), ("hindi presentable", 1.5), ("di presentable", 1.5),
-        ("unpresentable", 1.5), ("unattractive", 1.5),
-        ("unpleasant looking", 1.5), ("poor appearance", 1.5),
-        ("poorly maintained", 1.5),
-        ("maayos tignan", 1.5), ("maayos tingnan", 1.5),
-        ("pleasant looking", 1.5), ("well maintained", 1.5),
-    ],
-    "Bystanders and Loitering": [
-        "tambay", "nakatambay", "istambay", "mga tambay", "standby",
-        "mga standby", "loitering", "loiterers",
-        "tumatambay", "tumambay", "tatambay", "nagtatambay", "nagtambay",
-    ],
-    "Scholarship and Assistance": [
-        "scholarship", "iskolarship", "iskolar", "scholar",
-        "financial assistance", "grants-in-aid", "scholarship grant", "grant",
-        ("mali ang amount", 1.5), ("mali yung amount", 1.5), ("maling amount", 1.5),
-        ("mali ang halaga", 1.5), ("mali yung halaga", 1.5), ("maling halaga", 1.5),
-        ("kulang ang amount", 1.5), ("kulang yung amount", 1.5), ("kulang na amount", 1.5),
-        ("kulang ang halaga", 1.5), ("kulang yung halaga", 1.5), ("kulang na halaga", 1.5),
-    ],
-    "Enrollment Process": [
-        "enrollment", "enrolment", "pagpapatala", "nagpatala", "nagpapatala",
-        "magpapatala", "ipatala", "registration", "rehistrasyon",
-        "matriculation", "cross-enrollment", "re-admission", "shifting",
-        "mag-shift", "nag-shift",
-    ],
-    "Academic Transaction": [
-        "add/drop", "adding of subjects", "dropping of subjects",
-        "drop subject", "dropping subject",
-        "grade change", "correction of grades", "change of grade",
-        "graduation", "commencement", "graduating",
-        "entrance exam", "entrance examination", "college entrance exam",
-    ],
-    "Health Service": [
-        "clinic", "klinika", "doktor", "doctor", "dentista", "dentist",
-        "dental", "medical certificate", "gamot", "nurse", "nars",
-        "konsultasyon", "check-up", "checkup", "medical consultation",
-    ],
-    "Clearance Process": [
-        "clearance",
-    ],
-    "Leave Process": [
-        "leave of absence", "sick leave", "vacation leave", "bakasyon leave",
-    ],
-    "Accreditation Process": [
-        "accreditation", "akreditasyon", "accredit",
-    ],
-    "Complaint Handling": [
-        "grievance", "sumbong", "hinaing",
-    ],
-    "ID Services": [
-        "identification card", "id card", "school id", "employee id",
-        "id printing",
-    ],
-    "Dormitory Service": [
-        "dormitory", "dorm", "bed space", "boarding house",
-    ],
-    "Supplies and Resources": [
-        "supplies", "materials", "accountable forms", "office supplies",
-    ],
-    "Transportation Service": [
-        "transportation", "sasakyan", "service vehicle", "shuttle",
-    ],
-    "Library Service": [
-        "library", "aklatan", "librong hiniram", "libro", "book", "books",
-        "borrowing", "hiram ng libro", "pagsauli ng libro", "returning books",
-    ],
-    "Research Service": [
-        "research assistance", "pananaliksik", "research consultation",
-    ],
-    # "General Service" and "Service Procedure"'s referral-only phrasing are
-    # deliberately kept sparse — see the module comment above. These are
-    # only ever reached via Gemini (online) or the Gemini fallback (offline).
-}
-
-# ---------------------------------------------------------------------------
-# ITEM-LEVEL REFINEMENT (topic -> "{Topic} - {Specific Item}")
-# One more level of specificity than TOPIC_KEYWORDS, applied only AFTER a
-# topic has already been resolved by keyword_topic_override. Every item
-# label is sentiment-neutral by design (see the taxonomy module comment
-# above) — an item never encodes whether the thing it names was good or bad,
-# only what it was. Not every topic has a meaningful item breakdown; those
-# without one stay at the plain topic label.
+# SUBTOPICS (topic -> "{Topic} - {Specific Item}" labels), keyed by parent
+# topic. Every item label is sentiment-neutral by design (see the taxonomy
+# comment above) — an item never encodes whether the thing it names was good
+# or bad, only what it was. Not every topic has a meaningful item breakdown;
+# those without one stay at the plain topic label.
 #
-# Each entry is an ORDERED list of (item_label, keywords) — on an equal
-# keyword-hit count, the first-listed item wins, so the more specific/common
-# item for that topic is listed first.
+# The short keyword list under each item is NOT a matcher anymore (see the
+# module docstring) — it exists purely so gemini_model.py's _item_hint() can
+# show Gemini a couple of concrete example words/phrases for what that label
+# means (e.g. "Restroom Condition (e.g. tissue, sabon, banyo)"). An empty
+# list is valid — see Complaint Handling/General Service below — Gemini still
+# needs the label registered here to ever output it, even with no examples.
 # ---------------------------------------------------------------------------
 TOPIC_ITEM_KEYWORDS = {
     "Processing": [
@@ -414,7 +168,7 @@ TOPIC_ITEM_KEYWORDS = {
         ]),
         ("Processing - Processing Time", [
             "transaction", "pag-transact", "processing time",
-            ("processing", 0.75),
+            "processing",
         ]),
     ],
     "Service Procedure": [
@@ -427,7 +181,7 @@ TOPIC_ITEM_KEYWORDS = {
             "streamlined", "isang beses lang", "isang hakbang lang", "one-stop",
         ]),
         ("Service Procedure - Submission Process", [
-            ("proseso", 0.5), ("process", 0.5),
+            "proseso", "process",
         ]),
     ],
     "Requirements": [
@@ -494,15 +248,12 @@ TOPIC_ITEM_KEYWORDS = {
             "poor service", "unhelpful", "not helpful",
         ]),
         ("Staff Service - Staff Courtesy", [
-            ("staff", 0.5), ("staffs", 0.5), ("kawani", 0.5), ("empleyado", 0.5),
-            ("tauhan", 0.5), ("employee", 0.5), ("receptionist", 0.5),
-            ("guard", 0.5), ("security", 0.5), ("clerk", 0.5), ("faculty", 0.5),
-            ("professor", 0.5), ("guro", 0.5), ("adviser", 0.5),
-            ("ma'am", 0.5), ("sir", 0.5),
+            "staff", "kawani", "empleyado", "employee", "guard", "security",
+            "clerk", "faculty", "professor",
             "bastos", "hindi magalang", "suplado", "suplada", "masungit",
             "mabait", "mababait", "magalang", "magagalang", "courteous",
             "respectful", "approachable", "friendly",
-            "masusungit", "rude", "disrespectful", "unfriendly", "bad attitude",
+            "masusungit", "rude", "disrespectful", "unfriendly",
         ]),
     ],
     "Documents and Records": [
@@ -544,7 +295,7 @@ TOPIC_ITEM_KEYWORDS = {
     ],
     "Ease of Use": [
         ("Ease of Use - Form/Portal Usability", [
-            ("user-friendly", 1.5), ("user friendly", 1.5), "madaling gamitin",
+            "user-friendly", "user friendly", "madaling gamitin",
             "mahirap gamitin", "nakakalito", "nalilito", "confusing na sundin",
         ]),
     ],
@@ -604,19 +355,19 @@ TOPIC_ITEM_KEYWORDS = {
             "banyo", "cr", "comfort room", "palikuran", "restroom", "toilet",
         ]),
         ("Facilities and Resources - Cleanliness", [
-            ("kalinisan", 1.5), ("cleanliness", 1.5), ("malinis", 1.5),
-            ("marumi", 1.5), ("rumi", 1.5), ("dumi", 1.5), ("madumi", 1.5),
-            ("makalat", 1.5), ("kalat", 1.5), ("magulo", 1.5),
-            ("dirty", 1.5), ("unclean", 1.5), ("not clean", 1.5),
-            ("maalikabok", 1.5), ("alikabok", 1.5), ("dusty", 1.5),
-            ("mabaho", 1.5), ("ambaho", 1.5), ("napakabaho", 1.5),
-            ("napaka baho", 1.5), ("sobrang baho", 1.5), ("ang baho", 1.5),
-            ("masyadong mabaho", 1.5), ("masangsang", 1.5), ("mabahong amoy", 1.5),
-            ("amoy mabaho", 1.5), ("smelly", 1.5), ("stinky", 1.5),
-            ("foul smell", 1.5), ("bad smell", 1.5), ("unsanitary", 1.5),
-            ("poor sanitation", 1.5), ("filthy", 1.5), ("messy", 1.5),
-            ("napakalinis", 1.5), ("napaka linis", 1.5), ("sobrang linis", 1.5),
-            ("maayos at malinis", 1.5), ("well cleaned", 1.5), ("sanitary", 1.5),
+            "kalinisan", "cleanliness", "malinis",
+            "marumi", "rumi", "dumi", "madumi",
+            "makalat", "kalat", "magulo",
+            "dirty", "unclean", "not clean",
+            "maalikabok", "alikabok", "dusty",
+            "mabaho", "ambaho", "napakabaho",
+            "napaka baho", "sobrang baho", "ang baho",
+            "masyadong mabaho", "masangsang", "mabahong amoy",
+            "amoy mabaho", "smelly", "stinky",
+            "foul smell", "bad smell", "unsanitary",
+            "poor sanitation", "filthy", "messy",
+            "napakalinis", "napaka linis", "sobrang linis",
+            "maayos at malinis", "well cleaned", "sanitary",
         ]),
         ("Facilities and Resources - Seating/Furniture", [
             "upuan", "silya", "mesa", "bangko", "furniture", "chairs", "seats", "muwebles",
@@ -625,32 +376,21 @@ TOPIC_ITEM_KEYWORDS = {
             "kuryente", "ilaw", "brownout", "blackout", "lighting", "power outage",
             "walang kuryente",
         ]),
-        # Split 2026-09-25 from a single conflated "Equipment Condition" item
-        # that mixed appearance-judgment phrases with actual equipment nouns
-        # under one label — a comment naming neither ("hindi maayos yung
-        # opisina", no equipment, no specific appearance phrase) was still
-        # landing on "Equipment Condition" via Gemini because that item's
-        # own example hint (its first 3 keywords) was "pangit, pangit
-        # tignan, pangit tingnan", nothing to do with equipment at all, so
-        # the label Gemini picked didn't match what its own hint told it to
-        # match on. Listed with Equipment/Machine first so a comment naming
-        # BOTH a device and an appearance phrase (e.g. "pangit ang printer")
-        # resolves to the more specific Equipment/Machine on a tie.
         ("Facilities and Resources - Equipment/Machine", [
             "kagamitan", "equipment", "makina", "aparatus", "printer",
             "computer lab", "computer laboratory", "computer shop",
         ]),
         ("Facilities and Resources - Appearance/Condition", [
-            ("pangit", 1.5), ("pangit tignan", 1.5), ("pangit tingnan", 1.5),
-            ("di magandang tignan", 1.5), ("hindi magandang tignan", 1.5),
-            ("di magandang tingnan", 1.5), ("hindi magandang tingnan", 1.5),
-            ("di kaaya aya", 1.5), ("hindi kaaya aya", 1.5), ("kaaya aya", 1.5),
-            ("kaaya-aya", 1.5), ("hindi presentable", 1.5), ("di presentable", 1.5),
-            ("unpresentable", 1.5), ("unattractive", 1.5),
-            ("unpleasant looking", 1.5), ("poor appearance", 1.5),
-            ("poorly maintained", 1.5),
-            ("maayos tignan", 1.5), ("maayos tingnan", 1.5),
-            ("pleasant looking", 1.5), ("well maintained", 1.5),
+            "pangit", "pangit tignan", "pangit tingnan",
+            "di magandang tignan", "hindi magandang tignan",
+            "di magandang tingnan", "hindi magandang tingnan",
+            "di kaaya aya", "hindi kaaya aya", "kaaya aya",
+            "kaaya-aya", "hindi presentable", "di presentable",
+            "unpresentable", "unattractive",
+            "unpleasant looking", "poor appearance",
+            "poorly maintained",
+            "maayos tignan", "maayos tingnan",
+            "pleasant looking", "well maintained",
         ]),
         ("Facilities and Resources - Building/Structure", ["istruktura"]),
         ("Facilities and Resources - Parking", ["parking", "paradahan"]),
@@ -658,10 +398,10 @@ TOPIC_ITEM_KEYWORDS = {
     ],
     "Scholarship and Assistance": [
         ("Scholarship and Assistance - Grant Amount", [
-            ("mali ang amount", 1.5), ("mali yung amount", 1.5), ("maling amount", 1.5),
-            ("mali ang halaga", 1.5), ("mali yung halaga", 1.5), ("maling halaga", 1.5),
-            ("kulang ang amount", 1.5), ("kulang yung amount", 1.5), ("kulang na amount", 1.5),
-            ("kulang ang halaga", 1.5), ("kulang yung halaga", 1.5), ("kulang na halaga", 1.5),
+            "mali ang amount", "mali yung amount", "maling amount",
+            "mali ang halaga", "mali yung halaga", "maling halaga",
+            "kulang ang amount", "kulang yung amount", "kulang na amount",
+            "kulang ang halaga", "kulang yung halaga", "kulang na halaga",
             "grant",
         ]),
         ("Scholarship and Assistance - Application Process", [
@@ -705,10 +445,43 @@ TOPIC_ITEM_KEYWORDS = {
             "konsultasyon", "check-up", "checkup", "medical consultation",
         ]),
     ],
+    "Clearance Process": [
+        ("Clearance Process - Clearance Status", ["clearance"]),
+    ],
+    "Leave Process": [
+        ("Leave Process - Leave Application", [
+            "leave of absence", "sick leave", "vacation leave", "bakasyon leave",
+        ]),
+    ],
+    "Accreditation Process": [
+        ("Accreditation Process - Accreditation Status", [
+            "accreditation", "akreditasyon", "accredit",
+        ]),
+    ],
+    "Complaint Handling": [
+        ("Complaint Handling - Response", []),
+        ("Complaint Handling - Follow-up", []),
+        ("Complaint Handling - Resolution Process", ["grievance", "sumbong", "hinaing"]),
+    ],
     "ID Services": [
         ("ID Services - ID Printing", ["id printing", "employee id"]),
         ("ID Services - ID Application", [
             "identification card", "id card", "school id",
+        ]),
+    ],
+    "Dormitory Service": [
+        ("Dormitory Service - Bed Space Availability", [
+            "dormitory", "dorm", "bed space", "boarding house",
+        ]),
+    ],
+    "Supplies and Resources": [
+        ("Supplies and Resources - Item Availability", [
+            "supplies", "materials", "accountable forms", "office supplies",
+        ]),
+    ],
+    "Transportation Service": [
+        ("Transportation Service - Vehicle Availability", [
+            "transportation", "sasakyan", "service vehicle", "shuttle",
         ]),
     ],
     "Library Service": [
@@ -722,16 +495,15 @@ TOPIC_ITEM_KEYWORDS = {
             "library", "aklatan", "libro", "book", "books",
         ]),
     ],
-    # No keyword coverage — these two are reachable only through Gemini (see
-    # the taxonomy module comment above), never through keyword_topic_override/
-    # item_label_override's lexicon matching. Still registered here (even with
-    # empty keyword lists) so gemini_model.ALL_TOPICS actually includes them as
-    # valid outputs, matching shared/topicTaxonomy.js's admin-override dropdown.
-    "Complaint Handling": [
-        ("Complaint Handling - Response", []),
-        ("Complaint Handling - Follow-up", []),
-        ("Complaint Handling - Resolution Process", []),
+    "Research Service": [
+        ("Research Service - Research Assistance", [
+            "research assistance", "pananaliksik", "research consultation",
+        ]),
     ],
+    # No keyword examples at all — these are reachable only through Gemini's
+    # own judgment (see the module docstring). Still registered here so
+    # gemini_model.ALL_TOPICS includes them as valid outputs, matching
+    # shared/topicTaxonomy.js's admin-override dropdown.
     "General Service": [
         ("General Service - Service Information", []),
         ("General Service - Service Accessibility", []),
@@ -743,342 +515,25 @@ TOPIC_ITEM_KEYWORDS = {
 GENERAL_FEEDBACK = "General Feedback"
 
 
-def item_label_override(topic, text):
-    """
-    Best-matching "{topic} - {item}" label for a topic that already resolved
-    via keyword_topic_override, or None if that topic has no item breakdown
-    or the text doesn't name any specific item within it. Same
-    weighted-sum-then-order tie-break as keyword_topic_override, scoped to
-    the winning topic's own item list.
-
-    Bug fixed 2026-09-26: this used to score each item by len(_matched_spans(...))
-    — literally counting matches — which silently ignored every keyword's
-    declared weight (e.g. Cleanliness's ("madumi", 1.5) counted as a plain
-    1, same as a bare 1-weighted location noun). That meant an issue-specific
-    word like "madumi" (dirty) could never actually outrank a bare location
-    noun like "cr" the way the weight was designed to guarantee — it silently
-    fell back to whichever item happened to be listed first, defeating the
-    entire point of weighting items at all. "madumi ang cr sa office" is
-    exactly this case: Cleanliness's weighted "madumi" (1.5) must beat
-    Restroom Condition's bare "cr" (1), not tie with it.
-    """
-    groups = TOPIC_ITEM_KEYWORDS.get(topic)
-    if not groups:
-        return None
-    lowered = text.lower()
-    hits = {}
-    for item_label, keywords in groups:
-        count = sum(weight for _, _, weight in _matched_spans(lowered, keywords))
-        if count:
-            hits[item_label] = count
-    if not hits:
-        return None
-    # Preserve declared order on ties by scanning `groups` instead of `hits`.
-    best_count = max(hits.values())
-    for item_label, _ in groups:
-        if hits.get(item_label) == best_count:
-            return item_label
-    return None
-
-
-# ---------------------------------------------------------------------------
-# OFFICE-AWARE HINT
-# Superseded by gemini_model.py's own office_hint (free-text office/cluster
-# name passed straight into the Gemini prompt as soft context — see its
-# PROMPT_TEMPLATE) now that Gemini, not a zero-shot model, is the fallback.
-# ---------------------------------------------------------------------------
-
-
-def keyword_topic_override(text):
-    """
-    Best-matching topic by object-noun keyword count, or None if no keyword
-    hit at all. As of 2026-09-25 (see analyze.py's module comment), no
-    production comment is actually CLASSIFIED via this function anymore —
-    every online and offline comment goes straight to Gemini (see
-    heavy_model.analyze_pure_ai). This function is still called two ways:
-    detect_junk_topic's "is this actually real vocabulary" guard below (not
-    a classification, just a safety check), and heavy_model.analyze()'s
-    lexicon-first hybrid, kept only for test_accuracy.py's lexicon-only
-    scoring.
-    """
-    lowered = text.lower()
-    hits = {}
-    for topic, keywords in TOPIC_KEYWORDS.items():
-        count = sum(weight for _, _, weight in _matched_spans(lowered, keywords))
-        if count:
-            hits[topic] = count
-    if not hits:
-        return None
-    topic = max(hits.items(), key=lambda kv: kv[1])[0]
-    # Refine to "{topic} - {item}" when the text names a specific enough
-    # item within that topic (see TOPIC_ITEM_KEYWORDS) — otherwise stays at
-    # the plain topic label.
-    return item_label_override(topic, text) or topic
-
-
-# ---------------------------------------------------------------------------
-# SENTIMENT LEXICON — negation-aware keyword scoring, zero model loading.
-# Used two ways:
-#   1. The offline/fast path (fast_sentiment): no model at all, this is the
-#      entire answer.
-#   2. The offline HYBRID path (heavy_model.analyze): tried FIRST, before
-#      Gemini. Empirically, a general-purpose multilingual sentiment
-#      transformer (tried and replaced — see heavy_model.py's docstring) is
-#      miscalibrated on short Tagalog/Taglish text in exactly the way a
-#      zero-shot topic model is miscalibrated on Taglish topics: plainly
-#      positive Tagalog sentences ("mabilis na-release yung resulta ko",
-#      "hassle-free talaga") routinely score highest on Neutral, and negated
-#      phrases ("walang palakasan dito, pantay-pantay lahat") can score
-#      highest on Very Negative because the model reacts to the raw
-#      negative-coded word inside the negation instead of the negation
-#      itself. A small additive boost can't fix a gap that size, so — same
-#      convention as topic keywords — a clear lexicon hit wins outright and
-#      Gemini is reserved for text with no keyword coverage.
-#
-# The ONLINE path (heavy_model.analyze_pure_ai) never calls this — Gemini
-# alone decides sentiment there, per the 2026-09-22 decision that AI speed/
-# consistency for live comments takes priority over the lexicon.
-#
-# Negation handling: a NEGATOR word ("hindi", "wala", "walang", "di", "huwag",
-# "ayaw", "not", "no", "never", "without") found in the up-to-3 words
-# immediately before a sentiment keyword, WITHIN THE SAME CLAUSE (split on
-# ,.;:!?), flips that keyword's polarity. This is what correctly turns
-# "walang problema" (no problem) positive and "wala...maayos" (not
-# proper/fine) negative, instead of naive substring-in-lowered scanning that
-# scored both purely on the presence of "problema"/"maayos" regardless of
-# the negator sitting right next to them. Clause-scoping keeps a negator in
-# one clause from leaking across a comma into an unrelated later clause
-# (e.g. "walang palakasan dito, pantay-pantay lahat" must not let "walang"
-# flip "pantay").
-# ---------------------------------------------------------------------------
-FAST_NEGATIVE_WORDS = [
-    "mahina", "masama", "masamang", "pangit", "sira", "sirang", "bastos",
-    "mabagal", "matagal", "tagal", "bagal", "katagal", "bobo", "reklamo",
-    "galit", "problema", "hassle", "dumi", "madumi", "marumi", "amoy-amoy",
-    "kulang", "konti", "hirap", "mahirap", "nahirapan", "nakakainis",
-    "nakakastress", "sakit ng ulo", "kumplikado", "maraming hakbang", "madaming hakbang",
-    "palakasan", "may kilala", "paulit-ulit", "nawawalan ng koneksyon",
-    "nawalan ng signal", "nakakalito", "nalilito", "walang kwenta",
-    "sayang", "huli na", "magulo", "naligaw",
-    "poor", "bad", "slow", "broken", "rude", "worst", "terrible", "awful",
-    "annoying", "frustrating", "difficult", "messy", "disappoint",
-    "disappointed", "disappointing", "disappointment",
-    "dirty", "confusing", "outdated", "late", "lost", "not working",
-    "brownout", "blackout", "power outage",
-    "walang paalam", "walang reply", "hindi sumasagot", "hindi sinagot",
-    "hindi sumagot", "walang sagot", "no response", "no reply",
-    "never replied", "not informed", "nobody informed",
-    "no update", "walang update", "no updates", "walang updates",
-    "wala pang balita", "walang balita",
-    "walang wifi", "walang internet", "no wifi", "no internet", "no signal",
-    "walang stock", "out of stock", "no stock",
-    "sobrang mahal", "napakamahal", "masyadong mahal", "overpriced",
-    "too expensive",
-    "suplado", "suplada", "masungit", "sungit", "mayabang",
-    "nagla-lag", "lumalag", "laggy",
-    "nakakabwisit", "nakakagalit", "nakakadismaya", "nakakapagod",
-    "walang silbi", "walang kwenta na", "walang malasakit", "pabaya",
-    "abusado", "walang modo", "walang disiplina", "naantala", "na-delay",
-    "nadelay", "sablay", "epic fail",
-    "unprofessional", "unacceptable", "horrible", "pathetic", "useless",
-    "waste of time", "inconvenient", "inconvenience", "unresponsive",
-    "unreliable", "chaotic", "disorganized", "incomplete", "faulty",
-    "malfunctioning", "glitch", "glitchy", "buggy", "crashed", "crashing",
-    "nag-crash", "nag-hang", "hanging",
-    "antagal",
-    "mainit", "ang init", "sobrang init", "napakainit", "napaka init",
-    "masyadong mainit", "maalinsangan", "kulob", "too hot", "very hot",
-    "mabaho", "ambaho", "napakabaho", "napaka baho", "sobrang baho",
-    "ang baho", "masyadong mabaho", "masangsang",
-    "mabahong amoy", "amoy mabaho", "smelly", "stinky", "foul smell",
-    "bad smell", "unsanitary",
-    "pangit", "unpresentable", "hindi presentable", "unattractive",
-    "poor appearance", "poorly maintained",
-    "hindi inaasikaso", "di inaasikaso", "hindi pinapansin", "di pinapansin",
-    "walang assistance", "walang tumutulong", "poor assistance", "poor service",
-    "bad attitude",
-    "masusungit", "disrespectful", "unfriendly",
-    "mali", "maling", "incorrect",
-    "mahaba ang pila", "mahabang pila", "napakahaba ang pila",
-    "sobrang haba ng pila", "ang haba ng pila", "long line", "long queue",
-]
-FAST_POSITIVE_WORDS = [
-    "maganda", "magandang", "mabilis", "magaling", "mabait", "salamat",
-    "masaya", "masayang", "maayos", "ayos naman", "okay naman", "ok naman",
-    "walang problema", "walang reklamo", "pantay", "patas", "madali",
-    "kadali", "mahusay", "sanay", "stable", "malinaw", "maalaga", "magiliw",
-    "marunong", "madunong",
-    "propesyonal", "tulong", "tumulong", "tinulungan",
-    "walang abala", "walang hassle", "isang beses lang", "isang hakbang lang",
-    "one-stop", "one stop", "patient",
-    "satisfied", "great", "good", "excellent", "fast", "helpful",
-    "friendly", "nice", "pleasant", "malinis", "the best", "love it", "hassle-free",
-    "hassle free", "streamlined", "efficient", "smooth", "convenient",
-    "fair", "equal", "commend", "professional", "professionally", "professionalism",
-    "appreciate", "appreciated",
-    "magalang", "matulungin", "maasikaso",
-    "maagap", "matiyaga", "masipag", "accommodating", "approachable",
-    "considerate", "welcoming", "sulit", "astig", "solid", "top-notch",
-    "seamless", "responsive", "on-time", "prompt",
-    "organized", "spot on", "kaaya-aya", "mapagkalinga",
-    "all goods",
-    "napakalinis", "napaka linis", "sobrang linis", "maayos at malinis",
-    "very clean", "well maintained",
-    "kaayang aya", "kaayang ayang", "kaaya ayang", "kaaya-ayang",
-    "mababait", "magagalang", "courteous", "respectful",
-]
-
-# Filler phrases that read as flat/neutral on their own — matched only when
-# no positive/negative keyword fired at all (see lexicon_sentiment), so a
-# comment that also carries real signal elsewhere isn't dragged to Neutral
-# just for containing one of these.
-FAST_NEUTRAL_PHRASES = [
-    "walang masabi", "karaniwan lang", "ok lang", "okay lang",
-    "walang komento",
-]
-
-# Known idiom collisions: a phrase that contains a sentiment-lexicon word as
-# a substring but means something unrelated to that word's polarity, e.g.
-# "good moral certificate" is a specific document name (see
-# TOPIC_ITEM_KEYWORDS), not praise — it must not trip the bare word "good".
-# Masked out of the text before keyword scanning.
-SENTIMENT_COLLISION_PHRASES = ["good moral"]
-
-NEGATOR_WORDS = {
-    "hindi", "wala", "walang", "di", "'di", "huwag", "ayaw",
-    "not", "no", "never", "without",
-    "wasn't", "isn't", "doesn't", "don't", "didn't", "couldn't", "can't",
-    "cannot", "won't", "aren't", "wouldn't", "shouldn't",
-}
-NEGATION_LOOKBACK = 3
-
-# A generic complaint-filler word co-occurring in the same clause as a more
-# specific negative descriptor is redundant with it, not a second
-# independent gripe — e.g. "may kunting problema lang kasi madumi" ("there's
-# a small problem because it's dirty") is ONE complaint (dirtiness) named
-# twice, not two. Left uncorrected this double-counts and can make a
-# genuinely mixed comment (one real compliment + one real complaint) read as
-# more negative than it is purely because the complaint used two words. Only
-# dropped when a more specific negative word fires in the same clause —
-# a clause with ONLY "problema" and nothing else still counts it normally.
-GENERIC_NEGATIVE_FILLERS = {"problema", "reklamo", "issue", "concern"}
-
-# "sana" (I hope/wish) marks a positive word as aspirational rather than
-# descriptive of the current state — "sana maayos pa" ("hope it gets fixed")
-# is a complaint, not praise, even though it contains "maayos". Treated like
-# a negator for lookback purposes, but it neutralizes the keyword (drops it)
-# instead of flipping its polarity, since "sana [positive]" isn't a negative
-# claim either — it's a wish, distinct from both.
-ASPIRATIONAL_WORDS = {"sana", "kailangan"}
-
-
-def _is_aspirational(clause_lower, span_start):
-    words_before = clause_lower[:span_start].split()[-NEGATION_LOOKBACK:]
-    return any(w.strip("'") in ASPIRATIONAL_WORDS for w in words_before)
-
-
-def _keyword_spans(clause_lower, keywords):
-    # Delegates to _matched_spans so two keywords in the same list that match
-    # the same text (e.g. "walang kwenta"/"walang kwenta na", or a hyphenated
-    # spelling now matching its own unhyphenated variant via _kw_pattern)
-    # count as one hit, not two — see _matched_spans docstring.
-    return [(s, e) for s, e, _ in _matched_spans(clause_lower, keywords)]
-
-
-def _is_negated(clause_lower, span_start):
-    words_before = clause_lower[:span_start].split()[-NEGATION_LOOKBACK:]
-    return any(w.strip("'") in NEGATOR_WORDS for w in words_before)
-
-
-def lexicon_sentiment(text):
-    """
-    Negation-aware keyword sentiment verdict, or None if the text contains no
-    sentiment keyword at all (caller should fall back to a full model in
-    that case — see module docstring above for why this wins outright over
-    the transformer whenever it does have a signal).
-    """
-    lowered = text.lower()
-    for phrase in SENTIMENT_COLLISION_PHRASES:
-        lowered = re.sub(_kw_pattern(phrase), ' ', lowered)
-
-    clauses = re.split(r'[.,;:!?]+', lowered)
-    pos_count = 0
-    neg_count = 0
-    neutral_hit = False
-    for clause in clauses:
-        clause = clause.strip()
-        if not clause:
-            continue
-        if any(re.search(_kw_pattern(p), clause) for p in FAST_NEUTRAL_PHRASES):
-            neutral_hit = True
-        pos_spans = _keyword_spans(clause, FAST_POSITIVE_WORDS)
-        covered = set()
-        for s, e in pos_spans:
-            covered.update(range(s, e))
-        # Drop negative spans that overlap an already-claimed positive
-        # phrase, so e.g. "hassle-free" (positive phrase) doesn't also
-        # register "hassle" (negative word) as a second, contradictory hit.
-        neg_spans = [
-            (s, e) for s, e in _keyword_spans(clause, FAST_NEGATIVE_WORDS)
-            if not (set(range(s, e)) & covered)
-        ]
-        specific_neg_spans = [
-            (s, e) for s, e in neg_spans if clause[s:e] not in GENERIC_NEGATIVE_FILLERS
-        ]
-        if specific_neg_spans:
-            neg_spans = specific_neg_spans
-        for s, e in pos_spans:
-            if _is_negated(clause, s):
-                neg_count += 1
-            elif _is_aspirational(clause, s):
-                pass
-            else:
-                pos_count += 1
-        for s, e in neg_spans:
-            if _is_negated(clause, s):
-                pos_count += 1
-            else:
-                neg_count += 1
-
-    if pos_count == 0 and neg_count == 0:
-        return "Neutral" if neutral_hit else None
-    if pos_count > neg_count:
-        return "Positive"
-    if neg_count > pos_count:
-        return "Negative"
-    return "Neutral"
-
-
-def fast_sentiment(text):
-    if detect_junk_topic(text):
-        return "Neutral"
-    return lexicon_sentiment(text) or "Neutral"
-
-
 # ---------------------------------------------------------------------------
 # NO-MEANINGFUL-FEEDBACK DETECTION (pure numbers / symbols / emoji /
 # keyboard-mash gibberish / greeting-only text) — a deterministic pre-check
-# so these get a clear, honest "No Feedback - No Feedback" tag
-# INSTANTLY, without ever spending a Gemini call on content that has no real
-# opinion to classify, and without it being counted as genuine (if generic)
-# "General Feedback" — that label means "meaningful feedback that doesn't fit
-# a more specific topic," not "the classifier didn't understand this."
+# so these get a clear, honest "No Feedback - No Feedback" tag INSTANTLY,
+# without ever spending a Gemini call on content that has no real opinion to
+# classify, and without it being counted as genuine (if generic) "General
+# Feedback" — that label means "meaningful feedback that doesn't fit a more
+# specific topic," not "the classifier didn't understand this."
 #
-# This is now also the ENTIRE keyword-lexicon footprint of the ONLINE
-# classification path (see heavy_model.analyze_pure_ai) — every comment that
-# clears this gate goes straight to Gemini with no keyword matching at all —
-# both online AND offline, as of 2026-09-25 (see analyze.py's module
-# comment). The keyword lexicon above (TOPIC_KEYWORDS/TOPIC_ITEM_KEYWORDS/
-# sentiment words) is no longer used to classify any production comment; it
-# still runs as this function's own "is this actually real vocabulary" guard
-# below, and backs heavy_model.analyze()'s hybrid for test_accuracy.py's
-# lexicon-only scoring.
+# This is the ONLY keyword-based check any comment goes through, online and
+# offline alike (see the module docstring) — everything that clears this gate
+# goes straight to Gemini with no keyword matching at all.
 #
 # Order of checks:
-#   1. Known-vocabulary guard — if the comment already matches a topic or
-#      sentiment keyword, it is real content by definition and must never be
-#      flagged as junk on letter-shape alone (e.g. a bare "CR" comment is a
-#      genuine, if terse, Restroom-topic keyword — two letters, zero vowels).
+#   1. Known-vocabulary guard — if a token in the comment is itself a real
+#      taxonomy keyword (see _collect_known_vocab_tokens/_KNOWN_VOCAB_TOKENS
+#      below), it is never flagged as junk on letter-shape alone (e.g. a bare
+#      "CR" comment is a genuine, if terse, Restroom-topic keyword — two
+#      letters, zero vowels) — see _is_suspicious_token's own check for this.
 #   2. Numbers-only / symbols-only.
 #   3. Greeting/courtesy-particle-only ("Hello po", "Hi", "Hi po", "po po").
 #   4. Whole-comment vowel-ratio check (gibberish heuristic, kept as a
@@ -1088,8 +543,8 @@ def fast_sentiment(text):
 #      English/Tagalog/Taglish word looks like that) and there's at least one
 #      such token.
 # Anything with a real recognizable word anywhere in it returns None and
-# falls through to the normal lexicon/Gemini path — this is deliberately
-# conservative in the direction of keeping real feedback classified normally.
+# falls through to the normal Gemini path — this is deliberately conservative
+# in the direction of keeping real feedback classified normally.
 # ---------------------------------------------------------------------------
 UNCLASSIFIED_NO_FEEDBACK = "No Feedback - No Feedback"
 
@@ -1111,10 +566,17 @@ COURTESY_PARTICLES = {"po", "opo", "naman", "na", "ba", "lang", "sana", "nga"}
 
 def _collect_known_vocab_tokens():
     """
-    Every single-word (no-space) token already used anywhere in the topic or
-    sentiment lexicons, lowercased. Used as a safety net so a short, real
-    keyword (e.g. "cr", "id") is never treated as gibberish purely because it
-    happens to have an unusual letter shape.
+    Every single-word (no-space) token used anywhere in TOPIC_ITEM_KEYWORDS,
+    lowercased. Used as a safety net so a short, real keyword (e.g. "cr",
+    "id") is never treated as gibberish purely because it happens to have an
+    unusual letter shape.
+
+    Used to also pull from the classification lexicon (TOPIC_KEYWORDS,
+    FAST_POSITIVE_WORDS, FAST_NEGATIVE_WORDS) before that was removed
+    2026-09-27 — verified beforehand that every token those lists uniquely
+    contributed was either not short/vowelless enough to ever trip
+    _is_suspicious_token, or already duplicated in TOPIC_ITEM_KEYWORDS, so
+    this guard's real-world coverage is unchanged.
     """
     tokens = set()
 
@@ -1124,13 +586,9 @@ def _collect_known_vocab_tokens():
             for word in re.findall(r"[a-z]+", kw.lower()):
                 tokens.add(word)
 
-    for keywords in TOPIC_KEYWORDS.values():
-        add_from(keywords)
     for groups in TOPIC_ITEM_KEYWORDS.values():
         for _label, keywords in groups:
             add_from(keywords)
-    add_from(FAST_POSITIVE_WORDS)
-    add_from(FAST_NEGATIVE_WORDS)
     return tokens
 
 
@@ -1270,17 +728,12 @@ def _is_suspicious_token(token):
 
 def detect_junk_topic(text):
     """
-    Returns UNCLASSIFIED_NO_FEEDBACK, or None (not junk — classify normally).
-    Called before the keyword lexicon and before Gemini.
+    Returns UNCLASSIFIED_NO_FEEDBACK, or None (not junk — classify normally
+    via Gemini). Called before Gemini is ever invoked, for every comment.
     """
     stripped = text.strip()
     if not stripped:
         return None  # blank comments are handled separately upstream
-
-    # Real, recognized content always wins outright — never flagged as junk
-    # on letter-shape alone (see module comment, check #1).
-    if keyword_topic_override(stripped) or lexicon_sentiment(stripped):
-        return None
 
     letters = [c for c in stripped if c.isalpha() and c.isascii()]
     digits = [c for c in stripped if c.isdigit()]
@@ -1308,10 +761,3 @@ def detect_junk_topic(text):
         return UNCLASSIFIED_NO_FEEDBACK
 
     return None
-
-
-def fast_topic(text):
-    junk = detect_junk_topic(text)
-    if junk:
-        return junk
-    return keyword_topic_override(text) or GENERAL_FEEDBACK
