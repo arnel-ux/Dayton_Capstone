@@ -290,8 +290,7 @@
             vertical-align: middle;
             font-size: 0.86rem;
             color: var(--text-main);
-            height: 52px;
-            overflow: hidden;
+            min-height: 52px;
         }
         .table tbody tr:last-child td { border-bottom: none; }
         .table tbody tr.record-row:hover td { background: var(--surface-subtle); }
@@ -341,8 +340,12 @@
         /* Multi-topic tagging project (2026-09-25): a comment can carry more
            than one topic badge in the same cell — spaced and allowed to wrap
            onto a second line instead of overflowing the column. */
-        .topic-cell .topic-badge { max-width: 160px; }
-        .topic-cell .topic-badge + .topic-badge { margin-left: 4px; }
+        /* Fixed (not max-) width so every badge in a multi-topic cell lines up
+           at the same size instead of each one shrinking to its own text —
+           stacked one per line (not side-by-side) since a shared fixed width
+           leaves no room for two to sit next to each other. */
+        .topic-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .topic-cell .topic-badge { width: 190px; }
 
         .bg-cr { background-color: #fee2e2; color: #ef4444; }
         .bg-aircon { background-color: #e0f2fe; color: #0ea5e9; }
@@ -537,7 +540,7 @@
         .bg-pos { background-color: #dcfce7 !important; color: #166534 !important; -webkit-print-color-adjust: exact; }
         .bg-neg { background-color: #fee2e2 !important; color: #991b1b !important; -webkit-print-color-adjust: exact; }
         .bg-neu { background-color: #f1f5f9 !important; color: #334155 !important; -webkit-print-color-adjust: exact; }
-        .topic-pill { background-color: #e8f0fe !important; color: #0056b3 !important; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; -webkit-print-color-adjust: exact; }
+        .topic-pill { display: inline-block; background-color: #e8f0fe !important; color: #0056b3 !important; padding: 4px 8px; margin: 2px 3px 2px 0; border-radius: 12px; font-size: 11px; font-weight: bold; white-space: nowrap; -webkit-print-color-adjust: exact; }
         .text-center { text-align: center; }
         .fw-bold { font-weight: bold; }
         /* The SQD page's own lower section (Prepared/Interpretation/Noted/Reviewed)
@@ -640,9 +643,9 @@
                                         <col style="width: 10%;">
                                         <col style="width: 12%;">
                                         <col style="width: 17%;">
-                                        <col style="width: 18%;">
-                                        <col style="width: 15%;">
-                                        <col style="width: 11%;">
+                                        <col style="width: 16%;">
+                                        <col style="width: 20%;">
+                                        <col style="width: 8%;">
                                         <col style="width: 17%;">
                                     </colgroup>
                                     <thead>

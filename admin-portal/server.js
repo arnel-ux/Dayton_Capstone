@@ -1266,7 +1266,17 @@ const db = mysql.createPool({
     // Clever Cloud's free DEV MySQL plan caps max_user_connections at 5 total
     // — a pool of 10 would routinely exceed that under any concurrent load.
     connectionLimit: process.env.DB_CONNECTION_LIMIT ? parseInt(process.env.DB_CONNECTION_LIMIT, 10) : 4,
-    queueLimit: 0
+    queueLimit: 0,
+    // A pooled connection can sit idle for minutes between queries (e.g. the
+    // 5-minute abandoned-session sweep). Over a long cross-region hop — this
+    // app's VM and Clever Cloud's DB host are on different continents — an
+    // intermediate router/firewall can silently drop that idle TCP connection
+    // without either side knowing, so the next query hangs until it hits
+    // ETIMEDOUT instead of failing fast. TCP keep-alive pings the connection
+    // periodically so it's never idle long enough to look dead to anything
+    // in between.
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000
 });
 
 // Defense in depth: still listen for pool-level errors (e.g. a failure while
