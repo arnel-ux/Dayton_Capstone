@@ -121,7 +121,10 @@
    signature row entirely (not paired with Prepared); Prepared (left) and
    Reviewed (right) share one row; Noted sits alone below, left only — this is
    intentionally asymmetric, not a symmetric 2x2 grid. */
-.sqd-interpretation-standalone { width: 56%; margin: 26px 0 22px auto; font-size: 11px; color: #000; }
+/* Width 40% + margin-left:auto puts the legend's left edge at the 60% mark,
+   lining it up under the SQD table's own PERCENTAGE column (report.ejs's
+   table: 60% dimension name / 20% percentage / 20% rating). */
+.sqd-interpretation-standalone { width: 40%; margin: 26px 0 22px auto; font-size: 11px; color: #000; }
 .sqd-interpretation-standalone .interpretation-legend { font-size: 11px; }
 .sqd-interpretation-standalone .legend-title { font-weight: bold; font-style: italic; margin-bottom: 5px; }
 .sqd-interpretation-standalone .legend-table { border-collapse: collapse; width: 100%; }
