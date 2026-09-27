@@ -99,6 +99,11 @@
             padding: var(--sp-2) var(--sp-4);
             color: white;
         }
+        /* Bootstrap's .form-check floats the switch into a left padding this box
+           overrides, so it sat flush against the border and the label. Laid out
+           as a flex row with an explicit gap instead. */
+        .archived-toggle { display: flex; align-items: center; gap: 12px; padding-left: var(--sp-4); }
+        .archived-toggle .form-check-input { float: none; margin: 0; flex: 0 0 auto; }
         .archived-toggle .form-check-label { font-size: 0.82rem; }
         .archived-toggle .form-check-input:checked { background-color: var(--accent-indigo); border-color: var(--accent-indigo); }
 
