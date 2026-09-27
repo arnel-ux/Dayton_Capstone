@@ -9,7 +9,7 @@ os.environ['TRANSFORMERS_VERBOSITY'] = 'error'
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from topic_common import is_no_feedback
+from comment_filter import is_no_feedback
 
 # ---------------------------------------------------------------------------
 # INPUT PROTOCOL

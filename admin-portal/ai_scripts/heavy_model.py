@@ -13,12 +13,13 @@ comment, online and offline alike. This module now exposes exactly one
 classification entry point:
   - analyze_pure_ai: used by model_server.py's /analyze route (online) and
     by analyze.py (offline-synced comments). Only the junk/no-feedback
-    pre-check (see topic_common.detect_junk_topic) runs before Gemini —
+    pre-check (see comment_filter.detect_junk_topic) runs before Gemini —
     no keyword matching of any kind.
 """
 import sys
 
-from topic_common import detect_junk_topic, GENERAL_FEEDBACK
+from topic_common import GENERAL_FEEDBACK
+from comment_filter import detect_junk_topic
 import gemini_model
 
 

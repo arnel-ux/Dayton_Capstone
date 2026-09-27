@@ -25,7 +25,7 @@ os.environ.setdefault('TRANSFORMERS_VERBOSITY', 'error')
 from flask import Flask, request, jsonify
 
 import heavy_model
-from topic_common import is_no_feedback
+from comment_filter import is_no_feedback
 
 app = Flask(__name__)
 
