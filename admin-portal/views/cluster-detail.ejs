@@ -5,7 +5,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <script src="/js/pdf-repeating-header.js"></script>
+    <script src="/js/pdf-repeating-header.js?v=2"></script>
     <script src="/js/report-csv.js"></script>
     <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
          views/layout/report-footer.ejs) — see public/css/report.css. -->
@@ -268,7 +268,7 @@
                         <!-- PAGE 1: NUMBER OF RESPONDENTS - the SQD 0 / SQD 1-8 rating-bucket
                              breakdown. It opens the packet; the Percentage/Rating scorecard and
                              the AI feedback comments follow on their own pages. -->
-                        <div class="report-container" style="margin-bottom: 30px;">
+                        <div class="report-container" id="reportPage1" style="margin-bottom: 30px;">
                             <%- include('layout/report-header', { showSQDFormCode: false, bottomId: 'officeReportHeaderBottom1' }) %>
 
                             <div class="sqd-report-title" id="officeReportMainTitle1">CLIENT SATISFACTION MEASUREMENT SURVEY RESULT</div>
@@ -345,12 +345,6 @@
                                 </div>
                             </div>
 
-                            <!-- Effectivity/Rev./Page footer: part of CSPC's official CSM survey
-                                 result format, so renderOfficeReport() toggles this wrapper by
-                                 reportType rather than hiding it globally. -->
-                            <div id="officeReportFooter1" class="report-footer-slot">
-                                <%- include('layout/report-footer', { pageLabel: 'Page 1 of 3', footerId: 'footerPageLabel1' }) %>
-                            </div>
                         </div>
 
                         <!-- PAGE 2: SQD RESULT - the official Percentage/Rating scorecard, on its
@@ -443,32 +437,26 @@
                                 <tbody id="officeReportCommentsBody"></tbody>
                             </table>
 
-                            <div class="signature-section">
-                                <div class="sig-block">
-                                    <div>Prepared by:</div>
-                                    <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
-                                    <p class="sig-title">AOV-CQA</p>
+                            <div id="officeReportSignature2">
+                                <div class="signature-section">
+                                    <div class="sig-block">
+                                        <div>Prepared by:</div>
+                                        <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
+                                        <p class="sig-title">AOV-CQA</p>
+                                    </div>
+                                    <div class="sig-block">
+                                        <div>Reviewed by:</div>
+                                        <p class="sig-name">JOCELYN O. JINTALAN, DBA</p>
+                                        <p class="sig-title">ISO Chair</p>
+                                    </div>
                                 </div>
-                                <div class="sig-block">
-                                    <div>Reviewed by:</div>
-                                    <p class="sig-name">JOCELYN O. JINTALAN, DBA</p>
-                                    <p class="sig-title">ISO Chair</p>
+                                <div class="noted-block">
+                                    <div>Noted by:</div>
+                                    <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
+                                    <p class="sig-title">SUC President III</p>
                                 </div>
-                            </div>
-                            <div class="noted-block">
-                                <div>Noted by:</div>
-                                <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
-                                <p class="sig-title">SUC President III</p>
                             </div>
 
-                            <!-- Same footer pages 1 and 2 carry — this page is part of the
-                                 same signed packet, so it is footed like the rest of it. The
-                                 label is for the on-screen preview; the PDF hides this copy
-                                 and redraws the footer on every page with the real page
-                                 count (see downloadOfficeReportPDF). Page 3 only renders for
-                                 the full SQD packet, so "Page 3 of 3" is right whenever it is
-                                 visible at all. -->
-                            <%- include('layout/report-footer', { pageLabel: 'Page 3 of 3' }) %>
                         </div>
                         </div>
                     </div>
@@ -775,18 +763,11 @@
             const isFullPacket = reportType !== 'respondents';
             document.getElementById('reportPageSqd').classList.toggle('d-none', !isFullPacket);
             document.getElementById('reportPage2').classList.toggle('d-none', !isFullPacket);
-            // Page 1's footer label follows suit — "Page 1 of 3" for the full packet,
-            // "Page 1 of 1" when the respondents breakdown is the only page.
-            document.getElementById('footerPageLabel1').innerText = isFullPacket ? 'Page 1 of 3' : 'Page 1 of 1';
-            // Effectivity/Rev./Page footer is CSPC's official CSM survey result
-            // footer, carried by the SQD Result Report packet only — pages 2 and 3
-            // print theirs unconditionally because they only render for that packet,
-            // so page 1's is the one that has to be toggled.
-            document.getElementById('officeReportFooter1').classList.toggle('d-none', reportType !== 'sqd');
-            // Signatures are signed once per packet: the official Prepared/Interpretation/
-            // Noted/Reviewed grid on the scorecard page covers the full SQD packet, so
-            // page 1 only carries its own plain signature block when it prints alone.
-            document.getElementById('officeReportOldFooter1').classList.toggle('d-none', isFullPacket);
+            // Page 1 carries its own plain signature block always, alongside the
+            // official Prepared/Interpretation/Noted/Reviewed grid the scorecard
+            // page (page 2) carries for the full packet — every page of the
+            // downloaded/printed report is signed on its own.
+            document.getElementById('officeReportOldFooter1').classList.remove('d-none');
 
             // The document code (CSPC-F-CQA-06) sits on the scorecard page's letterhead,
             // rendered statically by views/layout/report-header.ejs — page 1's respondents
@@ -1032,11 +1013,10 @@
         function downloadOfficeReportPDF() {
             const officeSelect = document.getElementById('officeFilter');
             const officeLabel = officeSelect.value ? officeSelect.options[officeSelect.selectedIndex].text : 'All_Offices';
-            const reportType = document.getElementById('reportType').value;
-            // "Number of Respondents" hides the scorecard and AI Feedback sections
-            // entirely (reportPageSqd/reportPage2 get d-none in renderOfficeReport()) —
-            // a single-section document, so every page repeats that one header.
-            const isFullPacket = reportType !== 'respondents';
+            // "Number of Respondents" hides the scorecard and AI Feedback parts
+            // entirely (reportPageSqd/reportPage2 get d-none in renderOfficeReport()),
+            // so `sections` below simply finds them absent and every page falls
+            // back to page 1's header — see its own comment.
 
             // Page 1 — respondents breakdown; plain letterhead, no document code.
             const respondentsHeader = {
@@ -1080,27 +1060,69 @@
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollY: 0, backgroundColor: '#ffffff' },
                 jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
-                pagebreak: { mode: ['css', 'legacy'], avoid: ['.page-footer', '.signature-section', '.sqd-interpretation-standalone', '.sqd-signature-grid', '.office-block', 'tr'] }
+                // 'css' is deliberately not in `mode` (which makes `pagebreak.avoid`
+                // a no-op too, so it's dropped rather than left here doing
+                // nothing) — html2pdf's own CSS page-break handling was observed
+                // to duplicate content across the respondents/scorecard/AI
+                // Feedback part transitions once an earlier part's height stopped
+                // matching what it assumed. Both the forced part-to-part breaks
+                // and the signature blocks' split-avoidance are done the reliable
+                // way instead, via forcePageBreakSelectors/avoidSplitSelector
+                // below (see their JSDoc in pdf-repeating-header.js) — the
+                // tradeoff is that an ordinary table row can now occasionally
+                // split across a page edge, which is a cosmetic imperfection
+                // next to the duplicate-page bug this fixes.
+                pagebreak: { mode: ['legacy'] }
             };
+
+            // Respondent count for this office/period — below the office's
+            // reporting minimum, every page of the downloaded PDF gets a caution
+            // watermark so a partial count can't be mistaken for a finished result.
+            const sqdRespondentCount = parseInt(document.getElementById('officeReportTotal1').textContent.trim(), 10) || 0;
+
+            // Page 1's plain signature block (officeReportOldFooter1) stays
+            // visible for the PDF too, now that forcePageBreakSelectors (below)
+            // measures each part's real height at capture time and pushes the
+            // scorecard/AI Feedback parts to start on a fresh page accordingly —
+            // it no longer matters how tall page 1's own signature block makes
+            // it, since nothing downstream assumes a fixed page count anymore.
+
+            // Each part's real starting page is measured from its container's
+            // actual position (see computeSectionRanges in pdf-repeating-header.js)
+            // rather than assumed as "page 1 / page 2 / page 3" — page 1 (the
+            // respondents breakdown) now always carries its own signature block,
+            // so its height varies with content and can no longer be trusted to
+            // end exactly where a fixed page number would guess. #reportPageSqd
+            // and #reportPage2 stay hidden entirely (d-none) when the packet is
+            // "Number of Respondents" alone, so they're simply absent from the
+            // measurement in that case and every page falls back to page 1's
+            // section — see sectionForPage's fallback in pdf-repeating-header.js.
+            const pdfSections = [
+                { key: 'respondents', selector: '#reportPage1', header: respondentsHeader },
+                { key: 'sqd', selector: '#reportPageSqd', header: sqdHeader },
+                { key: 'ai', selector: '#reportPage2', header: aiHeader }
+            ];
 
             exportRepeatingHeaderPdf({
                 elementId: 'officeReportContentToExport',
                 filename: opt.filename,
                 opt,
                 headerHeightIn: 2.4,
-                headerHideSelectors: ['.report-header-block', '#officeReportMainTitle1', '.sqd-office-name', '.sqd-service-line', '.sqd-meta-block', '.office-title', '.meta-info'],
-                getHeaderForPage: (pageNum) => {
-                    if (!isFullPacket || pageNum === 1) return respondentsHeader;
-                    return pageNum === 2 ? sqdHeader : aiHeader;
-                },
-                avoidSplitSelector: '.sqd-signature-grid',
-                // Bottom edge of every page. The page label is counted from the
-                // finished PDF, so it no longer depends on the template's
-                // "Page 1 of 3" guess holding true — the AI Feedback section
-                // adds a page whenever the office collects enough comments, and
-                // the whole packet is one page when only the respondents
-                // breakdown was asked for.
-                footer: { effectivity: 'June 2024', revision: 'Rev. 4' }
+                headerHideSelectors: ['.report-header-block', '.sqd-report-title', '.sqd-office-name', '.sqd-service-line', '.sqd-meta-block', '.office-title', '.meta-info'],
+                sections: pdfSections,
+                forcePageBreakSelectors: ['#reportPageSqd', '#reportPage2'],
+                avoidSplitSelector: ['.sqd-signature-grid', '#officeReportSignature2'],
+                // Belongs to the official SQD scorecard part alone — not the
+                // respondents breakdown or AI Feedback parts sharing this
+                // download. Page label still counts from the finished PDF.
+                footer: { effectivity: 'June 2024', revision: 'Rev. 4', section: 'sqd' },
+                // Unlike the footer, the caution watermark applies to every page
+                // of the packet — the low count affects all three parts
+                // (respondents breakdown, scorecard, AI Feedback), not just the
+                // scorecard page.
+                watermark: sqdRespondentCount < 10
+                    ? { text: 'INSUFFICIENT RESPONDENTS' }
+                    : undefined
             });
         }
 

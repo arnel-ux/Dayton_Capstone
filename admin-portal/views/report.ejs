@@ -3,7 +3,7 @@
 <head>
     <%- include('layout/header') %>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <script src="/js/pdf-repeating-header.js"></script>
+    <script src="/js/pdf-repeating-header.js?v=2"></script>
     <script src="/js/report-csv.js"></script>
     <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
          views/layout/report-footer.ejs) — see public/css/report.css. -->
@@ -251,7 +251,7 @@
                     </div>
 
                     <!-- PANGALAWANG PAHINA (WRITTEN COMMENTS & AI ANALYTICS) -->
-                    <div class="report-container page-break" style="display: block;">
+                    <div class="report-container page-break" id="aiFeedbackPage" style="display: block;">
                         <%- include('layout/report-header', { showSQDFormCode: false }) %>
 
                         <div class="report-title">AI FEEDBACK SENTIMENT & TOPIC ANALYTICS</div>
@@ -285,24 +285,25 @@
                             </tbody>
                         </table>
 
-                        <div class="signature-section">
-                            <div class="sig-block">
-                                <div>Prepared by:</div>
-                                <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
-                                <p class="sig-title">AOV-CQA</p>
-                                
-                                <div style="margin-top: 30px;">Noted by:</div>
-                                <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
-                                <p class="sig-title">SUC President III</p>
-                            </div>
-                            <div class="sig-block">
-                                <div>Reviewed by:</div>
-                                <p class="sig-name">JOCELYN O. JINTALAN, DBA</p>
-                                <p class="sig-title">ISO Chair</p>
+                        <div id="aiSignatureBlock">
+                            <div class="signature-section">
+                                <div class="sig-block">
+                                    <div>Prepared by:</div>
+                                    <p class="sig-name">JUVY M. BUSTAMANTE, JD</p>
+                                    <p class="sig-title">AOV-CQA</p>
+
+                                    <div style="margin-top: 30px;">Noted by:</div>
+                                    <p class="sig-name">AMADO A. OLIVA JR., PhD</p>
+                                    <p class="sig-title">SUC President III</p>
+                                </div>
+                                <div class="sig-block">
+                                    <div>Reviewed by:</div>
+                                    <p class="sig-name">JOCELYN O. JINTALAN, DBA</p>
+                                    <p class="sig-title">ISO Chair</p>
+                                </div>
                             </div>
                         </div>
 
-                        <%- include('layout/report-footer', { pageLabel: 'Page 2 of 2' }) %>
                     </div>
                 </div>
             </div>
@@ -513,8 +514,20 @@
             image:        { type: 'jpeg', quality: 0.98 },
             html2canvas:  { scale: 2, useCORS: true, letterRendering: true, scrollY: 0, backgroundColor: '#ffffff' },
             jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
-            pagebreak:    { mode: ['css', 'legacy'], avoid: ['.signature-section', '.sqd-interpretation-standalone', '.sqd-signature-grid', 'tr'] }
+            // 'css' is deliberately not in `mode` (which makes `pagebreak.avoid`
+            // a no-op too, so it's dropped) — html2pdf's own CSS page-break
+            // handling was observed to duplicate content at the SQD→AI Feedback
+            // page transition once the CSS `.page-break` class and its forced
+            // break interacted badly with legacy slicing. The forced break and
+            // the signature blocks' split-avoidance are done the reliable way
+            // instead, via forcePageBreakSelectors/avoidSplitSelector below.
+            pagebreak:    { mode: ['legacy'] }
         };
+
+        // Respondent count backing the SQD scorecard (page 1) — below the
+        // office's reporting minimum, the downloaded PDF gets a caution
+        // watermark so a partial count can't be mistaken for a finished result.
+        const sqdRespondentCount = parseInt(document.getElementById('totalRespondents1').textContent.trim(), 10) || 0;
 
         exportRepeatingHeaderPdf({
             elementId: 'reportContentToExport',
@@ -523,12 +536,18 @@
             headerHeightIn: 2.4,
             headerHideSelectors: ['.report-header-block', '.sqd-report-title', '.sqd-office-name', '.sqd-meta-block', '.report-title', '.office-title', '.meta-info'],
             getHeaderForPage: (pageNum) => (pageNum === 1 ? sqdHeader : aiHeader),
-            avoidSplitSelector: '.sqd-signature-grid',
-            // Effectivity / Rev. / "Page N of M" along the bottom edge of every
-            // page, with M counted from the finished PDF rather than guessed in
-            // the template — this report's AI Feedback section grows a page
-            // every time the office collects more written comments.
-            footer: { effectivity: 'June 2024', revision: 'Rev. 4' }
+            forcePageBreakSelectors: ['#aiFeedbackPage'],
+            avoidSplitSelector: ['.sqd-signature-grid', '#aiSignatureBlock'],
+            // Effectivity / Rev. / "Page N of M" belongs to the official SQD
+            // scorecard only (page 1) — not the AI Feedback pages that follow
+            // in the same download.
+            footer: { effectivity: 'June 2024', revision: 'Rev. 4', onPages: (pageNum) => pageNum === 1 },
+            // Unlike the footer, the caution watermark applies to every page —
+            // the low respondent count affects the whole download, not just
+            // the SQD scorecard page.
+            watermark: sqdRespondentCount < 10
+                ? { text: 'INSUFFICIENT RESPONDENTS' }
+                : undefined
         });
     }
 

@@ -7134,7 +7134,7 @@ function loadDashboardData(req, callback) {
 
                                 let score = parseFloat(row.office_score || 0);
                                 const cell = scoreCell(row.office_volume, row.office_score, interpretForDashboard);
-                                clustersMap[cName].offices.push({ name: row.office_name, score: cell.score, interpretation: cell.interpretation });
+                                clustersMap[cName].offices.push({ name: row.office_name, score: cell.score, interpretation: cell.interpretation, respondents: row.office_volume || 0 });
 
                                 if (row.office_volume > 0) {
                                     rankedOffices.push({ name: row.office_name, cluster: cName, score, respondents: row.office_volume });
@@ -7467,7 +7467,7 @@ app.get('/print', ensureAdminAuth, noCache, (req, res) => {
                                 clustersMap[cName] = { clusterName: cName, offices: [] };
                             }
                             const cell = scoreCell(row.office_volume, row.office_score, interpretFor);
-                            clustersMap[cName].offices.push({ name: row.office_name, score: cell.score, interpretation: cell.interpretation });
+                            clustersMap[cName].offices.push({ name: row.office_name, score: cell.score, interpretation: cell.interpretation, respondents: row.office_volume || 0 });
                         });
 
                         // PER CLUSTER report order with each cluster's own TOTAL row —

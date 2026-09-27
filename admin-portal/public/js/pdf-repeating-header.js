@@ -138,6 +138,30 @@
         }
     }
 
+    // Draws a translucent, diagonal caution watermark across one page — used
+    // to flag a downloaded SQD scorecard whose respondent count hasn't yet
+    // reached the office's reporting minimum, so a reader can't mistake an
+    // early/partial count for a finished result. jsPDF's GState (present in
+    // the jsPDF build html2pdf.js 0.10.1 bundles) gives true transparency; if
+    // a future bundle lacks it, the text still draws, just fully opaque,
+    // rather than throwing and losing the rest of the page.
+    function drawWatermark(pdf, text) {
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const hasGState = typeof pdf.GState === 'function' && typeof pdf.setGState === 'function';
+        if (hasGState) {
+            try { pdf.setGState(new pdf.GState({ opacity: 0.16 })); } catch (e) { /* draw opaque */ }
+        }
+        pdf.setTextColor(200, 30, 30);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(34);
+        pdf.text(text, pageWidth / 2, pageHeight / 2, { align: 'center', angle: 45 });
+        if (hasGState) {
+            try { pdf.setGState(new pdf.GState({ opacity: 1 })); } catch (e) { /* already opaque */ }
+        }
+        pdf.setTextColor(0, 0, 0);
+    }
+
     // Draws the official CQA document footer — Effectivity date, revision
     // number, and the page label — pinned to the bottom edge of ONE page,
     // matching views/layout/report-footer.ejs (same three cells, same blue rule
@@ -202,6 +226,19 @@
         return startY + rowHeight;
     }
 
+    // A block's distance from `element`'s top edge, in real layout pixels.
+    // getBoundingClientRect() is used instead of walking the offsetParent
+    // chain (summing offsetTop node by node) because that walk silently
+    // produces a wrong, much larger number whenever some ancestor between
+    // `block` and `element` never becomes anyone's offsetParent (e.g. a plain
+    // `position: static` element with no layout context of its own) — the
+    // loop then never hits `element === node` and keeps climbing past it,
+    // picking up unrelated page chrome above it. Two viewport-relative
+    // rectangles avoid that entirely regardless of the DOM's positioning.
+    function topWithinElement(element, block) {
+        return block.getBoundingClientRect().top - element.getBoundingClientRect().top;
+    }
+
     // html2pdf's own page-break-avoidance (CSS `break-inside: avoid` /
     // the `pagebreak.avoid` selector list) is screenshot-based and has proven
     // unreliable for a CSS Grid block sitting near a page boundary — it can
@@ -220,9 +257,7 @@
         const pxPerIn = element.offsetWidth / availableWidthIn;
         const pageContentHeightPx = pageContentHeightIn * pxPerIn;
 
-        let top = 0;
-        let node = block;
-        while (node && node !== element) { top += node.offsetTop; node = node.offsetParent; }
+        const top = topWithinElement(element, block);
         const bottom = top + block.offsetHeight;
 
         const pageIndex = Math.floor(top / pageContentHeightPx);
@@ -233,6 +268,84 @@
         spacer.style.height = Math.ceil(boundary - top) + 4 + 'px';
         block.parentNode.insertBefore(spacer, block);
         return spacer;
+    }
+
+    // Unconditionally pushes `selector`'s element down to the exact start of
+    // the next page, regardless of whether it would otherwise fit where it is.
+    // This exists to replace html2pdf's own CSS `page-break-before: always`
+    // handling (the `.page-break` class, under `pagebreak.mode: ['css', ...]`)
+    // for multi-section documents (respondents breakdown → SQD scorecard → AI
+    // Feedback), which was observed to duplicate a section's tail content
+    // (e.g. its signature block rendering once alone on an otherwise blank
+    // page, then again with the rest of that section's content on the page
+    // after) rather than cleanly starting it fresh — the two mechanisms
+    // (html2pdf's own CSS-driven break and this module's pixel-measured one)
+    // don't agree on where a page boundary actually falls once any earlier
+    // section's height varies from whatever html2pdf assumed. Doing every
+    // forced break this same pixel-measured way, and none of them through
+    // html2pdf's CSS mode, keeps exactly one mechanism deciding page
+    // boundaries — see the `forcePageBreakSelectors` option below.
+    function forceStartOnFreshPage(element, selector, pageContentHeightPx) {
+        const block = element.querySelector(selector);
+        if (!block || block.offsetParent === null) return null;
+
+        const top = topWithinElement(element, block);
+        const remainder = top % pageContentHeightPx;
+        if (remainder < 1) return null; // already sitting right at a page boundary
+
+        const spacer = document.createElement('div');
+        spacer.style.height = Math.ceil(pageContentHeightPx - remainder) + 'px';
+        block.parentNode.insertBefore(spacer, block);
+        return spacer;
+    }
+
+    // Assigns each of `sections`' elements (given in document order) a run of
+    // physical PDF pages. Returns { key: { start, end } } (1-indexed, `end` is
+    // Infinity for the last present section).
+    //
+    // Reads each section's OWN real, final position (topWithinElement) instead
+    // of re-deriving where it must have landed by stacking earlier sections'
+    // measured heights. The two used to disagree: every section after the
+    // first is a forcePageBreakSelectors target, already pushed by
+    // forceStartOnFreshPage to sit at an exact page boundary — but that push
+    // is computed from the earlier section's real layout position, which
+    // includes things a plain `getBoundingClientRect().height` never sees,
+    // such as a margin-bottom on the section's own container. Stacking
+    // heights alone silently dropped that margin, so it could compute one
+    // page fewer than the forced spacer actually produced — e.g. call the
+    // first section done in 1 page when the real forced position already
+    // reflects it running into a 2nd — leaving the header/footer/watermark
+    // for every section after it drawn one page off from where its content
+    // genuinely landed (a stray page reading as the previous section's
+    // header with nothing on it, and that section's real content appearing
+    // under the NEXT section's header instead). Reading the true post-push
+    // position directly can't drift out of sync with itself this way.
+    function computeSectionRanges(element, sections, pageContentHeightIn, marginLeftIn, marginRightIn) {
+        const availableWidthIn = 8.5 - marginLeftIn - marginRightIn;
+        const pxPerIn = element.offsetWidth / availableWidthIn;
+        const pageContentHeightPx = pageContentHeightIn * pxPerIn;
+
+        // A section hidden via display:none (e.g. the scorecard/AI Feedback
+        // parts when only "Number of Respondents" was requested, or the
+        // respondents-breakdown signature hidden for capture during a full
+        // packet) contributes no pages at all — it's simply left out.
+        const present = sections
+            .map((s) => ({ key: s.key, block: element.querySelector(s.selector) }))
+            .filter((s) => s.block && s.block.offsetParent !== null);
+
+        const ranges = {};
+        present.forEach((s) => {
+            const top = topWithinElement(element, s.block);
+            // The very first section always opens the document at top: 0, i.e.
+            // page 1 — trivially a boundary. Every section after it is a
+            // forcePageBreakSelectors target already sitting at an exact page
+            // boundary, so this recovers which one directly instead of assuming.
+            ranges[s.key] = { start: Math.round(top / pageContentHeightPx) + 1 };
+        });
+        present.forEach((s, i) => {
+            ranges[s.key].end = (i + 1 < present.length) ? ranges[present[i + 1].key].start - 1 : Infinity;
+        });
+        return ranges;
     }
 
     /**
@@ -248,38 +361,62 @@
      * @param {string[]} headerHideSelectors - CSS selectors, relative to the
      *   element, whose matches are hidden during capture (the in-flow header
      *   markup that's being replaced by the redrawn one) and restored after.
-     * @param {(pageNum: number, totalPages: number) => {title, subtitle, period, meta, docCode}} getHeaderForPage
+     * @param {(pageNum: number, totalPages: number) => {title, subtitle, period, meta, docCode}} [getHeaderForPage] -
+     *   required unless `sections` is given instead.
+     * @param {{key: string, selector: string, header: object}[]} [sections] -
+     *   alternative to `getHeaderForPage` for a document made of several
+     *   in-order parts (e.g. respondents breakdown, then scorecard, then AI
+     *   Feedback) whose page count each can vary. Each part's actual starting
+     *   page is measured from `selector`'s real position (see
+     *   computeSectionRanges) instead of assumed, so the right header/footer/
+     *   watermark still land on the right pages even if an earlier part grows
+     *   or shrinks. `footer.section` / `watermark.section` (a `key` from this
+     *   list) restrict those to that part's measured page range.
      * @param {{columns: {label,widthPct,align}[], startYIn: number}} [columnHeader] -
      *   optional repeating data-table column header, drawn at a fixed Y on every
      *   page right below the report header (its own real `<thead>` should be
      *   hidden via headerHideSelectors so it isn't captured twice).
-     * @param {string} [avoidSplitSelector] - optional CSS selector for one block
-     *   (e.g. the signature/interpretation section) that must never be split
-     *   across pages — see pushBelowPageBreakIfNeeded above.
-     * @param {{effectivity?: string, revision?: string, heightIn?: number}} [footer] -
+     * @param {string[]} [forcePageBreakSelectors] - CSS selectors, in document
+     *   order, each pushed to start at the exact top of a fresh physical page.
+     *   Use this instead of the `.page-break` CSS class + `pagebreak.mode:
+     *   ['css', ...]` for a multi-section document (see `sections`) — that
+     *   combination was observed to duplicate content (a section's tail
+     *   rendering once alone on an otherwise blank page, then again in full on
+     *   the page after) once an earlier section's height no longer matches
+     *   what html2pdf assumed when it decided where to break. This measures
+     *   real layout pixels instead and is the only thing deciding page breaks
+     *   for these transitions — `opt.pagebreak.mode` should be `['legacy']`
+     *   only when this is used, not `['css', 'legacy']`, so the two mechanisms
+     *   can't disagree.
+     * @param {string|string[]} [avoidSplitSelector] - one CSS selector, or
+     *   several, each naming one block (e.g. a signature section) that must
+     *   never be split across pages — see pushBelowPageBreakIfNeeded above.
+     *   Prefer this over html2pdf's own `pagebreak.avoid` CSS list for a block
+     *   near a page boundary: that mechanism has proven unreliable here,
+     *   observed to duplicate the block (render it once where it would have
+     *   split, and again pushed whole onto the next page) rather than cleanly
+     *   moving it — this measures real layout pixels and moves it itself.
+     * @param {{effectivity?: string, revision?: string, heightIn?: number, onPages?: (pageNum: number, totalPages: number) => boolean, section?: string}} [footer] -
      *   pass this to print the official Effectivity / Rev. / Page footer along
-     *   the bottom edge of EVERY page. The in-flow `.page-footer` markup is
-     *   hidden during capture so it is not printed twice, and the bottom margin
-     *   is widened to `heightIn` so content can never run underneath it.
+     *   the bottom edge of every page, or only the pages `onPages` returns true
+     *   for, or only the measured page range of `section` (see `sections`
+     *   above) — e.g. the SQD scorecard part only, not the respondents
+     *   breakdown or AI Feedback parts sharing the same download. Omitting
+     *   both restricts it draws on every page. The in-flow `.page-footer`
+     *   markup is hidden during capture so it is not printed twice, and the
+     *   bottom margin is widened to `heightIn` so content can never run
+     *   underneath it.
+     * @param {{text: string, onPages?: (pageNum: number, totalPages: number) => boolean, section?: string}} [watermark] -
+     *   pass this to stamp a translucent diagonal caution watermark (e.g. "INSUFFICIENT
+     *   RESPONDENTS") on every page, or only `onPages`/`section` pages as with `footer`.
+     *   The caller decides `text`/whether to pass `watermark` at all based on its
+     *   own respondent-count threshold — this module only draws it.
      */
-    async function exportRepeatingHeaderPdf({ elementId, filename, opt, headerHeightIn, headerHideSelectors, getHeaderForPage, columnHeader, avoidSplitSelector, footer }) {
+    async function exportRepeatingHeaderPdf({ elementId, filename, opt, headerHeightIn, headerHideSelectors, getHeaderForPage, sections, columnHeader, avoidSplitSelector, forcePageBreakSelectors, footer, watermark }) {
         const element = document.getElementById(elementId);
         if (!element) return;
 
         const logoDataUrl = await loadLogoDataUrl(element);
-
-        const hidden = [];
-        // `.page-footer` is added unconditionally when a footer is being drawn:
-        // the in-flow copy is the one that lands in the middle of a sheet, and
-        // leaving it visible would print it twice — once adrift in the content,
-        // once correctly along the bottom edge.
-        const hideSelectors = (headerHideSelectors || []).concat(footer ? ['.page-footer'] : []);
-        hideSelectors.forEach((sel) => {
-            element.querySelectorAll(sel).forEach((el) => {
-                hidden.push([el, el.style.display]);
-                el.style.display = 'none';
-            });
-        });
 
         // The band the footer occupies has to be kept clear on every page, not
         // just the last one, so it is taken out of the printable area the same
@@ -289,30 +426,161 @@
         const footerHeightIn = footer ? (footer.heightIn || 0.55) : 0;
         const bottomMarginIn = Math.max(opt.margin[2], footerHeightIn);
 
-        let spacer = null;
-        if (avoidSplitSelector) {
-            const pageContentHeightIn = 11 - headerHeightIn - bottomMarginIn;
-            spacer = pushBelowPageBreakIfNeeded(element, avoidSplitSelector, pageContentHeightIn, opt.margin[1], opt.margin[3]);
-        }
+        const pageContentHeightIn = 11 - headerHeightIn - bottomMarginIn;
+        const availableWidthIn = 8.5 - opt.margin[1] - opt.margin[3];
+
+        // html2pdf.js never screenshots `element` at whatever width it happens to
+        // be on screen. Its own toContainer() step clones the source into a
+        // hidden, off-document container it hard-sets to `pageSize.inner.width`
+        // (this same availableWidthIn, at 96 CSS px/in) and lets it reflow there
+        // — `height: auto` — before html2canvas ever runs. So the real page
+        // breaks always land according to THAT narrower reflow, never according
+        // to the wide on-screen layout (which can be 1200px+ in a normal browser
+        // window, versus ~750px of actual printable width). Measuring spacer
+        // placement against the live, on-screen `element` was therefore checking
+        // the wrong layout: text wraps differently at ~750px than it does at
+        // full window width, so every height/position read off the live element
+        // silently disagreed with how tall that content would really be once
+        // html2pdf reflowed it — which is exactly what let the SQD scorecard's
+        // signature block drift past where this module assumed the page break
+        // was, spilling onto a stray extra page instead of landing where the
+        // math below expects.
+        //
+        // The fix: do the entire measure-and-space pipeline (forcePageBreak,
+        // avoid-split, section ranges) against our OWN detached, off-screen
+        // clone that is force-width'ed to this same availableWidthIn up front —
+        // so every measurement already reflects the narrow reflow html2pdf is
+        // going to use — then hand that already-corrected clone to html2pdf
+        // instead of the live element.
+        //
+        // The off-screen positioning goes on a plain WRAPPER around the clone,
+        // not on the clone itself: html2pdf.from(measureRoot) clones measureRoot
+        // AGAIN internally and reparents that inner clone into its own overlay,
+        // carrying over any inline style measureRoot has — a `position: fixed`
+        // on measureRoot itself was found (via a real capture) to travel along
+        // into that inner clone and escape html2pdf's overlay/container
+        // entirely, capturing as a blank page. Keeping measureRoot itself at
+        // its normal static position and moving only the wrapper off-screen
+        // avoids that, while still never being shown to the user; both are
+        // torn down again in `finally` below regardless of outcome.
+        const measureRoot = element.cloneNode(true);
+        measureRoot.style.width = availableWidthIn + 'in';
+        measureRoot.style.margin = '0';
+        const measureWrapper = document.createElement('div');
+        measureWrapper.style.position = 'fixed';
+        measureWrapper.style.top = '0';
+        measureWrapper.style.left = '-100000px';
+        measureWrapper.appendChild(measureRoot);
+        document.body.appendChild(measureWrapper);
+
+        // Each `.report-container` (one per physical report page — respondents
+        // breakdown, SQD scorecard, AI Feedback, ...) carries an inline
+        // margin-bottom purely so the on-screen preview shows visible daylight
+        // between pages stacked in one scrolling column. In the actual PDF that
+        // gap is pure waste: a forced page break already puts these on separate
+        // sheets, so the gap does nothing but add dead space above the next
+        // one — and when a page's real content already comes within that gap's
+        // width of a page boundary (a common, unremarkable amount of content,
+        // not a near-miss edge case), that dead space is what tips the next
+        // section's measured position just past the boundary, so
+        // forceStartOnFreshPage rounds it up to the page AFTER the one it
+        // should have started on — wasting an entire blank page for every
+        // report this happens to. Zeroed here, on the measurement/capture
+        // clone only, so the live on-screen preview keeps its visual spacing.
+        measureRoot.querySelectorAll('.report-container').forEach((el) => { el.style.marginBottom = '0'; });
+
+        // `.page-footer` is added unconditionally when a footer is being drawn:
+        // the in-flow copy is the one that lands in the middle of a sheet, and
+        // leaving it visible would print it twice — once adrift in the content,
+        // once correctly along the bottom edge. Applied to the clone only — the
+        // live page never needs to be touched (or restored) at all now.
+        const hideSelectors = (headerHideSelectors || []).concat(footer ? ['.page-footer'] : []);
+        hideSelectors.forEach((sel) => {
+            measureRoot.querySelectorAll(sel).forEach((el) => { el.style.display = 'none'; });
+        });
+
+        const pxPerIn = measureRoot.offsetWidth / availableWidthIn;
+        const pageContentHeightPx = pageContentHeightIn * pxPerIn;
+
+        // Applied FIRST, in document order, before anything else is measured:
+        // each of these selectors' elements (e.g. the SQD scorecard container,
+        // then the AI Feedback container) is pushed to start at an exact page
+        // boundary. Everything that follows — the avoid-split spacers below and
+        // computeSectionRanges — assumes page boundaries fall at clean multiples
+        // of pageContentHeightPx, which is only actually true once every forced
+        // section start has been aligned this way; doing it here, ahead of
+        // those, is what makes that assumption hold.
+        (forcePageBreakSelectors || []).forEach((sel) => {
+            forceStartOnFreshPage(measureRoot, sel, pageContentHeightPx);
+        });
+
+        // Accepts one selector or several (e.g. the SQD scorecard's signature
+        // grid AND the AI Feedback page's separate signature block both need
+        // this same protection in the same document) — applied in order, each
+        // one's own spacer inserted before the next is measured, so a spacer
+        // for an earlier block can't throw off where a later block appears to
+        // sit relative to it.
+        (avoidSplitSelector ? [].concat(avoidSplitSelector) : []).forEach((sel) => {
+            pushBelowPageBreakIfNeeded(measureRoot, sel, pageContentHeightIn, opt.margin[1], opt.margin[3]);
+        });
+
+        // Measured after the spacer above (if any) so a section pushed onto a
+        // fresh page by it is measured at its real, final position rather than
+        // the position it would have had before that push.
+        const sectionRanges = (sections && sections.length)
+            ? computeSectionRanges(measureRoot, sections, pageContentHeightIn, opt.margin[1], opt.margin[3])
+            : null;
+        const sectionForPage = (pageNum) => {
+            if (!sectionRanges) return null;
+            for (const key in sectionRanges) {
+                const r = sectionRanges[key];
+                if (pageNum >= r.start && pageNum <= r.end) return key;
+            }
+            // The only way to reach here is a page number smaller than every
+            // section's measured start (the last section's range always ends
+            // at Infinity, so nothing after it is ever unmatched) — pick the
+            // section that starts earliest, i.e. whichever one actually opens
+            // the document, rather than the one that happens to iterate last.
+            let firstKey = null, firstStart = Infinity;
+            for (const key in sectionRanges) { if (sectionRanges[key].start < firstStart) { firstStart = sectionRanges[key].start; firstKey = key; } }
+            return firstKey;
+        };
+        const resolvedGetHeaderForPage = sections
+            ? (pageNum) => {
+                const key = sectionForPage(pageNum);
+                const match = sections.find((s) => s.key === key);
+                return match ? match.header : {};
+            }
+            : getHeaderForPage;
 
         const finalOpt = Object.assign({}, opt, {
             margin: [headerHeightIn, opt.margin[1], bottomMarginIn, opt.margin[3]]
         });
 
         try {
-            const worker = global.html2pdf().set(finalOpt).from(element).toPdf();
+            const worker = global.html2pdf().set(finalOpt).from(measureRoot).toPdf();
             const pdf = await worker.get('pdf');
             const totalPages = pdf.internal.getNumberOfPages();
             for (let page = 1; page <= totalPages; page++) {
                 pdf.setPage(page);
-                drawHeader(pdf, logoDataUrl, getHeaderForPage(page, totalPages) || {});
+                drawHeader(pdf, logoDataUrl, resolvedGetHeaderForPage(page, totalPages) || {});
                 if (columnHeader) drawColumnHeader(pdf, columnHeader.startYIn, columnHeader.columns);
-                if (footer) drawFooter(pdf, footer, page, totalPages);
+                const footerShows = footer && (
+                    footer.section && sectionRanges ? sectionForPage(page) === footer.section :
+                    footer.onPages ? footer.onPages(page, totalPages) :
+                    true
+                );
+                if (footerShows) drawFooter(pdf, footer, page, totalPages);
+                const watermarkShows = watermark && watermark.text && (
+                    watermark.section && sectionRanges ? sectionForPage(page) === watermark.section :
+                    watermark.onPages ? watermark.onPages(page, totalPages) :
+                    true
+                );
+                if (watermarkShows) drawWatermark(pdf, watermark.text);
             }
             pdf.save(filename);
         } finally {
-            hidden.forEach(([el, display]) => { el.style.display = display; });
-            if (spacer && spacer.parentNode) spacer.parentNode.removeChild(spacer);
+            if (measureWrapper.parentNode) measureWrapper.parentNode.removeChild(measureWrapper);
         }
     }
 
