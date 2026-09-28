@@ -215,23 +215,39 @@ app.use(session({
 }));
 
 const ADMIN_COOKIE_NAME = 'admin.sid';
+// Office logins get their OWN cookie, for exactly the same reason admin and
+// client got separate cookies above: an admin tab and an office tab open at
+// once in the same browser used to both ride on 'admin.sid'. Logging into
+// the office panel in one tab called regenerateAdminSession(), which swapped
+// the browser's 'admin.sid' cookie to the office login's new value — so the
+// still-open admin tab silently started sending the OFFICE session's cookie
+// on its next request, failed the `user.type === 'admin'` check, and bounced
+// to a false "Session Expired" even though nothing about the admin session
+// itself had actually expired. Same fix as admin/client: separate cookie,
+// separate req.officeSession/req.officeSessionID, so the two can coexist.
+const OFFICE_COOKIE_NAME = 'office.sid';
 const ADMIN_SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 8; // 8 hours
+// Shared by both cookies above — session ids are independent random tokens
+// (newAdminSessionId), so one map can hold admin and office sessions side by
+// side without them ever colliding.
 const adminSessions = new Map(); // sessionId -> { data: {}, expiresAt: number }
 
 function newAdminSessionId() {
     return crypto.randomBytes(24).toString('base64url');
 }
 
-function readAdminSessionIdFromCookie(req) {
+function readSessionIdFromCookie(req, cookieName) {
     const cookies = cookieLib.parse(req.headers.cookie || '');
-    const raw = cookies[ADMIN_COOKIE_NAME];
+    const raw = cookies[cookieName];
     if (!raw || raw.slice(0, 2) !== 's:') return null;
     const id = cookieSignature.unsign(raw.slice(2), process.env.SESSION_SECRET);
     return id || null; // unsign() returns false on a missing/tampered signature
 }
+function readAdminSessionIdFromCookie(req) { return readSessionIdFromCookie(req, ADMIN_COOKIE_NAME); }
+function readOfficeSessionIdFromCookie(req) { return readSessionIdFromCookie(req, OFFICE_COOKIE_NAME); }
 
-function writeAdminSessionCookie(res, id) {
-    res.cookie(ADMIN_COOKIE_NAME, 's:' + cookieSignature.sign(id, process.env.SESSION_SECRET), {
+function writeSessionCookie(res, cookieName, id) {
+    res.cookie(cookieName, 's:' + cookieSignature.sign(id, process.env.SESSION_SECRET), {
         httpOnly: true,
         maxAge: ADMIN_SESSION_MAX_AGE_MS,
         path: '/',
@@ -241,6 +257,8 @@ function writeAdminSessionCookie(res, id) {
         sameSite: 'lax'
     });
 }
+function writeAdminSessionCookie(res, id) { writeSessionCookie(res, ADMIN_COOKIE_NAME, id); }
+function writeOfficeSessionCookie(res, id) { writeSessionCookie(res, OFFICE_COOKIE_NAME, id); }
 
 // Regenerates the admin session (new id, blank data) — used at login to
 // prevent session fixation, mirroring express-session's Session#regenerate().
@@ -253,6 +271,14 @@ function regenerateAdminSession(req, res) {
     req.adminSessionID = newAdminSessionId();
     req.adminSession = {};
     req._adminSessionHadExisting = false;
+}
+
+// Same as regenerateAdminSession, but for the separate office-session id/cookie.
+function regenerateOfficeSession(req, res) {
+    if (req.officeSessionID) adminSessions.delete(req.officeSessionID);
+    req.officeSessionID = newAdminSessionId();
+    req.officeSession = {};
+    req._officeSessionHadExisting = false;
 }
 
 // Destroys an admin session by id — used to force-invalidate another
@@ -299,6 +325,16 @@ function destroyAdminSession(req, res) {
     req.adminSession = {};
     req.adminSessionID = null;
     req._adminSessionDestroyed = true;
+}
+
+// Same as destroyAdminSession, but for the separate office-session id/cookie
+// (used by /office-logout).
+function destroyOfficeSession(req, res) {
+    destroyAdminSessionById(req.officeSessionID);
+    res.clearCookie(OFFICE_COOKIE_NAME, { path: '/' });
+    req.officeSession = {};
+    req.officeSessionID = null;
+    req._officeSessionDestroyed = true;
 }
 
 // Loads req.adminSession/req.adminSessionID from the 'admin.sid' cookie (if
@@ -350,6 +386,36 @@ app.use((req, res, next) => {
         if (!req._adminSessionHadExisting && !isModified) return; // still anonymous — nothing to persist
         adminSessions.set(req.adminSessionID, { data: req.adminSession, expiresAt: Date.now() + ADMIN_SESSION_MAX_AGE_MS });
         writeAdminSessionCookie(res, req.adminSessionID);
+    });
+
+    next();
+});
+
+// Same as the 'admin.sid' middleware above, but for the separate 'office.sid'
+// cookie — see the OFFICE_COOKIE_NAME comment for why office logins need
+// their own cookie instead of sharing 'admin.sid'. Office sessions don't use
+// the "replaced" tombstone (offices have no single-active-session
+// enforcement, unlike admin accounts — see /auth-login), so there's no
+// missingReason tracking to mirror here.
+app.use((req, res, next) => {
+    const existingId = readOfficeSessionIdFromCookie(req);
+    let existingEntry = existingId && adminSessions.get(existingId);
+    if (existingEntry && (existingEntry.expiresAt <= Date.now() || existingEntry.replaced)) {
+        adminSessions.delete(existingId);
+        existingEntry = null;
+    }
+
+    req.officeSessionID = existingEntry ? existingId : newAdminSessionId();
+    req.officeSession = existingEntry ? existingEntry.data : {};
+    req._officeSessionHadExisting = !!existingEntry;
+    req._officeSessionDestroyed = false;
+
+    onHeaders(res, () => {
+        if (req._officeSessionDestroyed) return;
+        const isModified = Object.keys(req.officeSession || {}).length > 0;
+        if (!req._officeSessionHadExisting && !isModified) return; // still anonymous — nothing to persist
+        adminSessions.set(req.officeSessionID, { data: req.officeSession, expiresAt: Date.now() + ADMIN_SESSION_MAX_AGE_MS });
+        writeOfficeSessionCookie(res, req.officeSessionID);
     });
 
     next();
@@ -1060,10 +1126,10 @@ function ensureAdminAuth(req, res, next) {
 }
 
 // Ensures only a logged-in office account (set at /auth-login) can view/use the
-// office approval panel. Reuses the same hand-rolled admin-session infra as
-// ensureAdminAuth (req.adminSession/'admin.sid' cookie) with a distinct
-// user.type so an office login can never be mistaken for an admin login (or
-// vice versa) even though they share a session store and cookie.
+// office approval panel. Reuses the same hand-rolled session mechanics as
+// ensureAdminAuth, but on its own req.officeSession/'office.sid' cookie (see
+// OFFICE_COOKIE_NAME) so an admin tab and an office tab open at once in the
+// same browser don't stomp on each other's cookie.
 // Two spellings of the signed-in office's own name, for the portal header.
 //
 // `offices` stores the name two different ways depending on the office, and
@@ -1189,7 +1255,7 @@ function officeHeaderNames(user) {
 }
 
 function ensureOfficeAuth(req, res, next) {
-    if (req.adminSession && req.adminSession.user && req.adminSession.user.type === 'office') {
+    if (req.officeSession && req.officeSession.user && req.officeSession.user.type === 'office') {
         // Sessions opened before offices started carrying full_name have no
         // copy of it, and the header needs it to spell the office out. Fill it
         // in once, here, so an office already signed in on some device gets
@@ -1207,7 +1273,7 @@ function ensureOfficeAuth(req, res, next) {
         // missing, and the flag — set only when the database actually
         // answered — stops the retries for the offices whose full_name really
         // is empty (those whose office_name is already spelled out).
-        const officeUser = req.adminSession.user;
+        const officeUser = req.officeSession.user;
         if (!officeUser.full_name && !officeUser.fullNameResolved) {
             return db.query('SELECT full_name FROM offices WHERE id = ? LIMIT 1', [officeUser.id], (err, rows) => {
                 if (err) {
@@ -4296,8 +4362,8 @@ app.post('/auth-login', loginRateLimiter('/login'), async (req, res) => {
             clearFailedLogins(emailInput);
             if (req.clearLoginFailures) req.clearLoginFailures();
 
-            regenerateAdminSession(req, res);
-            req.adminSession.user = {
+            regenerateOfficeSession(req, res);
+            req.officeSession.user = {
                 id: office.id,
                 office_name: office.office_name,
                 // Carried on the session so every office page can spell the
@@ -4345,9 +4411,11 @@ app.get('/client-login', noCache, (req, res) => {
 // login reviews survey submissions from non-@cspc.edu.ph accounts that claim
 // to have visited THIS office, and approves or declines them (see
 // checkResubmissionEligibility / finalizeVerifiedSurvey for how an approved
-// submission is replayed into survey_responses). An office session still
-// reuses the same hand-rolled admin-session cookie/store as admin logins
-// (see ensureOfficeAuth above), only with user.type === 'office'.
+// submission is replayed into survey_responses). An office session uses the
+// same hand-rolled session mechanics as an admin login, but its own
+// req.officeSession/'office.sid' cookie (see ensureOfficeAuth /
+// OFFICE_COOKIE_NAME above), so an admin tab and an office tab open at once
+// in the same browser can't invalidate each other.
 //
 // The dedicated '/office-login' page it used to have is gone: one login page
 // for every kind of account means office staff can never again land on a form
@@ -4382,8 +4450,8 @@ app.get('/office-logout', noCache, (req, res) => {
     // visitor. status=logged_out gives them the same "You have been logged
     // out successfully" confirmation the admin and client flows get from
     // '/logout' below.
-    const hadSession = !!(req.adminSession && req.adminSession.user && req.adminSession.user.type === 'office');
-    destroyAdminSession(req, res);
+    const hadSession = !!(req.officeSession && req.officeSession.user && req.officeSession.user.type === 'office');
+    destroyOfficeSession(req, res);
     res.redirect(302, hadSession ? '/login?status=logged_out' : '/login');
 });
 
@@ -4418,8 +4486,8 @@ function getOfficePendingCount(officeId, callback) {
 // individual submissions on Pending/History; this page is deliberately the
 // "how many", not the "who" or the "what".
 app.get('/office-dashboard', ensureOfficeAuth, noCache, (req, res) => {
-    const officeId = req.adminSession.user.id;
-    const { officeName, officeNameShort } = officeHeaderNames(req.adminSession.user);
+    const officeId = req.officeSession.user.id;
+    const { officeName, officeNameShort } = officeHeaderNames(req.officeSession.user);
 
     // ---- The reporting period is a SEMESTER, not a rolling six months ----
     // The College's terms run January–June and July–December, and the record
@@ -4580,7 +4648,7 @@ app.get('/office-dashboard', ensureOfficeAuth, noCache, (req, res) => {
 // from "something was reviewed": a count alone cannot tell one submission
 // arriving while another is approved from nothing happening at all.
 app.get('/office-approvals/status', ensureOfficeAuth, noCache, (req, res) => {
-    const officeId = req.adminSession.user.id;
+    const officeId = req.officeSession.user.id;
     // Pending and history come off the same table, so they are one query, not
     // the two this used to make — this runs on a timer for every open panel.
     db.query(
@@ -4624,7 +4692,7 @@ app.get('/office-approvals/status', ensureOfficeAuth, noCache, (req, res) => {
 // pending queue (no notification rows to drift out of sync); read/dismissed
 // state stays in the staffer's browser, so nothing here writes anything.
 app.get('/office-approvals/notifications', ensureOfficeAuth, noCache, (req, res) => {
-    const officeId = req.adminSession.user.id;
+    const officeId = req.officeSession.user.id;
     db.query(
         "SELECT id, service_availed, payload, created_at FROM pending_survey_submissions WHERE office_id = ? AND status = 'pending' ORDER BY created_at DESC, id DESC LIMIT 100",
         [officeId],
@@ -4648,7 +4716,7 @@ app.get('/office-approvals/notifications', ensureOfficeAuth, noCache, (req, res)
 });
 
 app.get('/office-approvals', ensureOfficeAuth, noCache, (req, res) => {
-    const officeId = req.adminSession.user.id;
+    const officeId = req.officeSession.user.id;
     db.query(
         "SELECT id, google_email, service_availed, payload, created_at FROM pending_survey_submissions WHERE office_id = ? AND status = 'pending' ORDER BY created_at ASC",
         [officeId],
@@ -4667,7 +4735,7 @@ app.get('/office-approvals', ensureOfficeAuth, noCache, (req, res) => {
             }) : [];
 
             getOfficeHistoryCount(officeId, (historyCount) => {
-                res.render('office-approvals', Object.assign(officeHeaderNames(req.adminSession.user), {
+                res.render('office-approvals', Object.assign(officeHeaderNames(req.officeSession.user), {
                     submissions,
                     historyCount
                 }));
@@ -4680,7 +4748,7 @@ app.get('/office-approvals', ensureOfficeAuth, noCache, (req, res) => {
 // a busy office's growing pending queue doesn't have to share space with its
 // history; navigated between via the sidebar on both pages.
 app.get('/office-approvals/history', ensureOfficeAuth, noCache, (req, res) => {
-    const officeId = req.adminSession.user.id;
+    const officeId = req.officeSession.user.id;
     // Most recently reviewed first, capped so the page doesn't grow unbounded
     // for offices that process a lot of surveys.
     db.query(
@@ -4708,7 +4776,7 @@ app.get('/office-approvals/history', ensureOfficeAuth, noCache, (req, res) => {
                 // list above is capped at 50 rows, so for a busy office the
                 // sidebar badge would otherwise sit at "50" forever.
                 getOfficeHistoryCount(officeId, (historyCount) => {
-                    res.render('office-history', Object.assign(officeHeaderNames(req.adminSession.user), {
+                    res.render('office-history', Object.assign(officeHeaderNames(req.officeSession.user), {
                         history,
                         pendingCount,
                         historyCount
@@ -4732,7 +4800,7 @@ app.get('/office-approvals/history', ensureOfficeAuth, noCache, (req, res) => {
 // transaction — both are slow, non-database operations that must never
 // hold a DB connection open (same reasoning as verify-and-sync).
 app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => {
-    const officeId = req.adminSession.user.id;
+    const officeId = req.officeSession.user.id;
     const submissionId = req.params.id;
 
     const conn = await db.promise().getConnection();
@@ -4976,7 +5044,7 @@ app.post('/office-approvals/:id/approve', ensureOfficeAuth, async (req, res) => 
 // tracking update (again a no-op when this didn't originate offline) commit
 // or roll back together on one dedicated pooled connection.
 app.post('/office-approvals/:id/decline', ensureOfficeAuth, async (req, res) => {
-    const officeId = req.adminSession.user.id;
+    const officeId = req.officeSession.user.id;
     const reason = String(req.body.decline_reason || '').trim().slice(0, 255) || null;
     const submissionId = req.params.id;
 
