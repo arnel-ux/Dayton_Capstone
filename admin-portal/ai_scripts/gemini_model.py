@@ -1,36 +1,19 @@
 """
-Gemini-based classifier — replaces the local mDeBERTa zero-shot topic model
-and the tabularisai sentiment transformer. As of the 2026-09-22 pure-AI
-classification project, this is used two ways:
-  - ONLINE (heavy_model.analyze_pure_ai): the SOLE classifier for live
-    comments — the keyword lexicon is never consulted at all, since AI
-    speed/consistency for live submissions is the priority.
-  - OFFLINE (heavy_model.analyze): the fallback, reached only when
-    topic_common's keyword lexicon finds ZERO anchors in a comment (see
-    keyword_topic_override / lexicon_sentiment docstrings for why the
-    lexicon always wins outright on a hit there).
+Gemini-based classifier — the SOLE classifier for every comment, online and
+offline alike (see heavy_model.analyze_pure_ai). Originally replaced the
+local mDeBERTa zero-shot topic model and the tabularisai sentiment
+transformer (2026-08-29), then went on to replace the keyword-lexicon hybrid
+that briefly served as the offline-sync fallback (2026-09-22 through
+2026-09-25 — see topic_common.py's 2026-09-27 cleanup note for why that
+lexicon was removed entirely rather than kept dormant).
 
-Why swap the fallback specifically (not the lexicon, not the overall
-architecture): mDeBERTa zero-shot and tabularisai are both narrow models with
-no real grip on code-switched Taglish reasoning (negation, sarcasm, temporal
-contrast) — confirmed via the 2026-08-24/25 confidence-dump experiments in
-heavy_model.py's old classify_topic/classify_sentiment docstrings, where the
-model's own confidence didn't separate right answers from wrong ones on this
-data at all. Gemini is a general-purpose LLM that can actually read the
-sentence instead of scoring embedding similarity, so it should do better on
-exactly the cases the lexicon can't resolve.
-
-Kept CONSISTENT with the existing taxonomy on purpose: candidate_topics (the
-same list keyword_topic_override resolves to) plus every "{Topic} - {Item}"
-label from TOPIC_ITEM_KEYWORDS are all valid outputs here too (added
-2026-08-29) — built directly from that same dict so the two paths can never
-drift apart. Unlike the keyword lexicon, which can only refine to an item
-when the comment contains one of that item's specific keywords, Gemini
-decides item-vs-parent-topic itself from the full sentence (see
-PROMPT_TEMPLATE's instruction to only pick a sub-item when the comment
-clearly names that specific thing) — this is what lets a comment resolved
-here reach the same specificity as a lexicon hit, which the old mDeBERTa
-fallback could never do at all.
+Built directly from topic_common's candidate_topics and TOPIC_ITEM_KEYWORDS
+(see ALL_TOPICS/_build_topic_guide below) so the taxonomy Gemini is told
+about can never drift out of sync with the taxonomy the rest of the app
+understands. TOPIC_ITEM_KEYWORDS' short keyword lists are no longer used for
+matching by anything — they exist purely to give Gemini a couple of concrete
+example words per label (see _item_hint), since a bare label name alone is
+often ambiguous.
 """
 import json
 import logging

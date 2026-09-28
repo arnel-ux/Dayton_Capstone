@@ -38,9 +38,10 @@
 // background service was doing weeks ago.
 //
 // It is deliberately the CONSERVATIVE half of the classifier's rules. The
-// Python side can afford to be sharper because it has a Tagalog/Bikol lexicon
-// to confirm real content against first (keyword_topic_override /
-// lexicon_sentiment); this module has no lexicon, so it only fires on shapes
+// Python side can afford to be sharper because it has a Tagalog/Bikol
+// vocabulary list to confirm real content against first (topic_common.py's
+// _KNOWN_VOCAB_TOKENS, built from the taxonomy's own keyword hints); this
+// module has no such list, so it only fires on shapes
 // that a real sentence cannot have — every alphabetic token being a mash, a
 // run of letters with essentially no vowels in it, nothing but punctuation.
 // A borderline comment is kept. Dropping a real complaint from a quality
