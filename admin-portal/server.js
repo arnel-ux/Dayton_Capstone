@@ -2365,6 +2365,15 @@ function sweepOrphanedClientAccountRows() {
     });
 }
 
+// The AFTER DELETE trigger (installClientAccountPurgeTrigger, above) covers
+// this instantly when the DB user has SUPER (or log_bin_trust_function_creators
+// is on) — some hosted MySQL plans grant neither, so CREATE TRIGGER fails and
+// only this sweep is left to catch a hand-made delete. Re-running it on a
+// timer (instead of startup only) keeps that gap to minutes instead of
+// "until the process next restarts", without needing any elevated privilege.
+const CLIENT_ACCOUNT_SWEEP_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+setInterval(sweepOrphanedClientAccountRows, CLIENT_ACCOUNT_SWEEP_INTERVAL_MS);
+
 // One row per admin user account — replaces the old hardcoded admin/admin123 login.
 const createAdminsTableQuery = `
 CREATE TABLE IF NOT EXISTS admins (
