@@ -2,34 +2,20 @@
 <html lang="en">
 <head>
     <%- include('layout/header', { forceLightMode: true }) %>
-    <!-- Deliberately no <link rel="manifest">: this project must stay a
-         plain website, never an installable PWA (no "Add to Home Screen" /
-         install prompt). The service worker below still provides offline
-         caching — that's independent of installability, manifest.json is
-         what Chrome/Edge actually key the install criteria on. -->
+    <!-- No manifest link on purpose, this stays a plain website, not an installable PWA.
+         Offline caching still works through the service worker below. -->
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/auth.css">
     <link rel="stylesheet" href="/css/offline-pill.css">
     <style>
-        /* The single Google button is this page's whole form, so it is sized
-           up a little from the shared .btn-google (which sits under an OR
-           divider next to a password form on /login). */
+        /* Bigger than the shared .btn-google since it's the only form on this page. */
         .btn-google { font-size: 1rem; gap: 12px; min-height: 48px; }
         .btn-google img { width: 21px; height: 21px; }
 
-        /* Blocked while a previous session's server-side logout is still
-           unresolved — see the race guard in the script at the bottom. */
+        /* Dims the button while the pending logout race guard has it blocked. */
         #clientGoogleSignInBtn.is-blocked { opacity: 0.55; cursor: not-allowed; }
 
-        /* The offline route out of this page. It had none: signing in with
-           Google is the only control here and it cannot work without a
-           reachable network, so an unusable connection left this page as a
-           dead end — the visitor could see the survey portal's front door and
-           had no way through it. Shown whenever the connection is unusable in
-           either sense (navigator.onLine false, OR a /api/health probe that
-           can't get through while the browser still claims to be online), and
-           never auto-navigated to — the visitor clicks it themselves, same
-           rule as the landing page's copy. */
+        /* Fallback link shown when the connection looks unusable, so the page isn't a dead end. */
         .offline-survey-btn {
             display: inline-flex;
             align-items: center;
@@ -58,17 +44,14 @@
     <div class="bg-blurred" style="--auth-hero-image: url('<%- heroImageUrl %>')"></div>
     <div class="bg-overlay"></div>
 
-    <!-- Every other auth page has this; this one was the odd one out, leaving a
-         visitor who landed here by mistake with no way back except the browser
-         button. -->
+    <!-- Link back to the home page. -->
     <a href="/" class="btn-home" title="Return to Home Page" aria-label="Return to Home Page">
         <i class="fas fa-home"></i>
     </a>
 
     <div class="login-wrapper">
         
-        <!-- Above the header, centred: the first thing in the column, so it is
-             the first thing read and nothing can sit on it. -->
+        <!-- Sits above the header as the first thing in the column. -->
         <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection.">
             <span class="dot"></span><span class="label">Viewing Offline</span>
         </span>
@@ -77,11 +60,7 @@
             <h1 class="main-title">Office Of Center For Quality Assurance (CQA)</h1>
         </div>
 
-        <!-- The gap between the heading and the card. An element rather than a
-             margin because it has to GROW into spare space and STOP at a cap —
-             see .auth-gap in /css/auth.css for why a plain margin (too tight on
-             a roomy screen) and an auto margin (too loose on a short card)
-             each got one of those two halves wrong. Presentational only. -->
+        <!-- Spacer between the heading and the card. -->
         <div class="auth-gap" aria-hidden="true"></div>
 
         <div class="card-custom">
@@ -99,10 +78,7 @@
                 </p>
             </div>
 
-            <!-- Blocks starting a NEW login here while an old session's
-                 server-side logout is still unresolved — see the JS
-                 comment near the bottom of this file for the exact race
-                 this prevents. -->
+            <!-- Notice shown while an old session's logout is still finishing. -->
             <div id="pendingLogoutNotice" class="pending-logout-notice d-none">
                 <i id="pendingLogoutNoticeIcon" class="fas fa-hourglass-half"></i>
                 <span id="pendingLogoutNoticeText">Finishing your previous session…</span>
@@ -114,10 +90,7 @@
                 Sign in with Google
             </a>
 
-            <!-- Visibility is driven from updateOfflineIndicator() below. Sits
-                 under the sign-in button, not above it: signing in properly is
-                 still the better outcome whenever it is actually possible, so
-                 this is the fallback, not the headline. -->
+            <!-- Toggled by updateOfflineIndicator() below. -->
             <a href="/survey-offline" id="offlineSurveyBtn" class="offline-survey-btn d-none" title="Complete the survey now — your account is verified once you're back online">
                 <i class="fas fa-clipboard-list"></i> Take Survey Offline
             </a>
@@ -126,33 +99,20 @@
     </div>
 
     <script>
-        // Marks a real landing on the login page in THIS browser tab (sessionStorage
-        // is tab-scoped, so this can never bleed into a different tab or a different
-        // client's browser) so that if the user later presses Forward, the matching
-        // bfcache guard in client-survey.ejs redirects back here instead of letting
-        // the browser silently restore a previously-cached authenticated survey page.
-        // Deliberately NOT done by destroying the server-side session here — see the
-        // "must NOT destroy any session" comment on the /login route in server.js:
-        // a shared session cookie means that would log out every OTHER open tab too.
+        // Marks this tab as having landed on the login page, so the bfcache guard
+        // in client-survey.ejs knows to redirect back here on Forward.
         try { sessionStorage.setItem('__loginBoundary', window.location.pathname); } catch (e) {}
     </script>
-    <!-- Needed for attemptPendingClientLogout() below (a previously-offline
-         session's server-side logout may still be pending) — this page
-         didn't load it before since it had no other use for offline-db.js. -->
+    <!-- Loaded for attemptPendingClientLogout() below. -->
     <script src="/js/offline-db.js"></script>
     <script src="/js/connection-prompt.js"></script>
     <script>
-        // Connectivity is owned by /js/connection-prompt.js — same module,
-        // same three observations and the same dialog as the landing page and
-        // /login, so a visitor bouncing between them is never told two
-        // different stories about the same connection.
+        // Connectivity is owned by /js/connection-prompt.js, same as the other auth pages.
         function updateOfflineIndicator() {
             const el = document.getElementById('offlineIndicator');
             if (el) el.classList.toggle('is-visible', !navigator.onLine);
             const offlineSurveyBtn = document.getElementById('offlineSurveyBtn');
-            // offerOfflineRoute(), not isUnusable() — once a weak connection
-            // has been seen on this page load the route stays on offer, so
-            // "Stay Online" never removes the alternative it just showed.
+            // Keeps offering the offline route once it's been shown, even after reconnecting.
             const offer = window.ConnectionPrompt ? ConnectionPrompt.offerOfflineRoute() : !navigator.onLine;
             if (offlineSurveyBtn) offlineSurveyBtn.classList.toggle('d-none', !offer);
         }
@@ -161,21 +121,10 @@
         updateOfflineIndicator();
 
         if (window.ConnectionPrompt) {
-            // forceLightMode in the header include, same as /login.
             ConnectionPrompt.init({ context: 'login', theme: 'light', onState: updateOfflineIndicator });
         }
 
-        // ==========================================
-        // PENDING-LOGOUT / NEW-LOGIN RACE GUARD — same mechanism and same
-        // reasoning as login.ejs's copy of this block: a stale pending
-        // /logout call that only lands AFTER a brand new login succeeded
-        // would destroy the NEW session (client.sid is just whatever
-        // cookie the request currently carries — there's no way to tell
-        // "old" and "new" apart from it alone). Blocking the one login
-        // control this page has (Google sign-in) until
-        // attemptPendingClientLogout() (offline-db.js) positively confirms
-        // the old session is gone prevents that outright.
-        // ==========================================
+        // Blocks the Google sign in button until any pending logout from a previous session is confirmed done.
         (function () {
             const notice = document.getElementById('pendingLogoutNotice');
             const icon = document.getElementById('pendingLogoutNoticeIcon');
@@ -216,9 +165,7 @@
                         setBlocked(false);
                         setNotice(null, '', false);
                     } else {
-                        // Does not claim the old session is closed — it
-                        // isn't yet. Stays blocked; Retry + the next
-                        // 'online' event are the only retries, no loop.
+                        // Stays blocked, Retry or the next online event are the only way to try again.
                         setNotice('error', "We couldn't close your previous session because the connection is unstable. Please retry once your connection improves.", true);
                     }
                 });
@@ -234,16 +181,6 @@
 
             attempt();
         })();
-
-        // REMOVED: this used to bounce straight to /client-survey while
-        // offline whenever a cached cspc_client_session existed. That's
-        // exactly what made the offline overlay's Login/Dashboard buttons
-        // "blink and do nothing" — navigating here (or to /) immediately
-        // redirected right back to /client-survey's cached shell, which
-        // shows the same offline overlay again on its own anyway. A cached
-        // client-side flag was never proof the live authenticated portal is
-        // usable offline; see login.ejs's identical removal for the fuller
-        // explanation.
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {

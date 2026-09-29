@@ -3,8 +3,7 @@
 <head>
     <%- include('layout/header') %>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
-         views/layout/report-footer.ejs) — see public/css/report.css. -->
+    <!-- Shared CQA report letterhead, footer, and pagination styles live in public/css/report.css. -->
     <link rel="stylesheet" href="/css/report.css?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '' %>">
 
     <style>
@@ -254,9 +253,7 @@
                         <tbody>
                             <% if (typeof recentSubmissions !== 'undefined' && recentSubmissions.length > 0) { %>
                                 <% recentSubmissions.forEach((r, i) => {
-                                    // r.sentimentTone is the server's own classification
-                                    // (see sentimentTone in server.js) — 'none' for a
-                                    // response the AI never analyzed.
+                                    // r.sentimentTone comes from the server, 'none' means not analyzed yet.
                                     const toneClass = { positive: 'pill-pos', negative: 'pill-neg', none: 'pill-none', neutral: 'pill-neu' };
                                     const badgeClass = toneClass[r.sentimentTone] || 'pill-neu';
                                 %>

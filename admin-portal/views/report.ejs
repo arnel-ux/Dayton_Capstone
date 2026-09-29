@@ -5,22 +5,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="/js/pdf-repeating-header.js?v=2"></script>
     <script src="/js/report-csv.js"></script>
-    <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
-         views/layout/report-footer.ejs) — see public/css/report.css. -->
+    <!-- Shared letterhead, footer, and pagination styles for CQA reports. -->
     <link rel="stylesheet" href="/css/report.css?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '' %>">
 
     <style>
-        /* Custom Styles for Print-like Report */
-        /* Unconditional (not just @media print) so html2pdf's 'css' pagebreak
-           mode actually sees it — it inspects the normal/screen stylesheet, not
-           @media print, when deciding where to cut pages. This guarantees the
-           AI Feedback section always starts its own PDF page, so the repeating
-           header in downloadPDF() below can reliably assume page 1 = the SQD
-           section and every later page = AI Feedback. */
+        /* Print styles for the report. */
+        /* Forces a page break before the AI Feedback section every time. */
         .page-break { page-break-before: always; }
-        /* No outer border/shadow — html2pdf captures this element as-is (it isn't
-           limited to @media print), so any border/shadow here would print as a
-           box around the official page, not just show on the on-screen preview. */
+        /* No border or shadow here so it never shows up in the exported PDF. */
         .report-container {
             background: #fff;
             padding: 18px;
@@ -65,39 +57,22 @@
         .text-center { text-align: center; }
         .fw-bold { font-weight: bold; }
         
-        /* Signatures — the SQD numerical-summary page's own lower section (Prepared/
-           Interpretation/Noted/Reviewed) is styled by .sqd-report-footer-layout in
-           public/css/report.css instead; .signature-section below is only the AI
-           Feedback page's plain two-column Prepared/Reviewed row. */
+        /* Signature row styling, just for the AI Feedback page. */
         .signature-section { display: flex; justify-content: space-between; margin-top: 18px; font-size: 13px; }
         .sig-block { width: 45%; }
         .sig-name { font-weight: bold; margin-top: 14px; margin-bottom: 0; }
         .sig-title { margin: 0; }
 
-        /* Page break for printing (letterhead/footer/page-setup rules live in
-           public/css/report.css so they stay identical across every SQD report).
-           page-break-inside: avoid on .report-container keeps the numerical-summary
-           page from splitting across two printed sheets, matching CSPC's one-page
-           official CSM survey result format. */
+        /* Keeps the SQD summary on one printed page. */
         @media print {
             .no-print { display: none !important; }
             .report-container { border: none; box-shadow: none; max-width: 100%; padding: 0; display: block; page-break-after: always; page-break-inside: avoid; break-inside: avoid; overflow: visible; }
             .page-break { page-break-before: always; }
         }
     
-        /* --- Dark theme ---
-           Only the CHROME of this page follows the theme: the parameters
-           card, the empty state and the download buttons. Everything
-           inside .report-container is the official CSPC form and stays
-           black on white in both themes — html2pdf captures that element
-           exactly as it renders on screen, so darkening it would darken
-           the exported PDF and anything printed from this page. The
-           shared stylesheet pins it white and gives it a paper shadow. */
+        /* Dark theme only affects the page chrome, not the report itself. */
 
-        /* Bootstrap's .text-light is a fixed near-white. In light mode it
-           makes the empty-state icon a pale grey hint; in dark mode the
-           same value turns it into the brightest thing on the screen,
-           which is the opposite of what a placeholder should be. */
+        /* Overrides Bootstrap's text-light so the empty state icon stays muted in dark mode. */
         html[data-bs-theme="dark"] #emptyState .text-light {
             color: #334155 !important;
         }
@@ -240,13 +215,7 @@
 
                         <%- include('layout/sqd-report-footer') %>
 
-                        <!-- Effectivity / Rev. / page label, the same footer cluster-detail.ejs
-                             and survey-records.ejs print. The label here is for the on-screen
-                             preview only: in the PDF this copy is hidden and the footer is
-                             redrawn along the bottom edge of EVERY page, with a page count taken
-                             from the finished document — see the `footer` option passed to
-                             exportRepeatingHeaderPdf in downloadPDF() below and
-                             public/js/pdf-repeating-header.js. -->
+                        <!-- On screen preview only, the PDF redraws its own footer on every page. -->
                         <%- include('layout/report-footer', { pageLabel: 'Page 1 of 2' }) %>
                     </div>
 
@@ -360,10 +329,7 @@
         return "Poor";
     }
 
-    // A dimension nobody could rate — no respondents at all, or every respondent
-    // marked it N/A — has no percentage to show. Printing 0.00%/Poor would read as
-    // "rated, and rated badly", so these cells print N/A instead, the same way the
-    // SQD 0 / SQD 1-8 bucket tables already do.
+    // Counts how many respondents actually answered this dimension instead of marking N/A.
     function sqdAnswerableCount(stats, prefix) {
         return ['sa', 'a', 'n', 'd', 'sd'].reduce((sum, b) => sum + (parseInt(stats[`${prefix}_${b}`]) || 0), 0);
     }
@@ -394,9 +360,7 @@
         document.getElementById('overall_interp').innerText = overallAnswerable === 0 ? 'N/A' : getInterpretation(overall).toUpperCase();
     }
 
-    // Same helper cluster-detail.ejs already carries. The comment text is
-    // written by a member of the public, and the rows below are built by
-    // string concatenation into innerHTML — so it goes through here first.
+    // Escapes text before it gets inserted into innerHTML.
     function escapeHtml(str) {
         return String(str == null ? '' : str)
             .replace(/&/g, '&amp;')
@@ -413,15 +377,7 @@
         let pos = 0, neu = 0, neg = 0;
         let topics = {};
 
-        // Only written comments belong in this report. /api/report-data has
-        // already applied the full rule set — the "N/A"-style declines, the
-        // keyboard mashes that are not words, and the profanity masking (see
-        // shared/commentFilter.js) — so `c.comments` here is what is meant to
-        // be PRINTED and is never the raw stored text. This filter repeats
-        // only the sentiment/topic half, so the table stays correct if the API
-        // is ever called directly, and so a page whose comments were all
-        // excluded falls through to the empty-state message below rather than
-        // printing rows with nothing in them.
+        // Keeps only comments that actually have a sentiment and topic assigned.
         comments = (comments || []).filter(c => c && c.sentiment && c.topic);
 
         if (comments.length === 0) {
@@ -432,15 +388,8 @@
             document.getElementById('aiDomTopic').innerText = 'N/A';
         } else {
             comments.forEach((c, index) => {
-                // Every row here is a real, AI-analyzed comment — the filter
-                // above guarantees it, so no '|| Neutral' / '|| General
-                // Feedback' fallback is needed (those used to invent a result
-                // for comments the AI never analyzed).
                 const aiSentiment = c.sentiment;
-                // Multi-topic tagging project (2026-09-25): a comment can
-                // carry more than one topic (see /api/report-data's
-                // extraTopics) — every one of them prints as its own pill
-                // and counts toward Dominant Topic, not just the primary.
+                // A comment can have more than one topic, each gets its own pill.
                 const allTopics = [c.topic, ...(c.extraTopics || [])];
 
                 if (aiSentiment === 'Positive') pos++;
@@ -480,12 +429,7 @@
     }
 
     function downloadPDF() {
-        // Two report identities share this one PDF: the SQD numerical summary
-        // (always exactly one page — the table is a fixed 8 rows) and AI Feedback
-        // Sentiment & Topic Analytics (can span several pages if there are many
-        // comments). Page 1 always belongs to the SQD section; every later page
-        // belongs to AI Feedback — see public/js/pdf-repeating-header.js and the
-        // unconditional .page-break rule above that guarantees this split.
+        // This PDF has two sections, the SQD summary on page 1 and AI Feedback on the pages after it.
         const sqdHeader = {
             title: 'Client Satisfaction Measurement Survey Result',
             subtitle: document.getElementById('displayOfficeName1').textContent.trim(),
@@ -504,29 +448,18 @@
             meta: 'Analyzed Feedbacks: ' + document.getElementById('totalRespondents2').textContent.trim()
         };
 
-        // Letter (8.5in x 11in) portrait, matching CSPC's official print spec.
-        // html2pdf's margin array is [top, left, bottom, right] (not CSS order);
-        // top is overridden by exportRepeatingHeaderPdf to reserve space for the
-        // redrawn header.
+        // Letter size portrait, matching the official print format. Margin order is top, left, bottom, right.
         const opt = {
             margin:       [0, 0.5, 0.25, 0.25],
             filename:     'CSM_Report.pdf',
             image:        { type: 'jpeg', quality: 0.98 },
             html2canvas:  { scale: 2, useCORS: true, letterRendering: true, scrollY: 0, backgroundColor: '#ffffff' },
             jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
-            // 'css' is deliberately not in `mode` (which makes `pagebreak.avoid`
-            // a no-op too, so it's dropped) — html2pdf's own CSS page-break
-            // handling was observed to duplicate content at the SQD→AI Feedback
-            // page transition once the CSS `.page-break` class and its forced
-            // break interacted badly with legacy slicing. The forced break and
-            // the signature blocks' split-avoidance are done the reliable way
-            // instead, via forcePageBreakSelectors/avoidSplitSelector below.
+            // Legacy mode avoids duplicated content at the page break.
             pagebreak:    { mode: ['legacy'] }
         };
 
-        // Respondent count backing the SQD scorecard (page 1) — below the
-        // office's reporting minimum, the downloaded PDF gets a caution
-        // watermark so a partial count can't be mistaken for a finished result.
+        // Watermarks the PDF if the respondent count is too low to be a finished result.
         const sqdRespondentCount = parseInt(document.getElementById('totalRespondents1').textContent.trim(), 10) || 0;
 
         exportRepeatingHeaderPdf({
@@ -538,26 +471,16 @@
             getHeaderForPage: (pageNum) => (pageNum === 1 ? sqdHeader : aiHeader),
             forcePageBreakSelectors: ['#aiFeedbackPage'],
             avoidSplitSelector: ['.sqd-signature-grid', '#aiSignatureBlock'],
-            // Effectivity / Rev. / "Page N of M" belongs to the official SQD
-            // scorecard only (page 1) — not the AI Feedback pages that follow
-            // in the same download.
+            // Footer only shows on the SQD scorecard page.
             footer: { effectivity: 'June 2024', revision: 'Rev. 4', onPages: (pageNum) => pageNum === 1 },
-            // Unlike the footer, the caution watermark applies to every page —
-            // the low respondent count affects the whole download, not just
-            // the SQD scorecard page.
+            // Watermark shows on every page.
             watermark: sqdRespondentCount < 10
                 ? { text: 'INSUFFICIENT RESPONDENTS' }
                 : undefined
         });
     }
 
-    // Built from the report's own figures, section by section, rather than by
-    // walking every `.report-table tr` on the page and dumping the cells into
-    // one flat list — see public/js/report-csv.js for what that produced and
-    // why a CSV cannot hold a 3-column table and a 4-column table in the same
-    // columns. The SQD scorecard IS a clean 3-column grid, so its rows are read
-    // straight out of the table (keeping the dimension labels in one place);
-    // everything else is assembled from the values the report computed.
+    // Builds the CSV section by section since the tables have different column counts.
     function downloadCSV() {
         const text = (id) => document.getElementById(id).innerText.trim();
         const office = text('displayOfficeName1');
@@ -566,8 +489,7 @@
         const sqdRows = Array.from(document.querySelectorAll('#tableData1 tbody tr'))
             .map(tr => Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim()));
 
-        // The comments table holds either real rows of four cells or the single
-        // spanned "no comments" line; only the former are data.
+        // Skips the "no comments" placeholder row, only keeps actual data rows.
         const commentRows = Array.from(document.querySelectorAll('#commentsBody tr'))
             .map(tr => Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim()))
             .filter(cells => cells.length === 4);
@@ -601,10 +523,7 @@
             {
                 title: 'WRITTEN COMMENTS/SUGGESTIONS',
                 columns: ['No.', 'Written Comment/Suggestion', 'AI Modeled Topic', 'AI Sentiment'],
-                // Profanity in these cells is already masked through its vowels
-                // by /api/report-data (shared/commentFilter.js) — the export
-                // carries the same text the printed report does, never the raw
-                // stored comment.
+                // Profanity is already masked by the API, same text as the printed report.
                 rows: commentRows.length
                     ? commentRows
                     : [['', 'NO WRITTEN COMMENTS AND SUGGESTIONS REFLECTED IN ANY OF THE INSTRUMENTS', '', '']]

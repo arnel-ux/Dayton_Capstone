@@ -1,42 +1,12 @@
 """
-The AI topic/subtopic taxonomy — and ONLY the taxonomy, as of 2026-09-28 (see
-below for where everything else moved). This is Gemini's entire
-classification universe: gemini_model.py reads candidate_topics and
-TOPIC_ITEM_KEYWORDS directly to build its prompt guide, its per-item
-example-keyword hints, and its JSON schema's valid-output enum. Do not remove
-or rename anything here without also checking gemini_model.py's
-TOPIC_DESCRIPTIONS (which must have an entry for every topic listed here).
-
-2026-09-28: junk/no-feedback detection (is_no_feedback, detect_junk_topic,
-and the greeting/gibberish/keyboard-mash machinery behind it) moved out to
-its own comment_filter package, so it's easy to find on its own — it never
-belonged next to the taxonomy conceptually, it just lived here historically.
-Import it as `from comment_filter import is_no_feedback, detect_junk_topic`.
-
-2026-09-27: the keyword-based classification lexicon (TOPIC_KEYWORDS, the
-sentiment word lists, keyword_topic_override, item_label_override,
-lexicon_sentiment, fast_sentiment/fast_topic) was removed entirely. It was
-the fallback classifier before the pure-AI classification project
-(2026-09-22) and briefly a lexicon-first hybrid for offline-synced comments
-after that, but neither role survived: online comments have called Gemini
-exclusively since 2026-09-22, and offline-synced comments have too since
-2026-09-25 (see analyze.py's module comment) — no production path has
-classified a single comment via keyword matching since.
-
-Designed around one rule: a Topic/Subtopic label must be SENTIMENT-NEUTRAL —
-it names what the comment is ABOUT, never whether that thing was good or bad
-(that judgment belongs entirely to the separate sentiment axis). The old
-taxonomy violated this in a few places (e.g. "Transaction - Slow"/
-"Transaction - Fast" baked a sentiment judgment into the subtopic itself),
-which is exactly the pattern that taxonomy rewrite removed — "Transaction" is
-folded into "Processing - Processing Time" and sentiment alone carries the
-slow/fast verdict, matching every other topic's convention.
-
-This taxonomy merges the previous physical-facility/behavioral topics with a
-broader set of administrative/service-process topics covering the college's
-non-facility offices (registrar, HR, cash unit, scholarships, ICT, library,
-dormitory, travel orders, etc.), consolidating topics that meant the same
-thing under one neutral name and removing duplicates.
+This file holds the full list of topics and subtopics Gemini can choose
+from when reading a comment. gemini_model.py reads this list directly to
+build its prompt and to check its own answers, so any topic added or
+renamed here should also be checked against gemini_model.py.
+Blank comment detection lives in comment_filter.py instead.
+Topic and subtopic names are meant to stay neutral, describing what the
+comment is about rather than whether it was good or bad. Sentiment is
+handled separately.
 """
 candidate_topics = [
     "Processing",
@@ -71,19 +41,8 @@ candidate_topics = [
 ]
 
 # ---------------------------------------------------------------------------
-# SUBTOPICS (topic -> "{Topic} - {Specific Item}" labels), keyed by parent
-# topic. Every item label is sentiment-neutral by design (see the taxonomy
-# comment above) — an item never encodes whether the thing it names was good
-# or bad, only what it was. Not every topic has a meaningful item breakdown;
-# those without one stay at the plain topic label.
-#
-# The short keyword list under each item is NOT a matcher (see the module
-# docstring) — it exists purely so gemini_model.py's _item_hint() can show
-# Gemini a couple of concrete example words/phrases for what that label means
-# (e.g. "Restroom Condition (e.g. tissue, sabon, banyo)"). An empty list is
-# valid — see Complaint Handling/General Service below — Gemini still needs
-# the label registered here to ever output it, even with no examples.
-# ---------------------------------------------------------------------------
+# Subtopics for each topic. The short word lists under each one are just
+# examples shown to Gemini, not used for matching.
 TOPIC_ITEM_KEYWORDS = {
     "Processing": [
         ("Processing - Waiting Time", [
@@ -430,10 +389,7 @@ TOPIC_ITEM_KEYWORDS = {
             "research assistance", "pananaliksik", "research consultation",
         ]),
     ],
-    # No keyword examples at all — these are reachable only through Gemini's
-    # own judgment (see the module docstring). Still registered here so
-    # gemini_model.ALL_TOPICS includes them as valid outputs, matching
-    # shared/topicTaxonomy.js's admin-override dropdown.
+    # No example words, Gemini picks these based on judgment alone.
     "General Service": [
         ("General Service - Service Information", []),
         ("General Service - Service Accessibility", []),

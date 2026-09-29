@@ -3,9 +3,7 @@
 <head>
     <%- include('layout/header') %>
     <style>
-        /* Same token set and 4/8/12/16/20/24/32 spacing scale as
-           survey-records.ejs, so this page sits inside the admin portal's
-           existing visual language instead of inventing a second one. */
+        /* Same token set and spacing scale as survey-records.ejs. */
         :root {
             --primary-indigo: #251d3a;
             --accent-indigo: #3452a5;
@@ -34,10 +32,7 @@
             --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
             --shadow-md: 0 6px 16px rgba(15, 23, 42, 0.06);
 
-            /* ONE grid definition shared by the column headings and every
-               account row below them. Declared once here rather than repeated
-               on each selector, so a heading can never drift out of line with
-               the column it labels. */
+            /* Shared grid used by both the column headings and the account rows. */
             --account-grid: 40px minmax(0, 1fr) 132px 168px;
         }
 
@@ -86,10 +81,7 @@
         }
         .btn-back:hover { background: #fff; color: var(--primary-indigo); }
 
-        /* --- Stat tiles ---
-           An auto-fit grid rather than hand-placed columns, so the four tiles
-           stay equal-width and equally spaced at every breakpoint instead of
-           one of them ending up wider than its neighbours. */
+        /* Stat tiles use an auto-fit grid so they stay equal width at every breakpoint. */
         .stat-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -148,10 +140,7 @@
             overflow: hidden;
         }
 
-        /* Title on its own line, controls on the next one. A title plus three
-           controls in a single flex row left the search field squeezed against
-           the selects at laptop widths; this way the controls have the full
-           width of the card to divide between them. */
+        /* Title on its own line, controls on the next, so they have room to breathe. */
         .accounts-toolbar {
             display: flex;
             flex-direction: column;
@@ -179,8 +168,7 @@
             gap: var(--sp-3);
         }
 
-        /* Each control is label-above-field, so the search box and the two
-           selects all sit on the same baseline whatever their label lengths. */
+        /* Label above field for each control, keeps them on the same baseline. */
         .control-field {
             display: flex;
             flex-direction: column;
@@ -235,8 +223,7 @@
             font-size: 0.86rem;
             font-weight: 600;
             padding: var(--sp-3) calc(var(--sp-6) + var(--sp-1)) var(--sp-3) var(--sp-3);
-            /* Caret drawn with gradients rather than an image, so it follows
-               the text colour in dark mode instead of staying black. */
+            /* Caret drawn with gradients so it follows the text color in dark mode. */
             background-image: linear-gradient(45deg, transparent 50%, var(--text-faint) 50%),
                               linear-gradient(135deg, var(--text-faint) 50%, transparent 50%);
             background-position: calc(100% - 18px) 52%, calc(100% - 13px) 52%;
@@ -249,13 +236,10 @@
             border-color: var(--primary-indigo);
             box-shadow: 0 0 0 3px rgba(37, 29, 58, 0.08);
         }
-        /* The native option list is drawn by the OS, so it needs the surface
-           colours spelled out to stay readable in dark mode. */
+        /* Native option list is drawn by the OS, needs colors spelled out for dark mode. */
         html[data-bs-theme="dark"] .control-select option { background-color: #141d30; color: #cbd5e1; }
 
-        /* --- Column headings ---
-           Same grid as the rows (see --account-grid), so "Date Registered"
-           sits directly above the dates it labels. */
+        /* Column headings use the same grid as the rows. */
         .accounts-head {
             display: grid;
             grid-template-columns: var(--account-grid);
@@ -270,15 +254,10 @@
             text-transform: uppercase;
             color: var(--text-muted);
         }
-        /* The account heading covers both the avatar and the identity track. */
+        /* Account heading spans both the avatar and identity columns. */
         .accounts-head span:first-child { grid-column: 1 / span 2; }
 
-        /* --- Account row ---
-           Four tracks: avatar / identity / account type / date registered.
-           Because the tracks are declared on the row rather than sized by their
-           contents, the name column starts at the same x on every row and every
-           date ends flush on the right edge, no matter how long a name or an
-           address happens to be. */
+        /* Account row: avatar, identity, account type, date registered. */
         .account-row {
             display: grid;
             grid-template-columns: var(--account-grid);
@@ -290,7 +269,7 @@
         }
         .account-row:last-child { border-bottom: none; }
         .account-row:hover { background: var(--surface-subtle); }
-        /* hidden alone would be overridden by display: grid above. */
+        /* Needed since display: grid above would otherwise override hidden. */
         .account-row[hidden] { display: none; }
 
         .account-avatar {
@@ -308,9 +287,7 @@
             letter-spacing: 0.02em;
         }
 
-        /* The Google account's own picture, in the same 40px cell the initials
-           circle occupies, so a row with a photo and a row without line up
-           identically. object-fit keeps a non-square source from stretching. */
+        /* Google profile picture, sized to the same cell as the initials circle. */
         .account-photo {
             width: 40px;
             height: 40px;
@@ -363,8 +340,7 @@
         html[data-bs-theme="dark"] .type-badge.is-cspc { background: rgba(109, 150, 255, 0.16); color: #b9cbff; }
         html[data-bs-theme="dark"] .type-badge.is-personal { background: rgba(148, 163, 184, 0.16); color: #cbd5e1; }
 
-        /* Date over time in one block: the date reads as the primary value and
-           the exact clock time sits under it, which is what the column is for. */
+        /* Date as the primary value, exact time shown underneath it. */
         .account-registered { text-align: right; }
         .registered-date {
             display: block;
@@ -402,16 +378,13 @@
             text-align: center;
         }
 
-        /* On a tablet the two right-hand columns give up width before the name
-           column starts truncating. */
+        /* On tablet, the right columns shrink before the name column truncates. */
         @media (max-width: 991.98px) {
             :root { --account-grid: 40px minmax(0, 1fr) 118px 132px; }
             .registered-date { font-size: 0.78rem; }
         }
 
-        /* On a phone the type badge and the date move under the address rather
-           than competing with it for the same row -- the four-track grid becomes
-           two tracks and the lower cells span the freed column. */
+        /* On phone, the type badge and date move under the address instead of the row. */
         @media (max-width: 575.98px) {
             .page-header { padding: var(--sp-5) var(--sp-4); }
             .accounts-toolbar { padding: var(--sp-4); }
@@ -456,10 +429,7 @@
 
         <div class="container-fluid px-4">
 
-            <%# Total first, then the two halves it splits into (CSPC + Personal
-                = Total), then today's registrations. Reading left to right now
-                follows the arithmetic instead of mixing a total, a subset and
-                two date ranges in no particular order. %>
+            <%# Total, then the two halves it splits into, then today's registrations. %>
             <div class="stat-grid">
                 <div class="stat-tile">
                     <span class="stat-icon"><i class="fas fa-user-group"></i></span>
@@ -540,8 +510,7 @@
                     <div id="accountList">
                         <% accounts.forEach(account => { %>
                             <%
-                                // The avatar letter comes from the name when there is one
-                                // and from the address otherwise, so a circle is never blank.
+                                // Avatar letter comes from the name, or the email if there's no name.
                                 const initialSource = account.hasName ? account.name : (account.email || '?');
                                 const initial = initialSource.trim().charAt(0) || '?';
                                 const emailText = account.email || 'No email on record';
@@ -552,10 +521,7 @@
                                  data-date="<%= account.dateKey %>"
                                  data-type="<%= account.isCspc ? 'cspc' : 'personal' %>">
                                 <% if (account.photoUrl) { %>
-                                    <%# referrerpolicy is required, not cosmetic: Google's
-                                        lh3.googleusercontent.com refuses a request that arrives
-                                        with a referrer from an unrelated origin, and the photo
-                                        comes back 403 instead of loading. %>
+                                    <%# referrerpolicy is required, Google's photo host rejects requests with a referrer set. %>
                                     <img class="account-photo" src="<%= account.photoUrl %>"
                                          alt="" width="40" height="40" loading="lazy"
                                          referrerpolicy="no-referrer" data-initial="<%= initial %>">
@@ -610,11 +576,7 @@
 <%- include('layout/footer') %>
 <%- include('layout/theme-toggle') %>
 <script>
-    // Search, sort and account-type filter over the rows already rendered --
-    // the whole list is on the page, so none of the three needs a round trip.
-    // The keys they compare (lowercased name, registration timestamp, account
-    // type) are precomputed server-side into data- attributes, so a click never
-    // re-parses a printed date or re-lowercases a name.
+    // Search, sort and type filter run over the rows already on the page, no round trip needed.
     (function () {
         const list = document.getElementById('accountList');
         if (!list) return;
@@ -625,8 +587,7 @@
         const summary = document.getElementById('accountsSummary');
         const noResults = document.getElementById('noResults');
 
-        // Read the keys once instead of on every comparison: a sort touches each
-        // row O(log n) times and every dataset read is a string parse.
+        // Reads each row's data attributes once up front instead of on every comparison.
         const entries = Array.from(list.querySelectorAll('.account-row')).map(row => ({
             row,
             name: row.dataset.name || '',
@@ -635,8 +596,7 @@
             search: row.dataset.search || ''
         }));
 
-        // Every sort has a tiebreaker, so rows that tie on the chosen key still
-        // land in a stable, meaningful order rather than an arbitrary one.
+        // Every sort has a tiebreaker so tied rows still land in a stable order.
         const SORTERS = {
             'date-desc': (a, b) => b.date - a.date || a.name.localeCompare(b.name),
             'date-asc': (a, b) => a.date - b.date || a.name.localeCompare(b.name),
@@ -665,8 +625,7 @@
                 if (show) visible++;
             });
 
-            // Reordered into a fragment and reattached in one go, so the browser
-            // lays the list out once instead of on every moved row.
+            // Reordered in a fragment and reattached in one go, one layout pass instead of many.
             const fragment = document.createDocumentFragment();
             entries.slice().sort(SORTERS[sortKey]).forEach(entry => fragment.appendChild(entry.row));
             list.appendChild(fragment);
@@ -680,10 +639,7 @@
             list.hidden = visible === 0;
         }
 
-        // A Google photo URL is whatever was saved at sign-in and can stop
-        // resolving later (the account changed its picture, or the link expired),
-        // which renders as a broken-image icon in the middle of the list. Swap
-        // any such image for the initials circle the row would have had.
+        // Falls back to the initials circle if the saved Google photo URL stops loading.
         list.querySelectorAll('img.account-photo').forEach(img => {
             img.addEventListener('error', () => {
                 const fallback = document.createElement('span');

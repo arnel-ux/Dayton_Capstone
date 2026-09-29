@@ -14,8 +14,7 @@
             --radius-sm: 6px;
         }
 
-        /* Icon-only action buttons — tooltip (title + data-bs-toggle) reveals the
-           action on hover/focus instead of showing text on the button itself. */
+        /* Icon-only buttons, the tooltip shows what each one does. */
         .btn-icon {
             width: 32px;
             height: 32px;
@@ -66,9 +65,7 @@
             background-color: #f8fafc;
         }
 
-        /* Archived rows/clusters are hidden by default via CSS (not JS-on-load)
-           so there's no flash of the full unfiltered table before script runs —
-           the "Show Archived" toggle reveals them by adding body.show-archived. */
+        /* Archived rows are hidden by default in CSS, the Show Archived toggle reveals them. */
         tr.office-row-archived { display: none; }
         tbody.cluster-row-archived { display: none; }
         body.show-archived tr.office-row-archived { display: table-row; }
@@ -134,10 +131,7 @@
         .csm-table td.csm-num { text-align: center; white-space: nowrap; }
         .csm-table td.csm-empty { text-align: center; font-style: italic; color: #666; }
 
-        /* Printing: hide everything except the export table, let the browser paginate
-           the table naturally (repeats the header row, never slices a row in half) —
-           this replaced an html2pdf/html2canvas screenshot-and-slice approach that
-           corrupted the layout past the first page or two of a long table. */
+        /* Printing shows only the export table and lets the browser paginate it naturally. */
         @media print {
             body * { visibility: hidden; }
             #csmExportContent, #csmExportContent * { visibility: visible; }
@@ -152,24 +146,14 @@
             @page { size: landscape; margin: 0.4in; }
         }
     
-        /* --- Dark theme ---
-           The shared dark palette (public/css/style.css) already supplies
-           --border-strong and --surface-subtle, and it covers .archived-row
-           and .badge-archived, so only what this page hardcodes is listed
-           here.
-
-           #csmExportContent is left untouched on purpose: it is the
-           off-screen official "List of Services" table that gets printed,
-           so it stays black on white whatever the screen theme is. */
+        /* Dark theme overrides for what this page hardcodes.
+           The export table stays black on white regardless of theme. */
         html[data-bs-theme="dark"] .btn-icon {
             background: #1a2438;
             border-color: var(--border-strong);
             color: #cbd5e1;
         }
-        /* The hover tints are pale washes with dark ink — unreadable once
-           the button itself is dark. Each keeps its hue (blue = services,
-           red = archive/delete, green = restore) as a translucent wash
-           with light ink, so the color still says the same thing. */
+        /* Hover colors use a translucent wash with light text so they stay readable in dark mode. */
         html[data-bs-theme="dark"] .btn-icon-services:hover { background-color: rgba(56, 189, 248, 0.20); border-color: #38bdf8; color: #7dd3fc; }
         html[data-bs-theme="dark"] .btn-icon-archive:hover,
         html[data-bs-theme="dark"] .btn-icon-delete:hover,
@@ -177,9 +161,7 @@
         html[data-bs-theme="dark"] .btn-icon-restore:hover { background-color: rgba(34, 197, 94, 0.20); border-color: #22c55e; color: #86efac; }
         html[data-bs-theme="dark"] .btn-icon-edit:hover { background-color: #3452a5; border-color: #3452a5; color: #fff; }
 
-        /* Cluster header rows carry Bootstrap's .bg-light, which is a fixed
-           near-white: without this every cluster band stays a white stripe
-           across the table. */
+        /* Overrides Bootstrap's bg-light so cluster rows aren't stuck white in dark mode. */
         html[data-bs-theme="dark"] .cluster-toggle.bg-light { background-color: #1a2438 !important; }
         html[data-bs-theme="dark"] .cluster-toggle:hover { background-color: #22304a !important; }
 </style>
@@ -228,14 +210,14 @@
                             <%
                             let grouped = {};
                             let clusterMeta = {};
-                            // UNA: I-initialize ang lahat ng clusters mula sa clustersData para kahit walang office, lilitaw pa rin ang Cluster Header!
+                            // Sets up every cluster first so its header shows even with no offices.
                             if (typeof clustersData !== 'undefined' && clustersData.length > 0) {
                                 clustersData.forEach(c => {
                                     grouped[c.cluster_name] = [];
                                     clusterMeta[c.cluster_name] = c;
                                 });
                             }
-                            // PANGALAWANG HAKBANG: I-grupo ang mga offices sa kani-kanilang cluster
+                            // Groups offices under their cluster.
                             if (typeof officesData !== 'undefined' && officesData.length > 0) {
                                 officesData.forEach(off => {
                                     if(!grouped[off.cluster_name]) grouped[off.cluster_name] = [];
@@ -349,11 +331,7 @@
                             <% } %>
                         </table>
                         <script>
-                            // Runs immediately as this element parses (no defer) so a full MPA
-                            // page load restores each cluster's collapsed state before first
-                            // paint, instead of flashing the fully-expanded table open and then
-                            // snapping shut once DOMContentLoaded fires (that flash was the
-                            // navigation "glitch" into this page).
+                            // Restores each cluster's collapsed state right away, before first paint.
                             (function () {
                                 try {
                                     var collapsedState = JSON.parse(localStorage.getItem('officeClusterCollapsed')) || {};
@@ -377,7 +355,7 @@
     </div>
 </div>
 
-<!-- Hidden export table used by printOfficesList() (native print) and downloadOfficesPDF() (jsPDF-AutoTable reads this table directly) -->
+<!-- Hidden table used for printing and PDF export. -->
 <div id="csmExportContent">
     <div class="csm-export-container">
         <div class="csm-export-title">
@@ -430,7 +408,7 @@
     </div>
 </div>
 
-<!-- Preview modal: shows the export content on-screen so the user can review it before printing or downloading -->
+<!-- Preview modal shows the export content before printing or downloading. -->
 <div class="modal fade" id="exportPreviewModal" tabindex="-1" aria-labelledby="exportPreviewModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
@@ -646,18 +624,15 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // Show the result of the last create/edit/archive/delete redirect as a
-        // toast (?success=... / ?error=... set by server.js), then clean the URL.
+        // Shows the last create, edit, archive or delete result as a toast, then cleans the URL.
         AppAlert.autoShowFromQuery();
 
-        // Icon-only action buttons rely on Bootstrap tooltips to reveal what each icon does.
+        // Tooltips show what each icon button does.
         document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
 
-        // Archived offices/clusters are hidden by default via the CSS in <head>
-        // (no flash on load) — toggling this body class is all that's needed
-        // to reveal/hide them.
+        // Toggling this body class shows or hides archived rows.
 
-        // Confirm before archiving an office (modern modal instead of window.confirm)
+        // Confirms before archiving an office.
         document.querySelectorAll('.archive-office-form').forEach(form => {
             form.addEventListener('submit', async function (e) {
                 e.preventDefault();
@@ -687,7 +662,7 @@
             });
         });
 
-        // Confirm before permanently deleting an office (irreversible)
+        // Confirms before permanently deleting an office.
         document.querySelectorAll('.permanent-delete-office-form').forEach(form => {
             form.addEventListener('submit', async function (e) {
                 e.preventDefault();
@@ -702,7 +677,7 @@
             });
         });
 
-        // Confirm before permanently deleting a cluster (irreversible, cascades to its offices)
+        // Confirms before permanently deleting a cluster and its offices.
         document.querySelectorAll('.permanent-delete-cluster-form').forEach(form => {
             form.addEventListener('submit', async function (e) {
                 e.preventDefault();
@@ -724,10 +699,7 @@
             });
         }
 
-        // I-restore ang naka-save na collapsed state ng bawat cluster (per cluster name, hindi index)
-        // para hindi na mag-reset sa "open" kapag nag-refresh o lumipat ng page.
-        // (Initial state is already applied synchronously right after the table
-        // markup above — this just wires up the click handler + persistence.)
+        // Restores each cluster's saved collapsed state and wires up the toggle to save it again.
         const COLLAPSE_KEY = 'officeClusterCollapsed';
         function loadCollapsedState() {
             try {
@@ -764,8 +736,7 @@
         });
     });
 
-    // Add Office modal — repeatable "Service(s) Availed" rows. Each row posts as
-    // service_name[] alongside the office fields when the form is submitted.
+    // Adds another service input row to the Add Office form.
     function addServiceRow() {
         const wrap = document.getElementById('addServiceRows');
         const row = document.createElement('div');
@@ -782,8 +753,7 @@
         new bootstrap.Tooltip(removeBtn);
     }
 
-    // Wired via data-* attributes (rather than inline onclick with interpolated
-    // JSON) so an office name containing a quote/apostrophe can't break the markup.
+    // Uses data attributes instead of inline onclick so quotes in names don't break the markup.
     document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('.open-services-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -794,8 +764,7 @@
         });
     });
 
-    // Per-office "Services" modal — lists existing services (with delete) and a
-    // quick add form, both wired to the /services/add and /services/delete routes.
+    // Lists an office's services with delete, plus a quick add form.
     function openServicesModal(officeId, officeName, services) {
         document.getElementById('servicesOfficeId').value = officeId;
         document.getElementById('servicesOfficeName').textContent = officeName;
@@ -822,8 +791,7 @@
                 const actions = document.createElement('div');
                 actions.className = 'd-flex align-items-center gap-2';
 
-                // Availability dropdown — auto-submits a rename-preserving edit the
-                // moment a new frequency is picked (see /services/edit).
+                // Submits automatically when a new frequency is picked.
                 const editForm = document.createElement('form');
                 editForm.action = '/services/edit';
                 editForm.method = 'POST';
@@ -881,8 +849,7 @@
         editClusterModal.show();
     }
 
-    // Clones the (hidden) export table into the preview modal so the user can
-    // review the exact content before choosing to print or download it.
+    // Copies the hidden export table into the preview modal.
     function openExportPreview() {
         const source = document.querySelector('#csmExportContent .csm-export-container');
         const previewBody = document.getElementById('exportPreviewBody');
@@ -894,16 +861,12 @@
     }
 
     function printOfficesList() {
-        // Native print pipeline — the table paginates by real row boundaries
-        // (header repeats, rows never split mid-cell). User can pick "Save as
-        // PDF" as the print destination if they just want a file.
+        // Uses the browser's native print so the table paginates cleanly.
         window.print();
     }
 
     function downloadOfficesPDF() {
-        // jsPDF-AutoTable reads the actual <table> (including rowspans) and lays
-        // it out as real PDF content — it paginates by row, never as a sliced
-        // screenshot, so long tables stay intact across pages.
+        // Reads the table directly into a real PDF instead of a screenshot.
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
 

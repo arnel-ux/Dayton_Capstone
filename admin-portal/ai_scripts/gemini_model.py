@@ -1,19 +1,7 @@
 """
-Gemini-based classifier — the SOLE classifier for every comment, online and
-offline alike (see heavy_model.analyze_pure_ai). Originally replaced the
-local mDeBERTa zero-shot topic model and the tabularisai sentiment
-transformer (2026-08-29), then went on to replace the keyword-lexicon hybrid
-that briefly served as the offline-sync fallback (2026-09-22 through
-2026-09-25 — see topic_common.py's 2026-09-27 cleanup note for why that
-lexicon was removed entirely rather than kept dormant).
-
-Built directly from topic_common's candidate_topics and TOPIC_ITEM_KEYWORDS
-(see ALL_TOPICS/_build_topic_guide below) so the taxonomy Gemini is told
-about can never drift out of sync with the taxonomy the rest of the app
-understands. TOPIC_ITEM_KEYWORDS' short keyword lists are no longer used for
-matching by anything — they exist purely to give Gemini a couple of concrete
-example words per label (see _item_hint), since a bare label name alone is
-often ambiguous.
+This is the Gemini classifier. It reads every comment and decides its
+sentiment and topics. The topic list comes straight from topic_common.py
+so both files always agree on what topics exist.
 """
 import json
 import logging
@@ -22,19 +10,12 @@ import time
 
 from topic_common import candidate_topics, GENERAL_FEEDBACK, TOPIC_ITEM_KEYWORDS
 
-# The SDK logs a harmless "AFC is enabled" / "not recommended" advisory on
-# every single call since we use the plain generate_content() request/reply
-# API (no tool/function-calling, so AFC never actually does anything) rather
-# than its Chat wrapper — silenced so it doesn't spam production logs on
-# every classified comment.
+# Quiets a harmless SDK log message that would otherwise spam the console.
 logging.getLogger("google_genai.models").setLevel(logging.ERROR)
 
 try:
     from dotenv import load_dotenv
-    # Loads admin-portal/.env into os.environ when this module is imported
-    # standalone (python test_accuracy.py, python analyze.py). A no-op when
-    # server.js already spawned this process with .env merged into
-    # process.env (dotenv won't override already-set vars).
+    # Loads the .env file when this script runs on its own.
     load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"))
 except ImportError:
     pass
@@ -43,10 +24,8 @@ MODEL_NAME = "gemini-3.5-flash-lite"
 
 SENTIMENTS = ["Positive", "Negative", "Neutral"]
 
-# One short line per topic so Gemini has an unambiguous definition to pick
-# from, instead of guessing at what a bare label like "Process Efficiency"
-# is meant to cover. Deliberately short — Gemini doesn't need the Taglish
-# keyword examples the zero-shot model needed, it can read the sentence.
+# A short description for each topic, shown to Gemini so it knows what
+# each one means.
 TOPIC_DESCRIPTIONS = {
     "Processing": "How long a transaction, its wait beforehand, or the release of its result took — waiting in line, being attended to, or waiting for an outcome/result to come out. Not about the number of steps involved (Service Procedure) and not about approval specifically (Approval Process).",
     "Service Procedure": "Whether the STEPS of a process were simple or needlessly complicated — too many steps, redundant requirements, being sent back and forth between offices/windows, or being referred elsewhere. Not about how clearly things were explained (Communication and Information) and not about raw speed (Processing).",
@@ -60,7 +39,7 @@ TOPIC_DESCRIPTIONS = {
     "Internet Service": "Internet or wifi connectivity/signal problems, or internet subscription/access renewal at the Internet Center.",
     "Scheduling and Availability": "Whether an appointment, exam, or service slot was available and scheduled — appointment/exam availability, fully-booked slots, or schedule confirmation. Not about waiting in line once already there (Processing).",
     "Financial Transaction": "Paying fees, tuition, or other charges — payment processing/posting, receipts, reimbursement/liquidation of expenses, account balances, or remittances. Not about a scholarship grant's own amount or release (Scholarship and Assistance).",
-    "Facilities and Resources": "Physical facilities or equipment — aircon/cooling, restroom, general cleanliness/tidiness, seating/furniture, power/lighting, appearance/upkeep, actual equipment/machines, building/structure, parking, or resource availability. Also covers printers/computer labs. A vague complaint/praise that only names the PLACE itself (\"opisina\", \"office\", \"dito\") with a generic quality judgment (\"hindi maayos\", \"ayos naman\", \"okay lang\") and no specific aspect — no dirt/smell, no named appearance phrase like \"pangit\"/\"presentable\", no named equipment, no temperature, no furniture — stays at the plain \"Facilities and Resources\" topic with NO sub-item; do not pick \"Equipment/Machine\" unless an actual device/machine is named (printer, computer, kagamitan, makina), and do not pick \"Appearance/Condition\" unless a specific appearance/presentability word or phrase is used, not just a generic \"maayos\"/\"ayos\" judgment. IMPORTANT sub-item rule for the restroom specifically: a dirt/smell/mess word (\"madumi\", \"marumi\", \"dumi\", \"mabaho\", \"maalikabok\", \"makalat\", \"dirty\", \"smelly\", \"unsanitary\", etc.) ALWAYS wins \"Cleanliness\" over \"Restroom Condition\", even when the comment ALSO names the restroom/CR/banyo — the location word being present is not a reason to prefer \"Restroom Condition\" once an actual dirt/smell/mess word is there. Reserve \"Restroom Condition\" for restroom comments with NO dirt/smell/mess word at all (missing supplies, broken fixtures, locked/unavailable, etc.) — e.g. \"madumi ang cr\" is Cleanliness, not Restroom Condition; \"walang tissue sa cr\" is Restroom Condition, not Cleanliness. Not about people loitering or hanging around (Bystanders and Loitering) even if it happens near a building, and not library/dormitory/transportation specifically (their own topics).",
+    "Facilities and Resources": "Physical facilities or equipment — aircon/cooling, restroom, general cleanliness/tidiness, seating/furniture, power/lighting, appearance/upkeep, actual equipment/machines, building/structure, parking, or resource availability. Also covers printers/computer labs. A vague complaint/praise that only names the PLACE itself (\"opisina\", \"office\", \"dito\") with a generic quality judgment (\"hindi maayos\", \"ayos naman\", \"okay lang\") and no specific aspect — no dirt/smell/mess, no named appearance phrase like \"pangit\"/\"presentable\", no named equipment, no temperature, no furniture — stays at the plain \"Facilities and Resources\" topic with NO sub-item; do not pick \"Equipment/Machine\" unless an actual device/machine is named (printer, computer, kagamitan, makina), and do not pick \"Appearance/Condition\" unless a specific appearance/presentability word or phrase is used, not just a generic \"maayos\"/\"ayos\" judgment. IMPORTANT sub-item rule, for ANY facility/office comment, not restroom comments alone: a dirt/smell/mess word (\"madumi\", \"marumi\", \"dumi\", \"magulo\", \"makalat\", \"mabaho\", \"maalikabok\", \"dirty\", \"messy\", \"smelly\", \"unsanitary\", etc.) is itself a concrete, specific aspect, so it ALWAYS earns the \"Cleanliness\" sub-item instead of staying at the plain parent topic — this applies just as much to a general \"magulo yung opisina\" (the office is messy) as it does to a restroom comment. When the comment ALSO names the restroom/CR/banyo, that same dirt/smell/mess word ALWAYS wins \"Cleanliness\" over \"Restroom Condition\" too — the location word being present is not a reason to prefer \"Restroom Condition\" once an actual dirt/smell/mess word is there. Reserve \"Restroom Condition\" for restroom comments with NO dirt/smell/mess word at all (missing supplies, broken fixtures, locked/unavailable, etc.) — e.g. \"madumi ang cr\" is Cleanliness, not Restroom Condition; \"walang tissue sa cr\" is Restroom Condition, not Cleanliness; \"magulo yung office\" (with no restroom mentioned at all) is Cleanliness, not the bare parent topic. Not about people loitering or hanging around (Bystanders and Loitering) even if it happens near a building, and not library/dormitory/transportation specifically (their own topics).",
     "Bystanders and Loitering": "Idle outsiders, non-clients, or bystanders hanging around/loitering ('tambay', 'mga standby') — noise, crowding, or disturbance they cause. Not about the physical building/facility itself (Facilities and Resources) and not about staff/student attitude (Staff Service) — this is specifically about uninvolved people just standing/hanging around.",
     "Scholarship and Assistance": "Scholarship applications, eligibility, grant amounts, or grant release/financial assistance disbursement.",
     "Enrollment Process": "Enrollment, registration, matriculation, shifting, cross-enrollment, or re-admission. Not about adding/dropping subjects or grade changes once already enrolled (Academic Transaction).",
@@ -80,15 +59,7 @@ TOPIC_DESCRIPTIONS = {
     GENERAL_FEEDBACK: "Vague, generic praise/complaint with NO specific identifiable cause named — no concrete process, person, system, or facility issue mentioned, even if the sentiment itself is clear (e.g. \"I had a great day\" or \"it was disappointing\" with no reason given). If the comment names a concrete cause, pick that topic instead, even if the phrasing is sarcastic or indirect.",
 }
 
-# ---------------------------------------------------------------------------
-# ITEM-LEVEL LABELS (added 2026-08-29 so Gemini can match the lexicon's
-# specificity, e.g. "Aircon and Cooling - Electric Fan" instead of stopping
-# at the plain "Aircon and Cooling"). Built directly from topic_common's
-# TOPIC_ITEM_KEYWORDS — the same source of truth the keyword lexicon uses —
-# so the two paths can never drift out of sync, and each item's example
-# keywords double as a compact hint for Gemini without hand-writing a
-# separate description for every one of the ~50 items.
-# ---------------------------------------------------------------------------
+# Turns a subtopic's example words into a short hint string for the prompt.
 def _item_hint(keywords):
     examples = [kw if isinstance(kw, str) else kw[0] for kw in keywords[:3]]
     return ", ".join(examples)
@@ -98,14 +69,7 @@ ALL_TOPICS = candidate_topics + [GENERAL_FEEDBACK] + [
     label for items in TOPIC_ITEM_KEYWORDS.values() for label, _ in items
 ]
 
-# MAX_TOPICS caps how many distinct topics one comment can be tagged with —
-# added 2026-09-25 (multi-topic tagging project) after finding a comment that
-# genuinely names two unrelated things (e.g. "matagal ang transaction pero
-# maayos ang kalinisan") only ever got the single most-salient one, silently
-# dropping the other from every topic-frequency report. Sentiment stays a
-# single verdict for the WHOLE comment (not per-topic) — see PROMPT_TEMPLATE.
-# Capped (not unbounded) so Gemini doesn't pad the list with tangentially
-# related topics just because the array field exists.
+# The most topics one comment can be tagged with at once.
 MAX_TOPICS = 3
 
 RESPONSE_SCHEMA = {
@@ -163,17 +127,7 @@ def _build_prompt(text, office_hint=None):
     )
 
 
-# ---------------------------------------------------------------------------
-# CLIENT-SIDE THROTTLE
-# The free tier caps at 15 requests/minute per model. Real production
-# traffic (one admin portal, submissions trickling in) will basically never
-# hit this, but the accuracy test harnesses (test_accuracy.py, and any batch
-# re-scoring) fire many calls back-to-back and WILL blow past it without
-# this — confirmed empirically: an unthrottled run hit repeated 429s.
-# Capping at 12/60s (under the real 15/60s limit) here, at the call site,
-# means every caller is automatically safe without needing to remember to
-# pace itself.
-# ---------------------------------------------------------------------------
+# Keeps calls to Gemini under the free tier's rate limit.
 _call_times = []
 _MAX_CALLS_PER_WINDOW = 12
 _WINDOW_SECONDS = 60
@@ -208,20 +162,10 @@ def _get_client():
     return _client
 
 
-def classify(text, office_hint=None, max_retries=3):
+def classify(text, office_hint=None, max_retries=5):
     """
-    Returns (sentiment, topics) using Gemini 3.5 Flash-Lite — sentiment is a
-    single string, topics is a non-empty list of 1-MAX_TOPICS strings (see
-    the multi-topic tagging project, 2026-09-25: most comments still return
-    exactly one topic, but a comment that clearly names multiple distinct
-    things, e.g. transaction speed AND cleanliness, returns each of them
-    instead of silently keeping only the more salient one). Constrained to
-    this project's existing sentiment/topic taxonomy via a JSON schema so an
-    out-of-taxonomy label is structurally impossible, not just requested.
-
-    Retries on transient errors (network blips, 429 rate limit) with a short
-    backoff; raises on the last attempt so the caller can decide how to
-    degrade (see heavy_model.py's fallback-of-fallback handling).
+    Asks Gemini to classify one comment and returns (sentiment, topics).
+    Retries a couple times if the request fails before giving up.
     """
     from google.genai import types
 
@@ -239,7 +183,7 @@ def classify(text, office_hint=None, max_retries=3):
                     response_mime_type="application/json",
                     response_schema=RESPONSE_SCHEMA,
                     temperature=0,
-                    http_options=types.HttpOptions(timeout=15000),  # ms — bound a hung request instead of blocking a live comment submission indefinitely
+                    http_options=types.HttpOptions(timeout=15000),  # 15 second timeout
                 ),
             )
             data = json.loads(response.text)
@@ -251,19 +195,23 @@ def classify(text, office_hint=None, max_retries=3):
             if not topics:
                 topics = [GENERAL_FEEDBACK]
             else:
-                # De-dupe while preserving order — the schema doesn't forbid
-                # Gemini repeating a label across the array.
+                # Removes duplicate topics if Gemini repeats one.
                 seen = set()
                 topics = [t for t in topics if not (t in seen or seen.add(t))][:MAX_TOPICS]
             return sentiment, topics
         except Exception as e:
             last_err = e
             if attempt < max_retries - 1:
-                # A 429 needs to wait out most of the rate-limit window, not
-                # a quick exponential backoff — the throttle above should
-                # normally prevent these, but a burst from multiple
-                # processes (e.g. a manual test run overlapping with live
-                # traffic) can still trigger one occasionally.
-                is_rate_limit = "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)
-                time.sleep(20 if is_rate_limit else 2 ** attempt)
+                err_text = str(e)
+                is_rate_limit = "429" in err_text or "RESOURCE_EXHAUSTED" in err_text
+                # A 503/UNAVAILABLE means Gemini itself is momentarily overloaded,
+                # not that the request is bad — this clears within seconds to tens
+                # of seconds, so it's worth a real wait instead of a quick retry.
+                is_overloaded = "503" in err_text or "UNAVAILABLE" in err_text
+                if is_rate_limit:
+                    time.sleep(20)
+                elif is_overloaded:
+                    time.sleep(10)
+                else:
+                    time.sleep(2 ** attempt)
     raise last_err

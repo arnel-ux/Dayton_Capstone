@@ -5,8 +5,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="/js/pdf-repeating-header.js?v=2"></script>
     <script src="/js/report-csv.js"></script>
-    <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
-         views/layout/report-footer.ejs) — see public/css/report.css. -->
+    <!-- Shared report letterhead, footer, and pagination styles live in public/css/report.css. -->
     <link rel="stylesheet" href="/css/report.css?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '' %>">
     <style>
         :root {
@@ -123,11 +122,7 @@
         .search-bar .form-control:focus { box-shadow: none; background: var(--card-bg); color: var(--text-main); }
         .search-hint { color: var(--text-faint); font-size: 0.75rem; margin-top: var(--sp-3); }
 
-        /* Search field + sort button share one row — the sort control used to
-           be a full "Sort by" <select> with its own label sitting off to the
-           right, which cost a whole toolbar column for something used rarely.
-           It's an icon button now; the option list moved into its dropdown,
-           unchanged. */
+        /* Search field and sort button share one row. Sort is just an icon button, with the options in its dropdown. */
         .search-row { display: flex; align-items: center; gap: var(--sp-3); }
         .search-row .search-bar { flex: 1 1 auto; margin-bottom: 0; }
 
@@ -147,27 +142,21 @@
         }
         .sort-btn:hover, .sort-btn:focus-visible { color: var(--text-main); border-color: var(--text-faint); }
         .sort-btn i { font-size: 0.95rem; }
-        /* A sort other than Default is active — without this the toolbar gives
-           no clue the list is reordered, which the old always-visible select
-           label used to provide. */
+        /* Highlights the sort button when a sort other than Default is active. */
         .sort-btn.is-sorted { color: #0056b3; border-color: #0056b3; background: rgba(0, 86, 179, .06); }
         html[data-bs-theme="dark"] .sort-btn.is-sorted { color: #8ab4f8; border-color: #8ab4f8; background: rgba(138, 180, 248, .1); }
 
         .sort-dropdown { font-size: 0.85rem; min-width: 230px; }
         .sort-dropdown .dropdown-item { display: flex; align-items: center; gap: var(--sp-2); }
-        /* Check mark occupies its slot even when hidden, so the labels don't
-           shift as the selection moves between rows. */
+        /* Check mark keeps its space even when hidden so labels don't shift. */
         .sort-dropdown .dropdown-item i { width: 14px; font-size: 0.75rem; visibility: hidden; }
         .sort-dropdown .dropdown-item.active,
         .sort-dropdown .dropdown-item.active:focus { background-color: var(--surface-subtle); color: var(--text-main); font-weight: 600; }
         .sort-dropdown .dropdown-item.active i { visibility: visible; color: #0056b3; }
         html[data-bs-theme="dark"] .sort-dropdown .dropdown-item.active i { color: #8ab4f8; }
 
-        /* Row visibility has TWO independent owners — the search filter and the
-           pager — so neither may use inline display: one would clobber the
-           other (clearing a search would reveal rows from every page, and
-           paging would un-hide rows the search had filtered out). Each owns its
-           own class instead, and a row shows only when neither is set. */
+        /* Search and the pager each control row visibility with their own class, so
+           clearing one filter never affects the other. A row only shows when neither is set. */
         .record-row.search-hidden,
         .record-row.page-hidden { display: none !important; }
 
@@ -236,8 +225,7 @@
         }
         html[data-bs-theme="dark"] .office-group-header { color: #93c5fd; border-left-color: #93c5fd; }
 
-        /* "View All" opens every respondent of this cluster in a modal that
-           reuses the exact same table markup as the section below it. */
+        /* "View All" opens every respondent of this cluster in a modal using the same table markup. */
         .btn-view-all {
             display: inline-flex;
             align-items: center;
@@ -261,13 +249,10 @@
         #viewAllModal .record-row.page-hidden,
         #viewAllModal .record-row.search-hidden { display: table-row !important; }
 
-        /* Table uses a fixed layout with deliberate column widths (set via <colgroup>) so
-           thead/tbody columns always line up and one long cell can never distort row height. */
+        /* Fixed table layout with column widths set via <colgroup> keeps columns aligned. */
         .table-scroll-x { overflow-x: auto; }
         .table { width: 100%; min-width: 800px; margin-bottom: 0; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
-        /* Action column gets a hard floor so "View Result" (icon + text) can never be
-           clipped by the fixed table layout, regardless of container width — the
-           percentage in <colgroup> only governs the *extra* room on wide screens. */
+        /* Minimum width keeps "View Result" from getting clipped at any screen size. */
         .table th:nth-child(7),
         .table td:nth-child(7) { min-width: 184px; }
         .table thead th {
@@ -295,8 +280,7 @@
         .table tbody tr:last-child td { border-bottom: none; }
         .table tbody tr.record-row:hover td { background: var(--surface-subtle); }
 
-        /* Single-line ellipsis truncation shared by any cell whose content must never
-           wrap or grow the row — the full value stays available via the title tooltip. */
+        /* Truncates a cell to one line with an ellipsis. Full value shows in the tooltip. */
         .cell-truncate {
             display: block;
             white-space: nowrap;
@@ -337,13 +321,8 @@
             cursor: default;
         }
         .topic-cell { text-align: center; white-space: normal; }
-        /* Multi-topic tagging project (2026-09-25): a comment can carry more
-           than one topic badge in the same cell — spaced and allowed to wrap
-           onto a second line instead of overflowing the column. */
-        /* Fixed (not max-) width so every badge in a multi-topic cell lines up
-           at the same size instead of each one shrinking to its own text —
-           stacked one per line (not side-by-side) since a shared fixed width
-           leaves no room for two to sit next to each other. */
+        /* A comment can have more than one topic badge, stacked one per line so they all wrap cleanly.
+           Fixed width keeps every badge the same size instead of shrinking to its own text. */
         .topic-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; }
         .topic-cell .topic-badge { width: 190px; }
 
@@ -358,10 +337,7 @@
         .bg-health { background-color: #fce7f3; color: #db2777; }
         .bg-transaction { background-color: #ffedd5; color: #c2410c; }
         .bg-unclassified { background-color: #f3f4f6; color: #6b7280; border: 1px dashed #d1d5db; }
-        /* Blank/"N/A"-style comment — genuinely nothing to classify, distinct
-           from a real "General Feedback" comment (see isNoFeedbackComment
-           in server.js). Dashed border marks it visually as "not a real
-           classification" rather than just another topic color. */
+        /* Style for a blank or "N/A" comment with nothing to classify. Dashed border sets it apart from a real topic color. */
         .bg-no-feedback { background-color: #f8fafc; color: #94a3b8; border: 1px dashed #cbd5e1; }
 
         .sentiment-badge { font-size: 0.65rem; padding: 4px 12px; border-radius: 999px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; display: inline-block; white-space: nowrap; }
@@ -370,11 +346,9 @@
         .bg-sentiment-neutral { background-color: #e2e8f0; color: #334155; }
         .bg-sentiment-none { background-color: #f8fafc; color: #94a3b8; border: 1px dashed #cbd5e1; }
 
-        /* Dark values for these pills are shared with /dashboard — see the
-           "status pills" section of public/css/style.css. */
+        /* Dark mode values for these pills live in the status pills section of public/css/style.css. */
 
-        /* Wider, left-aligned tooltip for long comments so wrapped text stays readable
-           instead of Bootstrap's default narrow 200px bubble. */
+        /* Wider, left-aligned tooltip so long comments stay readable when wrapped. */
         .tooltip-wide-comment .tooltip-inner { max-width: 320px; text-align: left; }
 
         #noResults { display: none; padding: var(--sp-8) var(--sp-6); text-align: center; color: var(--text-faint); }
@@ -459,12 +433,9 @@
         .sqd-badge-3 { background: #e2e8f0; color: #334155; }
         .sqd-badge-2, .sqd-badge-1 { background: #fee2e2; color: #b91c1c; }
         .sqd-badge-na, .sqd-badge-unanswered { background: #f1f5f9; color: #94a3b8; }
-        /* Dark values for these pills are shared with /dashboard — see the
-           "status pills" section of public/css/style.css. */
+        /* Dark mode values for these pills live in the status pills section of public/css/style.css. */
 
-        /* Generate Report modal — fills the content area (same wide layout/format as the
-           official /report page) but docks to the right of the sidebar instead of covering
-           the whole viewport, so the sidebar stays visible/usable while the report is open. */
+        /* Generate Report modal docks to the right of the sidebar instead of covering the whole screen. */
         .client-report-dialog {
             position: fixed;
             top: 0;
@@ -503,12 +474,9 @@
             padding: 32px 24px;
         }
         html[data-bs-theme="dark"] .client-report-body { background: #0d1420; }
-        /* Unconditional (not just @media print) so html2pdf's 'css' pagebreak
-           mode actually sees it — see report.ejs for the full rationale. This
-           guarantees the AI Feedback section always starts its own PDF page. */
+        /* Forces the AI Feedback section to always start its own PDF page. */
         .page-break { page-break-before: always; }
-        /* No outer border/shadow — html2pdf captures this element as-is, so any
-           border/shadow here would print as a box around the official page. */
+        /* No outer border or shadow so it doesn't print as a box around the page. */
         .report-container {
             background: #fff;
             padding: 18px;
@@ -543,10 +511,7 @@
         .topic-pill { display: inline-block; background-color: #e8f0fe !important; color: #0056b3 !important; padding: 4px 8px; margin: 2px 3px 2px 0; border-radius: 12px; font-size: 11px; font-weight: bold; white-space: nowrap; -webkit-print-color-adjust: exact; }
         .text-center { text-align: center; }
         .fw-bold { font-weight: bold; }
-        /* The SQD page's own lower section (Prepared/Interpretation/Noted/Reviewed)
-           is styled by .sqd-report-footer-layout in public/css/report.css instead;
-           .signature-section below is only the AI Feedback page's plain
-           two-column Prepared/Reviewed row. */
+        /* This is just the AI Feedback page's plain two-column Prepared/Reviewed row. */
         .signature-section { display: flex; justify-content: space-between; margin-top: 18px; font-size: 13px; }
         .sig-block { width: 45%; }
         .sig-name { font-weight: bold; margin-top: 14px; margin-bottom: 0; }
@@ -706,8 +671,7 @@
     </div>
 </div>
 
-<!-- View All modal: lists every respondent of one cluster, using the very same
-     table markup as that cluster's section (cloned at open time). -->
+<!-- View All modal: lists every respondent of one cluster, cloning that cluster's table markup. -->
 <div class="modal fade" id="viewAllModal" tabindex="-1" aria-labelledby="viewAllModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow-lg">
@@ -746,8 +710,7 @@
     </div>
 </div>
 
-<!-- Generate Report modal: shows one client's computed report, same format as the
-     official /report page, but scoped to this respondent's own answers only. -->
+<!-- Generate Report modal: shows one client's computed report, same format as the main report page but for just this respondent. -->
 <div class="modal fade" id="clientReportModal" tabindex="-1" aria-labelledby="clientReportModalLabel" aria-hidden="true" data-bs-backdrop="false">
     <div class="modal-dialog client-report-dialog">
         <div class="modal-content border-0 shadow-lg">
@@ -810,12 +773,7 @@
 
                         <%- include('layout/sqd-report-footer') %>
 
-                        <!-- On-screen preview only. In the PDF this copy is hidden and the
-                             footer is redrawn along the bottom edge of EVERY page with a
-                             page label counted from the finished document — "Page 1 of 2"
-                             here is only ever right while the comments table fits on one
-                             page. See downloadClientReportPDF() and
-                             public/js/pdf-repeating-header.js. -->
+                        <!-- On-screen preview only. The PDF hides this and redraws its own footer on every page. -->
                         <%- include('layout/report-footer', { pageLabel: 'Page 1 of 2' }) %>
                     </div>
 
@@ -895,8 +853,7 @@
     const TOPIC_TAXONOMY = <%- JSON.stringify(TOPIC_TAXONOMY) %>;
     const SENTIMENT_VALUES = <%- JSON.stringify(SENTIMENT_VALUES) %>;
 
-    // Client-side mirror of shared/topicTaxonomy.js's combineTopic() — kept
-    // in sync by hand, same as that file's own note about topic_common.py.
+    // Mirrors shared/topicTaxonomy.js's combineTopic() on the client side.
     function combineTopicClient(topic, subtopic) {
         if (!topic) return null;
         if (topic === 'No Feedback') return 'No Feedback';
@@ -910,12 +867,7 @@
         return div.innerHTML;
     }
 
-    // --- AI Analysis view/edit (Survey Result modal) --------------------------
-    // Authoritative "currently saved/effective" analysis for whichever survey
-    // response the modal has open — Cancel and every re-open of "Edit Analysis"
-    // reads from this, never from whatever happens to still be sitting in the
-    // <select> elements, so an unsaved edit can never leak into the next edit
-    // session.
+    // Holds the currently saved analysis for the open survey response.
     let currentAnalysis = null;
 
     function analysisViewItem(label, valueHtml) {
@@ -927,14 +879,10 @@
         `;
     }
 
-    // Multi-topic tagging project (2026-09-25): matches the server's own cap
-    // (see MAX_EXTRA_TOPICS in server.js) so the "Add Another Topic" button
-    // disables at the same limit the PATCH endpoint would otherwise reject.
+    // Matches the server's cap so the "Add Another Topic" button disables at the right limit.
     const MAX_EXTRA_TOPICS = 4;
 
-    // Renders the read-only list of topics beyond the primary — used both on
-    // initial modal load and right after a save, so both paths render
-    // identically.
+    // Renders the read-only list of extra topics beyond the primary one.
     function renderExtraTopicsView(extraTopics) {
         if (!extraTopics || !extraTopics.length) return '';
         return extraTopics.map((t, i) => `
@@ -958,13 +906,7 @@
         return `<span class="sentiment-badge ${sentimentBadgeClass(sentiment)}">${escapeHtml(sentiment)}</span>`;
     }
 
-    // Best-effort mirror of server.js's /survey-records badge-color rules, for
-    // instant visual feedback on the row right after a save — the next full
-    // page load/refresh always re-derives the authoritative class from the
-    // server, this is cosmetic only.
-    // Mirrors server.js's topicBadgeClassFor exactly (same taxonomy, same
-    // rules) — kept in sync by hand, same as this file's other server
-    // mirrors (combineTopicClient, TOPIC_TAXONOMY).
+    // Mirrors server.js's topicBadgeClassFor so the badge updates right after a save.
     function topicBadgeClass(topic) {
         const lower = (topic || '').toLowerCase();
         if (lower.startsWith('unclassified') || lower.startsWith('no feedback')) return 'bg-unclassified';
@@ -999,18 +941,13 @@
         if (selectedValue && options.includes(selectedValue)) selectEl.value = selectedValue;
     }
 
-    // Shows/hides a topic/subtopic "Custom" free-text input to match its
-    // <select>'s current value, pre-filling it with `value` when the select
-    // just landed on "Custom" because a saved override doesn't match any
-    // known taxonomy entry (an admin-typed custom value from a prior save).
+    // Shows or hides the "Custom" text input for a topic/subtopic select and fills it in when needed.
     function syncCustomInput(inputEl, isCustom, value) {
         inputEl.style.display = isCustom ? '' : 'none';
         inputEl.value = isCustom ? (value || '') : '';
     }
 
-    // Resets the three <select> elements (plus their "Custom" text inputs) to
-    // exactly currentAnalysis — called every time "Edit Analysis" is opened,
-    // so a previously-cancelled, never-saved edit can never resurface.
+    // Resets the select elements and their custom inputs back to currentAnalysis.
     function resetAnalysisEditor() {
         const sentimentSelect = document.getElementById('analysisSentimentSelect');
         const topicSelect = document.getElementById('analysisTopicSelect');
@@ -1023,9 +960,7 @@
 
         const topicOptions = [...Object.keys(TOPIC_TAXONOMY), 'Custom'];
         populateSelect(topicSelect, topicOptions, currentAnalysis.topic);
-        // A saved topic that isn't one of the known taxonomy keys is itself an
-        // admin-typed custom value — land the select on "Custom" and show it,
-        // rather than silently falling back to the first option in the list.
+        // A saved topic outside the known taxonomy is a custom value, so select "Custom".
         if (currentAnalysis.topic && !topicOptions.includes(currentAnalysis.topic)) {
             topicSelect.value = 'Custom';
         }
@@ -1052,12 +987,7 @@
         rebuildExtraTopicRows();
     }
 
-    // Multi-topic tagging project (2026-09-25) — everything below builds the
-    // removable, repeatable rows for topics beyond the primary. Each row uses
-    // its own local <select>/<input> elements (found via querySelector on the
-    // row itself) rather than fixed global ids, since any number of these can
-    // exist at once — unlike the single fixed primary Topic/Subtopic pair
-    // above.
+    // Builds a removable row for an extra topic with its own selects and inputs.
     function createExtraTopicRow(topicValue, subtopicValue) {
         const row = document.createElement('div');
         row.className = 'extra-topic-row result-grid mt-2 pt-2 border-top';
@@ -1129,9 +1059,7 @@
         updateAddTopicButtonState();
     }
 
-    // Called every time "Edit Analysis" is opened (see resetAnalysisEditor
-    // above) — rebuilds from currentAnalysis.extraTopics, same "never leak an
-    // unsaved edit into the next session" rule as the primary select.
+    // Rebuilds the extra topic rows from currentAnalysis.extraTopics.
     function rebuildExtraTopicRows() {
         const list = document.getElementById('analysisExtraTopicsList');
         if (!list) return;
@@ -1195,8 +1123,7 @@
             return;
         }
 
-        // Multi-topic tagging project (2026-09-25): gather every extra-topic
-        // row's Topic/Subtopic pair the same way as the primary above.
+        // Gather each extra topic row's topic and subtopic pair.
         const extraTopics = [];
         for (const row of document.querySelectorAll('#analysisExtraTopicsList .extra-topic-row')) {
             const rTopicSelect = row.querySelector('.extra-topic-select');
@@ -1231,10 +1158,7 @@
             .then(({ ok, data }) => {
                 if (!ok || !data.success) throw new Error(data.message || 'Failed to save analysis.');
 
-                // data.extraTopics comes back re-split from the server (same
-                // {topic, subtopic} shape as GET returns), so view mode and
-                // the next "Edit Analysis" open both reflect exactly what was
-                // actually stored, not just what was typed.
+                // Use what the server actually stored, not just what was typed.
                 currentAnalysis = {
                     sentiment: payload.sentiment, topic: payload.topic, subtopic: payload.subtopic,
                     extraTopics: data.extraTopics || [],
@@ -1249,10 +1173,7 @@
                 toggleAnalysisEdit(false);
                 AppAlert.toast('success', 'Analysis updated successfully.');
 
-                // Reflect the correction in the underlying table row immediately,
-                // without a full page reload — the next real refresh re-derives
-                // this from the server the same way. Every badge in the cell is
-                // rebuilt from scratch since the count itself can now change.
+                // Updates the table row right away instead of waiting for a page reload.
                 const row = document.querySelector(`.record-row[data-id="${id}"]`);
                 if (row) {
                     const topicCell = row.querySelector('.topic-cell');
@@ -1418,8 +1339,7 @@
             });
     }
 
-    // Long office names are shown as an acronym (e.g. "Office of the Vice President for Academic Affairs" -> "OVPAA")
-    // with the full name available as a hover tooltip, so the table stays compact and readable.
+    // Long office names get shortened to an acronym with the full name as a hover tooltip.
     const OFFICE_NAME_MAX_LENGTH = 25;
     const OFFICE_ACRONYM_STOPWORDS = ['of', 'the', 'and', 'for', 'in', 'a', 'an'];
 
@@ -1437,9 +1357,7 @@
         if (fullName.length > OFFICE_NAME_MAX_LENGTH) {
             const acronym = officeAcronym(fullName);
             if (acronym.length >= 2) {
-                // The acronym span becomes the single tooltip trigger for this cell —
-                // clear the td's own title/data-bs-toggle so hovering doesn't fire two
-                // overlapping tooltips for the same office name.
+                // Clears the cell's own tooltip attributes so only the acronym span shows one.
                 cell.removeAttribute('title');
                 cell.removeAttribute('data-bs-toggle');
                 cell.removeAttribute('data-bs-placement');
@@ -1448,34 +1366,16 @@
         }
     });
 
-    // Bootstrap tooltips for every truncatable cell (office, name, comments, topic,
-    // time). Run after the acronym pass above so dynamically-created spans are
-    // picked up too. Bootstrap reads the plain `title` attribute on init and moves
-    // it to `data-bs-original-title` (removing `title`), so there's no duplicate
-    // native browser tooltip once this runs — and if this script somehow fails,
-    // the native `title` tooltip is still there as a fallback.
+    // Turns on Bootstrap tooltips for every truncatable cell, run after the acronym pass so those spans are included.
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
 
-    // Sort by: name, date, sentiment, or office. Reorders the record rows within
-    // each group and, for "office", also puts the groups themselves in
-    // alphabetical order. "Default" restores server order (grouped by cluster,
-    // newest response first).
-    //
-    // NOTE: a ".office-section" is a CLUSTER section — its header prints the
-    // cluster name, and each row's own office is the first column. "Office
-    // (A-Z)" used to reorder only those cluster headers and leave the rows
-    // alone, so the Office column itself stayed unsorted; it sorts the rows by
-    // office too now, which is what the label promises.
+    // Sorts by name, date, sentiment, or office, reordering rows within each group and, for office, the groups too.
     const SENTIMENT_SORT_ORDER = { positive: 1, neutral: 2, negative: 3 };
 
-    // Each cluster shows at most this many records at a time — a cluster with
-    // hundreds of responses used to render every one of them into a single
-    // endless scroll.
+    // Each cluster shows at most this many records at a time.
     const RECORDS_PER_PAGE = 5;
 
-    // Re-renders one section's page window. Reads only rows the SEARCH has left
-    // visible, so paging always describes what the user is actually looking at
-    // ("Showing 1-5 of 12 matching records", not of all records).
+    // Re-renders one section's page window, only counting rows the search has left visible.
     function paginateSection(section, resetToFirstPage) {
         const pager = section.querySelector('.section-pager');
         if (!pager) return;
@@ -1485,8 +1385,7 @@
         const totalPages = Math.max(1, Math.ceil(rows.length / RECORDS_PER_PAGE));
 
         let page = resetToFirstPage ? 1 : (parseInt(section.dataset.page, 10) || 1);
-        // Deleting rows, searching, or re-sorting can leave the stored page past
-        // the end — clamp instead of showing an empty page.
+        // Clamps the page so it never lands past the end after rows are deleted or filtered.
         page = Math.min(Math.max(page, 1), totalPages);
         section.dataset.page = page;
 
@@ -1524,9 +1423,7 @@
                 section.dataset.page = btn.hasAttribute('data-page-next') ? current + 1 : current - 1;
                 paginateSection(section, false);
 
-                // Paging moves content out from under the pointer; bring the
-                // cluster's first row back into view so the reader isn't left
-                // mid-table on the new page.
+                // Scrolls the cluster's first row back into view on the new page.
                 section.scrollIntoView({ block: 'nearest' });
             });
         });
@@ -1534,10 +1431,7 @@
         paginateAllSections(true);
     }
 
-    // "View All": opens one cluster's complete record list in a modal. It clones
-    // the cluster's own table (colgroup + thead + every row, including the ones
-    // the pager or search is currently hiding) so the modal is guaranteed to
-    // match the page's format — nothing about the section itself is changed.
+    // Opens one cluster's complete record list in a modal by cloning its table, including hidden rows.
     function openViewAllCluster(btn) {
         const section = btn.closest('.office-section');
         const sourceTable = section && section.querySelector('table');
@@ -1545,8 +1439,7 @@
 
         const clone = sourceTable.cloneNode(true);
         const rows = clone.querySelectorAll('.record-row');
-        // Cloned nodes carry no Bootstrap tooltip instances; the title attributes
-        // stay, so hovering still shows the full text natively.
+        // Cloned rows have no Bootstrap tooltip instances, but the title attribute still shows on hover.
         rows.forEach(row => row.removeAttribute('data-bs-toggle'));
 
         const wrap = document.createElement('div');
@@ -1621,8 +1514,7 @@
             item.classList.add('active');
 
             const mode = item.dataset.sort;
-            // The button is the only remaining sign that a sort is applied now
-            // that the select (and its visible value) is gone.
+            // The button itself shows whether a sort is applied.
             sortButton.classList.toggle('is-sorted', mode !== '');
             sortButton.title = mode === '' ? 'Sort survey records' : 'Sorted by ' + item.textContent.trim();
 
@@ -1648,10 +1540,7 @@
                 let foundInOffice = 0;
 
                 rows.forEach(row => {
-                    // innerText skips display:none content, so a row hidden by the
-                    // pager would read as empty and never match. Search the row's
-                    // textContent instead — it sees every row regardless of which
-                    // page it currently sits on.
+                    // Uses textContent instead of innerText so hidden rows on other pages still get searched.
                     const rowText = row.textContent.toLowerCase();
                     const match = rowText.includes(query) || officeTitle.includes(query);
                     row.classList.toggle('search-hidden', !match);
@@ -1664,18 +1553,13 @@
                 section.style.display = foundInOffice > 0 ? "" : "none";
             });
 
-            // Every section's match set just changed, so each one starts again at
-            // its first page of results.
+            // Resets every section back to its first page since the search results just changed.
             paginateAllSections(true);
 
             noResults.style.display = totalFound === 0 ? "block" : "none";
         });
 
-        // Deep link from the notification bell: /survey-records?office=CCS opens
-        // the page already filtered to that office, so clicking a notification
-        // lands on the office that was actually surveyed. It drives the existing
-        // search box rather than filtering separately, so clearing the box
-        // restores the full list exactly as a typed search does.
+        // Deep link support: ?office=CCS in the URL prefills the search box with that office.
         const officeParam = new URLSearchParams(window.location.search).get('office');
         if (officeParam) {
             searchInput.value = officeParam;
@@ -1683,9 +1567,7 @@
         }
     });
 
-    // Generate Report: computes and displays one client's own SQD score using the
-    // exact same formula/template as the aggregate /report page, scoped to this
-    // respondent only, right here on the Survey Records page (no page navigation).
+    // Computes and shows one client's SQD score right here, using the same formula as the /report page.
     function openClientReport(id) {
         const modalEl = document.getElementById('clientReportModal');
         const loadingEl = document.querySelector('#clientReportBody > .text-center');
@@ -1714,9 +1596,7 @@
                 document.getElementById('cr_officeName2').innerText = `${clientName} — ${officeName}`;
                 document.getElementById('cr_period2').innerText = periodText;
 
-                // Service availed (italic subtitle under the office name) — only
-                // this single-respondent report has one real service to show;
-                // hidden entirely when this respondent didn't record one.
+                // Service availed line, hidden entirely when this respondent didn't record one.
                 const serviceLineEl = document.getElementById('cr_serviceLine1');
                 if (stats.service_availed) {
                     serviceLineEl.textContent = stats.service_availed;
@@ -1746,10 +1626,7 @@
         return "Poor";
     }
 
-    // A dimension nobody could rate — no respondents at all, or every respondent
-    // marked it N/A — has no percentage to show. Printing 0.00%/Poor would read as
-    // "rated, and rated badly", so these cells print N/A instead, the same way the
-    // SQD 0 / SQD 1-8 bucket tables already do.
+    // A dimension nobody could rate (no respondents, or everyone marked N/A) prints N/A instead of a score.
     function sqdAnswerableCount(stats, prefix) {
         return ['sa', 'a', 'n', 'd', 'sd'].reduce((sum, b) => sum + (parseInt(stats[`${prefix}_${b}`]) || 0), 0);
     }
@@ -1787,20 +1664,7 @@
         let pos = 0, neu = 0, neg = 0;
         let topics = {};
 
-        // Same rule as /report and the cluster report: a row reaches this
-        // table only if it is a real written comment. /api/report-data applies
-        // the whole rule set before it gets here — the "N/A"-style declines,
-        // the keyboard mashes, and the profanity masking (see
-        // shared/commentFilter.js) — so `c.comments` is the text to PRINT and
-        // never the raw stored text.
-        //
-        // This page used to be the one report that printed those rows anyway:
-        // it rendered a no-feedback row with the respondent's literal "N/A" in
-        // the Comments column and the words "No feedback" as its topic and
-        // sentiment. On a single-respondent report whose only comment was
-        // "N/A" that produced a Comments section consisting of one row saying
-        // nothing, instead of the empty-state line below, which is what a
-        // report with no written comments is supposed to say.
+        // Only real written comments reach this table, same rule as /report and the cluster report.
         comments = (comments || []).filter(c => c && c.sentiment && c.topic);
 
         if (comments.length === 0) {
@@ -1811,16 +1675,9 @@
             document.getElementById('cr_aiDomTopic').innerText = 'N/A';
         } else {
             comments.forEach((c, index) => {
-                // Every row here is a real, AI-analyzed comment — the filter
-                // above guarantees it, so there is no '|| Neutral' / '||
-                // General' fallback to apply (those used to invent a result
-                // for comments the AI never analyzed) and no no-feedback case
-                // left to render.
+                // Every row here is a real, AI-analyzed comment thanks to the filter above.
                 const aiSentiment = c.sentiment;
-                // Multi-topic tagging project (2026-09-25): a comment can
-                // carry more than one topic (see /api/report-data's
-                // extraTopics) — every one of them prints as its own pill
-                // and counts toward Dominant Topic, not just the primary.
+                // A comment can carry more than one topic, each one prints as its own pill and counts toward Dominant Topic.
                 const allTopics = [c.topic, ...(c.extraTopics || [])];
 
                 if (aiSentiment === 'Positive') pos++;
@@ -1856,10 +1713,7 @@
     }
 
     function downloadClientReportPDF() {
-        // Two report identities share this one PDF: the SQD numerical summary
-        // (always exactly one page) and AI Feedback Sentiment & Topic Analytics
-        // (can span several pages) — page 1 always belongs to the SQD section,
-        // every later page to AI Feedback. See public/js/pdf-repeating-header.js.
+        // Page 1 is the SQD summary, every page after that is AI Feedback Sentiment & Topic Analytics.
         const serviceLineEl = document.getElementById('cr_serviceLine1');
         const sqdHeader = {
             title: 'Client Satisfaction Measurement Survey Result',
@@ -1880,29 +1734,18 @@
             meta: 'Analyzed Feedbacks: ' + document.getElementById('cr_totalRespondents2').textContent.trim()
         };
 
-        // Letter (8.5in x 11in) portrait, matching CSPC's official print spec.
-        // html2pdf's margin array is [top, left, bottom, right] (not CSS order);
-        // top is overridden by exportRepeatingHeaderPdf to reserve space for the
-        // redrawn header.
+        // Letter portrait, matching CSPC's official print spec. Margin order is top, left, bottom, right.
         const opt = {
             margin: [0, 0.5, 0.25, 0.25],
             filename: 'CSM_Client_Report.pdf',
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollY: 0, backgroundColor: '#ffffff' },
             jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
-            // 'css' is deliberately not in `mode` (which makes `pagebreak.avoid`
-            // a no-op too, so it's dropped) — html2pdf's own CSS page-break
-            // handling was observed to duplicate content at the SQD→AI Feedback
-            // page transition once the CSS `.page-break` class and its forced
-            // break interacted badly with legacy slicing. The forced break and
-            // the signature blocks' split-avoidance are done the reliable way
-            // instead, via forcePageBreakSelectors/avoidSplitSelector below.
+            // Uses legacy pagebreak mode only, css mode duplicated content at the page transition.
             pagebreak: { mode: ['legacy'] }
         };
 
-        // Respondent count backing the SQD scorecard (page 1) — below the
-        // office's reporting minimum, the downloaded PDF gets a caution
-        // watermark so a partial count can't be mistaken for a finished result.
+        // Below the reporting minimum, the PDF gets a caution watermark so it's not mistaken for a finished result.
         const sqdRespondentCount = parseInt(document.getElementById('cr_totalRespondents1').textContent.trim(), 10) || 0;
 
         exportRepeatingHeaderPdf({
@@ -1914,23 +1757,16 @@
             getHeaderForPage: (pageNum) => (pageNum === 1 ? sqdHeader : aiHeader),
             forcePageBreakSelectors: ['#crAiFeedbackPage'],
             avoidSplitSelector: ['.sqd-signature-grid', '#crAiSignatureBlock'],
-            // Bottom edge of the SQD scorecard page (page 1) only — page label
-            // counted from the finished PDF, retiring the template's hardcoded
-            // "Page 1 of 2" for the download. The AI Feedback pages that follow
-            // don't carry this official footer.
+            // Footer only prints on the SQD scorecard page, the AI Feedback pages don't carry it.
             footer: { effectivity: 'June 2024', revision: 'Rev. 4', onPages: (pageNum) => pageNum === 1 },
-            // Unlike the footer, the caution watermark applies to every page —
-            // the low respondent count affects the whole download, not just
-            // the SQD scorecard page.
+            // Watermark applies to every page, not just the SQD scorecard.
             watermark: sqdRespondentCount < 10
                 ? { text: 'INSUFFICIENT RESPONDENTS' }
                 : undefined
         });
     }
 
-    // Section-by-section, like /report's own export — see public/js/report-csv.js
-    // for why scraping every `.report-table tr` into one flat list could not
-    // produce a file a spreadsheet can read back.
+    // Builds the CSV section by section, same approach as /report's own export.
     function downloadClientReportCSV() {
         const text = (id) => document.getElementById(id).innerText.trim();
         const office = text('cr_officeName1');

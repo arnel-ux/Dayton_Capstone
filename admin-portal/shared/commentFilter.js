@@ -1,64 +1,12 @@
-// ============================================================================
-// commentFilter.js — what is allowed to appear as a written comment in a
-// generated report, and how it is printed.
-//
-// A CQA report is a document that leaves the building: it is printed, signed
-// and filed. Three kinds of row had no business being on it, and all three
-// were reaching it:
-//
-//   1. "N/A", "none", "wala po", "-"  — a respondent declining to comment.
-//      The report's comments section is the written feedback, so a decline is
-//      not a short comment, it is the absence of one. Counting it as a row
-//      also skewed the sentiment tallies printed beside the table.
-//
-//   2. "asdasdasd", "..", "qwerty", "zzzz" — a respondent typing something to
-//      get past the field. There is no feedback in it to report.
-//
-//   3. Profanity. A real comment, genuinely submitted, and the complaint
-//      inside it is real too — so the word is never deleted and the row is
-//      never dropped. It is masked THROUGH ITS VOWELS instead
-//      ("p*t*ng*n*", "g*g*", "sh*t"): the consonants stay, which leaves the
-//      word's shape readable enough that a reader can tell which word was
-//      used and how strongly it was meant, without the page spelling it out.
-//      This applies EVERYWHERE a stored comment is shown back to staff — the
-//      signed report and /survey-records both — not the report alone. What is
-//      stored in the database is never rewritten; only what is displayed.
-//
-// WHERE THIS SITS IN THE PIPELINE
-// The AI classifier already catches (1) and (2) when it runs: analyze.py's
-// detect_junk_topic returns the "No Feedback" topic for them, and the report
-// queries drop anything with that topic (see NO_AI_RESULT_TOPIC_SQL in
-// server.js). This module is the pass that does not depend on that having
-// happened — the classifier is skipped for blank-looking comments, falls back
-// to a flat "Neutral / General Feedback" whenever the model server and Gemini
-// are both unreachable, and never ran at all on rows written before it
-// existed. Any of those three paths puts a row on the report that the
-// classifier would have caught. So the rules are checked again here, at the
-// moment the report is built, where the answer cannot depend on what a
-// background service was doing weeks ago.
-//
-// It is deliberately the CONSERVATIVE half of the classifier's rules. The
-// Python side can afford to be sharper because it has a Tagalog/Bikol
-// vocabulary list to confirm real content against first (topic_common.py's
-// _KNOWN_VOCAB_TOKENS, built from the taxonomy's own keyword hints); this
-// module has no such list, so it only fires on shapes
-// that a real sentence cannot have — every alphabetic token being a mash, a
-// run of letters with essentially no vowels in it, nothing but punctuation.
-// A borderline comment is kept. Dropping a real complaint from a quality
-// assurance report is a far worse failure than printing one odd-looking row.
-// ============================================================================
+// Decides what's allowed to appear as a written comment in a generated
+// report, and masks profanity while keeping the comment itself.
+// Filters out decline-to-comment phrases, gibberish, and stars out profanity
+// by vowel instead of dropping the whole word.
 
 // ---------------------------------------------------------------------------
 // 1. DECLINED TO COMMENT
 // ---------------------------------------------------------------------------
-// Whole-string matches only, against the normalized form below. These are
-// phrases that mean "nothing to say" and nothing else — a comment that merely
-// CONTAINS one of them ("N/A for the waiting time, but the staff were great")
-// is a real comment and is kept.
-//
-// The Filipino entries are the half that was missing. The list was English
-// only, so a respondent writing "wala po" — the ordinary way to say it here —
-// had it printed as a written comment.
+// Whole-string phrases meaning "nothing to say", checked after normalizing.
 const NO_FEEDBACK_PHRASES = new Set([
     // English
     'na', 'n/a', 'n a', 'none', 'nil', 'no comment', 'no comments',
@@ -70,11 +18,7 @@ const NO_FEEDBACK_PHRASES = new Set([
     'walang suggestion', 'mayo', 'mayo po', 'mayong comment', 'dai', 'dai po'
 ]);
 
-// Trim, lowercase, drop the punctuation people pad these with ("N/A.", "--",
-// "none...") and collapse runs of whitespace. Kept identical on both sides of
-// the wire: HAS_REAL_COMMENT_SQL in server.js is the SQL spelling of this same
-// normalization, so a row excluded by the query and a row excluded here are
-// excluded for the same reason.
+// Trims, lowercases, and strips stray punctuation for the feedback-phrase check.
 function normalizeForFeedbackCheck(text) {
     return String(text)
         .trim()
@@ -84,14 +28,13 @@ function normalizeForFeedbackCheck(text) {
         .trim();
 }
 
-// True when there is no written comment here to report: null, blank, pure
-// punctuation, or one of the decline phrases above.
+// True when there's no written comment to report: null, blank, or a decline phrase.
 function isNoFeedbackComment(text) {
     if (text === null || text === undefined) return true;
     const trimmed = String(text).trim();
     if (trimmed === '') return true;
     const stripped = normalizeForFeedbackCheck(trimmed);
-    if (stripped === '') return true; // "-", "--", "...", etc. reduce to nothing
+    if (stripped === '') return true;
     return NO_FEEDBACK_PHRASES.has(stripped);
 }
 
@@ -100,15 +43,10 @@ function isNoFeedbackComment(text) {
 // ---------------------------------------------------------------------------
 const VOWELS = new Set(['a', 'e', 'i', 'o', 'u']);
 
-// Rows of a QWERTY keyboard, used to recognize a finger dragged along one.
-// Checked in both directions, so "asdf" and "fdsa" both count.
+// Rows of a QWERTY keyboard, for spotting a finger dragged along one.
 const KEYBOARD_ROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm', '1234567890'];
 
-// Short real words that the structural rules below would otherwise condemn,
-// because they are short, vowel-poor, or both. Every one of these is a word a
-// respondent genuinely might write on its own or in a two-word comment.
-// Without this list, "ok ng serbisyo" would be three suspicious tokens and the
-// whole comment would be dropped as a mash.
+// Short real words that would otherwise get flagged as suspicious.
 const KNOWN_SHORT_WORDS = new Set([
     // Tagalog/Bikol function words — "ng" and "mga" have no vowel at all
     'ng', 'mga', 'po', 'at', 'ay', 'sa', 'ko', 'mo', 'ka', 'na', 'nya', 'niya',
@@ -122,9 +60,7 @@ const KNOWN_SHORT_WORDS = new Set([
     'cqa', 'sqd', 'id', 'hr', 'it', 'pc', 'tv', 'ac'
 ]);
 
-// A finger run along one keyboard row: consecutive keys, all in the same
-// direction. Real words essentially never do this at 4+ letters, which is why
-// the minimum is deliberately that high.
+// True if the token is a run of consecutive keys along one keyboard row.
 function isKeyboardRun(token, minLen = 4) {
     const lowered = token.toLowerCase();
     if (lowered.length < minLen) return false;
@@ -138,20 +74,7 @@ function isKeyboardRun(token, minLen = 4) {
     return false;
 }
 
-// ["asd", 2] for "asdasd", ["a", 6] for "aaaaaa", ["asdkj", 2] for
-// "asdkjasdkj"; null when the token is not one unit repeated end to end.
-// Returns the SHORTEST unit that works, so "aaaa" comes back as ["a", 4]
-// rather than ["aa", 2].
-//
-// The short sizes are the ones that need care: a 4-letter unit twice is also
-// exactly how Filipino reduplication works ("halohalo", "arawaraw",
-// "sarisari"), so the caller additionally requires a 3- or 4-letter unit to be
-// a keyboard run before condemning it. None of those three words is one.
-//
-// Units longer than 4 are searched too — "asdkjasdkj" is a 5-letter mash typed
-// twice and stopping at 4 missed it — and the caller judges those on the
-// unit's own vowel ratio instead, because a long Filipino stem is reduplicated
-// too ("bahaybahay", "tawantawan") and those are real words.
+// Finds the shortest repeating unit that makes up the whole token, if any.
 function repeatedUnit(token) {
     const lowered = token.toLowerCase();
     const half = Math.floor(lowered.length / 2);
@@ -175,12 +98,7 @@ function maxConsonantRun(lowered) {
     return best;
 }
 
-// One token that cannot be a word. Mirrors _is_suspicious_token in
-// ai_scripts/topic_common.py — the thresholds are uneven on purpose, and the
-// reason is in that file: Tagalog and Bikol reduplication is real and has to
-// survive. "mama" and "papa" are a 2-letter unit twice; "dagdag" and "pagpag"
-// are a 3-letter unit twice. Neither shape may condemn a token on repetition
-// alone, which is why a 3-letter unit additionally has to be a keyboard run.
+// True for one token that looks like gibberish rather than a real word.
 function isSuspiciousToken(token) {
     const lowered = token.toLowerCase().replace(/[^a-z]/g, '');
     if (lowered.length < 2) return false;
@@ -202,13 +120,7 @@ function isSuspiciousToken(token) {
         if (unit.length === 3 && reps >= 2 && isKeyboardRun(unit, 3)) return true;
         if (unit.length === 4 && reps >= 2 && isKeyboardRun(unit, 4)) return true;
 
-        // A longer unit typed twice, judged on whether the unit could be a
-        // word at all. Filipino reduplicates long stems as well, and those
-        // stems are built from CV/CVC syllables, so they come out at roughly
-        // 40% vowels or more — "bahay" is 2 in 5, "tawan" is 2 in 5, "sari" is
-        // 2 in 4. A mash does not: "asdkj" is 1 in 5. The cut is at 25%, which
-        // sits well clear of every real reduplication and still catches the
-        // mash.
+        // A longer unit typed twice, judged by its own vowel ratio.
         if (unit.length >= 5 && reps >= 2) {
             const unitVowels = Array.from(unit).filter(c => VOWELS.has(c)).length;
             if (unitVowels / unit.length < 0.25) return true;
@@ -218,41 +130,29 @@ function isSuspiciousToken(token) {
     return false;
 }
 
-// True when the comment as a whole carries no word in it. The two tests catch
-// different shapes, and both require the WHOLE comment to fail — one odd token
-// in an otherwise real sentence never drops the comment.
+// True when the whole comment carries no real word in it.
 function isGibberishComment(text) {
     if (text === null || text === undefined) return false;
     const stripped = String(text).trim();
-    if (stripped === '') return false; // blank is isNoFeedbackComment's job
+    if (stripped === '') return false;
 
     const letters = stripped.match(/[A-Za-z]/g) || [];
     const digits = stripped.match(/[0-9]/g) || [];
 
-    // Nothing but emoji, symbols or punctuation.
     if (letters.length === 0 && digits.length === 0) return true;
 
-    // Digits and separators only — a phone number, a date, a row of 1s.
     if (digits.length > 0 && letters.length === 0) {
         if (!stripped.replace(/[\d\s\-()+.]/g, '')) return true;
     }
 
-    // A long run of letters with essentially no vowels in it. 10 letters is
-    // high enough that no short real phrase reaches it by accident.
     if (letters.length >= 10) {
         const vowels = letters.filter(c => VOWELS.has(c.toLowerCase())).length;
         if (vowels / letters.length < 0.15) return true;
     }
 
-    // Every alphabetic token is a mash. This is the test that catches
-    // "asdasd", "qwertyuiop", "jkjkjkjk" — and the reason it is "every" and
-    // not "any" is that one unrecognized token in a real sentence (a name, an
-    // acronym, a typo) must not cost the comment its place in the report.
     const alphaTokens = (stripped.match(/[A-Za-z]+/g) || []).filter(t => t.length >= 2);
     if (alphaTokens.length > 0 && alphaTokens.every(isSuspiciousToken)) return true;
 
-    // A comment made only of single letters: "a", "x x", "q w e". There is no
-    // word in it, and the token test above skips tokens this short.
     if (alphaTokens.length === 0 && digits.length === 0 && letters.length > 0) return true;
 
     return false;
@@ -261,14 +161,10 @@ function isGibberishComment(text) {
 // ---------------------------------------------------------------------------
 // 3. PROFANITY
 // ---------------------------------------------------------------------------
-// Matched against a NORMALIZED token (see normalizeToken): lowercased,
-// accents removed, the usual character swaps undone, and repeated letters
-// collapsed — so "P U T A", "pvta", "put@", "tangináaaa" and "SHIIIIT" all
-// reduce to the same thing the list holds.
+// Matched against a normalized token: lowercased, accents removed, common
+// character swaps undone, repeated letters collapsed.
 
-// Exact matches. A token has to BE one of these, which is what keeps
-// "reputation" (which contains "puta") and "class" (which contains "ass") out
-// of it — the mistake any substring-based filter makes on its first day.
+// Exact-match profanity list.
 const PROFANITY_EXACT = new Set([
     // English
     'fuck', 'fucks', 'fucked', 'fuckin', 'fucking', 'fucker', 'fuckers',
@@ -290,87 +186,42 @@ const PROFANITY_EXACT = new Set([
     'burat', 'titi', 'pekpek', 'kantot', 'jakol', 'bayag', 'tite'
 ]);
 
-// DELIBERATELY NOT ON THE LIST, and each for the same reason — this is an
-// agricultural and polytechnic college, and these are ordinary vocabulary in
-// the offices this survey covers:
-//
-//   animal, hayop  Insults in Filipino, and also the literal subject matter
-//                  of the Animal Science department.
-//   cock           Only a vulgarity in American English; here it is a rooster.
-//   peste          An insult as "pesteng ~" (which IS listed), but on its own
-//                  it is a crop pest.
-//   leche          A swear as "letse" (listed), but "leche flan" is on the
-//                  canteen menu.
-//   bloody         A British swear, and a word a clinic comment may need.
-//
-// Masking one of these turns a legitimate complaint into asterisks, which is
-// worse than printing a mild word: the report exists to surface complaints.
+// Words deliberately left off the list because they're ordinary vocabulary
+// here (animal/hayop, cock, peste, leche, bloody).
 
-// Prefix matches, for the words that take Filipino suffixes and enclitics
-// ("gagong", "tanginamo", "putanginamo", "bwisit na bwisit"). Every entry here
-// was checked for being a prefix of an innocent word first — which is why
-// "puta" is exact-only above (it would have taken "putahe") while "putang"
-// is safe here.
+// Prefix matches, for words that take Filipino suffixes and enclitics.
 const PROFANITY_PREFIXES = [
     'putangina', 'putangna', 'putang', 'tangina', 'tangna',
     'kingina', 'kinginang', 'motherfuck', 'fuckin', 'asshol',
     'gagong', 'tarantad', 'hinayupak', 'punyet', 'pakyu'
 ];
 
-// Phrases that are only profane as a phrase — each word in them is ordinary
-// on its own, so nothing above would catch them. Written normalized and
-// space-separated; matched across adjacent tokens, so the spacing in the
-// original does not matter.
-//
-// Nothing goes in this list whose words are ALREADY caught individually. A
-// phrase masks every token in it, so listing "what the fuck" here would print
-// "**** *** **** is this" — three words gone to remove one. "fuck" is in the
-// exact list; the phrase adds nothing but collateral.
+// Phrases that are only profane together, each word being harmless alone.
 const PROFANITY_PHRASES = [
     'putang ina', 'tang ina', 'sira ulo'
 ];
 
-// Characters people substitute to slip a word past a filter, and the letters
-// they stand in for.
+// Characters people substitute for letters to slip a word past a filter.
 const LEET_MAP = {
     '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b',
     '@': 'a', '$': 's', '!': 'i', '|': 'l', '+': 't', '*': ''
 };
 
+// Lowercases, strips accents, undoes leet substitutions, and collapses
+// stretched-out repeated letters ("shiiiit" -> "shiit").
 function normalizeToken(token) {
     return token
         .toLowerCase()
-        // Strip accents ("tanginá" -> "tangina") without needing a lookup table.
         .normalize('NFD').replace(/[̀-ͯ]/g, '')
         .replace(/[0134578@$!|+*]/g, ch => (ch in LEET_MAP ? LEET_MAP[ch] : ch))
         .replace(/[^a-z]/g, '')
-        // "shiiiit" -> "shiit". Collapsed to TWO, not one, so real double
-        // letters ("assess", "letse") are left intact.
         .replace(/(.)\1{2,}/g, '$1$1');
 }
 
 // ---------------------------------------------------------------------------
 // 3b. THE SAME WORD, WITH FILIPINO AFFIXES ON IT
 // ---------------------------------------------------------------------------
-// The exact list above is a list of BASE FORMS, and Filipino does not leave a
-// word in its base form. "gagi grabing kabobohan and katangahan yan" came
-// through a real report completely unmasked: "bobo" and "tanga" are both on
-// the list, but what the respondent actually wrote was ka- + bobo + -han and
-// ka- + tanga + -han, and neither of those is the string the list holds. The
-// same gap hid "kagaguhan", "pagkabobo", "napakatanga" and "kaululan".
-//
-// So the affixes are peeled off and what is left is compared to a root. This
-// is deliberately separate from PROFANITY_PREFIXES above, which does the
-// opposite job — that list matches a word that STARTS with a profane stem
-// ("putanginamo"); this one strips a harmless wrapper off to find a profane
-// stem inside.
-//
-// The comparison against the root is EXACT, never fuzzy, and that is what
-// keeps ordinary vocabulary out of it. "katangian" — a quality, a
-// characteristic, a word this survey's own reports use — peels down to
-// "tangi", which is not "tanga" and so does not match. Anything looser here
-// would mask it, and masking a word like that in a quality assurance report is
-// a far worse failure than missing one insult.
+// Root words that count as profane once Filipino prefixes/suffixes are peeled off.
 const PROFANITY_AFFIXABLE_ROOTS = new Set([
     'bobo', 'boba', 'tanga', 'gago', 'gaga', 'gagi', 'gagu',
     'ulol', 'ulul', 'engot', 'inutil', 'hangal', 'gunggong',
@@ -378,16 +229,14 @@ const PROFANITY_AFFIXABLE_ROOTS = new Set([
     'bwisit', 'buwisit', 'punyeta'
 ]);
 
-// Prefixes a respondent actually puts on these words. '' is in the list so a
-// root carrying only a SUFFIX ("bobohan", "tangahan", "gagong") is reached too.
+// Prefixes a respondent might put on these words.
 const AFFIX_PREFIXES = [
     '', 'ka', 'pagka', 'napaka', 'pinaka', 'sobrang',
     'mag', 'nag', 'ma', 'na', 'pag', 'maka', 'naka', 'pina',
     'pang', 'mang', 'nang', 'ipag'
 ];
 
-// Suffixes, and the -ng linker. '' is here for the mirror case: a root
-// carrying only a PREFIX ("pagkabobo", "napakatanga").
+// Suffixes and the -ng linker a respondent might put on these words.
 const AFFIX_SUFFIXES = ['', 'han', 'hin', 'an', 'in', 'ng', 'g'];
 
 function hasProfaneRoot(normalized) {
@@ -397,20 +246,14 @@ function hasProfaneRoot(normalized) {
 
         for (const suffix of AFFIX_SUFFIXES) {
             if (suffix && !afterPrefix.endsWith(suffix)) continue;
-            // Bare root with no affix either side is the exact list's job —
-            // letting it through here would only match everything twice.
             if (!prefix && !suffix) continue;
 
             const root = afterPrefix.slice(0, afterPrefix.length - suffix.length);
-            // Under three letters there is no root left to recognize, only a
-            // fragment that could have come from anything.
             if (root.length < 3) continue;
 
             if (PROFANITY_AFFIXABLE_ROOTS.has(root)) return true;
 
-            // Filipino raises a final "o" to "u" in front of a suffix: "gago"
-            // + -han is "gaguhan", "ulol" + -an is "ululan". Put the "o" back
-            // before giving up, or every suffixed form of those two is missed.
+            // Filipino raises a final "o" to "u" before a suffix ("gago" -> "gaguhan").
             const restored = root.replace(/u([^u]*)$/, 'o$1');
             if (restored !== root && PROFANITY_AFFIXABLE_ROOTS.has(restored)) return true;
         }
@@ -421,21 +264,14 @@ function hasProfaneRoot(normalized) {
 function isProfaneToken(normalized) {
     if (normalized.length < 2) return false;
     if (PROFANITY_EXACT.has(normalized)) return true;
-    // A doubled letter that the collapse above left in place can still be the
-    // difference between "shiit" and "shit", so try the fully-collapsed form
-    // as well before giving up.
     const single = normalized.replace(/(.)\1+/g, '$1');
     if (PROFANITY_EXACT.has(single)) return true;
     if (PROFANITY_PREFIXES.some(prefix => normalized.startsWith(prefix))) return true;
-    // Last: the same word wearing a Filipino affix — see hasProfaneRoot.
     return hasProfaneRoot(normalized);
 }
 
-// The five vowels, plus every character that stands in for one: an accented
-// form, or one of the digit/symbol substitutions LEET_MAP already knows about
-// (0 -> o, 1 -> i, 3 -> e, 4 -> a, @ -> a, ! -> i). Consonant substitutions in
-// LEET_MAP (5 -> s, 7 -> t, 8 -> b, $ -> s, | -> l, + -> t) are deliberately
-// NOT vowels here — they are consonants written oddly, and consonants stay.
+// True for a vowel character, including accented forms and digit/symbol
+// stand-ins for vowels.
 function isVowelChar(ch) {
     const folded = ch.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     if (VOWELS.has(folded)) return true;
@@ -443,9 +279,7 @@ function isVowelChar(ch) {
     return substituted !== undefined && VOWELS.has(substituted);
 }
 
-// One profane word, starred through its vowels. Composed characters are
-// normalized to NFC first so an accented vowel is one unit to replace rather
-// than a base letter with a combining mark left dangling after it.
+// Stars out one profane word through its vowels, keeping its shape readable.
 function maskVowels(word) {
     let masked = 0;
     const out = Array.from(word.normalize('NFC'), (ch) => {
@@ -453,47 +287,22 @@ function maskVowels(word) {
         masked += 1;
         return '*';
     }).join('');
-    // Nothing to star out — see maskProfanity's note on "wtf".
     return masked > 0 ? out : '*'.repeat(word.length);
 }
 
-// Masks the vowels of every profane word and leaves the rest of the comment
-// exactly as written — "putangina" prints as "p*t*ng*n*", "shit" as "sh*t".
-//
-// Vowels rather than the whole word: the word is removed as something to READ
-// while its shape is left intact as something to SEE. A reader of a signed
-// report can tell which word was used and how strong the complaint behind it
-// was, which is information the report exists to carry; a solid run of
-// asterisks throws that away along with the word. Length is preserved either
-// way, so the sentence never reads as quietly missing a piece.
-//
-// "Vowel" here means what a reader would call one, not just the five ASCII
-// letters: accented vowels ("tanginá") and the digits and symbols people
-// substitute for them ("b0b0", "t@nga", "sh1t") are all starred out too.
-// Leaving a substitution visible would defeat the point — the word would still
-// be perfectly legible in exactly the form its writer chose.
-//
-// A profane word with NO vowel to take ("wtf", "stfu") is masked whole
-// instead. That is the one case where the vowel rule has nothing to act on,
-// and printing the word untouched is not an outcome this function may produce.
-//
-// Returns { text, maskedCount } so the caller can log or count how much of a
-// reporting period needed masking without re-scanning the text.
+// Masks the vowels of every profane word in a comment and leaves the rest as written.
 function maskProfanity(text) {
     if (text === null || text === undefined) return { text: '', maskedCount: 0 };
     const original = String(text);
 
-    // Split keeping the separators, so the original spacing and punctuation
-    // can be put back exactly: even indices are word tokens, odd are the gaps
-    // between them.
+    // Split keeping separators so spacing/punctuation can be put back exactly.
     const parts = original.split(/([^\p{L}\p{N}@$*!|+]+)/u);
     const isWord = i => i % 2 === 0 && parts[i].length > 0;
 
     const normalized = parts.map((part, i) => (isWord(i) ? normalizeToken(part) : null));
     const doMask = new Array(parts.length).fill(false);
 
-    // Pass 1 — phrases, first, because a phrase can span tokens that are each
-    // innocent on their own ("tang" + "ina").
+    // Pass 1: phrases, since a phrase can span tokens that are innocent alone.
     const wordIndices = [];
     for (let i = 0; i < parts.length; i++) if (isWord(i) && normalized[i]) wordIndices.push(i);
 
@@ -510,7 +319,7 @@ function maskProfanity(text) {
         }
     }
 
-    // Pass 2 — single words.
+    // Pass 2: single words.
     for (const i of wordIndices) {
         if (!doMask[i] && isProfaneToken(normalized[i])) doMask[i] = true;
     }
@@ -532,13 +341,7 @@ function containsProfanity(text) {
 // ---------------------------------------------------------------------------
 // THE ONE CALL A REPORT MAKES
 // ---------------------------------------------------------------------------
-// Takes a raw stored comment, answers whether it belongs on a report and, if
-// it does, hands back the text to print. Reports go through this rather than
-// calling the three rules separately, so a report added later cannot end up
-// applying two of the three.
-//
-//   { include: false }                      -> leave the row off entirely
-//   { include: true, text, wasMasked }      -> print `text`, never the original
+// Takes a raw comment and decides whether it belongs on a report, returning the text to print.
 function prepareReportComment(text) {
     if (isNoFeedbackComment(text)) return { include: false, reason: 'no-feedback', text: '', wasMasked: false };
     if (isGibberishComment(text)) return { include: false, reason: 'gibberish', text: '', wasMasked: false };

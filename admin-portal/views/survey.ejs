@@ -3,7 +3,7 @@
 <head>
     <%- include('layout/header') %>
     <style>
-        /* Custom Styles for Survey Management — palette matches the Survey Records page. */
+        /* Survey Management styles, palette matches the Survey Records page. */
         :root {
             --primary-indigo: #251d3a;
             --primary-indigo-hover: #2a2550;
@@ -99,9 +99,7 @@
             padding: var(--sp-2) var(--sp-4);
             color: white;
         }
-        /* Bootstrap's .form-check floats the switch into a left padding this box
-           overrides, so it sat flush against the border and the label. Laid out
-           as a flex row with an explicit gap instead. */
+        /* Laid out as a flex row with a gap instead of Bootstrap's default float. */
         .archived-toggle { display: flex; align-items: center; gap: 12px; padding-left: var(--sp-4); }
         .archived-toggle .form-check-input { float: none; margin: 0; flex: 0 0 auto; }
         .archived-toggle .form-check-label { font-size: 0.82rem; }
@@ -175,7 +173,7 @@
         }
         html[data-bs-theme="dark"] .badge-archived { filter: brightness(0.92) saturate(0.9); }
 
-        /* --- Icon-only action buttons, tooltip reveals the action on hover/focus --- */
+        /* Icon-only action buttons, tooltip reveals the action on hover or focus. */
         .action-cell { text-align: right; white-space: nowrap; }
         .btn-icon {
             width: 32px;
@@ -413,15 +411,13 @@
             const data = await response.json();
 
             if (data.success) {
-                window.location.reload(); // I-refresh ang page para mai-render ang binago mula sa DB safely
+                window.location.reload(); // Refreshes the page so the DB changes show up
             } else {
                 await AppAlert.error("Nagkaproblema sa pag-save sa database.");
             }
         } catch(err) {
             console.error(err);
-            // "Database Error." was wrong twice over: the request never
-            // reached the database (it never left the browser), and offline
-            // it blamed the server for the user's own lost connection.
+            // Uses a real connection error message instead of a generic database one.
             await AppAlert.fromError(err, "Hindi na-save ang pagbabago. Pakisubukan ulit.");
         }
     }
@@ -449,9 +445,7 @@
             }
         } catch(err) {
             console.error(err);
-            // "Database Error." was wrong twice over: the request never
-            // reached the database (it never left the browser), and offline
-            // it blamed the server for the user's own lost connection.
+            // Uses a real connection error message instead of a generic database one.
             await AppAlert.fromError(err, "Hindi na-save ang pagbabago. Pakisubukan ulit.");
         }
     }
@@ -479,9 +473,7 @@
             }
         } catch(err) {
             console.error(err);
-            // "Database Error." was wrong twice over: the request never
-            // reached the database (it never left the browser), and offline
-            // it blamed the server for the user's own lost connection.
+            // Uses a real connection error message instead of a generic database one.
             await AppAlert.fromError(err, "Hindi na-save ang pagbabago. Pakisubukan ulit.");
         }
     }

@@ -1,61 +1,30 @@
 """
-Junk/no-feedback detection for survey comments — split out of topic_common.py
-on 2026-09-28 into its own module so it's easy to locate on its own, separate
-from the AI taxonomy (which stays in topic_common.py, since gemini_model.py
-reads it directly to build Gemini's prompt).
+Checks for blank, nonsense, or no feedback comments before anything gets
+sent to Gemini. This runs first for every comment, online or offline.
+Not related to shared/commentFilter.js, which does similar checks on the
+Node side when a report is generated.
 
-NOTE: this is the Python, pre-AI junk detector (blanks, "N/A"-style
-placeholders, emoji/symbol-only text, keyboard mash, greeting-only comments)
-that runs BEFORE Gemini is ever called, for every comment, online and offline
-alike. It is unrelated to admin-portal/shared/commentFilter.js, which is a
-separate JS module that re-checks these same kinds of rules (plus profanity
-masking) at REPORT-GENERATION time on the Node side, as a defense-in-depth
-check independent of whether this Python classifier ever ran on a given row
-— see that file's own comment for why both exist.
-
-Public API: is_no_feedback(text), detect_junk_topic(text),
-UNCLASSIFIED_NO_FEEDBACK. Everything else here is a private implementation
-detail.
+Main functions to use: is_no_feedback(text) and detect_junk_topic(text).
 """
 import re
 
 from topic_common import TOPIC_ITEM_KEYWORDS
 
-# ---------------------------------------------------------------------------
-# NO-FEEDBACK DETECTION — must run BEFORE any AI classification.
-# A blank comment or an explicit "nothing to say" placeholder ("N/A", "none",
-# "no comment", ...) has no actual content to classify — forcing it through
-# the classification pipeline previously produced a fabricated "General
-# Feedback / Neutral" result, which reads to an admin as a real (if generic)
-# opinion rather than "this respondent didn't write anything." Callers
-# (analyze.py, model_server.py, server.js's analyzeComment) must check this
-# FIRST and short-circuit to no classification at all (topic=None,
-# sentiment=None) — see each caller for how that maps to the database (NULL,
-# not a string).
-# ---------------------------------------------------------------------------
+# Comments like "N/A", "none", or blank ones mean the person had nothing
+# to say. These should never get a fake topic or sentiment.
 NO_FEEDBACK_PHRASES = {
     "na", "n/a", "none", "nil", "no comment", "no comments", "not applicable",
 }
 
 
 def is_no_feedback(text):
-    """
-    True for a blank/whitespace-only comment, or one of the common "nothing
-    to say" placeholders in any case/spacing and with or without periods or
-    dashes — "N/A", "n/a", "NA", "N.A.", "None", "NONE", "nil", "Nil",
-    "No Comment", "not applicable", "-", "--", "..." all normalize to a
-    match here. Anything with real content (even a single real word) is not
-    a no-feedback comment, however short.
-    """
+    # True for blank comments or common placeholders like N/A, none, or
+    # no comment, in any spacing or capitalization.
     if text is None:
         return True
     trimmed = str(text).strip()
     if trimmed == "":
         return True
-    # Dashes/periods stripped before comparing: "N.A." -> "na", "--"/"..." -> ""
-    # (caught by the blank check below), without touching real words that
-    # merely contain a period/dash elsewhere (e.g. "wi-fi", "e.g." in a real
-    # sentence never reduce to one of the exact phrases below).
     stripped = re.sub(r'[.\-]', '', trimmed.lower())
     stripped = re.sub(r'\s+', ' ', stripped).strip()
     if stripped == "":
@@ -63,47 +32,16 @@ def is_no_feedback(text):
     return stripped in NO_FEEDBACK_PHRASES
 
 
-# ---------------------------------------------------------------------------
-# HYPHEN-TOLERANT MATCHING — used by the greeting-phrase check below
-# (_is_greeting_or_particle_only), which needs to match a phrase like "good
-# morning" regardless of exact spacing/hyphenation.
-# ---------------------------------------------------------------------------
 def _kw_pattern(kw):
+    # Lets a phrase like good morning match even if it's spaced or
+    # hyphenated differently.
     escaped = re.escape(kw).replace('\\-', '[- ]?')
     return r'\b' + escaped + r'\b'
 
 
-# ---------------------------------------------------------------------------
-# NO-MEANINGFUL-FEEDBACK DETECTION (pure numbers / symbols / emoji /
-# keyboard-mash gibberish / greeting-only text) — a deterministic pre-check
-# so these get a clear, honest "No Feedback - No Feedback" tag INSTANTLY,
-# without ever spending a Gemini call on content that has no real opinion to
-# classify, and without it being counted as genuine (if generic) "General
-# Feedback" — that label means "meaningful feedback that doesn't fit a more
-# specific topic," not "the classifier didn't understand this."
-#
-# This is the ONLY keyword-based check any comment goes through, online and
-# offline alike — everything that clears this gate goes straight to Gemini
-# with no keyword matching at all.
-#
-# Order of checks:
-#   1. Known-vocabulary guard — if a token in the comment is itself a real
-#      taxonomy keyword (see _collect_known_vocab_tokens/_KNOWN_VOCAB_TOKENS
-#      below), it is never flagged as junk on letter-shape alone (e.g. a bare
-#      "CR" comment is a genuine, if terse, Restroom-topic keyword — two
-#      letters, zero vowels) — see _is_suspicious_token's own check for this.
-#   2. Numbers-only / symbols-only.
-#   3. Greeting/courtesy-particle-only ("Hello po", "Hi", "Hi po", "po po").
-#   4. Whole-comment vowel-ratio check (gibberish heuristic, kept as a
-#      secondary net for junk spread across multiple short tokens).
-#   5. Per-token check: every alphabetic token (len>=2) is "suspicious"
-#      (zero vowels, or len>=8 with a consonant run>=4 — no real
-#      English/Tagalog/Taglish word looks like that) and there's at least one
-#      such token.
-# Anything with a real recognizable word anywhere in it returns None and
-# falls through to the normal Gemini path — this is deliberately conservative
-# in the direction of keeping real feedback classified normally.
-# ---------------------------------------------------------------------------
+# The rest of this file catches junk like numbers only, symbols only,
+# keyboard mashing, or a comment that's just a greeting. If a comment
+# passes all these checks it gets sent to Gemini like normal.
 UNCLASSIFIED_NO_FEEDBACK = "No Feedback - No Feedback"
 
 _GIBBERISH_MIN_LETTERS = 10
@@ -123,12 +61,8 @@ COURTESY_PARTICLES = {"po", "opo", "naman", "na", "ba", "lang", "sana", "nga"}
 
 
 def _collect_known_vocab_tokens():
-    """
-    Every single-word (no-space) token used anywhere in topic_common's
-    TOPIC_ITEM_KEYWORDS, lowercased. Used as a safety net so a short, real
-    keyword (e.g. "cr", "id") is never treated as gibberish purely because it
-    happens to have an unusual letter shape.
-    """
+    # Grabs every real word already used in the topic list, so a short
+    # real word like cr or id never gets mistaken for gibberish.
     tokens = set()
 
     def add_from(keyword_list):
@@ -147,13 +81,8 @@ _KNOWN_VOCAB_TOKENS = _collect_known_vocab_tokens()
 
 
 def _is_greeting_or_particle_only(stripped_text):
-    """
-    True only if the text contains at least one real greeting (word or
-    phrase) AND nothing besides that greeting and courtesy particles
-    ("po", "naman", ...) — e.g. "Hello po", "Hi", "Good morning po". A
-    comment with no greeting at all (even if every word happens to be a bare
-    particle, or a real greeting followed by real feedback) returns False.
-    """
+    # True only if the whole comment is just a greeting, maybe with a
+    # word like po or naman attached, and nothing else.
     lowered = stripped_text.lower()
     found_greeting = False
     for phrase in GREETING_PHRASES:
@@ -172,23 +101,15 @@ def _is_greeting_or_particle_only(stripped_text):
     return found_greeting and not remaining_words
 
 
-# The three QWERTY rows. Every check above is a letter-SHAPE heuristic (vowel
-# ratio, consonant runs), and the most common junk a respondent types slips
-# straight through them: "asdf" and "qwerty" are vowel-rich, and "asdasd" or
-# "aaaaaa" are perfectly pronounceable. Those are caught structurally instead
-# -- by where the letters sit on the keyboard, and by whether the token is one
-# short unit stamped out over and over.
+# Used to catch keyboard mashing like asdf or qwerty that a vowel check
+# alone would miss.
 _KEYBOARD_ROWS = ("qwertyuiop", "asdfghjkl", "zxcvbnm")
 _KEYBOARD_RUN_MIN_LEN = 4
 
 
 def _is_keyboard_run(token, min_len=_KEYBOARD_RUN_MIN_LEN):
-    """
-    True when every letter of the token lies on ONE keyboard row in an
-    unbroken left-to-right or right-to-left run: "asdf", "qwerty", "zxcvbnm",
-    "lkjh". Real words essentially never do this at 4+ letters, which is why
-    the default minimum is deliberately that high.
-    """
+    # True if every letter sits in a row on the keyboard, like asdf or
+    # qwerty. Real words almost never look like this.
     lowered = token.lower()
     if len(lowered) < min_len:
         return False
@@ -203,16 +124,9 @@ def _is_keyboard_run(token, min_len=_KEYBOARD_RUN_MIN_LEN):
 
 
 def _repeated_unit(token):
-    """
-    ("asd", 2) for "asdasd", ("a", 6) for "aaaaaa", ("asdf", 2) for "asdfasdf";
-    None when the token is not one short unit repeated end to end.
-
-    Units run to 4 letters because "asdfasdf" is one of the most common mashes
-    there is -- but a 4-letter unit is also exactly how Filipino reduplication
-    works ("halohalo", "arawaraw", "sarisari"), so the caller additionally
-    requires a 4-letter unit to be a keyboard run before condemning it. None of
-    those three words is one.
-    """
+    # Finds a short chunk that repeats to make the whole word, like
+    # asdasd or aaaaaa. Filipino words like halohalo repeat too, so this
+    # alone isn't enough to call something junk.
     lowered = token.lower()
     for size in (1, 2, 3, 4):
         if len(lowered) < size * 2 or len(lowered) % size:
@@ -235,6 +149,7 @@ def _max_consonant_run(lowered_letters):
 
 
 def _is_suspicious_token(token):
+    # Checks one word for signs it isn't a real word at all.
     if token.lower() in _KNOWN_VOCAB_TOKENS:
         return False
     letters = [c for c in token if c.isalpha() and c.isascii()]
@@ -247,7 +162,6 @@ def _is_suspicious_token(token):
     if len(lowered) >= _SUSPICIOUS_TOKEN_MIN_LEN and _max_consonant_run(lowered) >= _SUSPICIOUS_TOKEN_MIN_CONSONANT_RUN:
         return True
 
-    # Straight keyboard mash: "asdf", "qwertyuiop", "zxcvbnm".
     if _is_keyboard_run(lowered):
         return True
 
@@ -255,16 +169,8 @@ def _is_suspicious_token(token):
     if repeated:
         unit, reps = repeated
         unit_has_vowel = any(c in _VOWELS for c in unit)
-        # The thresholds below are deliberately uneven, because Tagalog/Bikol
-        # reduplication is real and must survive: "mama"/"papa" are a 2-letter
-        # unit twice, and "dagdag"/"pagpag" a 3-letter unit twice. So neither
-        # shape may condemn a token on repetition alone.
-        #   - a 1-2 letter unit needs 4+ repetitions ("aaaaaa", "tatatata"), or
-        #     3+ when the unit has no vowel to form a syllable with ("ghghgh")
-        #     or is itself adjacent keys ("opopop");
-        #   - a 3- or 4-letter unit counts at 2 repetitions only when the unit
-        #     is itself a keyboard run ("asdasd", "asdfasdf"), which "dagdag"
-        #     and "halohalo" are not.
+        # These thresholds are set so real reduplicated words like mama
+        # or dagdag never get flagged just for repeating.
         if len(unit) <= 2 and reps >= 4:
             return True
         if len(unit) <= 2 and reps >= 3 and (not unit_has_vowel or _is_keyboard_run(unit, 2)):
@@ -278,13 +184,12 @@ def _is_suspicious_token(token):
 
 
 def detect_junk_topic(text):
-    """
-    Returns UNCLASSIFIED_NO_FEEDBACK, or None (not junk — classify normally
-    via Gemini). Called before Gemini is ever invoked, for every comment.
-    """
+    # Returns a junk label if the comment is blank looking, symbols only,
+    # a greeting only, or gibberish. Otherwise returns None so it goes
+    # on to Gemini as usual.
     stripped = text.strip()
     if not stripped:
-        return None  # blank comments are handled separately upstream
+        return None
 
     letters = [c for c in stripped if c.isalpha() and c.isascii()]
     digits = [c for c in stripped if c.isdigit()]
@@ -295,8 +200,6 @@ def detect_junk_topic(text):
             return UNCLASSIFIED_NO_FEEDBACK
 
     if not letters and not digits:
-        # Something is there (checked non-empty above) but it's not a
-        # letter or a digit — pure emoji/symbols/punctuation.
         return UNCLASSIFIED_NO_FEEDBACK
 
     if letters and _is_greeting_or_particle_only(stripped):

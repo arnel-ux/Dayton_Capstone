@@ -5,19 +5,9 @@
     <link rel="stylesheet" href="/css/auth.css">
     <link rel="stylesheet" href="/css/offline-pill.css">
     <style>
-        /* ------------------------------------------------------------------
-           /login only. Everything shared with the other auth pages — backdrop,
-           wrapper, card, fields, buttons, notices, and the density ladder that
-           keeps these pages inside the fold — lives in /css/auth.css. Only the
-           three things this page alone has are here: the reCAPTCHA widget, the
-           Login/Register switch, and offline mode.
-           ------------------------------------------------------------------ */
+        /* Styles only used on this page. Shared auth page styles live in /css/auth.css. */
 
-        /* ---- reCAPTCHA ----
-           Google's checkbox widget is a fixed 304x78px iframe — wider than the
-           card's content area on every phone. Scaling it down and shrinking its
-           layout box by the same factor keeps it inside the card instead of
-           poking out past the edge. */
+        /* Google's reCAPTCHA iframe is wider than the card on phones, so we scale it down to fit. */
         @media (max-width: 480px) {
             .g-recaptcha {
                 transform: scale(0.85);
@@ -27,10 +17,7 @@
             }
         }
 
-        /* Narrowest phones (320-375px): at 0.85 the widget can still run past
-           the card's content width once the card itself has shrunk — measured
-           as low as ~226px on a 320px-wide viewport. Same iframe, smaller box;
-           none of Google's own widget text is hidden. */
+        /* Even smaller scale for narrow phones so the widget still fits the card. */
         @media (max-width: 375px) {
             .g-recaptcha {
                 transform: scale(0.74);
@@ -40,10 +27,7 @@
             }
         }
 
-        /* The tightest combinations left — a 360x640-class handset, or a browser
-           window dragged very short. The widget is Google's, so the only lever
-           is its scale; below this it stops being comfortably tappable, which is
-           why the ladder ends here. */
+        /* Smallest scale we use for the widget on very short or narrow screens. */
         @media (max-height: 680px), (max-width: 360px) {
             .g-recaptcha {
                 transform: scale(0.64);
@@ -53,13 +37,7 @@
             }
         }
 
-        /* ---- Login / Register switch ----
-           This one card serves two flows, so the control has to read as a
-           SWITCH (a track with a sliding thumb) rather than as two plain
-           buttons: the thing a first-time visitor must grasp instantly is that
-           Register is this same card in a different mode, not another page they
-           are being sent off to. Sized in rem/% only, so the same markup holds
-           from a 320px phone up to the desktop card. */
+        /* Login/Register toggle styled as a sliding switch instead of two buttons. */
         .auth-switch {
             position: relative;
             display: grid;
@@ -71,11 +49,7 @@
             border-radius: 50px;
         }
 
-        /* Thumb width is calc(50% - 4px), so translateX(100%) — i.e. by its OWN
-           width — lands it exactly on the right half's inset position.
-           Percentage-based, so it stays correct at every card width.
-           Register is the FIRST slot (the default state), so it is Login that
-           slides the thumb to the right half. */
+        /* The thumb slides to the right half when Login is active. */
         .auth-switch-thumb {
             position: absolute;
             top: 4px;
@@ -93,7 +67,7 @@
 
         .auth-switch-btn {
             position: relative;
-            z-index: 1; /* above the thumb, so the label stays readable */
+            z-index: 1; /* keeps label above the thumb */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -102,7 +76,7 @@
             border: none;
             border-radius: 50px;
             padding: 0.5rem 0.4rem;
-            min-height: 40px; /* comfortable tap target on a phone */
+            min-height: 40px; /* comfortable tap target */
             font-size: var(--fs-xs);
             font-weight: 700;
             letter-spacing: var(--tr-caps);
@@ -113,17 +87,10 @@
         .auth-switch-btn[aria-selected="true"] { color: #ffffff; }
         .auth-switch-btn:focus-visible { outline: 2px solid #ffcc00; outline-offset: 2px; }
 
-        /* Panels swap with .d-none — no absolute positioning, so the card's
-           height follows whichever panel is showing instead of being pinned to
-           the taller one. */
+        /* Panels swap with .d-none so the card height follows whichever one is showing. */
         .auth-panel { animation: fadeSlideUp 0.35s ease-out both; }
 
-        /* ---- Register panel ----
-           Deliberately not a set of name/email/password fields: an account is
-           only ever created off an email Google has actually verified (see
-           /auth/google/callback -> /complete-google-registration in server.js),
-           so this panel explains that the email step comes first and then starts
-           it. An email field here would look like it registered something. */
+        /* Register panel has no form fields, it just explains the Google email step and starts it. */
         .reg-emails {
             display: flex;
             flex-wrap: wrap;
@@ -179,8 +146,7 @@
         .btn-register-google:focus-visible { outline: 2px solid #ffcc00; outline-offset: 2px; }
         .btn-register-google.disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 
-        /* White pill behind Google's multicoloured G — the raw logo on a navy
-           button loses its blue stroke entirely. */
+        /* White pill behind Google's G logo so it stays visible on the navy button. */
         .btn-register-google .g-badge {
             display: inline-flex;
             align-items: center;
@@ -210,18 +176,7 @@
             text-decoration: underline;
         }
 
-        /* ---- Offline layout ----
-           The online fold fits EXACTLY (see the density ladder in auth.css), and
-           offline adds the pill (~34px) and the "Take Survey Offline" button
-           (~72px) on top of it. Rather than compressing everything further,
-           offline hides the blocks that genuinely CANNOT work with zero network
-           — the reCAPTCHA never loads, the password check needs the server, and
-           /auth/google (for signing in AND for registering) needs the redirect.
-           That frees far more height than the offline extras take, so the
-           offline card is shorter than the online one and the fold stays clear.
-           Everything here is keyed on a class toggled by the same
-           navigator.onLine listener as the pill — nothing is removed, only
-           hidden, so the form comes straight back when connectivity returns. */
+        /* Offline hides the blocks that need a network (form, google button, recaptcha) so the card stays short. Just hidden, not removed, so it all comes back when online. */
         body.is-offline #loginForm,
         body.is-offline .divider-or,
         body.is-offline #googleSignInBtn,
@@ -231,25 +186,16 @@
             display: none !important;
         }
 
-        /* Both of these exist to explain why SIGNING IN is currently blocked —
-           one for an unresolved previous-session logout, one for a server that
-           isn't answering. Offline the sign-in form is gone entirely and
-           #offlineLoginNotice already says why, so leaving them visible stacked
-           a second and third amber box saying "You're offline…" above it.
-           Hidden in CSS only, never cleared: the pending-logout guard re-runs
-           attempt() on the 'online' event. */
+        /* Hide these while offline since #offlineLoginNotice already covers it and the form is gone anyway. */
         body.is-offline #pendingLogoutNotice,
         body.is-offline #serverUnavailableNotice {
             display: none !important;
         }
 
-        /* No form under it, so the button is the card's last element — its mb-3
-           would leave a dangling gap above the card's bottom padding. */
+        /* Removes the bottom margin since this button is the last element in the card offline. */
         body.is-offline #offlineSurveyBtn { margin-bottom: 0 !important; }
 
-        /* Offline hides the form, so the card has height to spare — spend it on
-           breathing room and larger type instead of the tight online density.
-           Scoped to .is-offline; the online layout is untouched. */
+        /* Offline card has extra height to spare, so give it more spacing and larger type. */
         body.is-offline .card-custom h4 { font-size: 1.35rem; margin-bottom: 0.4rem; }
         body.is-offline .card-custom .divider-soft { margin: 0.5rem auto 0.7rem; }
         body.is-offline #cardSubtitle { display: block; font-size: 0.95rem; margin-bottom: 1rem; }
@@ -262,14 +208,7 @@
         body.is-offline #offlineStepsGuide .auth-step p { font-size: 0.95rem; line-height: 1.5; }
         body.is-offline #offlineSurveyBtn { font-size: 1.05rem; padding-block: 0.85rem; min-height: 54px; }
 
-        /* The home button is bottom-centre at every size and in both states now
-           (see /css/auth.css), so the overrides that used to pull it back down
-           here for the offline layout are gone — there is nothing left to undo. */
-
-        /* Register tab on a phone: the card sits well above the fold with room
-           to spare, so enlarge the logo and type. Scoped with :has() to the
-           Register panel being visible, so the Login tab (reCAPTCHA, tighter
-           fold) and the offline layout keep their own sizing. */
+        /* Register tab on a phone has room to spare, so enlarge the logo and type. Scoped to when the Register panel is visible. */
         @media (max-width: 480px) {
             body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) h4 { font-size: 1.35rem; }
             body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .divider-soft { margin: 0.5rem auto 0.6rem; }
@@ -285,20 +224,14 @@
             body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .btn-register-google { font-size: 1rem; min-height: 52px; }
         }
 
-        /* One header size for every state of the auth card (Login tab, Register
-           tab, offline) and every screen size, so the title, subtitle and
-           Login/Register switch never change size when the tab or connection
-           changes. The `body .card-custom` prefix outranks the per-breakpoint
-           trims in auth.css and above. */
+        /* Keeps the header the same size across every tab and connection state. */
         body .card-custom h4 { font-size: 1.35rem; margin-bottom: 0.4rem; }
         body .card-custom .divider-soft { margin: 0.5rem auto 0.6rem; }
         body .card-custom #cardSubtitle { display: block; font-size: 0.95rem; margin-bottom: 0.8rem; }
         body .card-custom .auth-switch { margin-bottom: 0.8rem; }
         body .card-custom .auth-switch-btn { font-size: 0.9rem; min-height: 40px; }
 
-        /* Register tab on desktop: same idea as the phone block above — larger
-           type for the steps and the sign-up button. Scoped to the visible
-           Register panel so the Login tab is untouched. */
+        /* Register tab on desktop gets larger type for the steps and sign-up button. */
         @media (min-width: 768px) {
             body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .auth-steps { padding: 1.1rem 1.2rem; margin-bottom: 1.1rem; }
             body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .auth-steps-title { font-size: 0.9rem; margin-bottom: 0.8rem; }
@@ -308,12 +241,11 @@
             body:not(.is-offline) .card-custom:has(#registerPanel:not(.d-none)) .btn-register-google { font-size: 1.05rem; min-height: 54px; }
         }
 
-        /* ---- Fold trims for the two step lists ---- */
+        /* Fold trims for the two step lists */
         @media (max-width: 480px) {
             .auth-switch { margin-bottom: 0.7rem; }
             .auth-switch-btn { font-size: 0.76rem; letter-spacing: 0.5px; }
-            /* Side by side, each of these two labels wraps to three cramped
-               lines on a phone — full width reads better. */
+            /* Full width reads better than wrapping these two labels on a phone. */
             .reg-email-chip { font-size: 0.7rem; flex-basis: 100%; }
             .reg-emails { gap: 0.3rem; margin-bottom: 0.55rem; }
             .auth-steps { padding: 0.65rem 0.7rem; margin-bottom: 0.7rem; }
@@ -322,13 +254,8 @@
             .btn-register-google { font-size: 0.88rem; }
         }
 
-        /* Same "short viewport OR phone" pairing as /css/auth.css — see the
-           note there on why height alone was not enough. */
         @media (max-height: 900px), (max-width: 480px) {
-            /* The steps are the point of the Register panel and stay; the
-               footnote is reassurance, and it is the one block here that can go
-               when the fold gets tight — the same trade the rest of the card's
-               short-viewport rules make. */
+            /* Steps stay since they're the point of the panel, but the footnote can go when space is tight. */
             .auth-steps-foot { display: none; }
             .auth-steps { padding: 0.6rem 0.7rem; margin-bottom: 0.55rem; }
             .auth-step p { font-size: 0.76rem; }
@@ -344,33 +271,19 @@
             .auth-switch-btn { min-height: 30px; }
             .reg-emails { margin-bottom: 0.45rem; }
             .btn-register-google { min-height: 38px; padding-block: 0.45rem; }
-            /* This card carries the most of any auth page — switch, two fields,
-               reCAPTCHA, two buttons — so the last few pixels come out of the
-               spacing between them rather than out of any control. */
+            /* Trims spacing between elements rather than shrinking any control further. */
             .card-custom h4 { font-size: 0.9rem; }
             .card-custom .divider-soft { margin: 0.2rem auto 0.25rem; }
             .field-group { margin-bottom: 0.25rem; }
-            /* "Sign in to your account" / "Sign up first with your CSPC or
-               personal email" — the switch sitting directly beneath it already
-               says which of the two modes you are in, so at this size the line
-               is the most repeated thing on the card and the least missed. */
+            /* Hidden here since the switch below it already shows which mode is active. */
             #cardSubtitle { display: none; }
         }
-        /* Smallest phones — narrow (<=360px) or small-and-short. The two email
-           chips stack full-width here, two rows for a point step 1 makes in the
-           same breath ("your CSPC email or a personal email"). They are the
-           cheapest thing on the panel to drop and the only one that is a pure
-           restatement. */
+        /* Smallest phones drop the email chips since step 1 already says the same thing. */
         @media (max-width: 360px), (max-width: 480px) and (max-height: 700px) {
             .reg-emails { display: none; }
         }
 
-        /* Short desktop windows — see the matching tiers at the foot of
-           /css/auth.css. The widget is the most obvious casualty of the phone
-           trims on a wide screen: at 64% it renders as a fuzzy miniature beside
-           full-size inputs. There is width to spare here, so it goes back to the
-           size Google draws it at — ~28px of what those tiers reclaim, spent on
-           the one element that actually looked broken. */
+        /* Short desktop windows have room, so the recaptcha widget goes back to full size. */
         @media (min-width: 768px) and (max-height: 820px) {
             .g-recaptcha {
                 transform: none;
@@ -382,9 +295,7 @@
         }
 
         @media (min-width: 768px) and (max-height: 700px) {
-            /* The switch keeps its full 4px track and a real tap height even in
-               the tightest desktop tier — it is the control that tells a new
-               visitor Register exists, and a squashed one reads as a label. */
+            /* Keeps the switch at a real tap height even in the tightest tier. */
             .auth-switch { margin-bottom: 0.7rem; padding: 4px; }
             .auth-switch-thumb { top: 4px; left: 4px; bottom: 4px; width: calc(50% - 4px); }
             .auth-switch-btn { min-height: 38px; font-size: 0.74rem; }
@@ -415,22 +326,7 @@
             .btn-register-google { min-height: 44px; padding-block: 0.6rem; }
         }
 
-        /* ---- Desktop breathing room for "How registration works" ----
-           The three steps inherit a rhythm that is sized for a phone fold, and
-           on a wide screen that reads as one dense block: the numbers, the
-           lines and the panel edge all sit a couple of pixels apart. The air
-           goes back INSIDE the block — padding, the gap after the heading, the
-           gap between steps and the line-height — while the outer
-           margin-bottom moves only slightly, so the button under it and the
-           fixed home button keep the clearance the density ladder gives them.
-
-           Bounded by min-width: 768px (no phone or tablet sees it) and split by
-           height for the same reason every tier above is: a 1366x768 laptop has
-           no pixels to spare, so tier 1 (<=700px) is deliberately left exactly
-           as it was. Each tier below adds only what its own budget allows, and
-           the Register panel is the shorter of the two panels anyway — it has
-           no reCAPTCHA, no fields and no second button — so this spends slack
-           the fold already had rather than borrowing from it. */
+        /* Adds breathing room to the registration steps on desktop, scaled by how much height is available. */
         @media (min-width: 768px) and (min-height: 701px) and (max-height: 780px) {
             .reg-emails { margin-bottom: 0.7rem; }
             .auth-steps { padding: 0.85rem 0.9rem; margin-bottom: 0.9rem; }
@@ -474,8 +370,7 @@
 
     <div class="login-wrapper">
 
-        <!-- Above the header, centred: the first thing in the column, so it is
-             the first thing read and nothing can sit on it. -->
+        <!-- First thing in the column, above the header. -->
         <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection.">
             <span class="dot"></span><span class="label">Viewing Offline</span>
         </span>
@@ -484,11 +379,7 @@
             <h1 class="main-title">Office Of Center For Quality Assurance (CQA)</h1>
         </div>
 
-        <!-- The gap between the heading and the card. An element rather than a
-             margin because it has to GROW into spare space and STOP at a cap —
-             see .auth-gap in /css/auth.css for why a plain margin (too tight on
-             a roomy screen) and an auto margin (too loose on a short card)
-             each got one of those two halves wrong. Presentational only. -->
+        <!-- Flexible gap between the heading and the card, grows with space but caps out. Presentational only. -->
         <div class="auth-gap" aria-hidden="true"></div>
 
         <div class="card-custom">
@@ -500,12 +391,7 @@
                 <p class="text-muted text-xsmall mb-0" id="cardSubtitle">Sign up first with your CSPC or personal email</p>
             </div>
 
-            <!-- Blocks starting a NEW login while an old session's server-
-                 side logout is still unresolved — see the race condition
-                 explained on guardLoginAgainstPendingLogout() below. Reuses
-                 the same .offline-login-notice/.notice-retry-btn styling as
-                 #serverUnavailableNotice (an existing reusable pattern, not
-                 a new one) rather than introducing another notice design. -->
+            <!-- Blocks a new login while an old session's logout is still unresolved. -->
             <div id="pendingLogoutNotice" class="offline-login-notice d-none">
                 <i id="pendingLogoutNoticeIcon" class="fas fa-hourglass-half"></i>
                 <span id="pendingLogoutNoticeText">Finishing your previous session…</span>
@@ -518,22 +404,13 @@
                 <button type="button" class="notice-retry-btn" onclick="checkServerHealth()">Retry</button>
             </div>
 
-            <!-- Says WHY the username/password form is gone while offline, so
-                 the shortened card doesn't just look broken. Reuses the
-                 existing .offline-login-notice pattern. -->
+            <!-- Explains why the login form is gone while offline. -->
             <div id="offlineLoginNotice" class="offline-login-notice d-none">
                 <i class="fas fa-wifi"></i>
                 <span>You're offline. Signing in needs a connection — but you can still answer the survey now.</span>
             </div>
 
-            <!-- The two steps mirror the real flow: this button leads to
-                 /survey-offline, whose form requires BOTH a registered email
-                 and that account's password (client-survey.ejs, offlineMode
-                 branch). Neither is checked on this device — verification
-                 happens at POST /api/offline-surveys/verify-and-sync once
-                 connectivity returns — which is exactly why the warning about
-                 getting them right belongs here, up front, and not after the
-                 user has already filled in the whole survey. -->
+            <!-- Leads to /survey-offline, which needs a registered email and password but can't verify them until back online. -->
             <div id="offlineStepsGuide" class="auth-steps d-none">
                 <p class="auth-steps-title">How to answer the survey offline</p>
 
@@ -553,24 +430,12 @@
                 </p>
             </div>
 
-            <!-- Offline: signing in for real always needs the server (there is
-                 no way to check a password with zero network access), so this
-                 replaces the login form entirely rather than pretending it can
-                 still work. Leads to the unauthenticated /survey-offline flow,
-                 whose own account/password verification happens once back
-                 online — see offline-db.js / pwa-client.js. -->
+            <!-- Offline replaces the login form since signing in always needs the server. Leads to the unauthenticated /survey-offline flow. -->
             <a href="/survey-offline" id="offlineSurveyBtn" class="btn btn-login w-100 d-none text-decoration-none mb-3" title="Complete the survey now — your account is verified once you're back online">
                 <i class="fas fa-clipboard-list me-2"></i> Take Survey Offline
             </a>
 
-            <!-- LOGIN / REGISTER SWITCH
-                 Registering and logging in are two different jobs that were
-                 previously indistinguishable on this page: the only entry
-                 point for a brand-new client was the "Sign in with Google"
-                 button at the very bottom, under the OR divider, whose label
-                 says "sign IN" — so a first-time visitor had no way to tell
-                 that this was also where they sign UP. The switch names both
-                 states up front and puts them on equal footing. -->
+            <!-- Login/Register switch lets a first time visitor tell right away that they can sign up here too. -->
             <div class="auth-switch" id="authSwitch" data-active="register" role="tablist" aria-label="Register or Login">
                 <span class="auth-switch-thumb" aria-hidden="true"></span>
                 <button type="button" class="auth-switch-btn" id="registerTabBtn" role="tab" aria-selected="true" aria-controls="registerPanel" data-tab="register" title="Create a new account">
@@ -602,11 +467,7 @@
                     </div>
                     <div class="input-modern">
                         <span class="input-icon"><i class="fas fa-lock"></i></span>
-                        <!-- The show/hide toggle and the strength meter are both
-                             injected by public/js/alerts.js — the toggle for any
-                             password input, the meter because of data-pw-strength.
-                             Adding them by hand here too is what produced a second,
-                             empty toggle button next to the real one. -->
+                        <!-- Show/hide toggle and strength meter are injected by public/js/alerts.js, don't add them here. -->
                         <input type="password" name="password" id="passwordInput" class="form-control" placeholder="Enter your password" required title="Password" autocomplete="current-password" data-pw-strength>
                     </div>
                 </div>
@@ -617,11 +478,7 @@
                 </div>
                 <% } %>
 
-                <!-- RECAPTCHA_SITE_KEY unset (e.g. local dev without it configured yet):
-                     the widget above never renders, so the button starts enabled instead
-                     of being permanently stuck disabled with no way to ever pass a check
-                     that isn't even shown. Once a real key is set in .env, this reverts to
-                     the normal disabled-until-verified behavior. -->
+                <!-- Button starts enabled when there's no recaptcha key set, since the widget won't render to ever enable it. -->
                 <button type="submit" class="btn btn-login w-100" id="loginSubmitBtn" <%= recaptchaSiteKey ? 'disabled' : '' %> title="Sign in to your account">
                     <i class="fas fa-sign-in-alt me-2"></i> Login
                 </button>
@@ -633,7 +490,7 @@
                 <hr>
             </div>
 
-            <!-- GOOGLE SIGN-IN (Clients) -->
+            <!-- Google sign in for clients -->
             <a href="/auth/google" class="btn btn-google w-100" id="googleSignInBtn" title="Sign in as a client with your Google account">
                 <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google">
                 Sign in with Google
@@ -641,15 +498,7 @@
 
             </div><!-- /#loginPanel -->
 
-            <!-- REGISTER PANEL
-                 Deliberately NOT a set of name/email/password fields. An
-                 account is only ever created off an email Google has actually
-                 verified (/auth/google/callback stashes the verified address
-                 in the session and hands over to /complete-google-registration,
-                 which is where the real registration form lives) — so the one
-                 honest thing this panel can do is explain that the email step
-                 comes first, then start it. Typing an email into a form here
-                 would look like it registered something and would not. -->
+            <!-- Register panel has no form fields, it explains the Google email verification step and starts it. -->
             <div id="registerPanel" class="auth-panel" role="tabpanel" aria-labelledby="registerTabBtn">
 
                 <div class="auth-steps">
@@ -687,15 +536,8 @@
     </div>
 
     <script>
-        // Marks a real landing on the login page in THIS browser tab (sessionStorage
-        // is tab-scoped, so this can never bleed into a different tab or a different
-        // admin's browser) so that if the user later presses Forward, the shared
-        // bfcache guard (public/js/main.js) redirects back here instead of letting
-        // the browser silently restore a previously-cached authenticated admin page.
-        // Deliberately NOT done by destroying the server-side session here — see the
-        // "must NOT destroy any session" comment on the /login route in server.js:
-        // admin.sid is shared by every tab in the browser, so that would log out
-        // every OTHER open admin tab too.
+        // Marks that this tab really landed on login, so the bfcache guard sends
+        // a later Forward press back here instead of restoring a cached admin page.
         try { sessionStorage.setItem('__loginBoundary', window.location.pathname); } catch (e) {}
     </script>
 
@@ -705,8 +547,7 @@
     <script src="/js/connection-prompt.js"></script>
     <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     <script>
-        // The Login button stays disabled until the "I'm not a robot" checkbox
-        // is checked (grecaptcha calls these on the global scope by name).
+        // Login button stays disabled until the recaptcha checkbox is checked.
         function enableLoginSubmit() {
             const btn = document.getElementById('loginSubmitBtn');
             if (btn) btn.disabled = false;
@@ -717,16 +558,8 @@
         }
     </script>
     <script>
-        // ==========================================
-        // LOGIN / REGISTER TAB SWITCH
-        //
-        // Runs BEFORE the query-param script below on purpose: that one
-        // calls history.replaceState(..., location.pathname) to scrub the
-        // error/status flags out of the URL, which also drops ?tab=register.
-        // Reading the tab here first is what lets the server keep linking
-        // straight to the Register state (e.g. the "no account found for
-        // that email, please register" redirects in server.js).
-        // ==========================================
+        // Login/Register tab switch. Runs before the query-param script below
+        // strips the tab param off the URL.
         (function () {
             const switcher = document.getElementById('authSwitch');
             const tabButtons = Array.prototype.slice.call(document.querySelectorAll('.auth-switch-btn'));
@@ -762,9 +595,7 @@
                 tabButtons.forEach(function (btn) {
                     const isActive = btn.getAttribute('data-tab') === active;
                     btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
-                    // Only the selected tab stays in the tab order; the arrow
-                    // keys below move between them, which is how a tablist is
-                    // expected to behave for keyboard users.
+                    // Only the selected tab stays in the tab order, arrow keys move between them.
                     btn.setAttribute('tabindex', isActive ? '0' : '-1');
                 });
 
@@ -776,8 +607,7 @@
                 if (cardSubtitle) cardSubtitle.textContent = copy.subtitle;
                 if (portalBadge) portalBadge.textContent = copy.badge;
 
-                // Keeps the address bar honest, so a reload / shared link comes
-                // back to the same tab the user was looking at.
+                // Keeps the address bar in sync so a reload or shared link lands on the same tab.
                 try {
                     const url = new URL(window.location.href);
                     if (active === 'login') {
@@ -788,10 +618,7 @@
                     window.history.replaceState({}, document.title, url.pathname + url.search);
                 } catch (e) { /* non-critical */ }
 
-                // Moving focus into the newly-shown panel helps a keyboard
-                // user, but on a phone focusing the username field pops the
-                // on-screen keyboard the moment someone merely taps "Login" to
-                // look at it — which covers half the card. Wide viewports only.
+                // Only autofocus on wide viewports, on a phone it would pop the keyboard immediately.
                 if (options.focus && window.matchMedia('(min-width: 768px)').matches) {
                     const target = active === 'login'
                         ? document.getElementById('usernameInput')
@@ -814,22 +641,15 @@
                 });
             });
 
-            // The "No account yet? / Already registered?" links at the foot of
-            // each panel — same switch, reached from where the user is looking.
+            // The "No account yet?" / "Already registered?" links use this same switch.
             document.querySelectorAll('[data-auth-goto]').forEach(function (link) {
                 link.addEventListener('click', function () {
                     setAuthTab(link.getAttribute('data-auth-goto'), { focus: true });
                 });
             });
 
-            // Register is the default state of this page: someone who has no
-            // account yet is the one who needs to be told what to do, and a
-            // returning user recognises the Login tab right next to it. Login
-            // is shown only when it is actually being asked for — ?tab=login,
-            // or any of the login-outcome redirects from server.js (a failed
-            // sign-in, a logout, an expired session), all of which carry an
-            // error/status flag and must land back on the login FORM, not on
-            // registration instructions.
+            // Register is the default tab. Login only shows when asked for via
+            // ?tab=login or a login outcome redirect (error/status flag).
             const loginParams = new URLSearchParams(window.location.search);
             const requestedTab = loginParams.get('tab');
             const isLoginOutcome = loginParams.has('error') || loginParams.has('status');
@@ -843,24 +663,14 @@
         const loginQueryParams = new URLSearchParams(window.location.search);
         const loginErrorMsg = loginQueryParams.get('error');
 
-        // Freeform error text (invalid credentials, server errors, the
-        // new-tab auth guards in header.ejs/client-survey.ejs/office-approvals.ejs) —
-        // unrelated to the semantic session states below, untouched.
+        // Freeform error text (bad credentials, server errors, auth guards elsewhere), separate from the status states below.
         if (loginErrorMsg) {
             AppAlert.error(loginErrorMsg, 'Login Failed');
             window.history.replaceState({}, document.title, window.location.pathname);
         }
 
-        // Explicit semantic session states — one flash param, one accurate
-        // message each, shared by both the Admin and Client login flows on
-        // this same page. Deliberately NOT collapsed into the freeform
-        // `error` message above: manual logout, session expiration, login-
-        // required, and a real cross-device/tab session replacement are four
-        // different events (see ensureAdminAuth/ensureClientAuth/`/logout`
-        // in server.js) and must never share one ambiguous flag or wording —
-        // in particular, an ordinary session timeout must never be reported
-        // as "logged in on another device," which requires actual evidence
-        // (a real newer login) to say, not just "the old session is gone."
+        // Session status messages, shared by Admin and Client login. Each status
+        // is a distinct event and gets its own wording, never lumped together.
         const loginStatus = loginQueryParams.get('status');
         const STATUS_MESSAGES = {
             logged_out: { type: 'success', title: 'Logged Out', text: 'You have been logged out successfully.' },
@@ -870,11 +680,7 @@
         };
         if (loginStatus && STATUS_MESSAGES[loginStatus]) {
             const s = STATUS_MESSAGES[loginStatus];
-            // logged_out reuses the same AppAlert toast design as the Client
-            // Profile "updated successfully" notification; the other three
-            // are less routine/more worth reading, so they use the standard
-            // (non-auto-dismissing until acknowledged for warning/info)
-            // AppAlert modal instead of a corner toast.
+            // logged_out uses a toast since it's routine, the other statuses use a modal since they're worth reading.
             if (s.type === 'success') {
                 AppAlert.toastSuccess(s.text, { title: s.title });
             } else {
@@ -883,11 +689,8 @@
             window.history.replaceState({}, document.title, window.location.pathname);
         }
 
-        // Native browser autofill remembers every value ever typed into a text
-        // input (including plain admin usernames), so it's disabled above via
-        // autocomplete="off". Instead we keep our own suggestion list that only
-        // ever stores values that look like an email (i.e. contain '@'), so
-        // admin usernames never show up as a suggestion here.
+        // Browser autofill is disabled since it would remember admin usernames too.
+        // We keep our own suggestion list, only storing values that look like an email.
         (function () {
             const STORAGE_KEY = 'cqa_username_suggestions';
             const MAX_SUGGESTIONS = 10;
@@ -950,44 +753,8 @@
     </script>
 
     <script>
-        // CONNECTIVITY — owned by /js/connection-prompt.js.
-        //
-        // This page previously keyed everything on navigator.onLine alone,
-        // and that is the bug the reported screenshots caught: a phone with
-        // 4G bars but no working route showed the amber "slow or unstable"
-        // chip and left the sign-in form sitting there, with no prompt and no
-        // offline route offered — on the one page a client actually lands on
-        // from the survey link. See connection-prompt.js for the three
-        // observations it now treats as the same problem.
-        //
-        // The page's own /api/health probe is gone with it: two independent
-        // probes could disagree about the same connection, so the module owns
-        // the probe and this page just renders the state it is handed.
-        // Two levels, deliberately not one:
-        //
-        //   OFFLINE (navigator.onLine false) keeps the existing .is-offline
-        //   layout — the sign-in form, the OR divider and the Google button
-        //   are hidden outright, because with no network at all none of them
-        //   can do anything and a dead form is worse than no form.
-        //
-        //   WEAK only ADDS the offline route alongside the form; it never
-        //   takes the form away. A slow connection may still finish a
-        //   sign-in, the latency threshold is a judgement call that can
-        //   misfire on a merely-bad-day network, and removing someone's login
-        //   form on a false positive is a far worse failure than showing them
-        //   an extra button they can ignore. So weak persuades, offline
-        //   decides.
-        // `offer` and `unusable` are deliberately different inputs:
-        //
-        //   unusable — the connection RIGHT NOW. Drives the claims: the amber
-        //              in-card notice, and the .is-offline layout.
-        //   offer    — sticky once this page load has seen a weak connection.
-        //              Drives the offline ROUTE: the button and the short
-        //              how-to beside it.
-        //
-        // The visitor who chose "Stay Online" in the dialog and then found the
-        // offline button gone had their own choice used against them. An
-        // option can safely outlive the moment; an assertion cannot.
+        // Connectivity state comes from /js/connection-prompt.js, this page just renders it.
+        // Offline hides the login form entirely, weak just adds the offline route alongside it.
         function applyConnectionState(unusable, offline, offer) {
             const pill = document.getElementById('offlineIndicator');
             if (pill) pill.classList.toggle('is-visible', offline);
@@ -999,9 +766,7 @@
             if (offlineLoginNotice) {
                 offlineLoginNotice.classList.toggle('d-none', !unusable);
                 const noticeText = offlineLoginNotice.querySelector('span');
-                // The stock wording says "You're offline", which would be a
-                // plain falsehood in the weak case — the form is still right
-                // there and still worth trying.
+                // Different wording for the weak case since the form is still usable there.
                 if (noticeText) {
                     noticeText.textContent = offline
                         ? "You're offline. Signing in needs a connection — but you can still answer the survey now."
@@ -1009,15 +774,11 @@
                 }
             }
 
-            // Travels with the button, not with the warning — it explains how
-            // to use the route, so it is useless without it and confusing
-            // beside a button that isn't there.
+            // Shows and hides together with the offline button, not the warning.
             const offlineStepsGuide = document.getElementById('offlineStepsGuide');
             if (offlineStepsGuide) offlineStepsGuide.classList.toggle('d-none', !offer);
 
-            // Drives the offline layout rules in the <style> block, which is
-            // what keeps the offline card short enough to fit the fold
-            // without scrolling. Offline only — see above.
+            // Toggles the offline layout rules in the style block above.
             document.body.classList.toggle('is-offline', offline);
         }
 
@@ -1049,8 +810,7 @@
             if (text) text.textContent = message;
         }
 
-        // Kept as a named global because #serverUnavailableNotice's Retry
-        // button calls it inline.
+        // Kept as a named global since the Retry button calls it inline.
         function checkServerHealth() {
             if (window.ConnectionPrompt) ConnectionPrompt.probe();
         }
@@ -1058,19 +818,13 @@
         if (window.ConnectionPrompt) {
             ConnectionPrompt.init({
                 context: 'login',
-                // forceLightMode in the header include — white card, navy
-                // buttons. See .wc-theme-light.
+                // Matches forceLightMode from the header include.
                 theme: 'light',
                 onState: function (state) {
                     if (state === ConnectionPrompt.STATE_SERVER_DOWN) {
                         setServerNotice('error', 'The service is temporarily unavailable. Please try again shortly.');
                     } else {
-                        // Nothing amber for weak or offline. Weak already has
-                        // #offlineLoginNotice saying the same thing in the
-                        // card itself, right above the offline button that
-                        // does something about it, and the style block hides
-                        // this notice entirely under .is-offline — so an
-                        // amber chip here is either a duplicate or invisible.
+                        // Nothing amber for weak or offline, those cases already have their own notice.
                         setServerNotice(null);
                     }
                     updateOfflineIndicator();
@@ -1078,41 +832,14 @@
             });
         }
 
-        // ==========================================
-        // PENDING-LOGOUT / NEW-LOGIN RACE GUARD
-        //
-        // The race this closes: an old session goes offline, gets flagged
-        // pending (cspc_client_pending_logout, set in client-survey.ejs),
-        // and the /logout confirmation fails on a flaky reconnect — the
-        // marker correctly stays set. If the user could start a brand new
-        // login on THIS page in that window, and the stale pending
-        // /logout call finally reached the server AFTER the new session
-        // was created, it would destroy the NEW session instead of the old
-        // one — /logout?scope=client just destroys whatever session the
-        // request's client.sid cookie currently points to, and by then
-        // that cookie is the new login's, not the old one. There is no way
-        // to tell "old" and "new" apart from the cookie alone.
-        //
-        // The fix is to never let a new login start while the marker is
-        // unresolved: Google sign-in and the password form are both
-        // blocked until attemptPendingClientLogout() (offline-db.js)
-        // positively confirms the old session is gone, at which point the
-        // marker is cleared and it's safe to authenticate. This also means
-        // a stale marker can no longer coexist with a freshly-created
-        // session by the time /client-survey is reached — so its own
-        // existing showBackOnlineTransition()/attemptPendingClientLogout()
-        // handling (unchanged) never sees that combination either.
-        // ==========================================
+        // Blocks a new login while a previous session's pending logout hasn't
+        // been confirmed yet, so it can't accidentally destroy the new session.
         (function () {
             const notice = document.getElementById('pendingLogoutNotice');
             const icon = document.getElementById('pendingLogoutNoticeIcon');
             const text = document.getElementById('pendingLogoutNoticeText');
             const retryBtn = document.getElementById('pendingLogoutRetryBtn');
-            // Both Google entry points — "Sign in with Google" on the Login
-            // tab and "Sign up with Email (Google)" on the Register tab — hit
-            // the same /auth/google redirect and would create the same new
-            // session, so the guard has to cover both or the Register tab
-            // becomes a way around it.
+            // Covers both Google buttons since they both hit the same redirect.
             const googleBtns = Array.prototype.slice.call(
                 document.querySelectorAll('#googleSignInBtn, #registerGoogleBtn')
             );
@@ -1159,9 +886,7 @@
                         setBlocked(false);
                         setNotice(null, '', false);
                     } else {
-                        // Does NOT claim the old session is gone — it isn't,
-                        // yet. Stays blocked; no automatic retry loop, just
-                        // the Retry button plus the next 'online' event.
+                        // Stays blocked, no automatic retry loop, just the button and the next online event.
                         setNotice('error', "We couldn't close your previous session because the connection is unstable. Please retry once your connection improves.", true);
                     }
                 });
@@ -1177,22 +902,8 @@
             attempt();
         })();
 
-        // REMOVED: this used to bounce straight to /client-survey while
-        // offline whenever a cached cspc_client_session existed — meant as
-        // a convenience ("resume the survey app instead of re-deciding
-        // between Login and Take Survey Offline"). That convenience is what
-        // made the offline overlay's own Login/Dashboard buttons "blink and
-        // do nothing": clicking either one navigates here (or to /), and
-        // this redirect immediately bounced right back to /client-survey's
-        // cached shell, whose own load-time check re-shows the exact same
-        // "You're Offline" overlay — a loop, not a shortcut. And since
-        // landing on /client-survey while offline shows that same overlay
-        // immediately anyway (see client-survey.ejs), this redirect never
-        // actually saved a step even in the cases it didn't loop — it only
-        // ever added one. A cached client-side session flag was never proof
-        // the live authenticated portal is usable while offline; removing
-        // this is what lets this page (and /) stay reachable on their own
-        // terms, as the offline overlay's Login/Dashboard buttons require.
+        // Removed the auto redirect to /client-survey for a cached offline session,
+        // it just caused a loop with the offline overlay's own redirect.
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {

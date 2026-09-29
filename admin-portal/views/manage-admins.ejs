@@ -155,8 +155,7 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // Show the result of the last create/edit/delete redirect as a toast
-        // (?success=... / ?error=... set by server.js), then clean the URL.
+        // Shows a toast for the last create, edit, or delete, then cleans up the URL.
         AppAlert.autoShowFromQuery();
 
         document.querySelectorAll('.delete-admin-form').forEach(form => {

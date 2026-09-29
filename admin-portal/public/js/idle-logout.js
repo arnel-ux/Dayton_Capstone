@@ -1,7 +1,5 @@
-// Auto-logout after 5 minutes of no user activity. The page that includes this
-// script must set window.__idleLogoutUrl to the correct scoped logout link
-// (e.g. '/logout?scope=admin', '/logout?scope=client', '/office-logout')
-// before loading this file; without it, nothing runs.
+// Logs the user out after 5 minutes of no activity.
+// The page must set window.__idleLogoutUrl first or this does nothing.
 (function () {
     var IDLE_LIMIT_MS = 5 * 60 * 1000;
     var logoutUrl = window.__idleLogoutUrl;
@@ -18,10 +16,8 @@
         timer = setTimeout(doLogout, IDLE_LIMIT_MS);
     }
 
-    // Capture phase so activity is still seen even if a component (modal,
-    // dropdown, data table, etc.) calls stopPropagation() on the bubble
-    // phase, and so scroll events inside inner scrollable containers (which
-    // don't bubble to window at all) are still caught.
+    // Listens in the capture phase so activity is still caught even if something
+    // stops propagation, including scroll events that don't bubble to window.
     [
         'mousemove', 'mousedown', 'keydown', 'scroll', 'wheel',
         'touchstart', 'touchmove', 'pointerdown', 'pointermove',
@@ -30,9 +26,7 @@
         document.addEventListener(evt, resetTimer, { passive: true, capture: true });
     });
 
-    // Any network request the admin's own actions trigger (saving a form,
-    // loading a record, etc.) also counts as activity, even during stretches
-    // with no mouse/keyboard input in between.
+    // Network requests count as activity too, not just mouse and keyboard input.
     if (window.fetch) {
         var originalFetch = window.fetch;
         window.fetch = function () {

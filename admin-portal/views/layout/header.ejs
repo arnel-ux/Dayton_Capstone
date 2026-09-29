@@ -3,19 +3,8 @@
 <title>Admin Portal</title>
 <% if (typeof loginToken !== 'undefined' && loginToken && typeof currentAdmin !== 'undefined' && currentAdmin) { %>
 <script>
-    // New-tab auto-login guard: 'admin.sid' is a normal browser cookie, so a brand
-    // new tab that merely inherited it (typed the URL, duplicated the tab, opened
-    // a bookmark) would otherwise land on an admin page fully "logged in" without
-    // ever having submitted credentials in THAT tab. sessionStorage is scoped per
-    // tab (never copied to a freshly opened one), so it's used here purely as a
-    // "did this tab actually authenticate" marker: /auth-login's redirect tags the
-    // very next page load with ?loggedin=1, which this script converts into the
-    // marker before the URL is cleaned up. Any other admin page load in a tab
-    // without that marker gets bounced straight back to /login.
-    // Note: this is a client-side UX guard, not a security boundary — the page
-    // markup briefly reaches the browser before this (first) script redirects it
-    // away, so it doesn't stop someone with devtools/view-source open on that same
-    // already-logged-in machine.
+    // Checks that this tab actually logged in itself, redirects to /login if it just
+    // inherited the cookie from another tab.
     (function () {
         try {
             var params = new URLSearchParams(window.location.search);
@@ -28,17 +17,12 @@
             } else if (sessionStorage.getItem('cqa_admin_tab_ok') !== '1') {
                 window.location.replace('/login?error=' + encodeURIComponent('Please log in to continue.'));
             }
-        } catch (e) { /* sessionStorage unavailable (privacy mode, etc.) — fail open */ }
+        } catch (e) { /* sessionStorage unavailable, fail open */ }
     })();
 </script>
 <script>
-    // Same-browser single-tab enforcement: two tabs on the same account share one
-    // session cookie, so the server can't tell them apart until this tab's NEXT
-    // request (ensureAdminAuth re-checks login_token against admins.login_token
-    // then). This closes that gap instantly, without waiting for a request — each
-    // tab broadcasts the login_token it was rendered with, and if a sibling tab
-    // announces a different one for the SAME admin (i.e. a fresh login happened
-    // somewhere else), this tab logs itself out right away.
+    // Logs this tab out right away if another tab for the same admin announces a
+    // different login token.
     (function () {
         var CHANNEL_NAME = 'cqa_admin_session_sync';
         var STORAGE_KEY = 'cqa_admin_session_sync';
@@ -50,15 +34,7 @@
             if (redirected) return;
             if (String(adminId) === String(myAdminId) && token && token !== myToken) {
                 redirected = true;
-                // reason=replaced is informational only (server logs/debugging) —
-                // this tab is being signed out because a sibling tab just
-                // completed a REAL login with a different token, not because
-                // anyone clicked Logout here. /logout does NOT trust this
-                // query param by itself for that reason: a client-supplied
-                // URL flag alone isn't proof of anything. It independently
-                // confirms the replacement server-side (the admins.login_token
-                // check / the session tombstone) before ever showing "signed
-                // in elsewhere" instead of a false "logged out successfully".
+                // reason=replaced is just for logging, the server still verifies the logout itself.
                 window.location.href = '/logout?scope=admin&reason=replaced';
             }
         }
@@ -73,9 +49,7 @@
                 };
                 bc.postMessage(announcement);
             } else {
-                // localStorage fallback: the 'storage' event only fires in OTHER tabs,
-                // never the tab that called setItem, which is exactly the pub/sub
-                // behavior we need here.
+                // Falls back to localStorage's storage event, which only fires in other tabs.
                 window.addEventListener('storage', function (e) {
                     if (e.key !== STORAGE_KEY || !e.newValue) return;
                     try {
@@ -85,7 +59,7 @@
                 });
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(announcement));
             }
-        } catch (e) { /* BroadcastChannel/localStorage unavailable (privacy mode, etc.) — fail open */ }
+        } catch (e) { /* BroadcastChannel/localStorage unavailable, fail open */ }
     })();
 </script>
 <% } %>
@@ -102,37 +76,15 @@
 <% } %>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-<!-- ONE font request for the whole portal — see the "Typography" block in
-     /css/style.css for what each family is for. Two things matter here:
-
-     1. The ITALIC axis is requested, not just upright weights. It used to be
-        upright-only, so every italic on these pages (the auth pages' subtitle
-        is the visible one) was a FAUX oblique — the browser shearing the
-        upright face over by ~10 degrees. That slant is what made the login
-        page's type read as cheap: skewed letterforms have broken stems and
-        wrong-shaped bowls, and it never matches the real italic the fallback
-        system font would have drawn.
-     2. Playfair Display is here so the institutional headline on the auth
-        pages is the SAME face as the landing page's section titles. The
-        landing page used to be the only page that loaded it, which is why
-        /login and / never looked like the same product.
-
-     preconnect first: the stylesheet lives on fonts.googleapis.com but the
-     font FILES come from fonts.gstatic.com, a second origin whose connection
-     otherwise isn't opened until the CSS has already been parsed. Warming both
-     up front is what stops the first paint showing fallback type. -->
+<!-- One font request for the whole portal, includes the italic axis and Playfair Display.
+     Preconnects to both font origins so the first paint doesn't show fallback type. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600..800&family=Plus+Jakarta+Sans:ital,wght@0,400..800;1,400..700&family=Inter:ital,wght@0,400..700;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 <link rel="stylesheet" href="/css/style.css">
 <link rel="stylesheet" href="/css/alerts.css">
-<!-- Tints the phone browser's own UI (address bar / status bar) to match the
-     app, so on any device where fullscreen isn't available — iOS Safari has no
-     Fullscreen API for ordinary elements — the bar at least stops reading as a
-     foreign white strip above the page. -->
+<!-- Tints the phone browser's address bar and status bar to match the app. -->
 <meta name="theme-color" content="#251d3a">
-<!-- Requests fullscreen on the visitor's FIRST TAP. It cannot be done on load:
-     requestFullscreen() requires a real user gesture and every browser rejects
-     it otherwise. See the file for the full explanation and platform notes. -->
+<!-- Requests fullscreen on the visitor's first tap, since it needs a real user gesture. -->
 <script src="/js/mobile-fullscreen.js" defer></script>

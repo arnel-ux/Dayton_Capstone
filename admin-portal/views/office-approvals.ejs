@@ -2,20 +2,8 @@
 <html lang="en">
 <head>
     <script>
-        // New-tab auto-login guard: office sessions ride the same hand-rolled
-        // admin-session cookie as admin logins, so a brand new tab that merely
-        // inherited that cookie (typed the URL, duplicated the tab, opened a
-        // bookmark) would otherwise land here fully "logged in" without ever
-        // having submitted office credentials in THAT tab. sessionStorage is
-        // scoped per tab (never copied to a freshly opened one), so it's used
-        // here purely as a "did this tab actually authenticate" marker: the
-        // login redirect tags the very next page load with ?loggedin=1, which this
-        // script converts into the marker before the URL is cleaned up. Same
-        // pattern as the admin dashboard (layout/header.ejs) and /client-survey.
-        // Note: this is a client-side UX guard, not a security boundary — the
-        // page markup briefly reaches the browser before this (first) script
-        // redirects it away, so it doesn't stop someone with devtools/view-source
-        // open on that same already-logged-in machine.
+        // Checks this tab actually logged in before showing the page, using a sessionStorage marker.
+        // Just a UX guard, not real security.
         (function () {
             try {
                 var params = new URLSearchParams(window.location.search);
@@ -28,18 +16,13 @@
                 } else if (sessionStorage.getItem('cqa_office_tab_ok') !== '1') {
                     window.location.replace('/login?error=' + encodeURIComponent('Please log in to continue.'));
                 }
-            } catch (e) { /* sessionStorage unavailable (privacy mode, etc.) — fail open */ }
+            } catch (e) { /* sessionStorage not available, just continue */ }
         })();
     </script>
     <%- include('layout/header') %>
     <%
-        // Display-only helpers. These never touch the underlying DB values —
-        // they only format sub.officeVisitedTime / officeName for presentation.
-
-        // client_profiles.office_visited_time is a MySQL DATETIME, arriving here
-        // as "YYYY-MM-DD HH:mm:ss" — the client's own visit date+time, which can
-        // be an earlier day than when they actually submitted the survey. Format
-        // it directly rather than assuming it matches the submission's created_at.
+        // Formats the visited date and time for display only.
+        // Doesn't touch the stored value.
         function formatVisitedDateTime12h(value) {
             if (!value) return null;
             var match = String(value).trim().match(/^(\d{4}-\d{2}-\d{2})[T ](\d{1,2}):(\d{2})/);
@@ -59,14 +42,7 @@
            BASE / LAYOUT
            ========================================================== */
         * { box-sizing: border-box; }
-        /* overflow-x must be `clip`, never `hidden`, here. `hidden` turns
-           html/body into a scroll container, and a scroll container is what
-           .topbar's `position: sticky` then sticks to instead of the
-           viewport — which is why the header scrolled away with the page.
-           `clip` cuts off the same horizontal overflow without creating
-           that scroll container, so sticky keeps working.
-           overflow-y is pinned to `visible` so the pair can never fall back
-           to the scroll-container behaviour in a browser that lacks `clip`. */
+        /* Use clip not hidden so the sticky topbar keeps working. */
         html, body {
             overflow-x: clip;
             overflow-y: visible;
@@ -78,11 +54,7 @@
             color: #0f172a;
         }
 
-        /* "Viewing offline" pill — same amber style, font-size and padding
-           as index.ejs / login.ejs for a consistent look across the whole
-           system. Placed in its own centered row under the topbar instead
-           of squeezed in next to Logout/the portal-status pill, so it never
-           overlaps or covers those on narrow screens. */
+        /* Offline pill, matches the style used on other pages. */
         @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
         /* ==========================================================
@@ -215,19 +187,10 @@
             color: #1a1436;
             line-height: 1.35;
         }
-        /* Desktop: the pill floats in the naturally-empty top area of the
-           Respondent cell (that column's own row height is set by the much
-           taller Actions column next to it, so there's already free space
-           above the vertically-centered name) instead of sitting inline
-           next to the name — keeping "Francis James Obis" itself exactly
-           where it'd sit with no pill at all, aligned with Google Account.
-           The mobile media query below switches this to its own stacked
-           card layout with a differently-positioned floating badge. */
+        /* Pending pill floats above the name on desktop. Mobile view repositions it below. */
         .respondent-cell { display: flex; flex-direction: row; align-items: center; gap: 0.5rem; min-width: 0; }
         .col-order-respondent { position: relative; }
-        /* "Respondent" / "Google Account" mini-labels only exist for the
-           mobile card view (the desktop table already has real <th> column
-           headers) — hidden here, shown again inside the media query. */
+        /* Mini labels are only for the mobile card view. */
         .cell-label-inline { display: none; }
         .toggle-chevron { display: none; }
         .pending-pill {
@@ -262,14 +225,7 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
-        /* The same reference number the client is shown in their emailed
-           decline notice (see sendSurveyDeclinedEmail in server.js). Printed
-           here so a client who quotes "PSS-42" can actually be looked up —
-           without it the number in that email matched nothing anywhere in
-           this system. "PSS" = pending survey submission; it is the
-           pending_survey_submissions row id, NOT the CSM reference, which
-           only exists once a submission is approved and inserted into
-           survey_responses. */
+        /* Reference number shown to the client, same one they get in the decline email. */
         .submission-ref {
             flex: 0 0 auto;
             align-self: flex-start;
@@ -541,12 +497,7 @@
             .page-header p { font-size: 0.84rem; max-width: 100%; }
             .pending-badge { width: 100%; }
 
-            /* --- Card-style responsive table --------------------------
-               Below 767px a bordered/scrolling table is hard to use on a
-               phone (tiny text, sideways scrolling). Instead each row is
-               reflowed into its own bordered "card" with the header label
-               shown inline above each value (via the td's data-label attr),
-               same pattern used across the rest of the admin portal. */
+            /* Turns the table into stacked cards on mobile. */
             .approvals-table-scroll { overflow-x: visible; }
             .approvals-table { min-width: 0; table-layout: auto; }
             .approvals-table thead { display: none; }
@@ -580,8 +531,7 @@
             .approvals-table tr.decline-row td { padding: 0; border-bottom: none; }
             .approvals-table tr.decline-row td > div { margin: -0.5rem 0.85rem 0.85rem; }
 
-            /* Full values instead of desktop's ellipsis-truncated single line —
-               there's no adjacent column fighting for space anymore. */
+            /* Show full text instead of truncating like on desktop. */
             .approvals-table .cell-value,
             .approvals-table .respondent-name {
                 white-space: normal;
@@ -591,15 +541,7 @@
             }
             .approvals-table .cell-value.wrap-value { -webkit-line-clamp: unset; }
 
-            /* --- Pending list accordion --------------------------------
-               With many pending requests each full card ate too much
-               vertical space to scan. Collapsed by default, a pending row
-               shows only the respondent name + Google account — laid out
-               as two side-by-side columns instead of stacked, so the
-               summary reads as one compact line pair instead of four.
-               Tapping the row expands it in place to reveal the rest of
-               the details (each spanning the full card width) plus the
-               Approve/Decline actions. */
+            /* Pending rows collapse to just the name and email, tap to expand for the rest. */
             .pending-table.approvals-table tbody tr.data-row {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
@@ -617,15 +559,10 @@
             .approvals-table tr.data-row.expanded td.collapsible-detail { display: block; }
 
             .row-summary-toggle { cursor: pointer; }
-            /* Card view: pill sits above the name (not inline beside it —
-               see the floating-badge rule further down) and the mini-label
-               reappears above each value, since there's no <th> row here. */
+            /* Card view puts the pill above the name and shows the mini labels. */
             .respondent-cell { flex-direction: column; align-items: flex-start; gap: 0.35rem; }
             .cell-label-inline { display: block; }
-            /* Google Account's own auto-generated label is replaced by an
-               explicit one paired with the chevron on the same line (flex
-               row, not absolute positioning) — simpler and more reliable
-               than pinning the chevron to a corner. */
+            /* Replaces the auto label with one paired next to the chevron. */
             .pending-table td.col-order-email::before { display: none; }
             .email-header-row {
                 display: flex;
@@ -643,13 +580,7 @@
             }
             tr.data-row.expanded .toggle-chevron { transform: rotate(180deg); color: #4b3a86; }
 
-            /* Pending pill floats as a small badge overlapping the card's
-               top-left corner — pulled out of the normal flow entirely —
-               so it no longer pushes "Respondent" (and the name below it)
-               down past where "Google Account" and its value sit. With the
-               pill out of the way, Respondent/Google Account line up on
-               the same row, and Name/Google Account value line up right
-               beneath them. */
+            /* Pill floats over the card's top left corner instead of pushing content down. */
             .pending-table td.col-order-respondent::before { display: none; }
             .pending-table .pending-pill {
                 position: absolute;
@@ -658,9 +589,7 @@
                 z-index: 1;
             }
 
-            /* Respondent + Google Account form one compact header pair when
-               collapsed — no divider under them — and only gain a
-               separating line once the row expands and details follow. */
+            /* No divider between these two until the row expands. */
             .pending-table .col-order-respondent,
             .pending-table .col-order-email {
                 border-bottom: none !important;
@@ -686,9 +615,7 @@
             .btn-confirm-decline { width: 100%; }
         }
     </style>
-    <!-- After the block above on purpose: this file is the portal's shared
-         shell (header + sidebar), and loading it last is what lets it override
-         whatever each page still defines for those parts. -->
+    <!-- Loaded last so it can override the page's own header and sidebar styles. -->
     <link rel="stylesheet" href="/css/office-shell.css">
     <link rel="stylesheet" href="/css/offline-pill.css">
 </head>
@@ -833,7 +760,7 @@
                 new bootstrap.Tooltip(el, { trigger: 'hover focus' });
             });
 
-            // "Viewing offline" pill — same pattern as index.ejs/login.ejs.
+            // Offline pill, same as other pages.
             function updateOfflineIndicator() {
                 var pill = document.getElementById('offlineIndicator');
                 if (pill) pill.classList.toggle('is-visible', !navigator.onLine);
@@ -842,9 +769,7 @@
             window.addEventListener('offline', updateOfflineIndicator);
             updateOfflineIndicator();
 
-            // Sidebar: off-canvas panel toggled from the topbar's upper-left
-            // hamburger button. Pending / History are separate pages now, so
-            // this is just open/close, not a content switcher.
+            // Sidebar toggled from the hamburger button, just open and close.
             var sidebar = document.getElementById('officeSidebar');
             var sidebarBackdrop = document.getElementById('sidebarBackdrop');
             var sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
@@ -873,12 +798,8 @@
                 if (e.key === 'Escape') closeSidebar();
             });
 
-            // Mobile pending-list accordion: a pending row starts collapsed
-            // (name + Google account only); tapping either summary element
-            // expands the same <tr> in place to reveal the rest of the details
-            // and the Approve/Decline actions. Purely a CSS class toggle — the
-            // ".collapsible-detail" cells are only actually hidden inside the
-            // mobile media query, so this is a no-op visually on desktop.
+            // Tapping a pending row expands it to show the rest of its details.
+            // Only visible on mobile.
             document.querySelectorAll('.row-summary-toggle').forEach(function (el) {
                 function toggleRow() {
                     var row = el.closest('tr.data-row');
@@ -888,9 +809,7 @@
                     row.querySelectorAll('.row-summary-toggle').forEach(function (t) {
                         t.setAttribute('aria-expanded', String(expanded));
                     });
-                    // Collapsing the card while its decline-reason panel was
-                    // open would otherwise leave that panel dangling below a
-                    // collapsed card — close it too.
+                    // Close the decline panel too if the card collapses.
                     if (!expanded) {
                         var declineRow = row.nextElementSibling;
                         var declineForm = declineRow && declineRow.classList.contains('decline-row')
@@ -908,10 +827,7 @@
                 });
             });
 
-            // Toggle aria-expanded state on decline buttons in sync with the collapse,
-            // and show/hide the wrapping <tr> — Bootstrap's collapse animates height,
-            // which doesn't work on table rows, so the collapse lives on a <div>
-            // inside the cell while the <tr> itself is just hidden/unhidden.
+            // Syncs the decline button state with the collapse and hides its row.
             document.querySelectorAll('[data-bs-target^="#declineForm"]').forEach(function (btn) {
                 var target = document.querySelector(btn.getAttribute('data-bs-target'));
                 if (!target) return;
@@ -924,8 +840,7 @@
                 });
             });
 
-            // Show the result of the last approve/decline redirect as a toast
-            // (?success=... / ?error=... set by server.js), then clean the URL.
+            // Shows the approve or decline result as a toast, then cleans the URL.
             AppAlert.autoShowFromQuery();
 
             var logoutBtn = document.getElementById('officeLogoutBtn');
@@ -940,12 +855,10 @@
                 });
             }
 
-            // Approve: confirm first, then show a loading button state and let
-            // the form submit normally (server still owns the redirect + the
-            // real approve logic — this only adds a confirmation + feedback layer).
+            // Confirms before approving, then submits the form normally.
             document.querySelectorAll('form.approve-form').forEach(function (form) {
                 form.addEventListener('submit', function (e) {
-                    if (form.dataset.confirmed === '1') return; // already confirmed, let it through
+                    if (form.dataset.confirmed === '1') return; // already confirmed
                     e.preventDefault();
                     var respondent = form.dataset.respondent || 'this submission';
                     AppAlert.confirm(
@@ -960,13 +873,7 @@
                 });
             });
 
-            // Approve All: confirm once, then approve every pending row one at a
-            // time through the same per-submission endpoint the Approve button
-            // uses (so each still gets its own claim, precedence check, client
-            // notification and email). Sequential on purpose — approvals take a
-            // per-survey DB lock. The endpoint answers with a redirect whose
-            // final URL carries ?success= or ?error=, which is how each result
-            // is told apart.
+            // Approve All confirms once, then approves each pending row one at a time.
             var approveAllBtn = document.getElementById('approveAllBtn');
             if (approveAllBtn) {
                 approveAllBtn.addEventListener('click', function () {
@@ -1006,8 +913,7 @@
                 });
             }
 
-            // Decline: same confirm-then-submit pattern; the optional reason the
-            // office staff typed is preserved since we submit the real form as-is.
+            // Same confirm then submit pattern, keeps whatever reason was typed.
             document.querySelectorAll('form.decline-form').forEach(function (form) {
                 form.addEventListener('submit', function (e) {
                     if (form.dataset.confirmed === '1') return;

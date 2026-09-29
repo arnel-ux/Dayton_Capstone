@@ -1,27 +1,5 @@
-// Centralized alert helpers so every page — online or offline, phone or
-// desktop, light or dark — shares one look and one behavior.
-//
-// The public API (success/error/info/warning/confirm/toast*/loading/
-// setButtonLoading/restoreButton/autoShowFromQuery) is UNCHANGED in
-// signature and return type; many pages already call it.
-//
-// What changed underneath:
-//
-// 1. NOTHING IS SILENT OFFLINE ANY MORE. SweetAlert2 is loaded from a CDN
-//    and only precached best-effort by the service worker, so a device
-//    that first opens the app offline (or whose CDN cache entry failed)
-//    has no `Swal` at all. Every AppAlert.* call then threw, and the user
-//    was told nothing — including about a survey that had just been
-//    queued or had failed to sync. Every method now falls back to a
-//    dependency-free renderer (`_fallback` below, styled by alerts.css to
-//    match the SweetAlert2 version) whenever Swal is missing.
-//
-// 2. All appearance lives in /css/alerts.css, not in per-page <style>
-//    blocks, so the same alert looks the same on every page and device.
-//
-// 3. Connection changes (going offline, coming back online) report
-//    through the same toasts as everything else instead of each feature
-//    inventing its own banner.
+// Shared alert helpers so every page looks and behaves the same, online or offline.
+// Falls back to a plain DOM renderer when SweetAlert2 hasn't loaded yet.
 
 const AppAlert = {
     theme: {
@@ -33,40 +11,24 @@ const AppAlert = {
         info: '#0d6efd'
     },
 
-    // ------------------------------------------------------------------
-    // ENGINE SELECTION
-    // ------------------------------------------------------------------
-    // True only when SweetAlert2 actually finished loading. Checked at
-    // CALL time, never cached: on a slow connection the library can still
-    // arrive after the first alert has already been shown by the fallback.
+    // True when SweetAlert2 has actually loaded. Checked fresh every call, not cached.
     get hasSwal() {
         return typeof window !== 'undefined' && typeof window.Swal !== 'undefined' && typeof window.Swal.fire === 'function';
     },
 
-    // ------------------------------------------------------------------
-    // FALLBACK RENDERER — plain DOM, zero dependencies. Used only when
-    // hasSwal is false. Deliberately mirrors the SweetAlert2 markup's
-    // shape so /css/alerts.css can style the two identically; a user who
-    // is offline should not be able to tell which one they are looking at.
-    // ------------------------------------------------------------------
+    // Plain DOM alert renderer with no dependencies, used only when hasSwal is false.
+    // Mirrors SweetAlert2's markup so alerts.css can style both the same way.
     _fallback: {
-        // Text-only symbols, because the icon fonts (Font Awesome /
-        // Bootstrap Icons) are themselves CDN-loaded and may be just as
-        // missing as SweetAlert2 is in this code path.
+        // Text symbols instead of icon fonts, since those can be missing too.
         _symbol: { success: '✓', error: '✕', warning: '!', info: 'i', question: '?' },
 
-        _open: null, // the single container currently on screen, if any
+        _open: null, // the container currently on screen, if any
 
         close() {
             if (this._open && this._open.parentNode) this._open.parentNode.removeChild(this._open);
             this._open = null;
-            // preventScroll — restoring focus must never MOVE the page. The
-            // element that opened the dialog is usually a button at the
-            // bottom of a long form (a "Next"/"Submit"), so a plain focus()
-            // yanked the user back down to it on close, undoing wherever the
-            // caller had just sent them. `_returnFocus === false` opts out
-            // entirely, for callers that focus something themselves after
-            // the dialog closes (see AppAlert.warning's `returnFocus`).
+            // Restores focus without scrolling the page. Skipped when _returnFocus is false,
+            // for callers that handle focus themselves after closing.
             if (this._returnFocus !== false && this._restoreFocus && typeof this._restoreFocus.focus === 'function') {
                 try { this._restoreFocus.focus({ preventScroll: true }); }
                 catch (e) {
@@ -77,8 +39,7 @@ const AppAlert = {
             this._returnFocus = undefined;
         },
 
-        // Returns a Promise<boolean>: true only when the confirm button was
-        // used, matching AppAlert.confirm's contract.
+        // Returns a Promise<boolean> that resolves true only when confirm was clicked.
         show(opts) {
             const o = opts || {};
             const self = this;
@@ -103,7 +64,7 @@ const AppAlert = {
             if (o.title) {
                 const h = document.createElement('h2');
                 h.className = 'appalert-fallback-title';
-                h.textContent = o.title; // textContent, never innerHTML — messages can carry server text
+                h.textContent = o.title; // textContent only, since messages can carry server text
                 popup.appendChild(h);
             }
             if (o.text) {
@@ -144,8 +105,7 @@ const AppAlert = {
                     actions.appendChild(confirm);
 
                     popup.appendChild(actions);
-                    // Focus the SAFE action on a destructive confirm, so a
-                    // stray Enter keypress can never destroy anything.
+                    // Focuses the safe (cancel) button on a destructive confirm.
                     setTimeout(() => {
                         const target = (o.showCancel && o.danger) ? actions.firstChild : confirm;
                         if (target && target.focus) target.focus();
@@ -157,8 +117,7 @@ const AppAlert = {
                 };
                 document.addEventListener('keydown', onKey, true);
 
-                // Clicking the dimmed backdrop dismisses, except while a
-                // blocking/loading dialog is up.
+                // Clicking the backdrop dismisses, unless the dialog is blocking.
                 if (!o.toast && !o.blocking) {
                     container.addEventListener('click', (e) => { if (e.target === container) finish(false); });
                 }
@@ -174,9 +133,7 @@ const AppAlert = {
         }
     },
 
-    // ------------------------------------------------------------------
-    // MODAL ALERTS — unchanged signatures.
-    // ------------------------------------------------------------------
+    // Shows a modal alert, using SweetAlert2 or the plain fallback.
     _modal(type, message, title, extra) {
         if (!this.hasSwal) {
             return this._fallback.show({
@@ -185,9 +142,7 @@ const AppAlert = {
                 text: message,
                 confirmText: 'OK',
                 timer: (extra && extra.timer) || undefined,
-                // Forwarded so the offline fallback and SweetAlert2 honour
-                // `returnFocus: false` identically — a caller that manages
-                // focus itself must get the same behavior either way.
+                // Keeps returnFocus behavior consistent between the fallback and SweetAlert2.
                 returnFocus: extra ? extra.returnFocus : undefined
             });
         }
@@ -196,9 +151,7 @@ const AppAlert = {
             title,
             text: message,
             confirmButtonColor: this.theme.confirmButtonColor,
-            // Buttons stack on narrow screens (see alerts.css); reversed
-            // order keeps the primary action nearest the thumb.
-            reverseButtons: true
+            reverseButtons: true // keeps the primary button nearest the thumb on mobile
         }, extra || {}));
     },
 
@@ -214,12 +167,8 @@ const AppAlert = {
         return this._modal('info', message, title);
     },
 
-    // `extra` is passed straight through to the underlying engine (and the
-    // relevant parts of it to the offline fallback). Existing two-argument
-    // callers are unaffected. The option that matters here is
-    // `returnFocus: false`, for a caller that moves focus itself once the
-    // alert is dismissed — e.g. form validation focusing the field the user
-    // missed, which the default focus-restore would otherwise fight.
+    // extra is passed straight through, including returnFocus: false for callers
+    // that move focus themselves after the alert closes.
     warning(message, title = 'Warning', extra) {
         return this._modal('warning', message, title, extra);
     },
@@ -227,11 +176,7 @@ const AppAlert = {
     // Resolves to true only if the user confirms.
     async confirm(message, { title = 'Are you sure?', confirmText = 'Yes, proceed!', danger = true } = {}) {
         if (!this.hasSwal) {
-            // Previously the only no-Swal path in the app was a raw
-            // window.confirm(), which is unstyled, unbrandable, and on
-            // some mobile browsers can be suppressed entirely — meaning a
-            // destructive action either looked broken or silently did
-            // nothing. This renders the same dialog as everywhere else.
+            // Renders the same styled confirm dialog as everywhere else, instead of a raw window.confirm().
             return this._fallback.show({
                 type: 'warning',
                 title,
@@ -257,18 +202,11 @@ const AppAlert = {
         return result.isConfirmed;
     },
 
-    // ------------------------------------------------------------------
-    // TOASTS — short-lived corner notifications for routine confirmations
-    // (record saved, approved, declined, logged out, etc). Desktop:
-    // top-right. Mobile (<576px): top-center full-width strip, clear of
-    // the notch (see alerts.css). Success/info auto-dismiss; error/warning
-    // need a manual close so the user has time to read them.
-    // ------------------------------------------------------------------
+    // Short corner notifications for routine confirmations. Success and info
+    // auto-dismiss, error and warning stay until closed manually.
     _toastIcon: { success: 'success', error: 'error', warning: 'warning', info: 'info' },
 
-    // The offline sync loop retries on an interval, so without this the
-    // same "couldn't sync" toast could stack several deep. A repeat of the
-    // identical message within 4s is dropped.
+    // Drops a repeat of the same toast message within 4 seconds so retries don't stack up.
     _lastToast: { key: '', at: 0 },
 
     toast(type, message, opts = {}) {
@@ -288,9 +226,7 @@ const AppAlert = {
                 text: message,
                 toast: true,
                 showConfirm: false,
-                // A non-auto-closing fallback toast still has to be
-                // dismissible, and it has no close button of its own, so
-                // it gets a generous timer rather than sticking forever.
+                // Fallback toasts have no close button, so non-auto-closing ones still get a long timer.
                 timer: autoClose ? duration : 10000
             });
         }
@@ -319,11 +255,8 @@ const AppAlert = {
     toastWarning(message, opts) { return this.toast('warning', message, { autoClose: false, ...opts }); },
     toastInfo(message, opts) { return this.toast('info', message, opts); },
 
-    // ------------------------------------------------------------------
-    // LOADING — for requests with no natural page-navigation loading state
-    // (fetch()-based flows). Always pair with AppAlert.stopLoading() in a
-    // finally block so it can never get stuck open.
-    // ------------------------------------------------------------------
+    // For fetch() flows with no natural page navigation to show progress.
+    // Always pair with stopLoading() in a finally block.
     loading(message = 'Processing your request...', title = 'Please wait') {
         if (!this.hasSwal) {
             return this._fallback.show({
@@ -349,12 +282,8 @@ const AppAlert = {
         this._fallback.close();
     },
 
-    // ------------------------------------------------------------------
-    // BUTTON LOADING STATE — disables a submit button and swaps its label
-    // for a spinner, guarding against duplicate/double-click submissions.
-    // Call restoreButton() if the action fails; on success the page usually
-    // navigates away or re-renders, so restoring isn't always necessary.
-    // ------------------------------------------------------------------
+    // Disables a submit button and swaps its label for a spinner to block double clicks.
+    // Call restoreButton() if the action fails.
     setButtonLoading(button, loadingText = 'Processing...') {
         if (!button || button.dataset.loading === '1') return;
         button.dataset.loading = '1';
@@ -373,17 +302,9 @@ const AppAlert = {
         delete button.dataset.originalHtml;
     },
 
-    // ------------------------------------------------------------------
-    // NETWORK-AWARE HELPERS
-    // Every feature that talks to the server needs to say the same thing
-    // when the request fails, and the right thing depends on whether the
-    // device is offline. Routing those through here means the offline
-    // survey, the login page and the admin tables all word it identically.
-    // ------------------------------------------------------------------
+    // Network aware helpers so offline vs server error messaging stays consistent everywhere.
     get isOnline() {
-        // navigator.onLine only proves a link exists, not that the server
-        // is reachable — so it is trusted for the NEGATIVE case only
-        // (false really does mean offline), which is how it is used here.
+        // navigator.onLine only tells us the negative case reliably, so we only trust it when it says offline.
         return typeof navigator === 'undefined' || navigator.onLine !== false;
     },
 
@@ -392,18 +313,7 @@ const AppAlert = {
         return this.toast('warning', message, { title, autoClose: false });
     },
 
-    // Call from a catch block around any fetch(). Picks the offline wording
-    // or the server-error wording automatically, so no caller has to
-    // re-implement that check.
-    //
-    // Deliberately does NOT surface err.message by default: a fetch() that
-    // fails because the network died rejects with a TypeError whose message
-    // is "Failed to fetch" / "NetworkError when attempting to fetch
-    // resource" — browser-internal wording that means nothing to a survey
-    // respondent. The caller's own fallbackMessage describes what the user
-    // was actually trying to do, so that wins. An error carrying an
-    // explicit `userMessage` (set by us, already user-facing) is preferred
-    // over both.
+    // Call from a catch block around a fetch(). Picks offline or server error wording automatically.
     fromError(err, fallbackMessage = 'Something went wrong. Please try again.') {
         if (!this.isOnline) {
             return this.offline('You appear to be offline, so this could not be saved. Please check your connection and try again.');
@@ -412,12 +322,7 @@ const AppAlert = {
         return this.toast('error', message, { autoClose: false });
     },
 
-    // ------------------------------------------------------------------
-    // CONNECTION STATUS — one consistent notification for going offline
-    // and coming back, instead of each page inventing its own banner.
-    // Opt-in per page via AppAlert.watchConnection(); auto-enabled below
-    // for pages that opt in with <body data-connection-alerts>.
-    // ------------------------------------------------------------------
+    // One consistent notification for going offline and coming back. Opt in per page with AppAlert.watchConnection().
     _connectionWatching: false,
 
     watchConnection(opts = {}) {
@@ -435,23 +340,13 @@ const AppAlert = {
             this.toast('success', onlineMessage, { title: 'Back Online' });
         });
 
-        // Say so on load too — a user who opens the app already offline
-        // otherwise gets no indication at all, because 'offline' only
-        // fires on a TRANSITION.
+        // Also announce on load, since the offline event only fires on a transition.
         if (!this.isOnline && opts.announceOnLoad !== false) {
             this.toast('warning', offlineMessage, { title: 'Offline', autoClose: false });
         }
     },
 
-    // ------------------------------------------------------------------
-    // SERVER-SIDE FLASH MESSAGES — reads ?success=/?error=/?warning=/?info=
-    // from the current URL (the convention used by redirect-based POST
-    // handlers throughout the app), shows the matching toast once, then
-    // strips the param from the address bar so a refresh doesn't repeat it.
-    // Opt-in per page (call it explicitly) so pages with their own bespoke
-    // query-param handling (e.g. login.ejs's session_expired special-case)
-    // are never double-handled.
-    // ------------------------------------------------------------------
+    // Reads ?success=/?error=/?warning=/?info= from the URL, shows the matching toast once, then strips it so a refresh doesn't repeat it.
     autoShowFromQuery(paramMap = { success: 'success', error: 'error', warning: 'warning', info: 'info' }) {
         const params = new URLSearchParams(window.location.search);
         let shown = false;
@@ -473,19 +368,7 @@ const AppAlert = {
     }
 };
 
-// Accessible show/hide toggle for every password input on client/office
-// pages that load this shared file (admin pages don't load it, so this
-// never touches admin forms). Auto-runs on DOMContentLoaded below; also
-// exposed on window so dynamically-created password inputs (e.g. any
-// SweetAlert2 modal) can call it against just their own root element once
-// rendered. Never reads, logs, copies, or persists the value anywhere — the
-// click handler only ever flips the input's own `type` attribute back and
-// forth.
-// Which icon font this page actually loaded. The toggle used to hard-code
-// Bootstrap Icons ("bi bi-eye"), but only client-survey.ejs loads that font —
-// every other page here loads Font Awesome, so the <i> rendered as nothing and
-// the toggle showed up as an empty bordered box that read as a stray divider
-// line inside the password field. Detected once, per page.
+// Figures out which icon font the page loaded so the toggle icon actually renders.
 function pwIconSet() {
     const hasBootstrapIcons = !!document.querySelector('link[href*="bootstrap-icons"]');
     return hasBootstrapIcons
@@ -493,14 +376,7 @@ function pwIconSet() {
         : { shown: 'fas fa-eye', hidden: 'fas fa-eye-slash' };
 }
 
-// Accessible show/hide toggle for every password input on client/office
-// pages that load this shared file (admin pages don't load it, so this
-// never touches admin forms). Auto-runs on DOMContentLoaded below; also
-// exposed on window so dynamically-created password inputs (e.g. any
-// SweetAlert2 modal) can call it against just their own root element once
-// rendered. Never reads, logs, copies, or persists the value anywhere — the
-// click handler only ever flips the input's own `type` attribute back and
-// forth.
+// Adds a show/hide toggle to every password input on client and office pages. Only flips the input's type attribute, never reads the value.
 function initPasswordToggles(root) {
     root = root || document;
     const icons = pwIconSet();
@@ -510,15 +386,12 @@ function initPasswordToggles(root) {
 
         const btn = document.createElement('button');
         btn.type = 'button'; // never a submit trigger
-        // Both classes: `password-toggle` is what page CSS styles, and
-        // `pw-toggle-btn` is kept so any existing selector still matches.
+        // Keeps both class names so old and new CSS selectors both match.
         btn.className = 'password-toggle pw-toggle-btn';
         btn.setAttribute('aria-label', 'Show password');
         btn.setAttribute('title', 'Show password');
         btn.setAttribute('aria-pressed', 'false');
-        // The icon shows the CURRENT STATE, not the action it would perform:
-        // a slashed eye means "hidden right now", an open eye means "visible
-        // right now". The field starts hidden, so it starts slashed.
+        // Icon shows the current state: slashed means hidden, open means visible.
         btn.innerHTML = '<i class="' + icons.hidden + '"></i>';
         btn.addEventListener('click', () => {
             const showing = input.type === 'text';
@@ -529,24 +402,16 @@ function initPasswordToggles(root) {
             btn.setAttribute('aria-label', label);
             btn.setAttribute('title', label);
             btn.setAttribute('aria-pressed', showing ? 'false' : 'true');
-            // Flipping `type` sends the caret to the end in some browsers,
-            // which is jarring mid-word — put it back where it was.
+            // Flipping type can move the caret to the end in some browsers, so restore its position.
             const pos = input.value.length;
             input.focus();
             try { input.setSelectionRange(pos, pos); } catch (e) { /* not supported on every input type */ }
         });
 
-        // .input-modern (this app's own custom field wrapper) and Bootstrap's
-        // .input-group are both already flex + built to hold a trailing
-        // addon — appended directly as a sibling of the input, never
-        // wrapping it, so their existing CSS (including .input-group's
-        // direct-child flex-sizing selectors) stays intact.
+        // Appends the toggle as a sibling inside the existing field wrapper instead of wrapping the input.
         const group = input.closest('.input-modern') || input.closest('.input-group');
         if (group) {
-            // Deliberately NOT Bootstrap's .btn-outline-secondary here: its
-            // own left/right borders are what made the field look chopped in
-            // two. `.password-toggle` in style.css renders it as a plain icon
-            // that blends into the field instead.
+            // Uses the plain password-toggle style instead of Bootstrap's outline button.
             if (group.classList.contains('input-group')) {
                 btn.classList.add('password-toggle-grouped');
             }
@@ -554,10 +419,7 @@ function initPasswordToggles(root) {
             return;
         }
 
-        // No existing icon-field wrapper — wrap just the input itself
-        // (never its <label> or any sibling, and never its `name`
-        // attribute — some client-facing password inputs deliberately
-        // have none so they can never end up in a form's FormData).
+        // No existing wrapper, so wrap just the input itself, not its label or siblings.
         const wrap = document.createElement('span');
         wrap.style.cssText = 'position:relative;display:block;';
         input.parentNode.insertBefore(wrap, input);
@@ -568,11 +430,7 @@ function initPasswordToggles(root) {
     });
 }
 
-// Opt-in password strength meter. Only attaches to inputs that explicitly ask
-// for it with `data-pw-strength`, so it never shows up on a plain sign-in
-// field that didn't request it. Feedback only — it never blocks submission,
-// because an existing account may legitimately have a weak password and
-// refusing to submit would lock that user out of their own account.
+// Password strength meter for inputs marked with data-pw-strength. Shows feedback only, never blocks submission.
 function initPasswordStrength(root) {
     root = root || document;
     root.querySelectorAll('input[data-pw-strength]').forEach((input) => {
@@ -588,10 +446,7 @@ function initPasswordStrength(root) {
             '<span class="pw-strength-badge"><i class="fas pw-strength-icon"></i><span class="pw-strength-text"></span></span>' +
             '<span class="pw-strength-hint"></span></p>';
 
-        // Sits directly under the whole field (the wrapper, when there is
-        // one), never inside it — dropping it inside an .input-group would
-        // make Bootstrap treat it as another addon and lay it out on the
-        // same row as the input.
+        // Sits under the whole field wrapper, not inside it, so Bootstrap doesn't treat it as another addon.
         const field = input.closest('.input-modern') || input.closest('.input-group') || input;
         field.parentNode.insertBefore(meter, field.nextSibling);
 
@@ -600,8 +455,7 @@ function initPasswordStrength(root) {
         const iconEl = meter.querySelector('.pw-strength-icon');
         const ICONS = ['', 'fa-triangle-exclamation', 'fa-shield-halved', 'fa-shield-halved', 'fa-shield-halved'];
 
-        // Score 0-4. Length carries the most weight (it's what actually costs
-        // an attacker time), with character variety on top.
+        // Scores 0 to 4, weighted mostly by length with character variety added on top.
         function score(v) {
             if (!v) return { level: 0, text: '', hint: '' };
             const variety = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/]
@@ -643,50 +497,22 @@ document.addEventListener('DOMContentLoaded', () => {
     initPasswordStrength();
 });
 
-// Exposed so dynamically-rendered password inputs (e.g. inside a SweetAlert2
-// modal, which doesn't exist yet at DOMContentLoaded) can be wired up against
-// just their own root once they're in the DOM. Both are idempotent — the
-// data-* guards mean re-running over an already-initialised field is a no-op.
+// Exposed so password inputs rendered later, like inside a SweetAlert2 modal, can be wired up too. Safe to call more than once.
 window.initPasswordToggles = initPasswordToggles;
 window.initPasswordStrength = initPasswordStrength;
 
-// Requested global convenience API: showAlert({ type, title, message }).
-// Thin wrapper around AppAlert so both call styles are available everywhere
-// AppAlert is (i.e. everywhere layout/footer.ejs or a page's own script tags
-// load this file).
+// Convenience wrapper around AppAlert: showAlert({ type, title, message }).
 function showAlert({ type = 'info', title, message, toast = false } = {}) {
     if (toast) return AppAlert.toast(type, message, { title });
     const fn = AppAlert[type] || AppAlert.info;
     return title ? fn.call(AppAlert, message, title) : fn.call(AppAlert, message);
 }
 
-// ---------------------------------------------------------------------
-// EXPLICIT GLOBAL EXPORTS — load-bearing, do not remove.
-//
-// `const AppAlert = {...}` at the top level of a classic <script> creates
-// a binding in the global LEXICAL scope, which is NOT the same as a
-// property on `window`. So `AppAlert` resolved fine, but `window.AppAlert`
-// was permanently `undefined` — and pwa-client.js gates every one of its
-// offline-sync notifications on exactly that check:
-//
-//     if (!window.AppAlert) return;
-//
-// which meant the entire offline path — "saved locally, will submit when
-// you're back online", "N surveys synced", "couldn't be verified",
-// "rejected", "please wait" — silently showed the user NOTHING. The alerts
-// were written and wired up correctly; they simply never ran.
-//
-// Assigning here makes those guards true, and keeps the `window.` form
-// working from any other script regardless of load order.
-// ---------------------------------------------------------------------
+// Puts AppAlert and showAlert on window explicitly since a top level const isn't a window property on its own. Other scripts like pwa-client.js depend on window.AppAlert existing.
 window.AppAlert = AppAlert;
 window.showAlert = showAlert;
 
-// Announce connection changes through the standard toasts on any page that
-// opts in with <body data-connection-alerts>. Opt-in rather than automatic
-// so pages that deliberately render their own richer offline UI (login's
-// offline overlay, the offline survey's own status strip) don't end up
-// showing two notices for the same event.
+// Announces connection changes as toasts on pages that opt in with <body data-connection-alerts>.
 document.addEventListener('DOMContentLoaded', () => {
     if (document.body && document.body.hasAttribute('data-connection-alerts')) {
         AppAlert.watchConnection();

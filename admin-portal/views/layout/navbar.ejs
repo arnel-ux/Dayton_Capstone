@@ -13,21 +13,7 @@
     %>
     <div class="navbar-actions">
 
-        <!-- Incoming-survey bell. The feed is survey_responses itself (see
-             /api/admin/notifications) — nothing is written per notification, so
-             what's listed here is always exactly what's in the records.
-
-             A MODAL, not a dropdown. A dropdown anchors to the bell, which is
-             in the top-right corner, so the panel opened into the corner of a
-             wide screen — the furthest point from where the admin is actually
-             looking — and was capped at 340px wide by the space left beside
-             it. Respondent and office names are long enough that nearly every
-             row was truncated to an ellipsis inside that width. Centring it
-             takes the width cap away, so the rows can show the whole name, and
-             puts the panel where the eye already is. The backdrop that comes
-             with a modal also makes it unmistakably a thing you are IN and
-             then dismiss, rather than something that vanishes on a stray
-             click somewhere else on the page. -->
+        <!-- Incoming survey bell. Shows a modal listing recent survey responses. -->
         <div class="notif-bell-wrap">
             <button type="button" id="adminNotifBell" class="notif-bell"
                     data-bs-toggle="modal" data-bs-target="#adminNotifModal"
@@ -65,9 +51,7 @@
 </nav>
 
 <style>
-    /* The navbar is justify-content: space-between, so the bell and the admin
-       menu share one right-hand group rather than being pushed to opposite
-       ends of the bar. */
+    /* Groups the bell and admin menu together on the right side of the navbar. */
     .navbar-actions {
         display: flex;
         align-items: center;
@@ -98,11 +82,7 @@
     .notif-bell:active { transform: scale(0.94); }
     .notif-bell:focus-visible { outline: 2px solid var(--accent, #ffcc00); outline-offset: 2px; }
 
-    /* Unread state. The badge alone is 18px in the corner of the screen and is
-       genuinely easy to walk past; the ring draws the eye to the bell without
-       moving anything or making noise. It runs three times and stops — a
-       permanent animation in a toolbar becomes furniture within a minute and
-       is then just something flickering while you are trying to read the page. */
+    /* Unread state. Rings and swings the bell three times to catch attention, then stops. */
     .notif-bell.has-unread { color: var(--primary, #251d3a); border-color: rgba(37, 29, 58, 0.35); }
     html[data-bs-theme="dark"] .notif-bell.has-unread { color: #b9cbff; border-color: rgba(185, 203, 255, 0.4); }
     .notif-bell.has-unread::after {
@@ -134,8 +114,7 @@
         .notif-bell.has-unread::after { opacity: 0.6; }
     }
 
-    /* Rings the badge in the navbar's own background colour so it reads as a
-       separate chip sitting on top of the bell, not part of the icon. */
+    /* Outlines the badge in the navbar background so it looks like a chip on top of the bell. */
     .notif-badge {
         position: absolute;
         top: -3px;
@@ -154,13 +133,7 @@
     }
     .notif-badge[hidden] { display: none !important; }
 
-    /* ==================== THE PANEL ====================
-       A centred modal (see the markup comment on the bell). Bootstrap's own
-       .modal-content is the box; everything below restyles it into a panel
-       rather than a form dialog — no bordered header/footer bars, because
-       three horizontal rules stacked inside 500px of height is most of what
-       you end up seeing. The header carries the brand gradient and the footer
-       is one tinted strip, so the panel reads as three bands, not five. */
+    /* The notification panel. Restyles Bootstrap's modal into a gradient header, body, and footer band. */
     .notif-modal .modal-dialog { max-width: 520px; }
 
     .notif-modal-content {
@@ -171,9 +144,7 @@
         box-shadow: 0 24px 60px -18px rgba(15, 23, 42, 0.45);
     }
 
-    /* A touch more travel than Bootstrap's default, plus a scale, so the panel
-       reads as coming FORWARD out of the page — which is what tells you it is
-       centred on purpose rather than having lost its anchor. */
+    /* Slides and scales the panel in so it feels like it's coming forward out of the page. */
     .notif-modal.fade .modal-dialog {
         transform: translateY(18px) scale(0.97);
         transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.3, 1);
@@ -192,9 +163,7 @@
         background: linear-gradient(135deg, var(--primary, #251d3a), var(--primary-hover, #2a2550));
         color: #fff;
     }
-    /* A hairline of brand gold along the bottom of the header — the same accent
-       the sidebar and the auth pages use, and the one thing that keeps a flat
-       navy band from looking like an unstyled placeholder. */
+    /* Thin gold accent line along the bottom of the header. */
     .notif-head::after {
         content: "";
         position: absolute;
@@ -260,8 +229,7 @@
     .notif-head-close:hover { background: rgba(255, 255, 255, 0.26); color: #fff; }
     .notif-head-close:focus-visible { outline: 2px solid var(--accent, #ffcc00); outline-offset: 2px; }
 
-    /* Capped so the panel stays centred and dismissible on a laptop screen
-       rather than filling it; dvh because a phone's address bar eats into vh. */
+    /* Caps the panel height so it stays centered instead of filling the screen. */
     .notif-body {
         flex: 1 1 auto;
         overflow-y: auto;
@@ -270,9 +238,7 @@
         padding: 8px;
     }
 
-    /* Each row is its own rounded tile with a gap between, rather than a
-       full-width row separated by a rule. A dozen hairlines down a scrolling
-       list is visual noise; whitespace separates them just as well. */
+    /* Each row is its own rounded tile with spacing between them instead of a divider line. */
     .notif-row {
         display: flex;
         align-items: flex-start;
@@ -288,17 +254,13 @@
     html[data-bs-theme="dark"] .notif-row:hover { background: rgba(255, 255, 255, 0.05); }
     .notif-row:focus-visible { outline: 2px solid var(--primary, #251d3a); outline-offset: -2px; }
 
-    /* Unread rows get a coloured rail down the left edge as well as the tint:
-       the tint on its own was a 4.5%-opacity wash that did not survive being
-       looked at on a bright screen. */
+    /* Unread rows get a colored rail on the left edge plus a background tint. */
     .notif-row.is-new {
         background: rgba(220, 53, 69, 0.11);
         box-shadow: inset 3px 0 0 #dc3545;
     }
     html[data-bs-theme="dark"] .notif-row.is-new { background: rgba(220, 53, 69, 0.2); }
-    /* An unread row should read as lit-up next to the ones already seen, not
-       merely tinted: the title goes to full strength and the whole row sits on
-       a soft halo, while seen rows are dimmed slightly to widen the gap. */
+    /* Unread rows stand out with a bold title, while read rows are dimmed slightly. */
     .notif-row.is-new .notif-row-office { color: var(--text-main, #1f2937); font-weight: 800; }
     html[data-bs-theme="dark"] .notif-row.is-new .notif-row-office { color: #fff; }
     .notif-row.is-new .notif-row-sub,
@@ -310,7 +272,7 @@
     .notif-row:not(.is-new) { opacity: 0.86; }
     .notif-row:not(.is-new):hover { opacity: 1; }
 
-    /* ---- Toolbar: All/Unread filter + bulk actions ---- */
+    /* Toolbar with the All/Unread filter and bulk actions. */
     .notif-toolbar {
         display: flex;
         align-items: center;
@@ -350,8 +312,7 @@
     }
     html[data-bs-theme="dark"] .notif-filter-btn.is-active { background: rgba(255, 255, 255, 0.14); color: #fff; }
     .notif-filter-btn:focus-visible { outline: 2px solid var(--primary, #251d3a); outline-offset: 1px; }
-    /* The unread tally rides on its own tab, so the number and the list it
-       opens can never disagree. */
+    /* Unread count badge shown on the filter tab. */
     .notif-filter-count {
         min-width: 18px;
         padding: 0 5px;
@@ -387,8 +348,7 @@
     .notif-tool-btn:disabled { opacity: 0.45; }
     .notif-tool-btn:focus-visible { outline: 2px solid var(--primary, #251d3a); outline-offset: 1px; }
 
-    /* Each row and its own delete button share a wrapper: the button cannot
-       live inside the row itself, because the row is a link. */
+    /* Wraps each row with its action buttons since the row itself is a link. */
     .notif-row-wrap { position: relative; }
     .notif-row-wrap + .notif-row-wrap { margin-top: 2px; }
     .notif-row-actions {
@@ -416,7 +376,7 @@
     .notif-row-btn:focus-visible { opacity: 1; }
     .notif-row-read:hover { background: rgba(37, 99, 235, 0.14); color: #2563eb; }
     .notif-row-dismiss:hover { background: rgba(220, 53, 69, 0.14); color: #dc3545; }
-    /* Touch screens have no hover, so the buttons must simply always be there. */
+    /* Keeps the buttons visible on touch screens since there's no hover. */
     @media (hover: none) {
         .notif-row-btn { opacity: 1; }
     }
@@ -448,9 +408,7 @@
         margin: 0;
         line-height: 1.35;
     }
-    /* The office name is the part that can be arbitrarily long, so it is the
-       only part allowed to truncate — the label and the NEW tag beside it
-       always stay whole. */
+    /* Only the office name truncates since it can be arbitrarily long. */
     .notif-row-office {
         min-width: 0;
         overflow: hidden;
@@ -485,7 +443,7 @@
         margin: 4px 0 0;
     }
 
-    /* ---- Empty / error state ---- */
+    /* Empty and error state. */
     .notif-placeholder {
         padding: 44px 20px;
         text-align: center;
@@ -507,7 +465,7 @@
     .notif-placeholder-title { margin: 0; font-size: 0.9rem; font-weight: 700; color: var(--text-main, #1f2937); }
     .notif-placeholder-sub { margin: 5px 0 0; font-size: 0.8rem; line-height: 1.5; }
 
-    /* ---- Loading skeleton ---- */
+    /* Loading skeleton. */
     .notif-skeleton { padding: 4px; }
     .notif-skeleton-row { display: flex; align-items: center; gap: 12px; padding: 12px 10px; }
     .sk-dot, .sk-line {
@@ -525,7 +483,7 @@
     @keyframes notifShimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
     @media (prefers-reduced-motion: reduce) { .sk-dot, .sk-line { animation: none; } }
 
-    /* ---- Footer ---- */
+    /* Footer. */
     .notif-foot {
         padding: 12px 16px;
         border-top: 1px solid var(--border-color, #e5e7eb);
@@ -545,10 +503,7 @@
         text-decoration: none;
         transition: filter 0.15s ease, transform 0.15s ease;
     }
-    /* In dark mode the button and the strip it sits on are both dark navy, so
-       the button loses its edge and reads as a label rather than a control.
-       Lifted a shade and outlined, which is the smallest thing that gives it
-       one back. */
+    /* Lightens and outlines the button in dark mode so it stands out from the footer strip. */
     html[data-bs-theme="dark"] .notif-foot-btn {
         background: #322c58;
         border: 1px solid rgba(255, 255, 255, 0.14);
@@ -558,8 +513,7 @@
 
     @media (max-width: 575.98px) {
         .navbar-actions { gap: 8px; }
-        /* Full width inside the dialog's own side margin, and a taller body —
-           a phone has the height to spare and nothing else competing for it. */
+        /* Full width panel with a taller body on phone screens. */
         .notif-modal .modal-dialog { max-width: none; margin: 0.75rem; }
         .notif-head { padding: 14px 16px; gap: 10px; }
         .notif-head-icon { width: 36px; height: 36px; border-radius: 10px; }
@@ -580,18 +534,14 @@
                     <h5 class="notif-head-title" id="adminNotifModalLabel">Incoming Surveys</h5>
                     <p class="notif-head-sub">The most recent responses submitted across all offices</p>
                 </div>
-                <!-- Sits next to the close button rather than beside the title:
-                     it changes on every poll, and a chip that resizes in the
-                     middle of a heading drags the heading around with it. -->
+                <!-- Sits next to the close button instead of the title, since it changes on every poll. -->
                 <span class="notif-head-count" id="adminNotifHeadCount" hidden></span>
                 <button type="button" class="notif-head-close" data-bs-dismiss="modal" aria-label="Close">
                     <i class="fas fa-xmark"></i>
                 </button>
             </div>
 
-            <!-- Toolbar: which rows to list, and the two bulk actions. Kept out
-                 of the coloured header because these are controls the admin
-                 works with, not part of the panel's title. -->
+            <!-- Toolbar with the row filter and the two bulk actions. -->
             <div class="notif-toolbar">
                 <div class="notif-filter" role="tablist" aria-label="Filter notifications">
                     <button type="button" class="notif-filter-btn is-active" data-filter="all" role="tab" aria-selected="true">All</button>
@@ -610,9 +560,7 @@
             </div>
 
             <div class="notif-body" id="adminNotifList">
-                <!-- Skeleton rows, not a spinner: the panel opens at its final
-                     height and the real rows land where the grey ones were, so
-                     nothing jumps as the fetch resolves. -->
+                <!-- Skeleton rows shown while the real notifications load. -->
                 <div class="notif-skeleton" aria-hidden="true">
                     <div class="notif-skeleton-row"><span class="sk-dot"></span><span class="sk-lines"><span class="sk-line sk-line-lg"></span><span class="sk-line sk-line-sm"></span></span></div>
                     <div class="notif-skeleton-row"><span class="sk-dot"></span><span class="sk-lines"><span class="sk-line sk-line-lg"></span><span class="sk-line sk-line-sm"></span></span></div>
@@ -666,7 +614,7 @@
                                             <td><span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25"><i class="fas fa-sign-out-alt me-1"></i> <%= log.logout_time_fmt %></span></td>
                                             <td class="pe-4 fw-bold text-secondary"><%= log.duration_text %></td>
                                         <% } else { %>
-                                            <!-- logout_time not yet written — session went stale (cookie expired, browser closed) and the periodic sweep hasn't caught up to it yet -->
+                                            <!-- Session went stale before logout was recorded. -->
                                             <td><span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25"><i class="fas fa-clock me-1"></i> Session expired</span></td>
                                             <td class="pe-4 fw-bold text-secondary">&mdash;</td>
                                         <% } %>
@@ -690,12 +638,8 @@
 </div>
 
 <script>
-    // --- Incoming-survey notification bell ---
-    // Polls /api/admin/notifications for the newest canonical survey responses
-    // and badges however many arrived since this admin last opened the panel
-    // (the server-side watermark — see admins.notifications_seen_at). Opening
-    // the panel is what marks them seen, so the badge belongs to this admin
-    // alone and clearing it never touches anyone else's.
+    // Incoming survey notification bell.
+    // Polls for new survey responses and badges how many arrived since this admin last opened the panel.
     (function () {
         var POLL_MS = 30000;
 
@@ -712,12 +656,8 @@
 
         var pollTimer = null;
 
-        // Dismissed notifications. The feed IS survey_responses, so there is no
-        // notification row to delete -- deleting one here must never delete the
-        // survey itself, which still has to show up on /survey-records and in
-        // the reports. What is stored is therefore only "this admin has cleared
-        // survey #N from their own bell", kept in this browser and keyed by
-        // admin id so two admins sharing a machine do not clear each other's.
+        // Notifications this admin dismissed from their own bell, kept in this browser and keyed by admin id.
+        // Dismissing never deletes the actual survey record.
         var DISMISS_KEY = 'adminNotifDismissed:' + (bell.dataset.adminKey || 'admin');
         var dismissed = (function () {
             try {
@@ -725,19 +665,11 @@
                 return Array.isArray(raw) ? raw.map(Number) : [];
             } catch (e) { return []; }
         })();
-        // Whatever the panel last received from the server, before dismissals
-        // are applied -- "Clear all" works off this.
+        // Last list received from the server, before dismissals are applied.
         var lastItems = [];
 
-        // Read/unread is tracked HERE, not off the server's isNew flag alone.
-        // isNew is derived from the seen watermark, and merely OPENING the panel
-        // moves that watermark, so every row would flip to "read" on the next
-        // 30s poll whether or not the admin actually dealt with it -- an Unread
-        // list built on it would empty itself while the admin was reading it.
-        // Instead each notification is classified ONCE, the first time this
-        // browser ever sees it: arrived unseen => unread, already seen => read.
-        // After that only the admin changes it, via the row's own button or
-        // "Mark all read".
+        // Read/unread state is tracked here in the browser, not from the server flag.
+        // Each notification is classified once, the first time it's seen, then only changes when the admin marks it.
         var READ_KEY = 'adminNotifRead:' + (bell.dataset.adminKey || 'admin');
         var KNOWN_KEY = 'adminNotifKnown:' + (bell.dataset.adminKey || 'admin');
 
@@ -756,8 +688,7 @@
             try { localStorage.setItem(key, JSON.stringify(ids)); } catch (e) { /* private mode */ }
         }
 
-        // Classifies anything this browser has not seen before, then prunes all
-        // three stored sets back to what the feed still returns.
+        // Classifies any new notifications, then prunes stored ids down to what the feed still returns.
         function reconcileReadState() {
             var live = lastItems.map(function (item) { return Number(item.id); });
 
@@ -799,9 +730,7 @@
         }
 
         function saveDismissed() {
-            // Only ids still in the feed are worth keeping: the endpoint returns
-            // the newest 20, so anything older can never be listed again and the
-            // stored list would otherwise grow without limit.
+            // Keeps only ids still in the feed so the stored list doesn't grow forever.
             var live = lastItems.map(function (item) { return Number(item.id); });
             dismissed = dismissed.filter(function (id) { return live.indexOf(id) !== -1; });
             try { localStorage.setItem(DISMISS_KEY, JSON.stringify(dismissed)); } catch (e) { /* private mode */ }
@@ -831,8 +760,7 @@
             if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
         }
 
-        // Same shape the rest of the portal uses for recent activity: a short
-        // relative age while it's fresh, an actual date once it isn't.
+        // Shows a short relative age while it's fresh, an actual date once it's old.
         function relativeTime(iso) {
             if (!iso) return '';
             var then = new Date(iso).getTime();
@@ -848,13 +776,8 @@
             return new Date(then).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
         }
 
-        // The BELL's badge only. The panel's own header count is set by
-        // renderList instead, and the two are deliberately not the same number
-        // at the same moment: opening the panel is the "seen" event, so this
-        // is driven to zero the instant the modal finishes opening, while the
-        // rows on screen keep their "new" highlight until the next poll. A
-        // header chip wired to this one read "3 new" for a single frame and
-        // then blanked itself while three rows were still visibly marked new.
+        // Sets the bell's badge count only. It clears as soon as the panel opens,
+        // while the rows keep their "new" highlight until the next poll.
         function setBadge(count) {
             if (count > 0) {
                 badge.textContent = count > 99 ? '99+' : String(count);
@@ -862,19 +785,14 @@
             } else {
                 badge.hidden = true;
             }
-            // Drives the ring/swing on the bell itself. Only ADDED when the
-            // count goes from zero to non-zero: re-adding it on every 30s poll
-            // while the count merely stays the same would restart the
-            // animation forever, which is the exact "flickering furniture" the
-            // three-iteration limit in the CSS exists to avoid.
+            // Only adds the ring/swing animation when the count goes from zero to non-zero.
             var wanted = count > 0;
             if (wanted !== bell.classList.contains('has-unread')) {
                 bell.classList.toggle('has-unread', wanted);
             }
         }
 
-        // Built with DOM nodes rather than an HTML string so a respondent name
-        // or office name containing markup can never be injected into the page.
+        // Built with DOM nodes instead of an HTML string so names can't inject markup into the page.
         function renderRow(item) {
             var wrap = document.createElement('div');
             wrap.className = 'notif-row-wrap';
@@ -883,11 +801,9 @@
 
             var row = document.createElement('a');
             row.className = 'notif-row' + (unread ? ' is-new' : '');
-            // Opening a notification is also reading it.
+            // Opening a notification marks it as read.
             row.addEventListener('click', function () { markRead(item.id); });
-            // Straight to the office this response was submitted for: the
-            // records page reads ?office= and opens already filtered to it,
-            // instead of dropping the admin at the top of every cluster.
+            // Links straight to the survey records page filtered to this office.
             row.href = '/survey-records?office=' + encodeURIComponent(item.office || '');
 
             var icon = document.createElement('span');
@@ -897,10 +813,7 @@
             var body = document.createElement('div');
             body.className = 'notif-row-body';
 
-            // The office name is its own element so it alone can truncate —
-            // the whole line used to be one nowrap string, so a long office
-            // name took the words "New survey for" off the end with it and
-            // rows could read "New survey for Office of the Regis…".
+            // The office name is its own element so it alone can truncate.
             var title = document.createElement('p');
             title.className = 'notif-row-title';
             var office = document.createElement('span');
@@ -931,12 +844,11 @@
             row.appendChild(icon);
             row.appendChild(body);
 
-            // The row's own buttons, kept OUTSIDE the link so clicking one can
-            // never be read as following the link.
+            // Row buttons live outside the link so clicking them doesn't follow it.
             var actions = document.createElement('div');
             actions.className = 'notif-row-actions';
 
-            // Mark as read is only offered while there is something to mark.
+            // Only shows the mark as read button while the row is unread.
             if (unread) {
                 var readBtn = document.createElement('button');
                 readBtn.type = 'button';
@@ -975,9 +887,7 @@
             return wrap;
         }
 
-        // Shared shape for "there is nothing to list" and "we could not
-        // reach the server" — same layout, different words, so neither one
-        // looks like a broken version of the other.
+        // Shared layout for the empty list and connection error states, just with different wording.
         function renderPlaceholder(icon, title, sub) {
             list.innerHTML = '';
             var wrap = document.createElement('div');
@@ -1001,8 +911,7 @@
             list.appendChild(wrap);
         }
 
-        // Counts the rows actually marked new, so the chip and the NEW tags
-        // beside the rows can never disagree.
+        // Counts the rows actually marked new so the header chip matches the tags on screen.
         function setHeadCount(newRows) {
             if (!headCount) return;
             if (newRows > 0) {
@@ -1029,8 +938,7 @@
             if (markAllBtn) markAllBtn.disabled = unreadCount === 0;
 
             if (visible.length === 0) {
-                // The Unread tab empties on its own as rows are read, and that is
-                // a good outcome, not an error -- it gets its own wording.
+                // The Unread tab emptying out is a good outcome, so it gets its own message.
                 if (activeFilter === 'unread') {
                     renderPlaceholder(
                         'fas fa-check-double',
@@ -1040,9 +948,7 @@
                     setHeadCount(0);
                     return;
                 }
-                // Two different empty states: one for "nothing has come in", one
-                // for "you cleared what came in" -- the second must not read as
-                // though the surveys themselves went missing.
+                // Two different empty states: nothing has come in yet, or the admin cleared everything.
                 if (lastItems.length > 0) {
                     renderPlaceholder(
                         'fas fa-check',
@@ -1067,19 +973,14 @@
         function loadNotifications() {
             return fetch('/api/admin/notifications', { headers: { 'Accept': 'application/json' } })
                 .then(function (res) {
-                    // 401 = this admin's session is gone (timed out, or replaced
-                    // by a newer login). Polling on would just repeat the same
-                    // failure every 30s, so it stops here; the next ordinary page
-                    // request is what redirects to /login.
+                    // A 401 means this admin's session is gone, so polling stops here instead of repeating the failure.
                     if (res.status === 401) { stopPolling(); return null; }
                     if (!res.ok) return null;
                     return res.json();
                 })
                 .then(function (data) {
                     if (!data || !data.success) {
-                        // Only replace what is on screen if there is nothing
-                        // real there yet: a failed BACKGROUND poll must not
-                        // wipe a list the admin is currently reading.
+                        // Only replaces what's on screen if nothing real is there yet, so a failed poll can't wipe a list the admin is reading.
                         if (!list.querySelector('.notif-row')) {
                             renderPlaceholder(
                                 'fas fa-triangle-exclamation',
@@ -1094,7 +995,7 @@
                     setBadge(data.unseenCount);
                 })
                 .catch(function () {
-                    /* offline or a blip — the next poll retries */
+                    /* Offline or a blip, the next poll retries. */
                     if (!list.querySelector('.notif-row')) {
                         renderPlaceholder(
                             'fas fa-wifi',
@@ -1106,13 +1007,8 @@
                 });
         }
 
-        // Opening the panel is the "seen" event. The badge clears immediately
-        // rather than waiting for the round trip, and the rows keep their
-        // "new" highlight until the next poll so the admin can still see which
-        // ones they just caught up on.
-        // The panel is a modal now, so these are modal events on the MODAL
-        // element — the dropdown events were fired by the bell itself, which
-        // no longer opens anything.
+        // Opening the panel marks notifications as seen and clears the badge right away.
+        // Rows keep their new highlight until the next poll.
         modal.addEventListener('show.bs.modal', function () {
             bell.classList.add('is-open');
             loadNotifications();
@@ -1122,16 +1018,13 @@
             fetch('/api/admin/notifications/seen', {
                 method: 'POST',
                 headers: { 'Accept': 'application/json' }
-            }).catch(function () { /* the watermark just stays where it is */ });
+            }).catch(function () { /* Nothing to do, the watermark just stays where it is. */ });
         });
         modal.addEventListener('hidden.bs.modal', function () {
             bell.classList.remove('is-open');
         });
 
-        // One asking-first path for every destructive action here. AppAlert is
-        // loaded by layout/footer.ejs, below this partial, so it is looked up at
-        // click time rather than captured now; if it somehow is not there, the
-        // browser's own confirm still asks.
+        // Confirms before any destructive action here, falling back to the browser's own confirm if AppAlert isn't loaded yet.
         function confirmThen(message, title, confirmText, run) {
             if (window.AppAlert && AppAlert.confirm) {
                 AppAlert.confirm(message, { title: title, confirmText: confirmText, danger: true })
@@ -1156,8 +1049,7 @@
             markAllBtn.addEventListener('click', markAllRead);
         }
 
-        // All / Unread. Purely a view over what is already loaded, so switching
-        // tabs costs no request and never changes what is stored.
+        // All / Unread filter. Just a view over already loaded data, no request needed to switch tabs.
         filterBtns.forEach(function (btn) {
             btn.addEventListener('click', function () {
                 activeFilter = btn.dataset.filter === 'unread' ? 'unread' : 'all';
@@ -1173,16 +1065,13 @@
         loadNotifications();
         pollTimer = setInterval(loadNotifications, POLL_MS);
 
-        // A backgrounded tab's interval is throttled by the browser, so its
-        // badge can be minutes stale by the time the admin looks at it again.
-        // Refreshing on the way back makes it current at the moment it's read.
+        // Refreshes when the tab becomes visible again, since a backgrounded tab's polling gets throttled.
         document.addEventListener('visibilitychange', function () {
             if (!document.hidden && pollTimer) loadNotifications();
         });
     })();
 
-    // Ticks the "Hours" cell of whichever admin_logs row is still active
-    // (no logout_time yet) every second, computed off the real login instant.
+    // Ticks the Hours cell of any admin log row that's still active, updating every second.
     (function () {
         function formatLiveDuration(totalSeconds) {
             const hrs = Math.floor(totalSeconds / 3600);
@@ -1205,7 +1094,7 @@
         setInterval(tickLiveDurations, 1000);
     })();
 
-    // Exports the currently-listed Admin Access Logs (same rows shown in the modal) to a CSV file.
+    // Exports the currently listed admin access logs to a CSV file.
     function exportAdminLogs() {
         const table = document.getElementById('adminLogsTable');
         if (!table) return;
@@ -1234,17 +1123,8 @@
         document.body.removeChild(downloadLink);
     }
 
-    // Confirm before logging an admin out. This was the only one of the
-    // app's three logout buttons with NO confirmation — the office panel
-    // (office-approvals/office-history) and the client survey both ask
-    // first, so a single stray click in this dropdown ended an admin's
-    // session outright while the same click elsewhere did not.
-    //
-    // Bound on DOMContentLoaded because this partial is rendered in the
-    // body but alerts.js is loaded by layout/footer.ejs further down, so
-    // AppAlert does not exist yet at parse time. The link keeps its real
-    // href, so if this script never runs the button still works — it just
-    // logs out without asking, exactly as it did before.
+    // Confirms before logging an admin out. Bound on DOMContentLoaded since AppAlert loads later in the page.
+    // The link keeps its real href, so it still works even if this script never runs.
     document.addEventListener('DOMContentLoaded', function () {
         var adminLogoutBtn = document.getElementById('adminLogoutBtn');
         if (!adminLogoutBtn || !window.AppAlert) return;

@@ -1,24 +1,22 @@
 <%
-    // currentPath is set globally in server.js via res.locals.currentPath
+    // Set globally in server.js via res.locals.currentPath.
     const _path = typeof currentPath !== 'undefined' ? currentPath : '';
     const isClusterPage = _path.startsWith('/cluster');
     const isReportPage = _path.startsWith('/report');
-    // Populated per-request by ensureAdminAuth (res.locals.sidebarClusters) from
-    // the `clusters` table, so a newly added cluster shows up here automatically.
+    // Comes from ensureAdminAuth, pulled fresh from the clusters table each request.
     const _sidebarClusters = typeof sidebarClusters !== 'undefined' ? sidebarClusters : [];
     const clusterLinks = _sidebarClusters.map(c => ({
         href: '/cluster/' + c.id, icon: 'fa-layer-group', label: c.cluster_name
     }));
     const _currentAdmin = typeof currentAdmin !== 'undefined' ? currentAdmin : null;
-    // Profile, Manage Password, and Manage Admins live in the navbar's admin-name
-    // dropdown (see layout/navbar.ejs) — kept out of here to avoid duplicating them.
+    // Profile, Manage Password, and Manage Admins live in the navbar dropdown instead.
     const mainLinks = [
         { href: '/dashboard', icon: 'fa-th-large', label: 'Dashboard' },
         { href: '/survey', icon: 'fa-clipboard-list', label: 'Survey Management' },
         { href: '/offices', icon: 'fa-building', label: 'Manage Offices' },
         { href: '/user-accounts', icon: 'fa-user-check', label: 'User Accounts' }
     ];
-    // NOTE: mainLinks[0] (Dashboard) is rendered separately below; slice(1) covers the rest.
+    // Dashboard (mainLinks[0]) is rendered separately below, slice(1) covers the rest.
     const reportLinks = [
         { href: '/report', icon: 'fa-file-export', label: 'Overall Report' },
         { href: '/report/dashboard', icon: 'fa-chart-line', label: 'Dashboard Report' }
@@ -71,14 +69,11 @@
     </ul>
 </nav>
 
-<!-- Mobile off-canvas backdrop: only shown (via CSS, <=768px) while #sidebar
-     has .active. Clicking it closes the drawer (wired in main.js). -->
+<!-- Mobile backdrop, shown under 768px while the sidebar is open. Closing it is wired in main.js. -->
 <div id="sidebar-overlay" aria-hidden="true"></div>
 
 <script>
-    // Runs immediately as this element parses (no defer) so a full MPA page
-    // load restores the collapsed rail before first paint instead of flashing
-    // the expanded sidebar first.
+    // Runs immediately, not deferred, so the collapsed rail is restored before first paint.
     (function () {
         try {
             if (window.innerWidth > 768 && localStorage.getItem('sidebarCollapsed') === '1') {
@@ -89,10 +84,7 @@
 </script>
 
 <style>
-    /* Header stays put; ul.components is the only part of the sidebar that
-       ever scrolls internally, and only if the nav list itself grows taller
-       than the viewport (it currently doesn't — this is headroom, not the
-       normal case). */
+    /* Header stays put, ul.components is the only part that scrolls internally. */
     #sidebar .sidebar-header {
         padding: 20px;
         background: rgba(0, 0, 0, 0.1);
@@ -180,7 +172,7 @@
         transform: translateX(2px);
     }
 
-    /* Active state: current page/cluster is clearly highlighted, not just on hover */
+    /* Highlights the current page or cluster. */
     #sidebar ul li a.active {
         background: rgba(255, 255, 255, 0.12);
         color: #fff;
@@ -192,13 +184,8 @@
         color: #fff;
     }
 
-    /* --- Collapsed (icon rail) state, desktop only --- */
-    /* Single authoritative transition for #sidebar itself: min/max-width
-       drive the desktop collapse-to-rail animation, margin-left drives the
-       mobile off-canvas drawer slide (see the <=768px rule in style.css).
-       Declaring all three together here — rather than splitting them across
-       files — is what keeps the mobile drawer's slide from silently losing
-       to a competing `transition` declaration on the same selector. */
+    /* Collapsed icon rail state, desktop only. */
+    /* One transition rule covers both the desktop rail collapse and the mobile drawer slide. */
     #sidebar {
         transition: min-width 0.28s ease-out, max-width 0.28s ease-out, margin-left 0.3s ease-out;
     }
@@ -206,12 +193,7 @@
         min-width: 76px;
         max-width: 76px;
     }
-    /* The rail's flyout submenus render outside the 76px column via
-       `left: 100%` — overflow:auto/hidden on EITHER #sidebar or
-       ul.components (both set for the rare case the expanded nav overflows)
-       would clip that, so collapsed mode opts both back out of scrolling
-       entirely. The rail is even more compact than expanded, so it's in no
-       more danger of overflowing. */
+    /* Turns off scrolling in collapsed mode so the flyout submenus aren't clipped. */
     #sidebar.collapsed {
         overflow: visible;
     }
@@ -274,6 +256,5 @@
         #sidebar.collapsed .nav-item i { margin-right: 12px !important; }
     }
 
-    /* prefers-reduced-motion is handled globally in style.css (`*` covers
-       #sidebar and #sidebar-overlay too) — no need to repeat it here. */
+    /* prefers-reduced-motion is already handled globally in style.css. */
 </style>

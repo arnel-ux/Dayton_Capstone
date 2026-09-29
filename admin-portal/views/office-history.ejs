@@ -2,21 +2,8 @@
 <html lang="en">
 <head>
     <script>
-        // New-tab auto-login guard: office sessions ride the same hand-rolled
-        // admin-session cookie as admin logins, so a brand new tab that merely
-        // inherited that cookie (typed the URL, duplicated the tab, opened a
-        // bookmark) would otherwise land here fully "logged in" without ever
-        // having submitted office credentials in THAT tab. sessionStorage is
-        // scoped per tab (never copied to a freshly opened one), so it's used
-        // here purely as a "did this tab actually authenticate" marker: the
-        // login redirect tags the very next page load with ?loggedin=1, which this
-        // script converts into the marker before the URL is cleaned up. Same
-        // pattern as /office-approvals, the admin dashboard (layout/header.ejs)
-        // and /client-survey.
-        // Note: this is a client-side UX guard, not a security boundary — the
-        // page markup briefly reaches the browser before this (first) script
-        // redirects it away, so it doesn't stop someone with devtools/view-source
-        // open on that same already-logged-in machine.
+        // Checks this tab actually logged in before showing the page, using a sessionStorage marker.
+        // Just a UX guard, not real security.
         (function () {
             try {
                 var params = new URLSearchParams(window.location.search);
@@ -29,7 +16,7 @@
                 } else if (sessionStorage.getItem('cqa_office_tab_ok') !== '1') {
                     window.location.replace('/login?error=' + encodeURIComponent('Please log in to continue.'));
                 }
-            } catch (e) { /* sessionStorage unavailable (privacy mode, etc.) — fail open */ }
+            } catch (e) { /* sessionStorage not available, just continue */ }
         })();
     </script>
     <%- include('layout/header') %>
@@ -40,14 +27,7 @@
            BASE / LAYOUT
            ========================================================== */
         * { box-sizing: border-box; }
-        /* overflow-x must be `clip`, never `hidden`, here. `hidden` turns
-           html/body into a scroll container, and a scroll container is what
-           .topbar's `position: sticky` then sticks to instead of the
-           viewport — which is why the header scrolled away with the page.
-           `clip` cuts off the same horizontal overflow without creating
-           that scroll container, so sticky keeps working.
-           overflow-y is pinned to `visible` so the pair can never fall back
-           to the scroll-container behaviour in a browser that lacks `clip`. */
+        /* Use clip not hidden so the sticky topbar keeps working. */
         html, body {
             overflow-x: clip;
             overflow-y: visible;
@@ -59,11 +39,7 @@
             color: #0f172a;
         }
 
-        /* "Viewing offline" pill — same amber style, font-size and padding
-           as index.ejs / login.ejs / office-approvals.ejs for a consistent
-           look across the whole system. Its own centered row under the
-           topbar, not squeezed next to Logout/portal-status, so it never
-           overlaps or covers those on narrow screens. */
+        /* Offline pill, matches the style used on other pages. */
         @keyframes offlinePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
         /* ==========================================================
@@ -211,14 +187,7 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
-        /* The same reference number the client is shown in their emailed
-           decline notice (see sendSurveyDeclinedEmail in server.js). Printed
-           here so a client who quotes "PSS-42" can actually be looked up —
-           without it the number in that email matched nothing anywhere in
-           this system. "PSS" = pending survey submission; it is the
-           pending_survey_submissions row id, NOT the CSM reference, which
-           only exists once a submission is approved and inserted into
-           survey_responses. */
+        /* Reference number shown to the client, same one they get in the decline email. */
         .submission-ref {
             flex: 0 0 auto;
             align-self: flex-start;
@@ -321,12 +290,7 @@
         /* ==========================================================
            STATUS FILTER (phones only)
            ==========================================================
-           The desktop table has a Status column that can be read down the
-           page, so it needs no filter. A phone shows one card at a time, and
-           "show me only the declined ones" is the other half of what a
-           staffer comes to History for — so the two statuses get their own
-           views of the same list here, without a second page or a round trip
-           to the server. Hidden entirely on desktop. */
+           Lets a phone view filter by approved or declined. Hidden on desktop. */
         .history-filter { display: none; }
         .history-filter-empty { display: none; }
 
@@ -340,7 +304,7 @@
             .page-header p { font-size: 0.84rem; max-width: 100%; }
             .pending-badge { width: 100%; }
 
-            /* --- Status filter chips ---------------------------------- */
+            /* Status filter chips */
             .history-filter {
                 display: flex;
                 gap: 0.4rem;
@@ -363,8 +327,7 @@
                 letter-spacing: 0.2px;
                 line-height: 1;
                 cursor: pointer;
-                /* The tap target is the whole chip; 44px keeps it reachable
-                   for a thumb without making the row look like a toolbar. */
+                /* Whole chip is tappable, sized for a thumb. */
                 min-height: 44px;
             }
             .hf-chip .hf-count {
@@ -377,14 +340,10 @@
             }
             .hf-chip.active { color: #ffffff; background: #4b3a86; border-color: #4b3a86; }
             .hf-chip.active .hf-count { background: rgba(255, 255, 255, 0.22); color: #ffffff; }
-            /* Each status chip carries its own colour when selected, the same
-               green/red the badges and the card edges use, so the chip, the
-               accent and the badge all say the same thing. */
+            /* Chip color matches the badge and card edge color for that status. */
             .hf-chip.hf-approved.active { background: #16a34a; border-color: #16a34a; }
             .hf-chip.hf-declined.active { background: #dc2626; border-color: #dc2626; }
-            /* A chip for a status this office has none of is shown, not
-               hidden — "0 declined" is a real and useful answer — but it is
-               dimmed and unusable so tapping it can't empty the list. */
+            /* A status with zero results still shows its chip, just dimmed and disabled. */
             .hf-chip[disabled] { opacity: 0.45; cursor: default; }
 
             .approvals-table tbody tr.data-row.hf-hidden,
@@ -402,9 +361,7 @@
             }
             .history-filter-empty.show { display: block; }
 
-            /* Card-style responsive table — same pattern as /office-approvals:
-               each row reflows into its own bordered card with the header
-               label shown inline above each value (via the td's data-label). */
+            /* Turns the table into stacked cards on mobile, same as office-approvals. */
             .approvals-table-scroll { overflow-x: visible; }
             .approvals-table { min-width: 0; table-layout: auto; }
             .approvals-table thead { display: none; }
@@ -444,12 +401,7 @@
             }
             .approvals-table .cell-value.wrap-value { -webkit-line-clamp: unset; }
 
-            /* --- History list accordion ---------------------------------
-               Same collapsed-by-default pattern as the Pending list: each
-               card shows Respondent + Google Account (side by side) and the
-               status; tapping it expands the same card to reveal Service
-               Availed, Decline Reason and Reviewed date. Keeps a long
-               history from turning into a wall of scrolling. */
+            /* History cards collapse to name, email and status, tap to expand for the rest. */
             .history-table.approvals-table tbody tr.data-row {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
@@ -457,9 +409,7 @@
             }
             .history-table .col-order-respondent { grid-column: 1; order: 1; min-width: 0; }
             .history-table .col-order-email { grid-column: 2; order: 2; min-width: 0; }
-            /* Status sits in the COLLAPSED card, directly under the summary —
-               see the block further down for why it is not behind the
-               accordion with the rest. */
+            /* Status stays visible in the collapsed card. */
             .history-table .col-order-status { grid-column: 1 / -1; order: 3; }
             .history-table .col-order-service { grid-column: 1 / -1; order: 4; }
             .history-table .col-order-reason { grid-column: 1 / -1; order: 5; }
@@ -469,10 +419,7 @@
             .approvals-table tr.data-row.expanded td.collapsible-detail { display: block; }
 
             .row-summary-toggle { cursor: pointer; }
-            /* Respondent's and Google Account's own auto-generated labels
-               are replaced by explicit ones (Google Account's paired with
-               the chevron on the same line, flex row — not absolute
-               positioning, which is fragile and didn't reliably render). */
+            /* Replaces the auto labels with explicit ones, Google Account's paired with the chevron. */
             .history-table td.col-order-respondent::before { display: none; }
             .history-table td.col-order-email::before { display: none; }
             .email-header-row {
@@ -491,9 +438,7 @@
             }
             tr.data-row.expanded .toggle-chevron { transform: rotate(180deg); color: #4b3a86; }
 
-            /* The divider under the summary is permanent now (it used to
-               appear only once expanded), because the status row below it is
-               always there to be separated from. */
+            /* Divider under the summary always shows since status is always there below it. */
             .history-table .col-order-respondent,
             .history-table .col-order-email {
                 border-bottom: 1px solid #f0f1f7 !important;
@@ -510,19 +455,8 @@
                 margin-bottom: 0.3rem;
             }
 
-            /* --- Status, visible without expanding ------------------------
-               The status IS what this page is for: "was this one approved or
-               declined" is the question a staffer opens History to answer.
-               Behind the accordion, every single row had to be tapped to
-               learn the one thing being looked for, which made the collapsed
-               list — the thing meant to make a long history scannable —
-               unscannable. It stays in the card at all times, and the card
-               carries the same answer as a colour down its left edge, so the
-               list can be read without touching it.
-
-               An inset shadow, not a left border: the dark-mode rules set
-               border-color on this same card, so a coloured border would be
-               repainted grey the moment the theme flipped. */
+            /* Status stays visible without expanding, shown as a colored edge on the card.
+               Uses an inset shadow instead of a border so dark mode does not override the color. */
             .history-table tbody tr.data-row.status-approved { box-shadow: inset 4px 0 0 #16a34a; }
             .history-table tbody tr.data-row.status-declined { box-shadow: inset 4px 0 0 #dc2626; }
 
@@ -531,8 +465,7 @@
                 padding-top: 0.55rem !important;
                 padding-bottom: 0 !important;
             }
-            /* No "STATUS" caption: the badge already reads "Approved" or
-               "Declined", so the label would only repeat it. */
+            /* No caption here, the badge text already says it. */
             .history-table td.col-order-status::before { display: none; }
             .history-table tr.data-row.expanded td.col-order-status {
                 border-bottom: 1px solid #f0f1f7 !important;
@@ -540,9 +473,7 @@
             }
         }
     </style>
-    <!-- After the block above on purpose: this file is the portal's shared
-         shell (header + sidebar), and loading it last is what lets it override
-         whatever each page still defines for those parts. -->
+    <!-- Loaded last so it can override the page's own header and sidebar styles. -->
     <link rel="stylesheet" href="/css/office-shell.css">
     <link rel="stylesheet" href="/css/offline-pill.css">
 </head>
@@ -581,8 +512,7 @@
             </div>
         <% } else { %>
             <%
-               // Counted here rather than in the browser so the chips carry
-               // real numbers in the very first paint, with no flash of "0".
+               // Counted here so the chips show real numbers right away.
                var nApproved = history.filter(function (h) { return h.status === 'approved'; }).length;
                var nDeclined = history.length - nApproved;
             %>
@@ -677,7 +607,7 @@
                 new bootstrap.Tooltip(el, { trigger: 'hover focus' });
             });
 
-            // "Viewing offline" pill — same pattern as index.ejs/login.ejs.
+            // Offline pill, same as other pages.
             function updateOfflineIndicator() {
                 var pill = document.getElementById('offlineIndicator');
                 if (pill) pill.classList.toggle('is-visible', !navigator.onLine);
@@ -686,8 +616,7 @@
             window.addEventListener('offline', updateOfflineIndicator);
             updateOfflineIndicator();
 
-            // Sidebar: off-canvas panel toggled from the topbar's upper-left
-            // hamburger button — same behavior as /office-approvals.
+            // Sidebar toggled from the hamburger button, same as office-approvals.
             var sidebar = document.getElementById('officeSidebar');
             var sidebarBackdrop = document.getElementById('sidebarBackdrop');
             var sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
@@ -716,11 +645,7 @@
                 if (e.key === 'Escape') closeSidebar();
             });
 
-            // Status filter chips (phones only — the CSS hides the chips on
-            // desktop, where the Status column is readable down the page).
-            // Filters the rows already on the page: the whole history is
-            // rendered either way, so switching is instant and works with no
-            // connection, which matters for a portal staff open offline.
+            // Status filter chips, phones only. Filters rows already on the page so it works offline.
             (function () {
                 var chips = document.querySelectorAll('.hf-chip');
                 if (!chips.length) return;
@@ -734,8 +659,7 @@
                         var match = filter === 'all' || row.getAttribute('data-status') === filter;
                         row.classList.toggle('hf-hidden', !match);
                         if (match) shown++;
-                        // A row hidden while expanded would come back
-                        // expanded later, out of step with every other card.
+                        // Collapse a row before hiding it so it does not stay expanded when shown again.
                         if (!match) {
                             row.classList.remove('expanded');
                             row.querySelectorAll('.row-summary-toggle').forEach(function (t) {
@@ -747,9 +671,7 @@
                         emptyNote.textContent = shown ? '' : 'No ' + filter + ' submissions yet.';
                         emptyNote.classList.toggle('show', shown === 0);
                     }
-                    // The card is the rows' container — with every row hidden it
-                    // would otherwise stay behind as an empty bordered strip
-                    // under the "none of these yet" note.
+                    // Hide the card too when every row in it is hidden.
                     if (card) card.classList.toggle('hf-hidden', shown === 0);
                 }
 
@@ -766,13 +688,8 @@
                 });
             })();
 
-            // Mobile history-list accordion: same collapsed-by-default
-            // pattern as the Pending list — a card starts showing
-            // Respondent, Google Account and the status; tapping it expands
-            // the same card in place to reveal Service Availed, Decline
-            // Reason and Reviewed date. Purely a CSS class toggle — the
-            // ".collapsible-detail" cells are only actually hidden inside
-            // the mobile media query, so this is a no-op on desktop.
+            // Tapping a history card expands it to show the rest of its details.
+            // Only visible on mobile.
             document.querySelectorAll('.row-summary-toggle').forEach(function (el) {
                 function toggleRow() {
                     var row = el.closest('tr.data-row');

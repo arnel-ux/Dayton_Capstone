@@ -1,16 +1,9 @@
 """
-Persistent local HTTP wrapper around heavy_model.py. server.js spawns this
-once when the admin portal starts (see startModelServer in server.js) and
-sends every live-comment analysis request here instead of spawning a fresh
-`python analyze.py` process per comment.
-
-This is the ONLINE classification path: every comment that reaches
-heavy_model.analyze_pure_ai() here is classified by Gemini alone, with no
-keyword-lexicon matching (see that function's docstring). Offline-synced
-comments never hit this server at all — they go through analyze.py's own
-process-per-comment path instead, which (as of 2026-09-25) calls this same
-analyze_pure_ai() function too, just via a fresh subprocess rather than this
-persistent one.
+A small local server that keeps heavy_model.py loaded and ready.
+server.js starts this once when the admin portal boots and sends every
+live comment here instead of starting a fresh Python process each time.
+This is the online path, using Gemini directly with no keyword lexicon.
+Offline synced comments use the same Gemini function through analyze.py.
 """
 import os
 import sys
@@ -41,17 +34,11 @@ def analyze_route():
     comment = str(data.get("comment", "") or "").strip()
     office_hint = str(data.get("office", "") or "").strip() or None
 
-    # Blank AND common "nothing to say" placeholders must never receive a
-    # fabricated classification — see is_no_feedback's docstring in
-    # topic_common.py. `null` here (not "Neutral"/"General Feedback") is
-    # what server.js's analyzeComment() already expects for "no real
-    # classification" in every other case.
+    # A blank or "N/A" style comment gets no classification at all.
     if is_no_feedback(comment):
         return jsonify({"sentiment": None, "topics": None})
 
     try:
-        # topics is always a non-empty list (multi-topic tagging project,
-        # 2026-09-25) — see heavy_model.analyze_pure_ai's docstring.
         sentiment, topics = heavy_model.analyze_pure_ai(comment, office_hint=office_hint)
         return jsonify({"sentiment": sentiment, "topics": topics})
     except Exception as e:
@@ -63,8 +50,5 @@ if __name__ == "__main__":
     print(f"[model_server] loading AI models (port {port})...", flush=True)
     heavy_model.warmup()
     print("[model_server] READY", flush=True)
-    # threaded=True lets the health check respond even while a request is
-    # mid-inference; single Python process still runs one inference at a
-    # time under the GIL, which is fine for this workload (fire-and-forget,
-    # low request rate from a single office admin portal).
+    # threaded so the health check still responds while a request is running
     app.run(host="127.0.0.1", port=port, threaded=True)

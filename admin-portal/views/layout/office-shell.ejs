@@ -1,27 +1,7 @@
 <%
-/* Office portal shell — topbar + sidebar, shared by Dashboard, Pending and
-   History so the three can never drift apart again (they were three copies of
-   the same markup).
-
-   Locals:
-     officeName      – the signed-in office, spelled out in full. It is the
-                       HEADLINE of both the header and the sidebar: what the
-                       staffer needs to know at a glance is which office this
-                       account is, not which portal they are in — every page
-                       here belongs to the same portal, so a fixed portal name
-                       in that slot told them nothing.
-     officeNameShort – the same office abbreviated (usually its acronym).
-                       Used ONLY by the header, and only when the full name
-                       genuinely cannot fit — see the fit check below.
-     activeNav     – 'dashboard' | 'pending' | 'history'
-     pendingCount  – badge on the Pending link
-     historyCount  – badge on the History link
-
-   The element IDs below (officeSidebar, sidebarBackdrop, sidebarToggleBtn,
-   sidebarCloseBtn) and the `.show` class contract are deliberately unchanged
-   from the old per-page markup, so each page's existing toggle script keeps
-   working with no edit at all.
-*/
+/* Office portal shell with the topbar and sidebar, shared by Dashboard, Pending and History.
+   Locals: officeName (full office name), officeNameShort (abbreviated, used when the full name doesn't fit),
+   activeNav (dashboard, pending, or history), pendingCount and historyCount (sidebar badges). */
     var _officeName = (typeof officeName !== 'undefined' && officeName) ? officeName : 'Office';
     var _officeShort = (typeof officeNameShort !== 'undefined' && officeNameShort) ? officeNameShort : _officeName;
     var _active = (typeof activeNav !== 'undefined' && activeNav) ? activeNav : '';
@@ -40,13 +20,7 @@
             <img src="/images/cspc-logo.png" alt="CSPC Logo">
         </div>
         <div class="topbar-brand-text">
-            <!-- The office's own name is the headline; the portal it belongs
-                 to is the subtitle. Both spellings of the office name are
-                 rendered and one is hidden, rather than picking server-side:
-                 which one fits depends on the viewport, which only the
-                 browser knows, and it has to be re-decided on a rotate.
-                 The full name is the one rendered visible, so an office whose
-                 name always fits never flashes. -->
+            <!-- Renders both the full and short office name, hiding one based on viewport width. -->
             <div class="t1 office-title" id="officeBrandTitle" title="<%= _officeName %>">
                 <span class="office-name-full"><%= _officeName %></span><span class="office-name-short"><%= _officeShort %></span>
             </div>
@@ -56,18 +30,14 @@
         </div>
     </div>
 
-    <!-- Same right-hand pair the client portal's header has: the bell, then the
-         full-screen toggle. The bell's badge is the office's pending count. -->
+    <!-- Notification bell and full screen toggle. The bell's badge shows the office's pending count. -->
     <div class="topbar-side topbar-side-end topbar-icon-group">
         <div class="topbar-bell-wrap">
             <button type="button" id="officeNotifBell" class="topbar-icon-btn" title="Notifications" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false" aria-controls="officeNotifPanel">
                 <i class="far fa-bell"></i>
                 <span class="topbar-notif-badge" id="officeNotifBadge" hidden>0</span>
             </button>
-            <!-- Same panel the client portal's bell opens: title + live count,
-                 All / Unread tabs, mark-all-read and clear-all, and per-row
-                 read / delete. Delete is a soft dismissal kept in this browser
-                 only — it never touches the survey submission. -->
+            <!-- Notification panel with All/Unread tabs, mark all read, clear all, and per row actions. Delete only dismisses locally, it never touches the survey itself. -->
             <div class="notif-panel" id="officeNotifPanel" role="dialog" aria-label="Notifications" hidden>
                 <div class="notif-panel-header">
                     <div class="notif-panel-header-top">
@@ -96,10 +66,7 @@
     </div>
 </header>
 
-<!-- Floating "Viewing Offline" chip: fixed, centred, just under the header
-     (/css/offline-pill.css positions it from --offline-pill-top). It used to
-     sit inside the header's right-hand zone, where a phone header had no room
-     left for it. -->
+<!-- Floating "Viewing Offline" chip, fixed and centered just under the header. -->
 <span id="offlineIndicator" class="offline-pill" role="status" title="No internet connection — showing the last data loaded while you were connected.">
     <span class="dot"></span><span class="label">Viewing Offline</span>
 </span>
@@ -112,10 +79,7 @@
             <img src="/images/cspc-logo.png" alt="CSPC Logo">
         </div>
         <div class="sidebar-brand-text">
-            <!-- Never abbreviated here, whatever the screen: the drawer has
-                 the room to wrap, and this is the one place that always shows
-                 the office's whole name — including when the header above has
-                 had to fall back to the acronym. -->
+            <!-- Always shows the full office name here, even when the header falls back to the acronym. -->
             <div class="t1"><%= _officeName %></div>
             <div class="t2">CQA Office Portal</div>
         </div>
@@ -140,31 +104,13 @@
 
     <div class="sidebar-footer">
         <span class="signed-in-office"><i class="fas fa-building me-1"></i><%= _officeName %></span>
-        <!-- id is load-bearing: office-approvals.ejs and office-history.ejs both
-             look up #officeLogoutBtn to hang the "Are you sure you want to
-             logout?" confirmation on it. When the three pages' duplicated
-             markup was folded into this shell the id was dropped, and because
-             both scripts guard with `if (logoutBtn)` the confirmation did not
-             error — it just silently stopped existing, and Logout became a
-             one-click, no-questions-asked action on both pages. -->
+        <!-- The id is required, office-approvals.ejs and office-history.ejs use it to attach the logout confirmation. -->
         <a href="/office-logout" id="officeLogoutBtn" class="btn-logout-side"><i class="fas fa-sign-out-alt"></i> Logout</a>
     </div>
 </aside>
 
 <script>
-    // Header office-name fit check.
-    //
-    // The rule is "desktop always shows the full name; a phone shows the full
-    // name too unless it genuinely doesn't fit, and only then the acronym."
-    // That "unless it doesn't fit" cannot be expressed as a breakpoint: it
-    // depends on how long THIS office's name is, and the names range from
-    // "Cash Unit" to "Academic Center for Continuing Enhancement Services for
-    // Students". A fixed width would either abbreviate short names that had
-    // room to spare, or keep clipping long ones. So the browser measures.
-    //
-    // The markup renders the FULL name visible and the acronym hidden, and
-    // this only ever hides the full one — so an office whose name fits never
-    // shows the wrong spelling for even a frame.
+    // Header office name fit check. Measures whether the full name fits and swaps to the acronym if it doesn't.
     (function () {
         var title = document.getElementById('officeBrandTitle');
         if (!title) return;
@@ -172,39 +118,29 @@
         var desktop = window.matchMedia('(min-width: 992px)');
 
         function fit() {
-            // Desktop is spelled out unconditionally (the CSS pins it there
-            // too) — the sidebar is a permanent column at that width, the
-            // header is wide, and the full name is the whole point.
+            // Desktop always shows the full name.
             if (desktop.matches) { title.classList.remove('is-short'); return; }
 
-            // Always measure the FULL spelling, never whatever is currently
-            // displayed: once shortened, the element fits by definition, so
-            // re-measuring in that state could never decide to grow back —
-            // rotating a phone to landscape would stay stuck on the acronym.
+            // Always re-measures the full spelling so it can grow back after being shortened.
             title.classList.remove('is-short');
-            // +1 for sub-pixel rounding: scrollWidth/clientWidth are integers,
-            // and a name that fits exactly can otherwise report one pixel of
-            // overflow that isn't there.
+            // +1 accounts for sub-pixel rounding.
             if (title.scrollWidth > title.clientWidth + 1) title.classList.add('is-short');
         }
 
         fit();
-        // Layout is measured mid-parse above (so there is no flash), then
-        // confirmed once the frame has actually been laid out.
+        // Re-checks once the frame is actually laid out.
         if (window.requestAnimationFrame) window.requestAnimationFrame(fit);
         window.addEventListener('resize', fit);
         window.addEventListener('orientationchange', fit);
-        // A webfont swapping in after this ran changes the text's width, which
-        // can flip the answer either way.
+        // A webfont swapping in can change the text width.
         if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
-            document.fonts.ready.then(fit).catch(function () { /* measurement stays as-is */ });
+            document.fonts.ready.then(fit).catch(function () { /* Measurement stays as is. */ });
         }
     })();
 </script>
 
 <script>
-    // Header bell panel + full-screen toggle. Self-contained: it only reads the
-    // pending count the live watch below already paints into the sidebar badge.
+    // Header bell panel and full screen toggle. Reads the pending count the live watch below paints into the sidebar badge.
     (function () {
         var bell = document.getElementById('officeNotifBell');
         var panel = document.getElementById('officeNotifPanel');
@@ -220,11 +156,7 @@
         var tabs = document.querySelectorAll('#officeNotifPanel .notif-tab');
         if (!bell || !panel || !list) return;
 
-        // Read / dismissed state lives in THIS browser, per office, exactly like
-        // the admin bell: the feed is the office's live pending queue, so
-        // "deleting" a notification can only ever mean hiding it from this
-        // staffer's own bell — never touching the submission itself, which
-        // still has to be reviewed on the Pending page.
+        // Read and dismissed state lives in this browser, per office. Deleting a notification only hides it here, it never touches the actual submission.
         var who = <%- JSON.stringify(_officeName) %>;
         var READ_KEY = 'officeNotifRead:' + who;
         var DISMISS_KEY = 'officeNotifDismissed:' + who;
@@ -246,7 +178,7 @@
         function kept() { return items.filter(function (it) { return !isDismissed(it); }); }
 
         function persist() {
-            // Ids that left the queue (reviewed) can never be listed again.
+            // Drops ids that already left the queue.
             var live = items.map(function (it) { return Number(it.id); });
             readIds = readIds.filter(function (id) { return live.indexOf(id) !== -1; });
             dismissed = dismissed.filter(function (id) { return live.indexOf(id) !== -1; });
@@ -297,7 +229,7 @@
 
             var body = document.createElement('div');
             body.className = 'notif-item-body';
-            // Opening a notification is reading it, and it goes where the work is.
+            // Opening a notification marks it read and links to where the work is.
             var link = document.createElement('a');
             link.className = 'notif-item-title-row';
             link.href = '/office-approvals';
@@ -428,18 +360,13 @@
             );
         });
 
-        // The live watch below repaints the sidebar's Pending badge whenever the
-        // queue changes; that is the cue to refresh this list too, so a survey
-        // that lands while the panel is open shows up without a reload.
+        // Refreshes this list whenever the live watch below repaints the sidebar's Pending badge.
         var sidebarCount = document.getElementById('sidebarPendingCount');
         if (sidebarCount && window.MutationObserver) {
             new MutationObserver(function () { load(); }).observe(sidebarCount, { childList: true, characterData: true, subtree: true });
         }
 
-        // Login alert. The login redirect adds ?welcome=1; the very first thing
-        // an office should see on opening its panel is whether anything is
-        // waiting. Shown once (the flag is stripped from the URL straight away,
-        // so a refresh does not repeat it) and only when something is pending.
+        // Login alert. Shows once after a fresh login (via ?welcome=1) whether anything is pending.
         var welcome = false;
         try {
             var params = new URLSearchParams(window.location.search);
@@ -449,26 +376,18 @@
                 var qs = params.toString();
                 window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
             }
-        } catch (e) { /* no URL API — the alert is a bonus */ }
+        } catch (e) { /* No URL API, the alert is a bonus. */ }
 
-        // The alert used to depend on ?welcome=1, which only a fresh login adds —
-        // so a device that reopened the panel on a saved session (a phone's
-        // installed app, a second browser) never saw it. Now it is shown once
-        // each time the panel is opened in a tab/app window, tracked in
-        // sessionStorage so moving between Dashboard / Pending / History does
-        // not repeat it. A fresh login still always shows it.
+        // Also shown once per tab or app window, tracked in sessionStorage, so switching between pages doesn't repeat it.
         var ANNOUNCE_KEY = 'cqa_office_open_alert';
         function alreadyAnnounced() {
             try { return sessionStorage.getItem(ANNOUNCE_KEY) === '1'; } catch (e) { return false; }
         }
         function markAnnounced() {
-            try { sessionStorage.setItem(ANNOUNCE_KEY, '1'); } catch (e) { /* storage blocked — may repeat, harmless */ }
+            try { sessionStorage.setItem(ANNOUNCE_KEY, '1'); } catch (e) { /* Storage blocked, may repeat, harmless. */ }
         }
 
-        // The reminder is its own centred card rather than AppAlert.confirm, so
-        // it never depends on the alert library being ready and always reads
-        // the same on every device: count, the latest few submissions, and two
-        // buttons. It is built once, on demand, and styled for both themes.
+        // Builds its own popup card instead of using AppAlert, so it doesn't depend on that library being ready.
         function ensurePopupStyles() {
             if (document.getElementById('officePendingPopupCss')) return;
             var css = document.createElement('style');
@@ -570,8 +489,7 @@
             go.focus();
         }
 
-        // Every open of the panel announces what is waiting, once per tab /
-        // app window (see ANNOUNCE_KEY) — and always right after a fresh login.
+        // Announces what's waiting once per tab or app window, and always right after a fresh login.
         function announceOnLogin(list) {
             if (!list || list.length <= 0) return;
             if (!welcome && alreadyAnnounced()) return;
@@ -580,7 +498,7 @@
         }
         var ACTIVE_PAGE = <%- JSON.stringify(_active) %>;
 
-        // AppAlert lives in layout/footer.ejs, parsed after this script.
+        // AppAlert loads in layout/footer.ejs, parsed after this script.
         function boot() {
             load().then(function (list2) {
                 if (list2) announceOnLogin(list2);
@@ -589,8 +507,7 @@
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
         else boot();
 
-        // Full screen. Native where the browser has it; on iPhone Safari there
-        // is no API, so the button simply is not offered there.
+        // Full screen toggle. Hidden on browsers without the API, like iPhone Safari.
         function fsElement() {
             return document.fullscreenElement || document.webkitFullscreenElement || null;
         }
@@ -614,7 +531,7 @@
                             ? (document.exitFullscreen || document.webkitExitFullscreen).call(document)
                             : (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
                         if (result && typeof result.catch === 'function') result.catch(function () {});
-                    } catch (e) { /* blocked — the panel works windowed */ }
+                    } catch (e) { /* Blocked, the panel still works windowed. */ }
                 });
                 document.addEventListener('fullscreenchange', paintFs);
                 document.addEventListener('webkitfullscreenchange', paintFs);
@@ -624,38 +541,14 @@
 </script>
 
 <script>
-    // Live pending watch — shared by Dashboard, Pending and History.
-    //
-    // An office staffer leaves this panel open on a desk all day. Before this,
-    // a survey submitted at 9:05 sat there unseen until somebody thought to
-    // press refresh, which is the opposite of what a queue is for. This asks
-    // the server every 20 seconds what is waiting, keeps the sidebar badges
-    // and the tab title honest, says so out loud when something new lands,
-    // and brings the page itself up to date.
-    //
-    // It deliberately polls rather than holding a socket open: this portal is
-    // a single Node process behind an ordinary host, the answer is two
-    // integers, and a poll survives the sleeps, network drops and captive
-    // portals a long-lived connection does not.
+    // Live pending watch, shared by Dashboard, Pending and History.
+    // Polls the server for what's waiting, keeps sidebar badges and the tab title current, and refreshes the page when needed.
     (function () {
         var ACTIVE = <%- JSON.stringify(_active) %>;
-        // 10s, not the 20s this started at: the gap between a survey landing
-        // and the office being told is the whole point of the feature, and two
-        // integers over an already-open connection is a cheap question to ask.
         var POLL_MS = 10000;
-        // Long enough to read "a new submission is waiting" before the page
-        // moves under you, short enough that it still feels immediate.
+        // Gives enough time to read the "new submission" notice before the page refreshes.
         var REFRESH_DELAY_MS = 3500;
-        // What makes THIS page out of date. Each page is refreshed on the
-        // changes it actually shows and on nothing else, so nobody loses their
-        // place to an update that would not have altered a pixel:
-        //
-        //   dashboard  every count on it moves — waiting, approved, declined,
-        //              respondents — so any change at all
-        //   pending    the queue itself: one arriving, or one leaving because
-        //              a colleague reviewed it somewhere else
-        //   history    only a finished review adds a row here; a newly
-        //              arrived submission does not belong on this page yet
+        // Decides what counts as stale per page: dashboard on any change, pending on queue changes, history on finished reviews only.
         function isStale(before, now) {
             if (ACTIVE === 'dashboard') return signature(before) !== signature(now);
             if (ACTIVE === 'pending') return before.pending !== now.pending || before.latestPendingId !== now.latestPendingId;
@@ -663,28 +556,22 @@
             return false;
         }
 
-        // Everything the panel draws, in one comparable string.
+        // Everything the panel draws, as one comparable string.
         function signature(d) {
             return [d.pending, d.latestPendingId, d.history, d.responses].join('|');
         }
-        // Survives the reload below, so the message that explains WHY the page
-        // just reloaded is still there afterwards.
+        // Carries the reload notice message across the page refresh.
         var NOTICE_KEY = 'cqa_office_pending_notice';
 
-        var baseline = null;      // the whole picture as of the last look
+        var baseline = null;      // The data as of the last look.
         var stopped = false;
-        var wantsRefresh = null;  // the message to carry through a pending refresh
+        var wantsRefresh = null;  // The message to show after a pending refresh.
         var toldAboutWait = false;
         var titleBase = document.title;
 
         function el(id) { return document.getElementById(id); }
 
-        // Two weights of message, because two different things happen here.
-        // A submission ARRIVING is addressed to the staffer and waits until
-        // they acknowledge it. A page merely catching up with a transaction
-        // that already completed — a colleague approving something, a survey
-        // being recorded — is not a request for attention; it only needs to
-        // explain why the page just moved, then get out of the way.
+        // A new submission gets a message that waits for acknowledgment. A page just catching up gets a quieter note.
         function notify(message, opts) {
             opts = opts || {};
             if (window.AppAlert && AppAlert.toastInfo) {
@@ -697,15 +584,9 @@
             }
         }
 
-        // A reload in the middle of something destroys work: a half-typed
-        // decline reason, an open confirmation, an expanded row being read.
-        // When it isn't safe the refresh is not cancelled, only postponed —
-        // the next poll asks again.
+        // Checks whether a reload would destroy work in progress. If not safe, the refresh is postponed rather than cancelled.
         function safeToReload() {
-            // A MODAL is work in progress; a toast is not. Both live in a
-            // .swal2-container, so treating every container as "busy" meant the
-            // notification this very script had just raised — which does not
-            // auto-dismiss — blocked the refresh it was announcing, forever.
+            // A modal counts as busy, but a toast doesn't, both live in the same container so they need to be told apart.
             var containers = document.querySelectorAll('.swal2-container');
             for (var i = 0; i < containers.length; i++) {
                 if (!containers[i].querySelector('.swal2-toast')) return false;
@@ -717,9 +598,8 @@
         }
 
         function refreshNow(notice) {
-            // The reload wipes the toast that was just raised, so the message
-            // is handed across to the page that comes back.
-            try { sessionStorage.setItem(NOTICE_KEY, JSON.stringify(notice)); } catch (e) { /* the toast is a bonus, the refresh is the point */ }
+            // Hands the notice message across the reload so it survives.
+            try { sessionStorage.setItem(NOTICE_KEY, JSON.stringify(notice)); } catch (e) { /* The toast is a bonus, the refresh is the point. */ }
             window.location.reload();
         }
 
@@ -730,8 +610,7 @@
         function paint(data) {
             setBadge(el('sidebarPendingCount'), data.pending);
             setBadge(el('sidebarHistoryCount'), data.history);
-            // The tab itself carries the count, so a staffer working in another
-            // tab still sees that something is waiting.
+            // Puts the count in the tab title so it's visible even from another tab.
             document.title = data.pending > 0 ? '(' + data.pending + ') ' + titleBase : titleBase;
         }
 
@@ -743,36 +622,28 @@
                 headers: { 'Accept': 'application/json' },
                 cache: 'no-store'
             }).then(function (res) {
-                // An expired office session does not answer with JSON — it
-                // answers with a redirect to the login page. Following that
-                // silently would leave this polling a login form forever, so
-                // the watch stops and the staffer is sent to log back in.
+                // An expired session redirects to login instead of returning JSON, so polling stops and the staffer is sent to log back in.
                 if (res.redirected) {
                     stopped = true;
                     window.location.href = '/login?status=session_expired';
                     return null;
                 }
                 if (!res.ok) return null;
-                // Anything that is not JSON is not an answer to this question
-                // — a captive portal's sign-in page, say. Ignored, not parsed.
+                // Ignores any non JSON response, such as a captive portal sign in page.
                 if ((res.headers.get('content-type') || '').indexOf('application/json') === -1) return null;
                 return res.json().catch(function () { return null; });
             }).then(function (data) {
                 if (!data || data.success !== true) return;
                 paint(data);
 
-                // The first look only sets the mark. It never announces:
-                // everything it sees is already on the page it just loaded.
+                // The first poll only sets the baseline, it never announces anything.
                 if (baseline === null) { baseline = data; return; }
 
                 var before = baseline;
-                if (signature(before) === signature(data)) return;   // nothing moved
+                if (signature(before) === signature(data)) return;   // Nothing moved.
                 baseline = data;
 
-                // A submission ARRIVING is the one event addressed to the
-                // staffer, and it is announced on every page — even History,
-                // which does not refresh for it: they still need to know a
-                // queue is forming while they read.
+                // A new submission is announced on every page, even History, which doesn't refresh for it.
                 var arrived = data.latestPendingId > before.latestPendingId;
                 if (arrived) {
                     notify(data.pending === 1
@@ -780,50 +651,35 @@
                         : data.pending + ' survey submissions are waiting for your review.');
                 }
 
-                if (!isStale(before, data)) return;   // changed, but not on THIS page
+                if (!isStale(before, data)) return;   // Changed, but not on this page.
 
-                // Anything else that moved is a transaction that already
-                // finished somewhere — a colleague approving or declining, an
-                // approved survey landing in the office's records, a survey
-                // from a CSPC account recorded without ever queueing. The page
-                // is simply brought up to date, with a short note saying so,
-                // because a page that reloads for no stated reason reads as a
-                // fault rather than as being current.
+                // Anything else is a transaction that already finished elsewhere, so the page just refreshes with a short note.
                 wantsRefresh = arrived
                     ? { text: 'A new survey submission is waiting for your review.', quiet: false }
                     : { text: 'Updated — the records for this office changed just now.', quiet: true, title: 'Page Updated' };
 
-                // Don't sit on it until the next poll comes round — give the
-                // toast a moment to be read, then bring the page up to date.
-                // tick() still owns the "is it safe yet" question.
+                // Gives the toast a moment to be read before refreshing.
                 setTimeout(tick, REFRESH_DELAY_MS);
             }).catch(function () {
-                // Offline, asleep, a dropped connection: nothing to report.
-                // The next tick tries again.
+                // Offline or a dropped connection, the next tick tries again.
             });
         }
 
         function tick() {
-            // A hidden tab is not being read, so it neither polls nor reloads
-            // under someone's feet; it catches up the moment it is looked at.
+            // A hidden tab doesn't poll or reload, it just catches up once it's looked at again.
             if (document.visibilityState !== 'visible') return;
             if (wantsRefresh && safeToReload()) return refreshNow(wantsRefresh);
             if (wantsRefresh && !toldAboutWait) {
-                // Busy — the refresh waits, but the staffer should not: told
-                // once, here, so a long spell of typing does not hide the fact
-                // that the page has something to catch up on.
+                // Tells the staffer once that a refresh is waiting on them.
                 toldAboutWait = true;
                 notify('This page updates as soon as you finish what you are doing.', { title: 'Page Updated', quiet: true });
             }
-            // Polling continues even while a refresh is queued. Someone can
-            // spend minutes on one decline reason, and submissions arriving in
-            // that time still have to announce themselves — stopping here
-            // would have made the busiest moments the quietest ones.
+            // Keeps polling even with a refresh queued, so new submissions still get announced.
             poll();
         }
 
         function start() {
-            // Anything left over from the reload this script asked for.
+            // Shows any notice left over from a reload this script triggered.
             try {
                 var carried = sessionStorage.getItem(NOTICE_KEY);
                 if (carried) {
@@ -831,20 +687,18 @@
                     var notice = JSON.parse(carried);
                     notify(notice.text, notice);
                 }
-            } catch (e) { /* private mode, or a notice from an older version — the reload still happened, which was the point */ }
+            } catch (e) { /* Private mode, or an older notice format, the reload still happened. */ }
 
             poll();
             setInterval(tick, POLL_MS);
             document.addEventListener('visibilitychange', function () {
                 if (document.visibilityState === 'visible') tick();
             });
-            // Back from a dead connection: ask immediately rather than waiting
-            // out the rest of the interval.
+            // Polls right away when the connection comes back instead of waiting out the interval.
             window.addEventListener('online', tick);
         }
 
-        // AppAlert lives in layout/footer.ejs, which is parsed after this —
-        // DOMContentLoaded is the first moment it is safe to call.
+        // AppAlert loads in layout/footer.ejs, parsed after this, so DOMContentLoaded is the first safe moment.
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
         else start();
     })();

@@ -1,26 +1,5 @@
-// BFCache guard: Chrome/Safari/Firefox can restore a page instantly from the
-// back/forward cache on Back/Forward navigation, completely skipping a fresh
-// request to the server — meaning our Cache-Control/session middleware never
-// even runs. `pageshow`'s event.persisted (and, as a fallback for engines that
-// don't set it consistently, the Navigation Timing API's back_forward type)
-// both indicate the page came from that cache rather than the network, so we
-// force a hard reload — that reload IS a real request, so /login redirects and
-// no-cache headers apply normally again.
-//
-// '__loginBoundary' (set by login.ejs the moment it is
-// actually rendered) marks that THIS TAB has, at some point, navigated back
-// to the login page. Once set, a Back/Forward-triggered pageshow on a
-// protected page sends the user straight back to that login page instead of
-// merely reloading — a plain reload would legitimately re-show the real
-// dashboard if the still-alive server session allows it (visiting /login
-// deliberately never destroys the session — it's shared by every tab in the
-// browser, see server.js), which is technically correct but lets Forward
-// "resurrect" the authenticated view after the user already stepped back
-// through the login page in this tab. Cleared the moment a protected page
-// actually loads for real (persisted:false) — that only happens after
-// ensureAdminAuth/ensureOfficeAuth already approved a fresh request, i.e. the
-// user genuinely (re)entered the authenticated area, so the boundary no
-// longer applies.
+// Some browsers can restore this page straight from cache on back/forward nav, skipping a real request to the server.
+// This forces a reload when that happens, and sends the user back to the login page if this tab visited it before.
 window.addEventListener('pageshow', function (event) {
     var navEntries = (window.performance && performance.getEntriesByType) ? performance.getEntriesByType('navigation') : [];
     var isBackForwardNav = navEntries.length > 0 && navEntries[0].type === 'back_forward';
@@ -38,24 +17,14 @@ window.addEventListener('pageshow', function (event) {
     }
 });
 
-// Belt-and-suspenders for the guard above: under rapid repeated Back/Forward
-// clicks, a reload() triggered by pageshow can itself get cancelled by the
-// NEXT click before it finishes, so the browser can end up silently settling
-// on a frozen bfcache snapshot that never re-ran the reload (and therefore
-// never re-hit the server's session check). A no-op 'unload' listener is the
-// standard cross-browser signal that opts THIS page out of bfcache entirely,
-// so every Back/Forward to it is forced to be a real network request from
-// the start — no reload-after-the-fact race to lose no matter how fast the
-// buttons are clicked.
+// An empty unload listener opts this page out of the back/forward cache entirely, backing up the guard above.
 window.addEventListener('unload', function () {});
 
 document.addEventListener("DOMContentLoaded", function() {
     const currentPath = window.location.pathname;
     const sidebar = document.getElementById('sidebar');
 
-    // Sidebar Toggle: desktop collapses to an icon-only rail (state persisted
-    // so it survives this app's full page reloads between routes), mobile
-    // slides the sidebar in/out as an overlay drawer with a dimmed backdrop.
+    // Sidebar toggle: collapses to an icon rail on desktop, slides in as an overlay drawer on mobile.
     const sidebarCollapse = document.getElementById('sidebarCollapse');
     const overlay = document.getElementById('sidebar-overlay');
 
@@ -87,8 +56,7 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
     if (overlay) overlay.addEventListener('click', closeMobileDrawer);
-    // Tapping a nav link on mobile should close the drawer, not leave it open
-    // behind the page-transition fade.
+    // Closes the drawer when a nav link is tapped on mobile.
     if (sidebar) {
         sidebar.querySelectorAll('a[href]:not([data-bs-toggle])').forEach(link => {
             link.addEventListener('click', () => {
@@ -97,26 +65,16 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
 
-    // Active link styling is fully server-rendered (layout/sidebar.ejs sets
-    // `.active` on the matching <a> from `currentPath` at render time) — that
-    // is the single source of truth, so this just reads it back to set the
-    // navbar's page title. (This used to also add `.active` to the <li>
-    // independently via a client-side href match, which could disagree with
-    // the server's own class and momentarily show two "active-looking" items
-    // at once — removed in favor of one authority.)
+    // Active link styling is set server side. This just reads it back to set the navbar's page title.
     const activeLink = sidebar && sidebar.querySelector('.nav-item a.active:not(.dropdown-toggle)');
     if (activeLink) {
-        // Read from the title attribute, not innerText: when the sidebar
-        // restores already collapsed, the label <span> is display:none and
-        // innerText would come back empty.
+        // Reads the title attribute since the label text is hidden when the sidebar loads collapsed.
         const pageTitle = (activeLink.getAttribute('title') || activeLink.innerText).trim();
         const titleElement = document.getElementById('pageTitle');
         if (titleElement) titleElement.innerText = pageTitle;
     }
 
-    // Smooth page transitions: every sidebar link is a real page load (no SPA
-    // router), so we fake a crossfade by fading #content out before letting
-    // the navigation happen, and #content fades in on arrival via CSS.
+    // Fakes a crossfade transition by fading out the content before the real page navigation happens.
     const content = document.getElementById('content');
     if (content) {
         document.querySelectorAll('#sidebar a[href]:not([data-bs-toggle])').forEach(link => {

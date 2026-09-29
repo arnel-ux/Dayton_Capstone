@@ -5,8 +5,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="/js/pdf-repeating-header.js?v=2"></script>
-    <!-- Shared CQA report letterhead/footer/pagination rules (views/layout/report-header.ejs,
-         views/layout/report-footer.ejs) — see public/css/report.css. -->
+    <!-- Shared report letterhead, footer, and pagination styles from public/css/report.css. -->
     <link rel="stylesheet" href="/css/report.css?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '' %>">
 
     <style>
@@ -784,9 +783,7 @@
         <div class="container-fluid px-4 py-4">
 
             <%
-                // Derived, non-fabricated insight pointers — computed purely from
-                // the arrays the route already provides. Rendered only when the
-                // underlying data actually exists.
+                // Insight pointers computed from the data the route already provides.
                 let mostActiveCluster = null;
                 if (typeof clusterCards !== 'undefined' && clusterCards.length > 0) {
                     mostActiveCluster = clusterCards.reduce((max, c) => (Number(c.respondents) > Number(max.respondents) ? c : max), clusterCards[0]);
@@ -794,13 +791,7 @@
                 const topOffice = (typeof topOffices !== 'undefined' && topOffices.length > 0) ? topOffices[0] : null;
                 const attentionOffice = (typeof bottomOffices !== 'undefined' && bottomOffices.length > 0) ? bottomOffices[0] : null;
 
-                // Rating bands. These are the SAME cut-offs loadDashboardData()
-                // already uses to derive dashboardData.overallLevel — restated
-                // here only so the hero can show which band the score sits in
-                // and how far the next one is. The badge previously printed a
-                // hardcoded "LEVEL 4" (and was styled green) no matter what the
-                // score was; the level number and its colour now both come from
-                // the band the score actually falls into.
+                // Rating bands, matching loadDashboardData's overallLevel cutoffs.
                 const ratingBands = [
                     { level: 1, label: 'POOR',              min: 0,  tone: 'poor', range: 'below 60%'      },
                     { level: 2, label: 'FAIR',              min: 60, tone: 'fair', range: '60% – 79.99%'   },
@@ -1428,10 +1419,8 @@
 <%- include('layout/theme-toggle') %>
 
 <script>
-// "+ Add New Period" is a sentinel option inside the Period Covered dropdown
-// itself (not a separate button) so the filter row stays visually clean —
-// picking it opens the add-period modal instead of filtering, and the select
-// is reset back to whatever was actually selected before.
+// Handles the "+ Add New Period" option in the Period Covered dropdown.
+// Opens the add period modal instead of filtering, then resets the select.
 function handlePeriodSelectChange(selectEl) {
     if (selectEl.value === '__add_new_period__') {
         selectEl.value = '<%= typeof selectedPeriod !== "undefined" ? selectedPeriod : "" %>';
@@ -1446,19 +1435,14 @@ function handlePeriodSelectChange(selectEl) {
 
 document.addEventListener("DOMContentLoaded", function() {
 
-    // Show the result of the last "Add Period" submission as a toast
-    // (?success=... / ?error=... set by POST /period-covered/add), then clean the URL.
+    // Shows a toast for the last "Add Period" submission, then cleans the URL.
     if (typeof AppAlert !== 'undefined' && AppAlert.autoShowFromQuery) {
         AppAlert.autoShowFromQuery();
     }
 
     const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // --- 0b. NATIVE HOVER TOOLTIP FOR TRUNCATED CHART AXIS LABELS ---
-    // Chart.js clips long category labels (office/cluster names) that don't
-    // fit the tick area and gives them no tooltip of their own — only bars
-    // get one. This watches mouse position over the label zone and swaps in
-    // the full text as a native title attribute so it still shows on hover.
+    // Shows the full axis label as a native tooltip when it's been clipped by Chart.js.
     function enableAxisLabelTooltips(chart, canvas, labels, axis) {
         canvas.addEventListener('mousemove', (e) => {
             const rect = canvas.getBoundingClientRect();
@@ -1482,17 +1466,13 @@ document.addEventListener("DOMContentLoaded", function() {
         canvas.addEventListener('mouseleave', () => { canvas.title = ''; });
     }
 
-    // Shortens a long axis label so Chart.js never tries to draw more text
-    // than the tick area can hold (which is what was clipping names like
-    // "Research and Development Services Office" off the left/right edge).
+    // Shortens a long axis label so it fits in the tick area.
     function truncateLabel(text, maxLen) {
         if (!text || text.length <= maxLen) return text;
         return text.slice(0, maxLen - 1).trimEnd() + '…';
     }
 
-    // Wraps a long label into several shorter lines (returned as an array)
-    // so Chart.js's tooltip box — which sizes itself to its widest line —
-    // stays narrow enough to fit on-canvas instead of getting cut off.
+    // Wraps a long label into an array of shorter lines for the tooltip box.
     function wrapLabel(text, maxCharsPerLine) {
         if (!text) return text;
         const words = text.split(' ');
@@ -1511,7 +1491,7 @@ document.addEventListener("DOMContentLoaded", function() {
         return lines;
     }
 
-    // --- 0. SHARED EASED NUMBER ANIMATION (rAF-driven, respects reduced motion) ---
+    // Shared eased number animation, respects reduced motion.
     function animateNumber(el, target, opts) {
         opts = opts || {};
         const decimals = opts.decimals || 0;
@@ -1540,13 +1520,13 @@ document.addEventListener("DOMContentLoaded", function() {
         requestAnimationFrame(tick);
     }
 
-    // --- 1. TOTAL SURVEYS COUNT-UP ---
+    // Total surveys count up animation.
     document.querySelectorAll('.count-up').forEach(el => {
         const target = +el.innerText.replace(/[^0-9.]/g, '');
         animateNumber(el, target, { duration: 1000 });
     });
 
-    // --- 2. HERO SCORE + RADIAL GAUGE ---
+    // Hero score and radial gauge.
     const heroScoreEl = document.getElementById('heroScoreValue');
     const heroGaugeFill = document.getElementById('heroGaugeFill');
     if (heroScoreEl) {
@@ -1558,7 +1538,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 heroGaugeFill.style.transition = 'none';
                 heroGaugeFill.style.strokeDashoffset = String(circumference * (1 - clampedPct / 100));
             } else {
-                // kick the transition after paint so it animates from the full offset
+                // Kicks off the transition after paint so it animates from the full offset.
                 requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
                         heroGaugeFill.style.strokeDashoffset = String(circumference * (1 - clampedPct / 100));
@@ -1569,21 +1549,14 @@ document.addEventListener("DOMContentLoaded", function() {
         animateNumber(heroScoreEl, target, { decimals: 2, duration: 1100 });
     }
 
-    // --- 4. SCROLL REVEAL + TOPIC BAR FILL (IntersectionObserver) ---
+    // Scroll reveal and topic bar fill using IntersectionObserver.
     const revealTargets = document.querySelectorAll('.reveal-section');
     if ('IntersectionObserver' in window && !prefersReducedMotion) {
         const revealObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
                     entry.target.classList.add('is-visible');
-                    // Charts inside a .reveal-section are created (and finish
-                    // their entrance animation) at page-load time, while the
-                    // section itself still sits at opacity:0 — so the draw-in
-                    // animation happens invisibly before the user ever scrolls
-                    // here. Replaying it exactly when the section fades into
-                    // view makes it actually visible. Left un-observed (no
-                    // unobserve call) so scrolling away and back replays it
-                    // every time instead of only on the first view.
+                    // Replays each chart's entrance animation when its section scrolls into view.
                     entry.target.querySelectorAll('canvas').forEach(canvasEl => {
                         const chartInstance = typeof Chart !== 'undefined' && Chart.getChart ? Chart.getChart(canvasEl) : null;
                         if (chartInstance) {
@@ -1601,19 +1574,13 @@ document.addEventListener("DOMContentLoaded", function() {
         revealTargets.forEach(el => el.classList.add('is-visible'));
     }
 
-    // --- 5. CHART.JS CONFIGURATION & RENDER PIPELINE ---
+    // Chart.js configuration and render pipeline.
     const chartLabels = <%- typeof chartData !== 'undefined' ? JSON.stringify(chartData.labels) : JSON.stringify(['Office of President', 'Admin & Finance', 'Research & Innov.', 'Academic Affairs', 'Other Offices']) %>;
     const chartRespondents = <%- typeof chartData !== 'undefined' ? JSON.stringify(chartData.respondents) : JSON.stringify([0, 0, 0, 0, 0]) %>;
     const chartRatings = <%- typeof chartData !== 'undefined' ? JSON.stringify(chartData.ratings) : JSON.stringify([0, 0, 0, 0, 0]) %>;
 
     const ctx = document.getElementById('clusterAnalyticsChart').getContext('2d');
-    // Axis labels, the y-axis title and the tick text are drawn onto the
-    // canvas, so no stylesheet can reach them. Chart.js defaults them to #666,
-    // which is dim-but-legible on a white card and genuinely hard to read on
-    // the dark one. This slate is the single value that clears ~4:1 against
-    // BOTH card colors, so the charts read the same in either theme instead of
-    // one theme being an afterthought. Set once here, before any chart is
-    // built, so every chart on the page agrees.
+    // Sets the default axis and tick color for every chart since CSS can't reach canvas text.
     Chart.defaults.color = '#7c889c';
     Chart.defaults.borderColor = 'rgba(148, 163, 184, 0.22)';
 
@@ -1624,11 +1591,7 @@ document.addEventListener("DOMContentLoaded", function() {
     barGradientNavy.addColorStop(0, '#9182d6');
     barGradientNavy.addColorStop(1, '#7b68c4');
 
-    // Cluster Performance chart: Respondents (Volume) and Satisfaction Rating
-    // are two separate metrics on very different scales (raw counts vs. a
-    // 0-100% score), so instead of cramming them into one dual-axis chart
-    // they're rendered one at a time — the toggle above the chart switches
-    // which metric is showing, re-drawing (and re-animating) the bars.
+    // Cluster Performance chart shows one metric at a time, toggled by the button above it.
     const clusterMetrics = {
         respondents: {
             label: 'Respondents (Volume)',
@@ -1731,7 +1694,7 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
 
-    // --- 6. SENTIMENT DOUGHNUT ---
+    // Sentiment doughnut chart.
     const sentimentCtx = document.getElementById('sentimentChart').getContext('2d');
     new Chart(sentimentCtx, {
         type: 'doughnut',
@@ -1772,7 +1735,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     });
 
-    // --- 7. PIE CHART: Respondent Share by Cluster ---
+    // Pie chart for respondent share by cluster.
     const clusterShareEl = document.getElementById('clusterShareChart');
     if (clusterShareEl) {
         const clusterShareLabels = <%- typeof clusterCards !== 'undefined' ? JSON.stringify(clusterCards.map(c => c.name)) : '[]' %>;
@@ -1813,9 +1776,7 @@ document.addEventListener("DOMContentLoaded", function() {
             }
         });
 
-        // Compact custom legend (dot + name + value + %) instead of Chart.js's
-        // auto-wrapping legend, which crowded this card when it sat in a
-        // narrow 4-across row.
+        // Builds a compact custom legend with dot, name, value, and percent.
         const legendEl = document.getElementById('clusterShareLegend');
         if (legendEl) {
             const shareTotal = clusterShareData.reduce((a, b) => a + b, 0);
@@ -1834,10 +1795,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
-    // --- 9. SMOOTH STACKED AREA CHART: Recent Submissions by Office ---
-    // Groups the same recent-submissions data the old timeline showed by
-    // office, keeping the sentiment breakdown (each area layer is a
-    // sentiment count) instead of a flat activity feed.
+    // Smooth stacked area chart of recent submissions grouped by office, one layer per sentiment.
     const recentSubEl = document.getElementById('recentSubmissionsChart');
     if (recentSubEl) {
         const recentOffices = <%- typeof recentSubmissions !== 'undefined' ? JSON.stringify(recentSubmissions.map(r => r.officeName)) : '[]' %>;
@@ -1858,15 +1816,7 @@ document.addEventListener("DOMContentLoaded", function() {
         let officeTally = buildOfficeTally('');
         let officeNames = Object.keys(officeTally);
 
-        // Stacked, smoothed AREA chart (reference layout) — x-axis = offices
-        // (in place of the reference's months), y-axis = sentiment counts (in
-        // place of dollar amounts), three stacked bands = Positive/Neutral/
-        // Negative. Colors are the dashboard's own brand palette (navy +
-        // gold): gold for Positive, dark navy for Negative, and a lightened
-        // navy tint for Neutral, spaced far apart in lightness so the three
-        // stay clearly distinct while remaining on-brand. Hovering anywhere
-        // on the chart (interaction.mode 'index') pops a tooltip with each
-        // band's count at that office.
+        // Stacked smoothed area chart with offices on the x-axis and one band per sentiment.
         const recentSubChart = new Chart(recentSubEl.getContext('2d'), {
             type: 'line',
             data: {
@@ -1923,7 +1873,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
-    // --- 10. HORIZONTAL BAR CHARTS: Top / Bottom Performing Offices ---
+    // Horizontal bar charts for top and bottom performing offices.
     function renderRankChart(canvasId, offices, barColor) {
         const el = document.getElementById(canvasId);
         if (!el || !offices.length) return;
@@ -1973,7 +1923,7 @@ document.addEventListener("DOMContentLoaded", function() {
     renderRankChart('bottomOfficesChart', <%- typeof bottomOffices !== 'undefined' ? JSON.stringify(bottomOffices.map(o => ({ name: o.name, score: o.score }))) : '[]' %>, '#7b68c4');
 });
 
-// --- 7. CONTROLS MANAGEMENT FUNCTIONS FOR POPUP REPORT MODAL ---
+// Controls for the popup report modal.
 function openReportModal() {
     document.getElementById('reportModal').style.display = 'block';
     document.body.style.overflow = 'hidden';
@@ -1985,19 +1935,11 @@ function closeReportModal() {
 }
 
 function downloadPDF() {
-    // PER CLUSTER has one report identity for the whole document (no section
-    // changes like the SQD+AI-Feedback reports), so every page redraws the same
-    // title/subtitle/period — see public/js/pdf-repeating-header.js.
+    // Every page redraws the same title, subtitle, and period for this report.
     const periodText = document.querySelector('#printableReportDocument .print-period')?.textContent.trim() || '';
     const header = { title: 'Client Satisfaction Measurement Survey Result', subtitle: 'Per Cluster', period: periodText };
 
-    // Letter (8.5in x 11in) portrait — CSPC's official reports are printed on
-    // Letter/short bond paper, not A4. html2pdf's margin array is
-    // [top, left, bottom, right] (not CSS order); top is overridden by
-    // exportRepeatingHeaderPdf to reserve space for the redrawn header.
-    // Cluster sections are deliberately NOT in the avoid list — a cluster too
-    // long for one page should keep flowing (header repeats via thead), not
-    // get forced onto a fresh page and leave a large blank gap.
+    // Letter size portrait PDF. Margin order is top, left, bottom, right.
     const opt = {
         margin:       [0, 0.5, 0.45, 0.5],
         filename:     'CSPC-CSM-Per-Cluster-Report.pdf',
@@ -2014,17 +1956,9 @@ function downloadPDF() {
         headerHeightIn: 2.15,
         headerHideSelectors: ['.report-header-block', '.print-title', '.print-period', '.cluster-report-table thead'],
         getHeaderForPage: () => header,
-        // The signature/interpretation block must never be lost — html2pdf's
-        // own break-avoidance for a CSS Grid block near a page boundary has
-        // proven unreliable (it can start the block, then silently drop the
-        // rest instead of pushing it to a fresh page). This measures real
-        // layout pixels and moves the whole block to the next page only if it
-        // would otherwise be cut.
+        // Measures real layout pixels and moves the signature block whole to the next page if it would get cut.
         avoidSplitSelector: '.cluster-report-signatures',
-        // The Academic Cluster block is long enough to straddle a page break
-        // mid-office-list; forcing it to start on a fresh page keeps it whole
-        // instead of getting cut off partway down the page — same fix as
-        // downloadRespondentsSummaryPDF.
+        // Forces the Academic Cluster block to start on a fresh page so it stays whole.
         forcePageBreakSelectors: ['[data-cluster="academic"]'],
         columnHeader: {
             startYIn: 1.85,
@@ -2034,10 +1968,7 @@ function downloadPDF() {
                 { label: 'INTERPRETATION', widthPct: 0.20, align: 'center' }
             ]
         },
-        // Same caution watermark as the SQD scorecard's own PDF (see downloadPDF
-        // in report.ejs), stamped only on the pages that actually contain an
-        // office below the 10-respondent reporting minimum — see .office-insufficient
-        // in report-cluster-table.ejs.
+        // Watermark stamped on pages with an office below the reporting minimum.
         watermark: { text: 'INSUFFICIENT RESPONDENTS', rowSelector: '.office-insufficient' }
     });
 }
@@ -2053,9 +1984,7 @@ function closeOverallClusterReportModal() {
 }
 
 function downloadOverallClusterPDF() {
-    // Same one-identity document as the PER CLUSTER export (see downloadPDF) — same
-    // three columns and the same repeated header; only the subtitle differs, plus the
-    // closing OVERALL row this table adds at the very end.
+    // Same layout as the per cluster export, but adds a closing overall row at the end.
     const periodText = document.querySelector('#printableOverallClusterDocument .print-period')?.textContent.trim() || '';
     const header = { title: 'Client Satisfaction Measurement Survey Result', subtitle: 'Overall Cluster', period: periodText };
 
@@ -2076,8 +2005,7 @@ function downloadOverallClusterPDF() {
         headerHideSelectors: ['.report-header-block', '.print-title', '.print-period', '.cluster-report-table thead'],
         getHeaderForPage: () => header,
         avoidSplitSelector: '.cluster-report-signatures',
-        // Same fix as the PER CLUSTER export — keep the Academic Cluster block
-        // from getting cut off partway down a page.
+        // Keeps the Academic Cluster block from getting cut off partway down a page.
         forcePageBreakSelectors: ['[data-cluster="academic"]'],
         columnHeader: {
             startYIn: 1.85,
@@ -2102,10 +2030,7 @@ function closeRespondentsSummaryModal() {
 }
 
 function downloadRespondentsSummaryPDF() {
-    // Same document identity as the other cluster reports (see downloadPDF /
-    // downloadOverallClusterPDF) — only the subtitle and the two printed
-    // columns differ: no scoring here, just each office's respondent count,
-    // numbered per cluster and closed by one institution-wide TOTAL row.
+    // Same layout as the other cluster reports, but lists respondent counts instead of scores.
     const periodText = document.querySelector('#printableRespondentsSummaryDocument .print-period')?.textContent.trim() || '';
     const header = { title: 'Client Satisfaction Measurement Survey Result', subtitle: 'Overall Citizen/ Client Satisfaction Survey Result per Cluster', period: periodText };
 
@@ -2126,9 +2051,7 @@ function downloadRespondentsSummaryPDF() {
         headerHideSelectors: ['.report-header-block', '.print-title', '.print-period', '.cluster-report-table thead'],
         getHeaderForPage: () => header,
         avoidSplitSelector: '.cluster-report-signatures',
-        // The Academic Cluster block is long enough to straddle a page break
-        // mid-office-list; forcing it to start on a fresh page keeps it whole
-        // instead of getting cut off partway down page 1.
+        // Keeps the Academic Cluster block whole instead of splitting across pages.
         forcePageBreakSelectors: ['[data-cluster="academic"]'],
         columnHeader: {
             startYIn: 1.85,
