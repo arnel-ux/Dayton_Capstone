@@ -760,7 +760,7 @@
         #npc-splash{position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(10px,2.2dvh,22px);padding:16px;box-sizing:border-box;transition:opacity .35s ease}
         #npc-splash.hide{opacity:0;pointer-events:none}
         #npc-splash .npc-title{margin:0;color:#fff;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:700;font-size:clamp(1.8rem,6vw,3.2rem);letter-spacing:.5px;text-align:center;line-height:1.1;text-transform:uppercase}
-        #npc-splash img{display:block;width:auto;height:auto;max-width:min(480px,88vw);max-height:62dvh;max-height:62vh;max-height:62dvh;object-fit:contain;image-rendering:-webkit-optimize-contrast;filter:drop-shadow(0 10px 30px rgba(0,0,0,.45))}
+        #npc-splash img{display:block;width:auto;height:auto;max-width:min(480px,88vw);max-height:62dvh;max-height:62vh;max-height:62dvh;object-fit:contain;image-rendering:auto}
         #npc-splash .npc-proceed{background:#0066cc;color:#fff;border:0;border-radius:2px;padding:.7rem 2.6rem;font-family:inherit;font-weight:700;font-size:1.05rem;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.35);transition:background .2s ease,transform .1s ease}
         #npc-splash .npc-proceed:hover{background:#0a58b8}
         #npc-splash .npc-proceed:active{transform:translateY(1px)}
@@ -772,7 +772,7 @@
 <body>
     <div id="npc-splash" role="dialog" aria-modal="true" aria-labelledby="npc-title">
         <h2 class="npc-title" id="npc-title">Privacy Notice</h2>
-        <img src="/images/npc-dpo-dps-registered-v2.png" width="585" height="1084" alt="National Privacy Commission DPO/DPS Registered">
+        <img src="/images/npc-dpo-dps-registered-v3.png" width="1170" height="2168" decoding="async" alt="National Privacy Commission DPO/DPS Registered">
         <button type="button" class="npc-proceed" id="npc-proceed">Proceed</button>
     </div>
     <script>
