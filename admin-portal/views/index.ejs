@@ -756,27 +756,32 @@
         @media (prefers-reduced-motion: reduce) {
             * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
         }
-        /* NPC DPO/DPS registration splash, shown on every load and dismissed by a click, tap, or keypress. */
-        #npc-splash{position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:opacity .35s ease}
+        /* NPC DPO/DPS privacy notice: dimmed overlay, header, badge image with no container, and a Proceed button that dismisses it. */
+        #npc-splash{position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(10px,2.2dvh,22px);padding:16px;box-sizing:border-box;transition:opacity .35s ease}
         #npc-splash.hide{opacity:0;pointer-events:none}
-        #npc-splash .npc-card{background:#fff;border-radius:18px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.4);box-sizing:border-box;max-width:92vw;max-height:94vh;max-height:94dvh;display:flex}
-        #npc-splash img{display:block;width:auto;height:auto;max-width:min(480px,calc(92vw - 40px));max-height:calc(94vh - 40px);max-height:calc(94dvh - 40px);object-fit:contain;image-rendering:-webkit-optimize-contrast}
-        @media (max-width:480px){#npc-splash .npc-card{padding:12px;border-radius:14px}#npc-splash img{max-width:min(320px,calc(88vw - 24px));max-height:calc(80dvh - 24px)}}
-        @media (min-width:1200px){#npc-splash img{max-width:min(560px,calc(92vw - 40px))}}
+        #npc-splash .npc-title{margin:0;color:#fff;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:700;font-size:clamp(1.8rem,6vw,3.2rem);letter-spacing:.5px;text-align:center;line-height:1.1;text-transform:uppercase}
+        #npc-splash img{display:block;width:auto;height:auto;max-width:min(480px,88vw);max-height:62dvh;max-height:62vh;max-height:62dvh;object-fit:contain;image-rendering:-webkit-optimize-contrast;filter:drop-shadow(0 10px 30px rgba(0,0,0,.45))}
+        #npc-splash .npc-proceed{background:#0066cc;color:#fff;border:0;border-radius:2px;padding:.7rem 2.6rem;font-family:inherit;font-weight:700;font-size:1.05rem;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.35);transition:background .2s ease,transform .1s ease}
+        #npc-splash .npc-proceed:hover{background:#0a58b8}
+        #npc-splash .npc-proceed:active{transform:translateY(1px)}
+        #npc-splash .npc-proceed:focus-visible{outline:3px solid #fff;outline-offset:3px}
+        @media (max-width:480px){#npc-splash img{max-width:min(340px,88vw);max-height:58dvh}}
+        @media (min-width:1200px){#npc-splash img{max-width:min(520px,88vw)}}
     </style>
 </head>
 <body>
-    <div id="npc-splash" role="button" aria-label="Continue to landing page" tabindex="0">
-        <div class="npc-card">
-            <img src="/images/npc-dpo-dps-registered.png" alt="National Privacy Commission DPO/DPS Registered">
-        </div>
+    <div id="npc-splash" role="dialog" aria-modal="true" aria-labelledby="npc-title">
+        <h2 class="npc-title" id="npc-title">Privacy Notice</h2>
+        <img src="/images/npc-dpo-dps-registered-v2.png" width="585" height="1084" alt="National Privacy Commission DPO/DPS Registered">
+        <button type="button" class="npc-proceed" id="npc-proceed">Proceed</button>
     </div>
     <script>
         (function () {
             var s = document.getElementById('npc-splash');
+            var btn = document.getElementById('npc-proceed');
             function close() { s.classList.add('hide'); setTimeout(function () { s.remove(); }, 400); }
-            s.addEventListener('click', close);
-            document.addEventListener('keydown', function () { if (document.getElementById('npc-splash')) close(); });
+            btn.addEventListener('click', close);
+            btn.focus();
         })();
     </script>
 
