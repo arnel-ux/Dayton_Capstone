@@ -1,0 +1,44 @@
+<%
+/* "Per Service Quality Dimension" table: one row per SQD dimension with the
+   score by critical service and the score in all services, closed by a yellow
+   OVERALL SCORE row, then the note naming the offices counted as critical
+   services. Matches the printed CSM result template.
+   Expects `sqdOverallReport` from loadDashboardData in server.js:
+     { dimensions: [{ label, critical, all }], overall: { critical: {score}, all: {score} } }
+   Scores arrive already formatted ("98.42") or as "N/A" when no office answered. */
+const _sqd = typeof sqdOverallReport !== 'undefined' && sqdOverallReport ? sqdOverallReport : null;
+const _sqdPct = (value) => (value === 'N/A' || value === null || value === undefined || value === '') ? 'N/A' : `${value}%`;
+%>
+<table class="sqd-overall-table">
+    <colgroup>
+        <col style="width: 52%">
+        <col style="width: 24%">
+        <col style="width: 24%">
+    </colgroup>
+    <thead>
+        <tr>
+            <th>Service Quality Dimension</th>
+            <th>Score by Critical Service*</th>
+            <th>Score in All Services</th>
+        </tr>
+    </thead>
+    <tbody>
+        <% if (_sqd) { %>
+            <% _sqd.dimensions.forEach((dimension, idx) => { %>
+                <tr>
+                    <td class="sqd-dim-name"><%= idx + 1 %>. <%= dimension.label === 'Reliability' ? 'Reliability (Quality)' : dimension.label %></td>
+                    <td class="sqd-dim-score"><%= _sqdPct(dimension.critical) %></td>
+                    <td class="sqd-dim-score"><%= _sqdPct(dimension.all) %></td>
+                </tr>
+            <% }) %>
+            <tr class="sqd-overall-row">
+                <td>OVERALL SCORE</td>
+                <td class="sqd-dim-score"><%= _sqdPct(_sqd.overall.critical.score) %></td>
+                <td class="sqd-dim-score"><%= _sqdPct(_sqd.overall.all.score) %></td>
+            </tr>
+        <% } else { %>
+            <tr><td colspan="3" class="text-center py-3 text-muted">No survey response submissions loaded yet for this period.</td></tr>
+        <% } %>
+    </tbody>
+</table>
+<p class="sqd-overall-note"><em>*Note: Offices included are Student Testing and Admission, Learning Resources, Student Registration and Records, the Colleges, Guidance Services Office, Cashiering and Disbursing, ACCESS, Health and Environment Management Services, NSTP, Student Affairs and Services and Security and Safety Management</em></p>

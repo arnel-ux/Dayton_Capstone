@@ -872,7 +872,7 @@
                         <div class="kpi-icon"><i class="fas fa-face-smile"></i></div>
                         <div>
                             <div class="kpi-value" id="kpiSatisfaction">0%</div>
-                            <div class="kpi-label">Overall Satisfaction</div>
+                            <div class="kpi-label">Overall Score</div>
                         </div>
                     </div>
                     <div class="kpi-tile" data-reveal="zoom-in" data-reveal-delay="160" style="--kpi-accent:#ffcc00; --kpi-accent-soft:rgba(255, 204, 0,0.14);">
@@ -1898,7 +1898,7 @@
             const officesEvaluated = typeof dataP.officesEvaluated === 'number' ? dataP.officesEvaluated : 0;
 
             document.getElementById('kpiRespondents').innerText = total.toLocaleString();
-            document.getElementById('kpiSatisfaction').innerText = satPct + '%';
+            document.getElementById('kpiSatisfaction').innerText = (typeof dataP.overallSatisfaction === 'number' ? dataP.overallSatisfaction.toFixed(2) : satPct) + '%';
             document.getElementById('kpiOffices').innerText = officesEvaluated.toLocaleString();
             document.getElementById('kpiAware').innerText = awarePct + '%';
         }

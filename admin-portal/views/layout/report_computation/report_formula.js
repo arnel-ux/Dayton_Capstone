@@ -17,6 +17,7 @@
 //                                    REPORT_SENTIMENT_SQL, HAS_REAL_COMMENT_SQL)
 //   8. Sentiment Tone Formula       (sentimentTone)
 //   9. Topic Badge Color Formula    (topicBadgeClassFor)
+//  10. SQD Overall Report Formula   (SQD_CRITICAL_SERVICE_OFFICE_IDS, sqdDimensionCountExprs, buildSqdOverallReport)
 // ============================================================================
 
 
@@ -224,6 +225,71 @@ function topicBadgeClassFor(topic) {
 }
 
 
+// ----------------------------------------------------------------------------
+// 10. SQD OVERALL REPORT FORMULA (Per Service Quality Dimension)
+// ----------------------------------------------------------------------------
+// One office's score for one dimension = (Strongly Agree + Agree) / (answered, N/A left out) * 100.
+// A dimension's score = the plain average of that office score across the offices that have an
+// answer for it (an office with no answer for the dimension is N/A and is skipped, not counted as 0).
+// OVERALL SCORE = the plain average of the 8 dimension scores.
+// "Score by Critical Service" averages only the offices in SQD_CRITICAL_SERVICE_OFFICE_IDS;
+// "Score in All Services" averages every active office.
+// Critical service offices: Graduate School(16), CTHBM(15), CCS(13), CAS(11), CEA(10), CHS(14),
+// CTDE(12), Student Testing and Admission(1), Student Registration and Records(3),
+// Learning Resources(23), Guidance and Counseling(2), ACCESS(29), NSTP(40),
+// Student Affairs and Services(18), Health Services Unit(4), General Services Unit(22), Cash Unit(5).
+const SQD_CRITICAL_SERVICE_OFFICE_IDS = [16, 15, 13, 11, 10, 14, 12, 1, 3, 23, 2, 29, 40, 18, 4, 22, 5];
+
+// Per-office agree/answered counts for each of the 8 dimensions.
+function sqdDimensionCountExprs() {
+    return SQD_DIMENSIONS.flatMap(d => [
+        `SUM(CASE WHEN s.${d.col} IN (4,5) THEN 1 ELSE 0 END) AS ${d.col}_agree`,
+        `SUM(CASE WHEN s.${d.col} BETWEEN 1 AND 5 THEN 1 ELSE 0 END) AS ${d.col}_ans`
+    ]);
+}
+
+// Builds the report from per-office count rows ({ id, report_name, sqd1_agree, sqd1_ans, ... }).
+// Also returns a worksheet (one row per counted office, one column per dimension) so the
+// computation can be shown office by office, the same way the summary numbers were derived.
+function buildSqdOverallReport(officeRows, interpretFn) {
+    const mean = (values) => values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : null;
+    const fmt = (value) => value === null ? NO_DATA : value.toFixed(2);
+
+    // One entry per office: its score for each dimension (null = no answers = N/A) and its own overall.
+    // Offices with no answers at all are left out, they don't count toward any average.
+    const offices = (officeRows || []).map(row => {
+        const scores = SQD_DIMENSIONS.map(d => {
+            const ans = Number(row[`${d.col}_ans`]);
+            return ans > 0 ? Number(row[`${d.col}_agree`]) / ans * 100 : null;
+        });
+        return { id: row.id, name: row.report_name, scores, overall: mean(scores.filter(v => v !== null)) };
+    }).filter(o => o.overall !== null);
+
+    // Critical offices keep the order of SQD_CRITICAL_SERVICE_OFFICE_IDS (the printed template's order).
+    const criticalOffices = SQD_CRITICAL_SERVICE_OFFICE_IDS
+        .map(id => offices.find(o => o.id === id))
+        .filter(Boolean);
+
+    const dimensionMeans = (list) => SQD_DIMENSIONS.map((d, i) => mean(list.map(o => o.scores[i]).filter(v => v !== null)));
+    const criticalMeans = dimensionMeans(criticalOffices);
+    const allMeans = dimensionMeans(offices);
+    const overallOf = (means) => mean(means.filter(v => v !== null));
+    const cell = (value) => ({ score: fmt(value), interpretation: value === null ? NO_DATA : interpretFn(value) });
+
+    const sheet = (list, means) => ({
+        offices: list.map(o => ({ name: o.name, scores: o.scores.map(fmt), overall: fmt(o.overall) })),
+        averages: means.map(fmt),
+        overall: fmt(overallOf(means))
+    });
+
+    return {
+        dimensions: SQD_DIMENSIONS.map((d, i) => ({ label: d.label, critical: fmt(criticalMeans[i]), all: fmt(allMeans[i]) })),
+        overall: { critical: cell(overallOf(criticalMeans)), all: cell(overallOf(allMeans)) },
+        worksheet: { critical: sheet(criticalOffices, criticalMeans), all: sheet(offices, allMeans) }
+    };
+}
+
+
 module.exports = {
     // 1. SQD Score Formula
     sqdScoreExpr, ALL_SQD_COLS,
@@ -244,4 +310,6 @@ module.exports = {
     sentimentTone,
     // 9. Topic Badge Color Formula
     topicBadgeClassFor,
+    // 10. SQD Overall Report Formula
+    SQD_CRITICAL_SERVICE_OFFICE_IDS, sqdDimensionCountExprs, buildSqdOverallReport,
 };

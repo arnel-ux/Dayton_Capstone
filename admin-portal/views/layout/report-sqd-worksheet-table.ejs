@@ -1,0 +1,41 @@
+<%
+/* Computation worksheet behind the SQD Overall report: one row per office, one
+   column per service quality dimension, an OVERALL SCORE column per office and
+   an OVERALL SCORE row at the bottom (the average of each column).
+   Expects `sheet` ({ offices: [{ name, scores[8], overall }], averages[8], overall })
+   and `sheetTitle` — both built by buildSqdOverallReport in report_formula.js. */
+const _wsPct = (value) => (value === 'N/A' || value === null || value === undefined || value === '') ? 'N/A' : `${value}%`;
+const _wsLabels = ['Responsiveness', 'Reliability', 'Access & Facility', 'Communication', 'Costs', 'Integrity', 'Assurance', 'Outcome'];
+%>
+<h6 class="sqd-ws-title"><%= sheetTitle %></h6>
+<table class="sqd-ws-table">
+    <colgroup>
+        <col style="width: 25%">
+        <% for (let i = 0; i < 9; i++) { %><col><% } %>
+    </colgroup>
+    <thead>
+        <tr>
+            <th>Service Quality Dimension</th>
+            <% _wsLabels.forEach(label => { %><th><%= label %></th><% }) %>
+            <th>Overall Score</th>
+        </tr>
+    </thead>
+    <tbody>
+        <% if (sheet && sheet.offices.length) { %>
+            <% sheet.offices.forEach((office, idx) => { %>
+                <tr>
+                    <td class="sqd-ws-name"><span class="sqd-ws-no"><%= idx + 1 %></span> <%= office.name %></td>
+                    <% office.scores.forEach(score => { %><td class="sqd-ws-score"><%= _wsPct(score) %></td><% }) %>
+                    <td class="sqd-ws-score sqd-ws-total"><%= _wsPct(office.overall) %></td>
+                </tr>
+            <% }) %>
+            <tr class="sqd-ws-avg">
+                <td class="sqd-ws-name text-end">OVERALL SCORE</td>
+                <% sheet.averages.forEach(score => { %><td class="sqd-ws-score"><%= _wsPct(score) %></td><% }) %>
+                <td class="sqd-ws-score sqd-ws-total"><%= _wsPct(sheet.overall) %></td>
+            </tr>
+        <% } else { %>
+            <tr><td colspan="10" class="text-center py-3 text-muted">No survey response submissions loaded yet for this period.</td></tr>
+        <% } %>
+    </tbody>
+</table>

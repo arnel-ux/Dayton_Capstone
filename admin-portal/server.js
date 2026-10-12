@@ -36,6 +36,7 @@ const {
     REPORT_TOPIC_SQL, REPORT_SENTIMENT_SQL, HAS_REAL_COMMENT_SQL,
     sentimentTone,
     topicBadgeClassFor,
+    sqdDimensionCountExprs, buildSqdOverallReport,
 } = require('./views/layout/report_computation/report_formula');
 
 // Tells Express to trust the X-Forwarded-For header only from a loopback proxy (like nginx on the same host).
@@ -5727,10 +5728,27 @@ function loadDashboardData(req, callback) {
                                     }));
 
                                     const withRecentSubmissions = (recentSubmissions) => {
+                                        // Per office, per dimension agree/answered counts for the SQD Overall report.
+                                        const sqdOverallQuery = `
+                                            SELECT o.id, ${OFFICE_REPORT_NAME_EXPR} AS report_name, ${sqdDimensionCountExprs().join(', ')}
+                                            FROM offices o
+                                            LEFT JOIN survey_responses s ON o.id = s.office_id${dateWhereAnd}
+                                            WHERE o.is_archived = 0
+                                            GROUP BY o.id, o.cluster_name, o.office_name, o.full_name
+                                            ORDER BY o.cluster_name, o.office_name
+                                        `;
+                                        db.query(sqdOverallQuery, dateParams, (sqdErr, sqdRows) => {
+                                        logErr('sqd overall report')(sqdErr);
+                                        const sqdOverallReport = buildSqdOverallReport(sqdRows || [], interpretForDashboard);
+                                        // The headline score is the Overall Cluster Report's TOTAL: the average of every
+                                        // surveyed office's overall score (same figure as the printed OVERALL RATING).
+                                        const headlineScore = overallClusterTotal.overallScore === NO_DATA ? 0 : parseFloat(overallClusterTotal.overallScore);
+                                        const headlineLevel = overallClusterTotal.overallScore === NO_DATA ? 'POOR' : overallClusterTotal.interpretation;
                                         getMergedPeriodOptions((periodOptions) => {
                                             callback({
-                                                dashboardData: { overallRating: overallAvgScore, overallLevel: interpretation, periodCoveredLabel: selectedPeriod || 'All Periods' },
-                                                chartData: chartData, clusterCards: clusterCards, satisfactionRate: overallAvgScore,
+                                                sqdOverallReport: sqdOverallReport,
+                                                dashboardData: { overallRating: headlineScore, overallLevel: headlineLevel, periodCoveredLabel: selectedPeriod || 'All Periods' },
+                                                chartData: chartData, clusterCards: clusterCards, satisfactionRate: headlineScore,
                                                 totalRespondents: totalRespondents, totalOffices: totalOffices, reportData: reportData,
                                                 overallClusterTotal: overallClusterTotal, totalRespondentsAll: totalRespondentsAll,
                                                 periodOptions: periodOptions, selectedPeriod: selectedPeriod || '',
@@ -5740,6 +5758,7 @@ function loadDashboardData(req, callback) {
                                                 topOffices: topOffices, bottomOffices: bottomOffices,
                                                 clusterOptions: CLUSTER_REPORT_ORDER
                                             });
+                                        });
                                         });
                                     };
 
@@ -7200,13 +7219,34 @@ app.get('/api/public-dashboard', (req, res) => {
             chartData[p].officesEvaluated = chartData[p].officeResp.filter(r => r > 0).length;
         });
 
-        res.json({
-            chartData: chartData,
-            clusterList: clusterList.length > 0 ? clusterList : undefined,
-            officeList: officeList.length > 0 ? officeList : undefined,
-            officeCluster: officeList.length > 0 ? officeCluster : undefined,
-            periodOptions: periodOptions,
-            currentPeriod: getPeriodCovered()
+        // The overall score is the admin dashboard's headline figure (the Overall Cluster Report TOTAL):
+        // each active office's overall score, averaged across the offices that have responses, per period.
+        const overallSql = `
+            SELECT ${periodNormExpr('s.period_year_quarter')} AS period_norm, o.id, ${sqdScoreExpr(ALL_SQD_COLS)} AS office_score
+            FROM survey_responses s
+            JOIN offices o ON o.id = s.office_id
+            WHERE o.is_archived = 0 AND s.canonical_status = 'canonical'
+            GROUP BY period_norm, o.id
+        `;
+        db.query(overallSql, (overallErr, overallRows) => {
+            if (overallErr) console.error('❌ [Landing] overall score query failed:', overallErr.message);
+            periods.forEach((p, i) => {
+                const scores = (overallRows || [])
+                    .filter(r => normalizePeriodStr(r.period_norm) === normalizedPeriods[i])
+                    .map(r => parseFloat(r.office_score || 0));
+                const average = scores.length ? scores.reduce((sum, v) => sum + v, 0) / scores.length : 0;
+                // Rounded to 2 decimals exactly as the dashboard prints it.
+                chartData[p].overallSatisfaction = parseFloat(average.toFixed(2));
+            });
+
+            res.json({
+                chartData: chartData,
+                clusterList: clusterList.length > 0 ? clusterList : undefined,
+                officeList: officeList.length > 0 ? officeList : undefined,
+                officeCluster: officeList.length > 0 ? officeCluster : undefined,
+                periodOptions: periodOptions,
+                currentPeriod: getPeriodCovered()
+            });
         });
         });
         });
