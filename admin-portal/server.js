@@ -6207,8 +6207,22 @@ app.post('/api/office-analytics', ensureOfficeAuth, noCache, (req, res) => {
                         `WHERE o.is_archived = 0 AND s.canonical_status = 'canonical'${periodAnd}${extraWhere}`;
                     db.query(benchSql(' AND o.cluster_name = (SELECT cluster_name FROM offices WHERE id = ?)'), [...periodParams, officeId], (errC, rowsC) => {
                         if (errC) return fail('cluster')(errC);
-                        db.query(benchSql(''), periodParams, (errD, rowsD) => {
+                        // Institution score follows the admin dashboard headline: the plain average of every
+                        // surveyed office's own score, so an office with few respondents counts as much as a big one.
+                        db.query(
+                            `SELECT o.id, COUNT(s.id) AS respondents, ${sqdScoreExpr(ALL_SQD_COLS)} AS overall ` +
+                            `FROM offices o LEFT JOIN survey_responses s ON o.id = s.office_id AND s.canonical_status = 'canonical'${periodAnd} ` +
+                            `WHERE o.is_archived = 0 GROUP BY o.id`,
+                            periodParams,
+                            (errD, rowsD) => {
                             if (errD) return fail('institution')(errD);
+                            const surveyed = (rowsD || []).filter(r => Number(r.respondents) > 0);
+                            const institutionBench = {
+                                respondents: surveyed.reduce((sum, r) => sum + Number(r.respondents), 0),
+                                offices: surveyed.length,
+                                score: surveyed.length ? surveyed.reduce((sum, r) => sum + parseFloat(r.overall || 0), 0) / surveyed.length : null
+                            };
+                            if (institutionBench.score !== null) institutionBench.score = Math.round(institutionBench.score * 100) / 100;
                             const bench = (r) => {
                                 const row = (r && r[0]) || {};
                                 return {
@@ -6249,7 +6263,7 @@ app.post('/api/office-analytics', ensureOfficeAuth, noCache, (req, res) => {
                                         dimensions,
                                         trend,
                                         cluster: Object.assign({ name: req.officeSession.user.cluster_name || null }, bench(rowsC)),
-                                        institution: bench(rowsD),
+                                        institution: institutionBench,
                                         sentiment: Object.assign({ analyzed: kept.length }, sentiment),
                                         topics
                                     }));
