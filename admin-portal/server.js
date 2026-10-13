@@ -5994,7 +5994,7 @@ app.get('/report', ensureAdminAuth, noCache, (req, res) => {
 
 // Powers the institution wide /report page and the per-cluster office drill down.
 // respondentId scopes the whole report to a single client's own answers instead.
-app.post('/api/report-data', ensureAdminAuth, (req, res) => {
+function reportDataHandler(req, res) {
     const { office, officeId, cluster, periodCovered, respondentId, serviceAvailed } = req.body;
 
     const conditions = [];
@@ -6122,6 +6122,153 @@ app.post('/api/report-data', ensureAdminAuth, (req, res) => {
             );
         });
     });
+}
+app.post('/api/report-data', ensureAdminAuth, reportDataHandler);
+
+// Office panel report. Same numbers as the admin report above, but the office is
+// always the signed in one, taken from the session and never from the request,
+// so an office can only ever see its own results. Only the period is accepted.
+app.get('/office-report', ensureOfficeAuth, noCache, (req, res) => {
+    const officeId = req.officeSession.user.id;
+    const { officeName, officeNameShort } = officeHeaderNames(req.officeSession.user);
+    getOfficePendingCount(officeId, (pendingCount) => {
+        getOfficeHistoryCount(officeId, (historyCount) => {
+            getMergedPeriodOptions((periodOptions) => {
+                res.render('office-report', { officeName, officeNameShort, pendingCount, historyCount, periodOptions });
+            });
+        });
+    });
+});
+
+app.post('/api/office-report-data', ensureOfficeAuth, noCache, (req, res) => {
+    const periodCovered = typeof (req.body && req.body.periodCovered) === 'string' ? req.body.periodCovered : '';
+    req.body = { officeId: req.officeSession.user.id, periodCovered };
+    return reportDataHandler(req, res);
+});
+
+// Performance analytics for the office dashboard. Aggregates only: scores, counts and
+// topic names, never a respondent name, email or full answer. The office always comes
+// from the session. Every score uses the same SQD formula as the reports
+// (agree + strongly agree over answered, N/A left out), and the cluster and
+// institution figures pool all their answers the same way instead of averaging
+// averages, so the numbers line up with /report and /print.
+app.post('/api/office-analytics', ensureOfficeAuth, noCache, (req, res) => {
+    const officeId = req.officeSession.user.id;
+    const periodCovered = typeof (req.body && req.body.periodCovered) === 'string' ? req.body.periodCovered : '';
+    const periodAnd = periodCovered ? ` AND ${periodNormExpr('s.period_year_quarter')} = ?` : '';
+    const periodParams = periodCovered ? [normalizePeriodStr(periodCovered)] : [];
+    const fail = (label) => (err) => {
+        console.error(`❌ [office-analytics] ${label} query failed:`, err.message);
+        return res.status(500).json({ success: false, message: 'Could not load analytics.' });
+    };
+
+    const bucketCols = SQD_DIMENSIONS.flatMap(d => sqdBucketExprs(`s.${d.col}`, d.col)).join(', ');
+    const dimScores = SQD_DIMENSIONS.map(d => `${sqdScoreExpr([`s.${d.col}`])} AS score_${d.col}`).join(', ');
+    const hasAnswer = ALL_SQD_COLS.map(c => `${c} BETWEEN 1 AND 5`).join(' OR ');
+    const ownWhere = ` WHERE s.office_id = ? AND s.canonical_status = 'canonical'${periodAnd}`;
+    const ownParams = [officeId, ...periodParams];
+
+    db.query(
+        `SELECT COUNT(s.id) AS respondents, ${sqdScoreExpr(ALL_SQD_COLS)} AS overall, ${dimScores}, ${bucketCols} FROM survey_responses s${ownWhere}`,
+        ownParams,
+        (errA, rowsA) => {
+            if (errA) return fail('summary')(errA);
+            const a = (rowsA && rowsA[0]) || {};
+
+            // Answer distribution across all eight dimensions.
+            const dist = { sa: 0, a: 0, n: 0, d: 0, sd: 0, na: 0 };
+            SQD_DIMENSIONS.forEach(d => Object.keys(dist).forEach(k => { dist[k] += parseInt(a[`${d.col}_${k}`]) || 0; }));
+            const answered = dist.sa + dist.a + dist.n + dist.d + dist.sd;
+
+            const dimensions = SQD_DIMENSIONS.map(d => {
+                const ans = ['sa', 'a', 'n', 'd', 'sd'].reduce((sum, k) => sum + (parseInt(a[`${d.col}_${k}`]) || 0), 0);
+                return { key: d.col, label: d.label, answered: ans, score: ans ? parseFloat(a[`score_${d.col}`]) : null };
+            });
+
+            // Month by month, so the trend moves as soon as a survey lands.
+            db.query(
+                `SELECT DATE_FORMAT(s.created_at, '%Y-%m') AS ym, COUNT(s.id) AS respondents, ${sqdScoreExpr(ALL_SQD_COLS)} AS overall, ` +
+                `SUM(CASE WHEN ${hasAnswer} THEN 1 ELSE 0 END) AS has_answers ` +
+                `FROM survey_responses s${ownWhere} GROUP BY ym ORDER BY ym ASC`,
+                ownParams,
+                (errB, rowsB) => {
+                    if (errB) return fail('trend')(errB);
+                    const trend = (rowsB || []).map(r => ({
+                        key: r.ym,
+                        respondents: Number(r.respondents) || 0,
+                        score: Number(r.has_answers) > 0 ? parseFloat(r.overall) : null
+                    })).slice(-12);
+
+                    // Cluster and institution, pooled the same way as the office.
+                    const benchSql = (extraWhere) =>
+                        `SELECT COUNT(s.id) AS respondents, ${sqdScoreExpr(ALL_SQD_COLS)} AS overall, ` +
+                        `SUM(CASE WHEN ${hasAnswer} THEN 1 ELSE 0 END) AS has_answers ` +
+                        `FROM survey_responses s JOIN offices o ON s.office_id = o.id ` +
+                        `WHERE o.is_archived = 0 AND s.canonical_status = 'canonical'${periodAnd}${extraWhere}`;
+                    db.query(benchSql(' AND o.cluster_name = (SELECT cluster_name FROM offices WHERE id = ?)'), [...periodParams, officeId], (errC, rowsC) => {
+                        if (errC) return fail('cluster')(errC);
+                        db.query(benchSql(''), periodParams, (errD, rowsD) => {
+                            if (errD) return fail('institution')(errD);
+                            const bench = (r) => {
+                                const row = (r && r[0]) || {};
+                                return {
+                                    respondents: Number(row.respondents) || 0,
+                                    score: Number(row.has_answers) > 0 ? parseFloat(row.overall) : null
+                                };
+                            };
+
+                            // Sentiment and topics from the comments that pass the same filter as the report.
+                            const commentsQuery =
+                                `SELECT s.id, s.comments, ${REPORT_SENTIMENT_SQL} AS sentiment, ${REPORT_TOPIC_SQL} AS topic ` +
+                                `FROM survey_responses s WHERE ${HAS_REAL_COMMENT_SQL} AND s.office_id = ? AND s.canonical_status = 'canonical'${periodAnd}`;
+                            db.query(commentsQuery, ownParams, (errE, rowsE) => {
+                                if (errE) return fail('comments')(errE);
+                                const kept = (rowsE || []).filter(r => prepareReportComment(r.comments).include && r.sentiment && r.topic);
+                                const sentiment = { positive: 0, neutral: 0, negative: 0 };
+                                kept.forEach(r => {
+                                    if (r.sentiment === 'Positive') sentiment.positive++;
+                                    else if (r.sentiment === 'Negative') sentiment.negative++;
+                                    else sentiment.neutral++;
+                                });
+
+                                const finish = (extraRows) => {
+                                    const counts = new Map();
+                                    kept.forEach(r => counts.set(r.topic, (counts.get(r.topic) || 0) + 1));
+                                    (extraRows || []).forEach(r => counts.set(r.topic, (counts.get(r.topic) || 0) + 1));
+                                    const topics = Array.from(counts.entries())
+                                        .map(([topic, count]) => ({ topic, count }))
+                                        .sort((x, y) => y.count - x.count || x.topic.localeCompare(y.topic))
+                                        .slice(0, 6);
+                                    getMergedPeriodOptions((periodOptions) => res.json({
+                                        success: true,
+                                        periodOptions,
+                                        respondents: Number(a.respondents) || 0,
+                                        overall: answered ? parseFloat(a.overall) : null,
+                                        answered,
+                                        distribution: dist,
+                                        dimensions,
+                                        trend,
+                                        cluster: Object.assign({ name: req.officeSession.user.cluster_name || null }, bench(rowsC)),
+                                        institution: bench(rowsD),
+                                        sentiment: Object.assign({ analyzed: kept.length }, sentiment),
+                                        topics
+                                    }));
+                                };
+
+                                const ids = kept.map(r => r.id);
+                                if (!ids.length) return finish([]);
+                                db.query(
+                                    `SELECT topic FROM survey_response_topics WHERE survey_response_id IN (${ids.map(() => '?').join(',')})`,
+                                    ids,
+                                    (errF, rowsF) => finish(errF ? [] : rowsF)
+                                );
+                            });
+                        });
+                    });
+                }
+            );
+        }
+    );
 });
 
 // Per-office SQD rating breakdown for every office in a cluster, one row per office instead of one combined total.

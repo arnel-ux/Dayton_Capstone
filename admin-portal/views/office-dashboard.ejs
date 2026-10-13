@@ -218,6 +218,79 @@
             .stat-card .stat-num { font-size: 1.55rem; }
             .chart-card { padding: 0.85rem 0.75rem 0.5rem; }
         }
+
+        /* ---- Performance analytics ----
+           Scoped to .an-* so nothing above is touched. Every figure is an aggregate;
+           rating names always sit next to their colour so colour is never the only cue. */
+        .an-controls { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+        .an-controls select { min-width: 190px; border-radius: 10px; font-size: .86rem; }
+        .an-live { font-size: .76rem; color: #64748b; }
+        .an-live i { color: #22c55e; font-size: .55rem; margin-right: 5px; vertical-align: middle; }
+        .an-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; }
+        .an-card { background: #fff; border: 1px solid rgba(15,23,42,.07); border-radius: 16px; padding: 1.1rem 1.25rem; box-shadow: 0 10px 26px -20px rgba(15,23,42,.5); min-width: 0; }
+        .an-card h4 { font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #64748b; margin: 0 0 .55rem; }
+        .an-big { font-size: 2rem; font-weight: 800; line-height: 1.1; color: #0f172a; font-variant-numeric: tabular-nums; }
+        .an-sub { font-size: .78rem; color: #94a3b8; margin-top: .35rem; line-height: 1.4; }
+        .an-delta { font-weight: 700; }
+        .an-delta.is-up { color: #15803d; } .an-delta.is-down { color: #dc2626; } .an-delta.is-flat { color: #64748b; }
+        .an-chip { display: inline-block; padding: .18rem .6rem; border-radius: 999px; font-size: .74rem; font-weight: 700; margin-left: .4rem; vertical-align: middle; }
+        .an-r-outstanding { background: rgba(21,128,61,.15); color: #166534; }
+        .an-r-very { background: rgba(22,163,74,.13); color: #15803d; }
+        .an-r-satisfactory { background: rgba(37,84,199,.13); color: #2554c7; }
+        .an-r-fair { background: rgba(217,119,6,.16); color: #b45309; }
+        .an-r-poor { background: rgba(220,38,38,.13); color: #b91c1c; }
+        .an-r-none { background: rgba(100,116,139,.15); color: #475569; }
+        .an-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 1rem; }
+        .an-grid .an-card { display: flex; flex-direction: column; }
+        .an-row { display: grid; grid-template-columns: 118px 1fr 56px; align-items: center; gap: .6rem; margin-bottom: .6rem; font-size: .82rem; }
+        .an-row .lbl { color: #334155; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .an-row .val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; color: #0f172a; }
+        .an-track { height: 12px; border-radius: 999px; background: rgba(100,116,139,.15); overflow: hidden; }
+        .an-fill { height: 100%; border-radius: 999px; transition: width .9s cubic-bezier(.22,.8,.3,1); }
+        .an-f-outstanding { background: #15803d; } .an-f-very { background: #22a05a; } .an-f-satisfactory { background: #2554c7; } .an-f-fair { background: #d97706; } .an-f-poor { background: #dc2626; }
+        .an-stack { display: flex; height: 16px; border-radius: 999px; overflow: hidden; background: rgba(100,116,139,.15); }
+        .an-stack > span { display: block; height: 100%; transition: width .9s cubic-bezier(.22,.8,.3,1); }
+        .an-legend { display: flex; flex-wrap: wrap; gap: .35rem 1rem; margin-top: .7rem; font-size: .76rem; color: #475569; }
+        .an-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; }
+        .an-topic { display: flex; justify-content: space-between; gap: .75rem; padding: .4rem 0; border-bottom: 1px solid rgba(15,23,42,.06); font-size: .82rem; }
+        .an-topic:last-child { border-bottom: 0; }
+        .an-topic b { font-variant-numeric: tabular-nums; }
+        .an-empty { padding: 1.2rem .5rem; text-align: center; color: #94a3b8; font-size: .84rem; }
+        .an-warn { margin-top: 1rem; padding: .7rem 1rem; border-radius: 12px; background: rgba(217,119,6,.12); color: #92400e; font-size: .82rem; }
+        .an-note { margin-top: 1rem; font-size: .76rem; color: #94a3b8; line-height: 1.5; }
+        .an-trend text { font-size: 11px; fill: #64748b; }
+        .an-trend .grid { stroke: rgba(100,116,139,.22); stroke-width: 1; }
+        .an-trend .line { fill: none; stroke: #2554c7; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+        .an-trend .dot { fill: #2554c7; stroke: #fff; stroke-width: 2; }
+        .an-trend .line { stroke-dasharray: var(--len, 0); stroke-dashoffset: 0; transition: stroke-dashoffset 1.3s cubic-bezier(.22,.8,.3,1); }
+        .an-trend .dot { transition: opacity .4s ease 1s; }
+        /* Scroll reveal. A card fades up when it enters the screen and its graph draws in; the cards
+           re-run it each time they scroll back into view. Nothing is hidden without JS or when
+           the visitor prefers reduced motion. */
+        .an-reveal { transition: opacity .55s ease, transform .55s ease; }
+        .an-js .an-reveal:not(.is-in) { opacity: 0; transform: translateY(18px); }
+        .an-js .an-reveal:not(.is-in) .an-fill,
+        .an-js .an-reveal:not(.is-in) .an-stack > span { width: 0 !important; }
+        .an-js .an-reveal:not(.is-in) .an-trend .line { stroke-dashoffset: var(--len, 0); }
+        .an-js .an-reveal:not(.is-in) .an-trend .dot { opacity: 0; }
+        .an-grid .an-reveal:nth-child(2) { transition-delay: .08s; }
+        .an-grid .an-reveal:nth-child(3) { transition-delay: .04s; }
+        .an-grid .an-reveal:nth-child(4) { transition-delay: .12s; }
+        @media (prefers-reduced-motion: reduce) { .an-reveal, .an-fill, .an-stack > span, .an-trend .line, .an-trend .dot { transition: none !important; } }
+        html[data-bs-theme="dark"] .an-card { background: var(--office-card, #1f1b33); border-color: rgba(255,255,255,.08); }
+        html[data-bs-theme="dark"] .an-big, html[data-bs-theme="dark"] .an-row .val { color: #f1f0f8; }
+        html[data-bs-theme="dark"] .an-card h4, html[data-bs-theme="dark"] .an-live, html[data-bs-theme="dark"] .an-legend, html[data-bs-theme="dark"] .an-row .lbl { color: #a9a5c2; }
+        html[data-bs-theme="dark"] .an-topic { border-color: rgba(255,255,255,.08); }
+        html[data-bs-theme="dark"] .an-trend text { fill: #a9a5c2; }
+        html[data-bs-theme="dark"] .an-trend .dot { stroke: #1f1b33; }
+        html[data-bs-theme="dark"] .an-trend .line, html[data-bs-theme="dark"] .an-trend .dot { stroke-opacity: 1; }
+        html[data-bs-theme="dark"] .an-r-outstanding, html[data-bs-theme="dark"] .an-r-very { color: #86efac; }
+        html[data-bs-theme="dark"] .an-r-satisfactory { color: #93b4ff; }
+        html[data-bs-theme="dark"] .an-r-fair { color: #fbbf24; }
+        html[data-bs-theme="dark"] .an-r-poor { color: #fca5a5; }
+        html[data-bs-theme="dark"] .an-r-none { color: #cbd5e1; }
+        @media (max-width: 767px) { .an-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 576px) { .an-row { grid-template-columns: 96px 1fr 50px; } }
     </style>
     <!-- After the block above on purpose: this file is the portal's shared
          shell (header + sidebar), and loading it last is what lets it override
@@ -308,6 +381,66 @@
             <% } %>
         </div>
 
+        <div class="section-head">
+            <h3>Performance analytics</h3>
+            <div class="an-controls">
+                <label class="visually-hidden" for="anPeriod">Period covered</label>
+                <select class="form-select form-select-sm" id="anPeriod">
+                    <option value="">All Periods</option>
+                </select>
+                <span class="an-live"><i class="fas fa-circle"></i>Updates automatically</span>
+            </div>
+        </div>
+
+        <div id="anRoot" aria-live="polite">
+            <div class="an-kpis">
+                <div class="an-card">
+                    <h4>Overall satisfaction</h4>
+                    <div class="an-big"><span id="anOverall">—</span><span class="an-chip an-r-none" id="anRating">No data</span></div>
+                    <div class="an-sub" id="anOverallSub">Loading…</div>
+                </div>
+                <div class="an-card">
+                    <h4>Vs. your cluster</h4>
+                    <div class="an-big" id="anClusterScore">—</div>
+                    <div class="an-sub" id="anClusterSub"></div>
+                </div>
+                <div class="an-card">
+                    <h4>Vs. whole institution</h4>
+                    <div class="an-big" id="anInstScore">—</div>
+                    <div class="an-sub" id="anInstSub"></div>
+                </div>
+                <div class="an-card">
+                    <h4>Positive feedback</h4>
+                    <div class="an-big" id="anPosPct">—</div>
+                    <div class="an-sub" id="anPosSub"></div>
+                </div>
+            </div>
+
+            <div class="an-warn" id="anWarn" hidden></div>
+
+            <div class="an-grid">
+                <div class="an-card an-reveal">
+                    <h4>Score per service quality dimension</h4>
+                    <div id="anDims"></div>
+                </div>
+                <div class="an-card an-reveal">
+                    <h4>Satisfaction trend by month</h4>
+                    <div id="anTrend"></div>
+                </div>
+                <div class="an-card an-reveal">
+                    <h4>How clients answered</h4>
+                    <div id="anDist"></div>
+                </div>
+                <div class="an-card an-reveal">
+                    <h4>Feedback sentiment and top topics</h4>
+                    <div id="anSent"></div>
+                    <div id="anTopics" class="mt-3"></div>
+                </div>
+            </div>
+
+            <p class="an-note">Satisfaction score = (Strongly Agree + Agree) ÷ (all answers − N/A) × 100, computed over the eight service quality dimensions. It is the same formula used in the Report page, so the figures match. Cluster and institution scores combine all of their answers; they are not an average of office scores. Only counts and scores are shown here, never who answered.</p>
+        </div>
+
         <div class="privacy-note">
             <i class="fas fa-shield-alt"></i>
             <span>These are totals only. Respondent names, email addresses and survey answers are never shown on this page — individual submissions stay on the Pending and History screens. Counts follow the semester (January–June and July–December); nothing is deleted when a semester ends, the totals simply start again for the new one.</span>
@@ -317,6 +450,262 @@
 
     <%- include('layout/footer') %>
 
+    <script>
+        // Performance analytics. Reads aggregate scores from /api/office-analytics and redraws only when they change.
+        (function () {
+            var POLL_MS = 10000;
+            var last = null;
+            var periodsFilled = false;
+            var MIN_RESPONDENTS = 10;   // Same threshold the Report page uses for "insufficient respondents".
+
+            function el(id) { return document.getElementById(id); }
+            function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+            function make(tag, cls, text) {
+                var n = document.createElement(tag);
+                if (cls) n.className = cls;
+                if (text !== undefined) n.textContent = text;
+                return n;
+            }
+            function pct(v) { return v === null || v === undefined ? 'N/A' : v.toFixed(2) + '%'; }
+
+            // Same bands as the report's interpretation legend.
+            function rating(score) {
+                if (score === null || score === undefined) return { key: 'none', name: 'No data' };
+                if (score >= 95) return { key: 'outstanding', name: 'Outstanding' };
+                if (score >= 90) return { key: 'very', name: 'Very Satisfactory' };
+                if (score >= 80) return { key: 'satisfactory', name: 'Satisfactory' };
+                if (score >= 60) return { key: 'fair', name: 'Fair' };
+                return { key: 'poor', name: 'Poor' };
+            }
+
+            function setBench(scoreId, subId, bench, mine, label) {
+                el(scoreId).textContent = pct(bench.score);
+                var sub = el(subId);
+                clear(sub);
+                if (bench.score === null) { sub.textContent = 'No answers yet for ' + label + '.'; return; }
+                if (mine === null) { sub.textContent = bench.respondents + ' respondents.'; return; }
+                var diff = Math.round((mine - bench.score) * 100) / 100;
+                var d = make('span', 'an-delta ' + (diff > 0 ? 'is-up' : diff < 0 ? 'is-down' : 'is-flat'),
+                    (diff > 0 ? '▲ +' : diff < 0 ? '▼ ' : '= ') + diff.toFixed(2) + ' pts');
+                sub.appendChild(d);
+                sub.appendChild(document.createTextNode(' ' + (diff > 0 ? 'above' : diff < 0 ? 'below' : 'same as') + ' ' + label + ' · ' + bench.respondents + ' respondents'));
+            }
+
+            function drawDims(dims) {
+                var box = el('anDims'); clear(box);
+                dims.forEach(function (d, i) {
+                    var r = rating(d.score);
+                    var row = make('div', 'an-row');
+                    row.appendChild(make('div', 'lbl', (i + 1) + '. ' + d.label));
+                    var track = make('div', 'an-track');
+                    var fill = make('div', 'an-fill an-f-' + r.key);
+                    fill.style.width = d.score === null ? '0%' : Math.max(0, Math.min(100, d.score)) + '%';
+                    track.appendChild(fill);
+                    row.appendChild(track);
+                    var v = make('div', 'val', d.score === null ? 'N/A' : d.score.toFixed(1) + '%');
+                    v.title = r.name;
+                    row.appendChild(v);
+                    box.appendChild(row);
+                });
+            }
+
+            var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            function monthLabel(key) { var p = key.split('-'); return MONTHS[parseInt(p[1], 10) - 1] + ' ' + p[0].slice(2); }
+
+            function drawTrend(trend) {
+                var box = el('anTrend'); clear(box);
+                var pts = trend.filter(function (t) { return t.score !== null; });
+                if (!pts.length) { box.appendChild(make('div', 'an-empty', 'No scored surveys yet.')); return; }
+                var NS = 'http://www.w3.org/2000/svg';
+                var W = 520, H = 220, L = 34, R = 14, T = 12, B = 30;
+                var svg = document.createElementNS(NS, 'svg');
+                svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+                svg.setAttribute('class', 'an-trend');
+                svg.setAttribute('width', '100%');
+                svg.setAttribute('role', 'img');
+                svg.setAttribute('aria-label', 'Monthly satisfaction score, ' + pts.map(function (t) { return monthLabel(t.key) + ' ' + t.score.toFixed(1) + '%'; }).join(', '));
+                function y(v) { return T + (100 - v) / 100 * (H - T - B); }
+                function x(i) { return trend.length === 1 ? (L + W - R) / 2 : L + i * (W - L - R) / (trend.length - 1); }
+                [0, 25, 50, 75, 100].forEach(function (g) {
+                    var ln = document.createElementNS(NS, 'line');
+                    ln.setAttribute('class', 'grid'); ln.setAttribute('x1', L); ln.setAttribute('x2', W - R);
+                    ln.setAttribute('y1', y(g)); ln.setAttribute('y2', y(g)); svg.appendChild(ln);
+                    var tx = document.createElementNS(NS, 'text');
+                    tx.setAttribute('x', L - 6); tx.setAttribute('y', y(g) + 4); tx.setAttribute('text-anchor', 'end'); tx.textContent = g;
+                    svg.appendChild(tx);
+                });
+                // Joins only neighbouring scored months, a month without answers leaves a gap rather than a fake zero.
+                var d = '', pen = false;
+                trend.forEach(function (t, i) {
+                    if (t.score === null) { pen = false; return; }
+                    d += (pen ? ' L ' : ' M ') + x(i).toFixed(1) + ' ' + y(t.score).toFixed(1);
+                    pen = true;
+                });
+                var path = document.createElementNS(NS, 'path');
+                path.setAttribute('class', 'line'); path.setAttribute('d', d.trim()); svg.appendChild(path);
+                trend.forEach(function (t, i) {
+                    var lab = document.createElementNS(NS, 'text');
+                    lab.setAttribute('x', x(i)); lab.setAttribute('y', H - 8); lab.setAttribute('text-anchor', 'middle');
+                    if (trend.length <= 8 || i % 2 === 0 || i === trend.length - 1) lab.textContent = monthLabel(t.key);
+                    svg.appendChild(lab);
+                    if (t.score === null) return;
+                    var c = document.createElementNS(NS, 'circle');
+                    c.setAttribute('class', 'dot'); c.setAttribute('cx', x(i)); c.setAttribute('cy', y(t.score)); c.setAttribute('r', 4.5);
+                    var ti = document.createElementNS(NS, 'title');
+                    ti.textContent = monthLabel(t.key) + ': ' + t.score.toFixed(2) + '% from ' + t.respondents + ' respondent' + (t.respondents === 1 ? '' : 's');
+                    c.appendChild(ti); svg.appendChild(c);
+                });
+                box.appendChild(svg);
+                // Line length drives the draw-on animation.
+                if (path.getTotalLength) path.style.setProperty('--len', Math.ceil(path.getTotalLength()) + 2);
+            }
+
+            function legend(items) {
+                var lg = make('div', 'an-legend');
+                items.forEach(function (it) {
+                    var s = make('span');
+                    var sw = make('i'); sw.style.background = it.color;
+                    s.appendChild(sw); s.appendChild(document.createTextNode(it.text));
+                    lg.appendChild(s);
+                });
+                return lg;
+            }
+
+            function stack(parts, total) {
+                var st = make('div', 'an-stack');
+                parts.forEach(function (p) {
+                    if (!p.value || !total) return;
+                    var s = make('span'); s.style.width = (p.value / total * 100) + '%'; s.style.background = p.color; s.title = p.name + ': ' + p.value;
+                    st.appendChild(s);
+                });
+                return st;
+            }
+
+            function drawDist(dist, answered) {
+                var box = el('anDist'); clear(box);
+                var total = answered + dist.na;
+                if (!total) { box.appendChild(make('div', 'an-empty', 'No answers yet.')); return; }
+                var parts = [
+                    { name: 'Strongly Agree', value: dist.sa, color: '#15803d' },
+                    { name: 'Agree', value: dist.a, color: '#4ade80' },
+                    { name: 'Neutral', value: dist.n, color: '#fbbf24' },
+                    { name: 'Disagree', value: dist.d, color: '#fb923c' },
+                    { name: 'Strongly Disagree', value: dist.sd, color: '#dc2626' },
+                    { name: 'N/A', value: dist.na, color: '#94a3b8' }
+                ];
+                box.appendChild(stack(parts, total));
+                box.appendChild(legend(parts.map(function (p) { return { color: p.color, text: p.name + ' ' + p.value + ' (' + (p.value / total * 100).toFixed(1) + '%)' }; })));
+            }
+
+            function drawSent(s, topics) {
+                var box = el('anSent'); clear(box);
+                var tb = el('anTopics'); clear(tb);
+                if (!s.analyzed) {
+                    box.appendChild(make('div', 'an-empty', 'No written feedback analysed yet.'));
+                    return;
+                }
+                var parts = [
+                    { name: 'Positive', value: s.positive, color: '#16a34a' },
+                    { name: 'Neutral', value: s.neutral, color: '#94a3b8' },
+                    { name: 'Negative', value: s.negative, color: '#dc2626' }
+                ];
+                box.appendChild(stack(parts, s.analyzed));
+                box.appendChild(legend(parts.map(function (p) { return { color: p.color, text: p.name + ' ' + p.value + ' (' + (p.value / s.analyzed * 100).toFixed(1) + '%)' }; })));
+                if (topics.length) {
+                    tb.appendChild(make('h4', '', 'Most mentioned topics'));
+                    topics.forEach(function (t) {
+                        var r = make('div', 'an-topic');
+                        r.appendChild(make('span', '', t.topic));
+                        r.appendChild(make('b', '', String(t.count)));
+                        tb.appendChild(r);
+                    });
+                }
+            }
+
+            function render(d) {
+                var r = rating(d.overall);
+                el('anOverall').textContent = pct(d.overall);
+                var chip = el('anRating'); chip.className = 'an-chip an-r-' + r.key; chip.textContent = r.name;
+                el('anOverallSub').textContent = d.respondents + ' respondent' + (d.respondents === 1 ? '' : 's') + (d.answered ? ' · ' + d.answered + ' answers counted' : '');
+                setBench('anClusterScore', 'anClusterSub', d.cluster, d.overall, d.cluster.name ? 'the ' + d.cluster.name : 'your cluster');
+                setBench('anInstScore', 'anInstSub', d.institution, d.overall, 'the institution');
+
+                if (d.sentiment.analyzed) {
+                    el('anPosPct').textContent = (d.sentiment.positive / d.sentiment.analyzed * 100).toFixed(1) + '%';
+                    el('anPosSub').textContent = d.sentiment.positive + ' of ' + d.sentiment.analyzed + ' written comments';
+                } else {
+                    el('anPosPct').textContent = 'N/A';
+                    el('anPosSub').textContent = 'No written comments yet.';
+                }
+
+                var warn = el('anWarn');
+                if (d.respondents > 0 && d.respondents < MIN_RESPONDENTS) {
+                    warn.hidden = false;
+                    warn.textContent = 'Only ' + d.respondents + ' respondent' + (d.respondents === 1 ? '' : 's') + ' so far. Scores are not final until there are at least ' + MIN_RESPONDENTS + '.';
+                } else if (d.respondents === 0) {
+                    warn.hidden = false;
+                    warn.textContent = 'No surveys recorded for this office in the selected period yet.';
+                } else {
+                    warn.hidden = true;
+                }
+
+                drawDims(d.dimensions);
+                drawTrend(d.trend);
+                drawDist(d.distribution, d.answered);
+                drawSent(d.sentiment, d.topics);
+            }
+
+            function fillPeriods(opts) {
+                if (periodsFilled) return;
+                periodsFilled = true;
+                var sel = el('anPeriod');
+                (opts || []).forEach(function (o) {
+                    var op = document.createElement('option');
+                    op.value = o.value; op.textContent = o.label; sel.appendChild(op);
+                });
+            }
+
+            function load() {
+                var sel = el('anPeriod');
+                return fetch('/api/office-analytics', {
+                    method: 'POST', credentials: 'same-origin', cache: 'no-store',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ periodCovered: sel.value })
+                }).then(function (res) {
+                    if (res.redirected) { window.location.href = '/login?status=session_expired'; return null; }
+                    if (!res.ok) return null;
+                    return res.json();
+                }).then(function (d) {
+                    if (!d || d.success !== true) return;
+                    fillPeriods(d.periodOptions);
+                    var sig = JSON.stringify([sel.value, d]);
+                    if (sig === last) return;
+                    last = sig;
+                    render(d);
+                }).catch(function () { /* Offline, the next tick tries again. */ });
+            }
+
+            el('anPeriod').addEventListener('change', load);
+            setInterval(function () { if (document.visibilityState === 'visible' && navigator.onLine) load(); }, POLL_MS);
+            document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') load(); });
+            window.addEventListener('online', load);
+            // Scroll reveal: adds .is-in as a card enters the screen and removes it once fully out, so it replays.
+            var cards = document.querySelectorAll('.an-reveal');
+            var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if ('IntersectionObserver' in window && cards.length && !calm) {
+                document.documentElement.classList.add('an-js');
+                var io = new IntersectionObserver(function (entries) {
+                    entries.forEach(function (en) {
+                        if (en.intersectionRatio >= 0.15) en.target.classList.add('is-in');
+                        else if (en.intersectionRatio === 0) en.target.classList.remove('is-in');
+                    });
+                }, { threshold: [0, 0.15] });
+                cards.forEach(function (c) { io.observe(c); });
+            }
+
+            load();
+        })();
+    </script>
     <script>
         // Ask before logging out — Pending and History already do; on the
         // Dashboard the sidebar's Logout link ended the session in one click.

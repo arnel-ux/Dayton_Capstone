@@ -67,7 +67,7 @@ const ADMIN_PROTECTED_PATH_PREFIXES = [
     '/dashboard', '/report', '/profile', '/password', '/print',
     '/survey-records', '/offices', '/manage-admins', '/survey',
     '/cluster', '/clusters', '/services', '/admins', '/settings',
-    '/period-covered', '/office-approvals', '/office-dashboard', '/office-logout',
+    '/period-covered', '/office-approvals', '/office-dashboard', '/office-report', '/office-logout',
     '/user-accounts'
 ];
 

@@ -1,7 +1,7 @@
 <%
 /* Office portal shell with the topbar and sidebar, shared by Dashboard, Pending and History.
    Locals: officeName (full office name), officeNameShort (abbreviated, used when the full name doesn't fit),
-   activeNav (dashboard, pending, or history), pendingCount and historyCount (sidebar badges). */
+   activeNav (dashboard, report, pending, or history), pendingCount and historyCount (sidebar badges). */
     var _officeName = (typeof officeName !== 'undefined' && officeName) ? officeName : 'Office';
     var _officeShort = (typeof officeNameShort !== 'undefined' && officeNameShort) ? officeNameShort : _officeName;
     var _active = (typeof activeNav !== 'undefined' && activeNav) ? activeNav : '';
@@ -91,6 +91,9 @@
     <nav class="sidebar-nav">
         <a href="/office-dashboard" class="sidebar-link<%= _active === 'dashboard' ? ' active' : '' %>">
             <i class="fas fa-chart-column"></i> Dashboard
+        </a>
+        <a href="/office-report" class="sidebar-link<%= _active === 'report' ? ' active' : '' %>">
+            <i class="fas fa-file-lines"></i> Report
         </a>
         <a href="/office-approvals" class="sidebar-link<%= _active === 'pending' ? ' active' : '' %>">
             <i class="fas fa-hourglass-half"></i> Pending
