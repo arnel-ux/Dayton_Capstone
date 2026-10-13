@@ -1141,7 +1141,7 @@
                     <div class="side-panel-card">
                         <p class="section-eyebrow mb-1">ACTIONABLE INSIGHT</p>
                         <h6 class="fw-bold text-dark mb-1"><i class="fas fa-arrow-trend-down text-danger me-1"></i> Offices Needing Attention</h6>
-                        <p class="text-muted small mb-3">Lowest satisfaction rating this period</p>
+                        <p class="text-muted small mb-3">Poor-rated offices (below 60%) with at least 25 respondents this period</p>
                         <% if (typeof bottomOffices !== 'undefined' && bottomOffices.length > 0) { %>
                             <div style="height: 330px; position: relative;" class="mb-3">
                                 <canvas id="bottomOfficesChart"></canvas>
@@ -1161,7 +1161,7 @@
                         <% } else { %>
                             <div class="empty-state-mini">
                                 <i class="fas fa-chart-simple"></i>
-                                <p>Not enough data yet.</p>
+                                <p>No office needs attention. None are rated Poor with 25+ respondents.</p>
                             </div>
                         <% } %>
                     </div>

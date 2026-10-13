@@ -5666,7 +5666,11 @@ function loadDashboardData(req, callback) {
 
                         rankedOffices.sort((a, b) => b.score - a.score);
                         const topOffices = rankedOffices.slice(0, 5);
-                        const bottomOffices = rankedOffices.slice(-5).reverse().filter(o => !topOffices.includes(o));
+                        // Offices needing attention: only POOR (below 60%) offices with enough respondents (25 or more) to be reliable.
+                        const bottomOffices = rankedOffices
+                            .filter(o => o.respondents >= 25 && o.score < 60)
+                            .sort((a, b) => a.score - b.score)
+                            .slice(0, 5);
 
                         const sentimentQuery = `SELECT ${REPORT_SENTIMENT_SQL} AS sentiment, COUNT(*) AS c FROM survey_responses s${dateWhere} GROUP BY ${REPORT_SENTIMENT_SQL}`;
                         db.query(sentimentQuery, dateParams, (err, sentimentRows) => {
