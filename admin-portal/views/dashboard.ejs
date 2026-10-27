@@ -768,7 +768,7 @@
         #sqdWorksheetModal .modal-report-container { max-width: 1150px; }
         .sqd-ws-title { font-weight: bold; text-transform: uppercase; font-size: 11pt; margin: 18px 0 6px; color: #000; }
         .sqd-ws-table { width: 100%; table-layout: fixed; border-collapse: collapse; color: #000; font-size: 8.5pt; margin-bottom: 8px; }
-        .sqd-ws-table th { background-color: #9dc3e6 !important; color: #000 !important; border: 1px solid #000; padding: 4px 3px; text-align: center; vertical-align: middle; font-size: 8pt; font-weight: bold; text-transform: uppercase; }
+        .sqd-ws-table th { background-color: #9dc3e6 !important; color: #000 !important; border: 1px solid #000; padding: 4px 2px; text-align: center; vertical-align: middle; font-size: 7pt; font-weight: bold; text-transform: uppercase; }
         .sqd-ws-table td { border: 1px solid #000; padding: 2px 4px; vertical-align: middle; }
         .sqd-ws-table .sqd-ws-name { text-transform: uppercase; font-size: 8pt; }
         .sqd-ws-table .sqd-ws-no { display: inline-block; width: 18px; font-weight: bold; }
@@ -1262,7 +1262,6 @@
 <div id="sqdWorksheetModal">
     <div class="modal-report-container shadow-lg">
         <div class="modal-controls">
-            <button onclick="downloadSqdWorksheetPDF()" class="btn btn-danger btn-sm px-3"><i class="fas fa-file-pdf me-1"></i> Export PDF</button>
             <button onclick="closeSqdWorksheetModal()" class="btn btn-dark btn-sm px-3">Close</button>
         </div>
 
@@ -2122,20 +2121,6 @@ function openSqdWorksheetModal() {
 function closeSqdWorksheetModal() {
     document.getElementById('sqdWorksheetModal').style.display = 'none';
     document.body.style.overflow = 'auto';
-}
-
-function downloadSqdWorksheetPDF() {
-    // Wide table (9 numeric columns), so it exports in landscape.
-    const element = document.getElementById('printableSqdWorksheetDocument');
-    const opt = {
-        margin:       [0.4, 0.4, 0.4, 0.4],
-        filename:     'CSPC-CSM-SQD-Computation-Worksheet.pdf',
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false, letterRendering: true, scrollY: 0, backgroundColor: '#ffffff' },
-        jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' },
-        pagebreak:    { mode: ['css', 'legacy'], avoid: ['.report-header-block', 'tr', '.sqd-ws-title'] }
-    };
-    html2pdf().set(opt).from(element).save();
 }
 
 function openRespondentsSummaryModal() {
