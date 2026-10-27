@@ -1760,7 +1760,7 @@
             // Footer only prints on the SQD scorecard page, the AI Feedback pages don't carry it.
             footer: { effectivity: 'June 2024', revision: 'Rev. 4', onPages: (pageNum) => pageNum === 1 },
             // Watermark applies to every page, not just the SQD scorecard.
-            watermark: sqdRespondentCount < 10
+            watermark: sqdRespondentCount < 20
                 ? { text: 'INSUFFICIENT RESPONDENTS' }
                 : undefined
         });

@@ -115,7 +115,16 @@
         pdf.setTextColor(200, 30, 30);
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(34);
-        pdf.text(text, pageWidth / 2, pageHeight / 2, { align: 'center', angle: 45 });
+        // jsPDF's align:'center' is unreliable on rotated text, so anchor the baseline start by hand:
+        // walk back half the text width along the 45deg direction, then drop half the cap height
+        // perpendicular to it, so the glyphs' midpoint lands on the page center.
+        const rad = Math.PI / 4;
+        const cos = Math.cos(rad), sin = Math.sin(rad);
+        const halfWidth = pdf.getTextWidth(text) / 2;
+        const halfCap = (34 / 72) * 0.72 / 2;
+        const startX = pageWidth / 2 - halfWidth * cos + halfCap * sin;
+        const startY = pageHeight / 2 + halfWidth * sin + halfCap * cos;
+        pdf.text(text, startX, startY, { angle: 45 });
         if (hasGState) {
             try { pdf.setGState(new pdf.GState({ opacity: 1 })); } catch (e) { /* already opaque */ }
         }

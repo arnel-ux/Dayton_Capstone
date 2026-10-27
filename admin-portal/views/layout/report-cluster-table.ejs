@@ -12,11 +12,11 @@
 /* An office or cluster with no responses yet carries the string "N/A" instead of a
    number (see scoreCell in server.js) — print that as-is, never as "N/A%". */
 const _pct = (value) => (value === 'N/A' || value === null || value === undefined || value === '') ? 'N/A' : `${value}%`;
-/* An office below CSPC's reporting minimum (fewer than 10 respondents, including
+/* An office below CSPC's reporting minimum (fewer than 20 respondents, including
    zero/blank offices) gets flagged .office-insufficient so downloadPDF's watermark
    can find it — see report.css. Not shown as anything visible while just viewing;
    only the exported PDF gets the caution watermark on the affected pages. */
-const _isThin = (office) => (office.respondents || 0) < 10;
+const _isThin = (office) => (office.respondents || 0) < 20;
 %>
 <table class="cluster-report-table">
     <colgroup>

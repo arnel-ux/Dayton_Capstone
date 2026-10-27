@@ -12,11 +12,11 @@
 const _clusters = typeof reportData !== 'undefined' && Array.isArray(reportData) ? reportData : [];
 const _grandTotal = typeof totalRespondentsAll !== 'undefined' ? totalRespondentsAll : 0;
 /* Same reporting-minimum flag as report-cluster-table.ejs/report-overall-cluster-table.ejs
-   (fewer than 10 respondents) — flags the row so downloadRespondentsSummaryPDF's
+   (fewer than 20 respondents) — flags the row so downloadRespondentsSummaryPDF's
    watermark, keyed off this same .office-insufficient class, stamps only the pages
    that actually contain one of these offices. Not shown as anything visible while
    just viewing — see report.css. */
-const _isThin = (office) => (office.respondents || 0) < 10;
+const _isThin = (office) => (office.respondents || 0) < 20;
 %>
 <table class="cluster-report-table respondents-summary-table">
     <colgroup>

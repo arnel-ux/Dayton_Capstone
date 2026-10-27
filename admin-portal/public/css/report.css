@@ -159,7 +159,7 @@
 
 /* ---- Insufficient-respondents flag (report-cluster-table.ejs / report-overall-cluster-table.ejs /
    report-respondents-summary-table.ejs) ----
-   Below CSPC's 10-respondent reporting minimum (including a blank/no-response
+   Below CSPC's 20-respondent reporting minimum (including a blank/no-response
    office). Deliberately carries NO visible styling of its own while viewing —
    the row only exists to be found by downloadPDF's `watermark.rowSelector`
    (see public/js/pdf-repeating-header.js), which stamps the caution watermark

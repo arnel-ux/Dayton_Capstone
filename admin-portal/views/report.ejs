@@ -474,7 +474,7 @@
             // Footer only shows on the SQD scorecard page.
             footer: { effectivity: 'June 2024', revision: 'Rev. 4', onPages: (pageNum) => pageNum === 1 },
             // Watermark shows on every page.
-            watermark: sqdRespondentCount < 10
+            watermark: sqdRespondentCount < 20
                 ? { text: 'INSUFFICIENT RESPONDENTS' }
                 : undefined
         });

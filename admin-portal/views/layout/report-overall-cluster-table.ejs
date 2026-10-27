@@ -21,7 +21,7 @@ const _total = typeof overallClusterTotal !== 'undefined' && overallClusterTotal
    number (see scoreCell in server.js) — print that as-is, never as "N/A%". */
 const _pct = (value) => (value === 'N/A' || value === null || value === undefined || value === '') ? 'N/A' : `${value}%`;
 /* Same reporting-minimum flag as report-cluster-table.ejs — see its comment. */
-const _isThin = (office) => (office.respondents || 0) < 10;
+const _isThin = (office) => (office.respondents || 0) < 20;
 %>
 <table class="cluster-report-table">
     <colgroup>

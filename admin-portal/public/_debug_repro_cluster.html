@@ -2854,7 +2854,7 @@
                 // of the packet — the low count affects all three parts
                 // (respondents breakdown, scorecard, AI Feedback), not just the
                 // scorecard page.
-                watermark: sqdRespondentCount < 10
+                watermark: sqdRespondentCount < 20
                     ? { text: 'INSUFFICIENT RESPONDENTS' }
                     : undefined
             });
