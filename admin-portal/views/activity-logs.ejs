@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <%- include('layout/header') %>
+    <style>
+        .act-badge { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+        .act-CREATE  { background: rgba(25, 135, 84, 0.12);  color: #198754; }
+        .act-UPDATE  { background: rgba(13, 110, 253, 0.12); color: #0d6efd; }
+        .act-ARCHIVE { background: rgba(255, 193, 7, 0.18);  color: #a07800; }
+        .act-RESTORE { background: rgba(13, 202, 240, 0.15); color: #0a8aa5; }
+        .act-DELETE  { background: rgba(220, 53, 69, 0.12);  color: #dc3545; }
+        .act-desc { max-width: 560px; white-space: normal; word-break: break-word; line-height: 1.45; }
+        html[data-bs-theme="dark"] .act-ARCHIVE { color: #ffd45e; }
+        html[data-bs-theme="dark"] .act-CREATE { color: #4cc38a; }
+        html[data-bs-theme="dark"] .act-UPDATE { color: #7fb2ff; }
+        html[data-bs-theme="dark"] .act-DELETE { color: #ff7b8a; }
+    </style>
+</head>
+<body>
+<div id="wrapper">
+    <%- include('layout/sidebar') %>
+
+    <div id="content">
+        <%- include('layout/navbar') %>
+        <script>document.getElementById('pageTitle').innerText = 'Activity Logs';</script>
+
+        <%
+            const qs = (extra) => {
+                const p = new URLSearchParams();
+                if (filters.action) p.set('action', filters.action);
+                if (filters.admin) p.set('admin', filters.admin);
+                if (filters.q) p.set('q', filters.q);
+                Object.keys(extra || {}).forEach(k => p.set(k, extra[k]));
+                return '?' + p.toString();
+            };
+        %>
+
+        <div class="container-fluid p-0">
+            <div class="card card-custom">
+                <div class="card-header bg-white border-0 p-4">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                        <div>
+                            <h6 class="fw-bold mb-0">Admin Activity Logs</h6>
+                            <small class="text-muted">Every create, edit, archive, restore and delete done by the admins (<%= total %> record<%= total === 1 ? '' : 's' %>).</small>
+                        </div>
+                    </div>
+                    <form method="GET" action="/activity-logs" class="row g-2">
+                        <div class="col-12 col-md-3">
+                            <select name="admin" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <option value="">All admins</option>
+                                <% adminOptions.forEach(a => { %>
+                                    <option value="<%= a.admin_username %>" <%= filters.admin === a.admin_username ? 'selected' : '' %>><%= a.admin_fullname || a.admin_username %></option>
+                                <% }) %>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <select name="action" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <option value="">All actions</option>
+                                <% actions.forEach(a => { %>
+                                    <option value="<%= a %>" <%= filters.action === a ? 'selected' : '' %>><%= a.charAt(0) + a.slice(1).toLowerCase() %></option>
+                                <% }) %>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="input-group input-group-sm">
+                                <input type="text" name="q" value="<%= filters.q %>" class="form-control" placeholder="Search description, module or admin name">
+                                <button class="btn btn-primary" type="submit"><i class="fas fa-search"></i></button>
+                                <% if (filters.action || filters.admin || filters.q) { %>
+                                    <a class="btn btn-outline-secondary" href="/activity-logs">Clear</a>
+                                <% } %>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-custom table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="px-4 py-3">Date &amp; Time</th>
+                                    <th class="py-3">Admin</th>
+                                    <th class="py-3">Action</th>
+                                    <th class="py-3">Module</th>
+                                    <th class="py-3 pe-4">What was done</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% if (logs.length > 0) { %>
+                                    <% logs.forEach(log => { %>
+                                        <tr>
+                                            <td class="px-4 py-2 text-nowrap"><div class="fw-semibold"><%= log.log_date %></div><small class="text-muted"><%= log.log_time %></small></td>
+                                            <td class="text-nowrap"><div class="fw-semibold"><%= log.admin_fullname || log.admin_username %></div><small class="text-muted">@<%= log.admin_username %><%= log.admin_role ? ' · ' + log.admin_role : '' %></small></td>
+                                            <td><span class="act-badge act-<%= log.action %>"><%= log.action %></span></td>
+                                            <td class="text-nowrap"><%= log.module %></td>
+                                            <td class="pe-4 act-desc"><%= log.description %></td>
+                                        </tr>
+                                    <% }) %>
+                                <% } else { %>
+                                    <tr><td colspan="5" class="text-center py-4 text-muted">No activity recorded<%= (filters.action || filters.admin || filters.q) ? ' for these filters' : ' yet' %>.</td></tr>
+                                <% } %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <% if (totalPages > 1) { %>
+                    <div class="card-footer bg-white border-0 d-flex justify-content-between align-items-center flex-wrap gap-2 p-3">
+                        <small class="text-muted">Page <%= page %> of <%= totalPages %></small>
+                        <div class="btn-group btn-group-sm">
+                            <a class="btn btn-outline-secondary <%= page <= 1 ? 'disabled' : '' %>" href="/activity-logs<%= qs({ page: page - 1 }) %>"><i class="fas fa-chevron-left"></i> Prev</a>
+                            <a class="btn btn-outline-secondary <%= page >= totalPages ? 'disabled' : '' %>" href="/activity-logs<%= qs({ page: page + 1 }) %>">Next <i class="fas fa-chevron-right"></i></a>
+                        </div>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('layout/footer') %>
+<%- include('layout/theme-toggle') %>
+</body>
+</html>

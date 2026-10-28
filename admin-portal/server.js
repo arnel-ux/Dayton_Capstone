@@ -2398,6 +2398,31 @@ CREATE TABLE IF NOT EXISTS admin_logs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );`;
 
+// One row per create, edit, archive, restore or delete an admin makes. Shown to the Super Admin on /activity-logs.
+// No FK to admins on purpose, the admin's name is copied in so the entry still reads right after that account is deleted.
+db.query(`
+CREATE TABLE IF NOT EXISTS admin_activity_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    admin_id INT NULL,
+    admin_username VARCHAR(100) NOT NULL,
+    admin_fullname VARCHAR(255) NULL,
+    admin_role VARCHAR(50) NULL,
+    action VARCHAR(20) NOT NULL,
+    module VARCHAR(50) NOT NULL,
+    description TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_activity_created (created_at),
+    INDEX idx_activity_admin (admin_id)
+);`, (err) => {
+    if (err) console.error("❌ Error creating admin_activity_logs table:", err);
+    else console.log('✅ admin_activity_logs table verified/created successfully!');
+    // A database that still has the older column layout is converted in place, keeping its existing rows.
+    require('./activity-logs-migration')(db, 'admin_activity_logs', (mErr, changed) => {
+        if (mErr) console.error('❌ Error migrating admin_activity_logs to the current layout:', mErr);
+        else if (changed) console.log('✅ admin_activity_logs converted to the current layout.');
+    });
+});
+
 db.query(createAdminsTableQuery, (err) => {
     if (err) {
         console.error("❌ Error creating admins table:", err);
@@ -6539,6 +6564,12 @@ app.patch('/api/admin/survey-response/:id/analysis', ensureAdminAuth, async (req
         conn = await db.promise().getConnection();
         await conn.beginTransaction();
 
+        // Effective values before this edit, so the activity log can show what the admin changed.
+        const [beforeRows] = await conn.query(
+            `SELECT s.topic, s.sentiment, s.topic_override, s.subtopic_override, s.sentiment_override, s.respondent_name, o.office_name
+             FROM survey_responses s LEFT JOIN offices o ON o.id = s.office_id WHERE s.id = ? LIMIT 1`, [id]);
+        const before = beforeRows && beforeRows[0];
+
         const [result] = await conn.query(
             'UPDATE survey_responses SET topic_override = ?, subtopic_override = ?, sentiment_override = ? WHERE id = ?',
             [topic, subtopic, sentiment, id]
@@ -6565,6 +6596,17 @@ app.patch('/api/admin/survey-response/:id/analysis', ensureAdminAuth, async (req
 
         await conn.commit();
         conn.release();
+        if (before) {
+            const split = before.topic ? splitTopic(before.topic) : { topic: null, subtopic: null };
+            const oldVals = {
+                sentiment: before.sentiment_override || before.sentiment || '',
+                topic: before.topic_override || split.topic || '',
+                subtopic: before.subtopic_override || split.subtopic || ''
+            };
+            const changes = describeChanges(oldVals, { sentiment, topic, subtopic }, [['sentiment', 'Sentiment'], ['topic', 'Topic'], ['subtopic', 'Subtopic']]);
+            if (extraTopicStrings.length) changes.push(`Additional topics set to: ${extraTopicStrings.map(t => `"${t}"`).join(', ')}`);
+            logActivity(req, 'UPDATE', 'Survey Response', `Edited the feedback analysis of survey #${id} (${before.office_name || 'unknown office'}, respondent: ${before.respondent_name || 'unknown'}).${changes.length ? ' ' + changes.join('; ') + '.' : ' No visible field changed.'}`);
+        }
         res.json({
             success: true, effectiveSentiment: sentiment, effectiveTopic: topic, effectiveSubtopic: subtopic,
             extraTopics: extraTopicStrings.map(splitTopic)
@@ -6786,13 +6828,43 @@ function officesOk(msg) { return '/offices?success=' + encodeURIComponent(msg); 
 function officesErr(msg) { return '/offices?error=' + encodeURIComponent(msg); }
 const GENERIC_SAVE_ERROR = 'Something went wrong while processing your request. Please try again.';
 
+// ==========================================
+// ADMIN ACTIVITY LOG (CRUD only, read by the Super Admin)
+// ==========================================
+// Fire and forget, a failed log write must never break the admin's actual save.
+// Call it only after the change succeeded. Never put passwords or hashes in the description.
+function logActivity(req, action, module, description) {
+    const u = req.adminSession && req.adminSession.user;
+    if (!u) return;
+    db.query(
+        'INSERT INTO admin_activity_logs (admin_id, admin_username, admin_fullname, admin_role, action, module, description) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [u.id, u.username, u.fullname || null, u.role || null, action, module, String(description).slice(0, 2000)],
+        (err) => { if (err) console.error('❌ Error writing admin_activity_logs:', err); }
+    );
+}
+
+// Builds "Label: "old" -> "new"" lines for only the fields that actually changed.
+// fields is [[column, label], ...], newVals is keyed by the same column names.
+function describeChanges(oldRow, newVals, fields) {
+    const show = (v) => (v === null || v === undefined || String(v).trim() === '') ? '(empty)' : `"${String(v).trim()}"`;
+    const parts = [];
+    fields.forEach(([col, label]) => {
+        if (!(col in newVals)) return;
+        const before = oldRow[col] === null || oldRow[col] === undefined ? '' : String(oldRow[col]).trim();
+        const after = newVals[col] === null || newVals[col] === undefined ? '' : String(newVals[col]).trim();
+        if (before !== after) parts.push(`${label}: ${show(before)} → ${show(after)}`);
+    });
+    return parts;
+}
+
 app.post('/clusters/add', ensureAdminAuth, (req, res) => {
     const { cluster_name } = req.body;
     if (!cluster_name || cluster_name.trim() === "") {
         return res.redirect(officesErr('Please enter a cluster name.'));
     }
-    db.query('INSERT IGNORE INTO clusters (cluster_name) VALUES (?)', [cluster_name.trim()], (err) => {
+    db.query('INSERT IGNORE INTO clusters (cluster_name) VALUES (?)', [cluster_name.trim()], (err, result) => {
         if (err) { console.error("❌ Error adding cluster to database:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
+        if (result && result.affectedRows > 0) logActivity(req, 'CREATE', 'Cluster', `Added a new cluster "${cluster_name.trim()}".`);
         res.redirect(officesOk('Cluster added successfully.'));
     });
 });
@@ -6811,6 +6883,7 @@ app.post('/clusters/edit', ensureAdminAuth, (req, res) => {
             db.query('UPDATE offices SET cluster_name = ? WHERE cluster_name = ?', [newName, oldName], (err) => {
                 if (err) { console.error("❌ Error cascading cluster rename to offices:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
                 loadOfficeNameCache();
+                if (oldName !== newName) logActivity(req, 'UPDATE', 'Cluster', `Renamed cluster "${oldName}" to "${newName}". Offices under it were moved to the new name.`);
                 res.redirect(officesOk('Cluster updated successfully.'));
             });
         });
@@ -6827,6 +6900,7 @@ app.post('/clusters/delete/:id', ensureAdminAuth, (req, res) => {
             if (err) { console.error("❌ Error archiving cluster:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
             db.query('UPDATE offices SET is_archived = 1 WHERE cluster_name = ?', [clusterName], (err) => {
                 if (err) { console.error("❌ Error cascading cluster archive to offices:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
+                logActivity(req, 'ARCHIVE', 'Cluster', `Archived cluster "${clusterName}" together with all offices under it.`);
                 res.redirect(officesOk('Cluster archived successfully.'));
             });
         });
@@ -6834,9 +6908,13 @@ app.post('/clusters/delete/:id', ensureAdminAuth, (req, res) => {
 });
 
 app.post('/clusters/restore/:id', ensureAdminAuth, (req, res) => {
-    db.query('UPDATE clusters SET is_archived = 0 WHERE id = ?', [req.params.id], (err, result) => {
-        if (err) { console.error("❌ Error restoring cluster:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
-        res.redirect(officesOk('Cluster restored successfully.'));
+    db.query('SELECT cluster_name FROM clusters WHERE id = ?', [req.params.id], (selErr, rows) => {
+        const clusterName = !selErr && rows && rows[0] ? rows[0].cluster_name : null;
+        db.query('UPDATE clusters SET is_archived = 0 WHERE id = ?', [req.params.id], (err, result) => {
+            if (err) { console.error("❌ Error restoring cluster:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
+            if (clusterName) logActivity(req, 'RESTORE', 'Cluster', `Restored archived cluster "${clusterName}".`);
+            res.redirect(officesOk('Cluster restored successfully.'));
+        });
     });
 });
 
@@ -6849,6 +6927,7 @@ app.post('/clusters/permanent-delete/:id', ensureAdminAuth, (req, res) => {
             if (err) { console.error("❌ Error permanently deleting offices under cluster:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
             db.query('DELETE FROM clusters WHERE id = ?', [req.params.id], (err) => {
                 if (err) { console.error("❌ Error permanently deleting cluster:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
+                logActivity(req, 'DELETE', 'Cluster', `Permanently deleted cluster "${clusterName}" together with all offices under it.`);
                 res.redirect(officesOk('Cluster deleted permanently.'));
             });
         });
@@ -6863,17 +6942,25 @@ app.post('/offices/add', ensureAdminAuth, async (req, res) => {
     [cluster_name, office_name, head_director || 'Not Assigned', email_address, passwordHash], (err, result) => {
         if (err) { console.error("❌ Error adding office:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
         loadOfficeNameCache();
+        const addedDesc = `Added office "${office_name}" under cluster "${cluster_name}"` +
+            `${head_director ? `, head: "${head_director}"` : ''}${email_address ? `, email: "${email_address}"` : ''}` +
+            `${password ? ', with an approval panel login' : ''}`;
 
         // service_name comes in as a single string or an array depending on how many rows were filled.
         let serviceNames = req.body.service_name;
-        if (!serviceNames) return res.redirect(officesOk('Office added successfully.'));
+        if (!serviceNames) { logActivity(req, 'CREATE', 'Office', addedDesc + '.'); return res.redirect(officesOk('Office added successfully.')); }
         if (!Array.isArray(serviceNames)) serviceNames = [serviceNames];
         serviceNames = serviceNames.map(s => (s || '').trim()).filter(s => s.length > 0);
-        if (serviceNames.length === 0) return res.redirect(officesOk('Office added successfully.'));
+        if (serviceNames.length === 0) { logActivity(req, 'CREATE', 'Office', addedDesc + '.'); return res.redirect(officesOk('Office added successfully.')); }
 
         const values = serviceNames.map(name => [result.insertId, name]);
         db.query('INSERT INTO services (office_id, service_name) VALUES ?', [values], (svcErr) => {
-            if (svcErr) { console.error("❌ Error adding services for new office:", svcErr); return res.redirect(officesErr('Office was added, but its services could not be saved. Please add them again.')); }
+            if (svcErr) {
+                console.error("❌ Error adding services for new office:", svcErr);
+                logActivity(req, 'CREATE', 'Office', addedDesc + '. Its services could not be saved.');
+                return res.redirect(officesErr('Office was added, but its services could not be saved. Please add them again.'));
+            }
+            logActivity(req, 'CREATE', 'Office', `${addedDesc}, with ${serviceNames.length} service(s): ${serviceNames.map(s => `"${s}"`).join(', ')}.`);
             res.redirect(officesOk('Office added successfully.'));
         });
     });
@@ -6895,6 +6982,10 @@ app.post('/services/add', ensureAdminAuth, (req, res) => {
     if (!office_id || !name) return res.redirect(officesErr('Please provide a service name.'));
     db.query('INSERT INTO services (office_id, service_name, availability) VALUES (?, ?, ?)', [office_id, name, cleanAvailability(availability)], (err) => {
         if (err) { console.error("❌ Error adding service:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
+        db.query('SELECT office_name FROM offices WHERE id = ?', [office_id], (_e, rows) => {
+            const officeName = rows && rows[0] ? rows[0].office_name : `office #${office_id}`;
+            logActivity(req, 'CREATE', 'Service', `Added service "${name}" (availability: ${cleanAvailability(availability)}) to office "${officeName}".`);
+        });
         res.redirect(officesOk('Service added successfully.'));
     });
 });
@@ -6903,21 +6994,48 @@ app.post('/services/edit', ensureAdminAuth, (req, res) => {
     const { id, service_name, availability } = req.body;
     const name = (service_name || '').trim();
     if (!id || !name) return res.redirect(officesErr('Please provide a service name.'));
-    db.query('UPDATE services SET service_name = ?, availability = ? WHERE id = ?', [name, cleanAvailability(availability), id], (err) => {
-        if (err) { console.error("❌ Error editing service:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
-        res.redirect(officesOk('Service updated successfully.'));
+    const newAvail = cleanAvailability(availability);
+    db.query('SELECT s.service_name, s.availability, o.office_name FROM services s LEFT JOIN offices o ON o.id = s.office_id WHERE s.id = ?', [id], (_selErr, oldRows) => {
+        const old = oldRows && oldRows[0];
+        db.query('UPDATE services SET service_name = ?, availability = ? WHERE id = ?', [name, newAvail, id], (err) => {
+            if (err) { console.error("❌ Error editing service:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
+            if (old) {
+                const changes = describeChanges(old, { service_name: name, availability: newAvail }, [['service_name', 'Service name'], ['availability', 'Availability']]);
+                if (changes.length) logActivity(req, 'UPDATE', 'Service', `Edited a service of office "${old.office_name}". ${changes.join('; ')}.`);
+            }
+            res.redirect(officesOk('Service updated successfully.'));
+        });
     });
 });
 
 app.post('/services/delete/:id', ensureAdminAuth, (req, res) => {
-    db.query('DELETE FROM services WHERE id = ?', [req.params.id], (err) => {
-        if (err) { console.error("❌ Error deleting service:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
-        res.redirect(officesOk('Service deleted successfully.'));
+    db.query('SELECT s.service_name, o.office_name FROM services s LEFT JOIN offices o ON o.id = s.office_id WHERE s.id = ?', [req.params.id], (_selErr, oldRows) => {
+        const old = oldRows && oldRows[0];
+        db.query('DELETE FROM services WHERE id = ?', [req.params.id], (err) => {
+            if (err) { console.error("❌ Error deleting service:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
+            if (old) logActivity(req, 'DELETE', 'Service', `Deleted service "${old.service_name}" from office "${old.office_name}".`);
+            res.redirect(officesOk('Service deleted successfully.'));
+        });
     });
 });
 
 app.post('/offices/edit', ensureAdminAuth, async (req, res) => {
     const { id, cluster_name, office_name, head_director, email_address, password } = req.body;
+    // Snapshot before the update so the activity log can say exactly what changed.
+    const oldOffice = await new Promise(resolve => {
+        db.query('SELECT cluster_name, office_name, head_director, email_address FROM offices WHERE id = ?', [id], (e, rows) => resolve(!e && rows && rows[0] ? rows[0] : null));
+    });
+    const logOfficeEdit = () => {
+        if (!oldOffice) return;
+        const changes = describeChanges(
+            oldOffice,
+            { cluster_name, office_name, head_director, email_address },
+            [['office_name', 'Office name'], ['cluster_name', 'Cluster'], ['head_director', 'Head'], ['email_address', 'Email']]
+        );
+        if (password) changes.push('Approval panel password was changed');
+        if (changes.length) logActivity(req, 'UPDATE', 'Office', `Edited office "${oldOffice.office_name}". ${changes.join('; ')}.`);
+    };
+
     // A blank password field on edit leaves the existing login untouched.
     if (password) {
         const passwordHash = await bcrypt.hash(password, 10);
@@ -6925,6 +7043,7 @@ app.post('/offices/edit', ensureAdminAuth, async (req, res) => {
         [cluster_name, office_name, head_director, email_address, passwordHash, id], (err, result) => {
             if (err) { console.error("❌ Error editing office:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
             loadOfficeNameCache();
+            logOfficeEdit();
             res.redirect(officesOk('Office updated successfully.'));
         });
         return;
@@ -6933,14 +7052,24 @@ app.post('/offices/edit', ensureAdminAuth, async (req, res) => {
     [cluster_name, office_name, head_director, email_address, id], (err, result) => {
         if (err) { console.error("❌ Error editing office:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
         loadOfficeNameCache();
+        logOfficeEdit();
         res.redirect(officesOk('Office updated successfully.'));
     });
 });
+
+// Shared by the three single-office status routes below, logs after looking the office up by id.
+function logOfficeStatus(req, id, action, verb) {
+    db.query('SELECT office_name, cluster_name FROM offices WHERE id = ?', [id], (e, rows) => {
+        if (e || !rows || !rows[0]) return;
+        logActivity(req, action, 'Office', `${verb} office "${rows[0].office_name}" (cluster: "${rows[0].cluster_name}").`);
+    });
+}
 
 // Soft delete lang, is_archived flag lang ang binabago para hindi mawala ang historical data.
 app.post('/offices/delete/:id', ensureAdminAuth, (req, res) => {
     db.query('UPDATE offices SET is_archived = 1 WHERE id = ?', [req.params.id], (err, result) => {
         if (err) { console.error("❌ Error archiving office:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
+        logOfficeStatus(req, req.params.id, 'ARCHIVE', 'Archived');
         res.redirect(officesOk('Office archived successfully.'));
     });
 });
@@ -6948,16 +7077,21 @@ app.post('/offices/delete/:id', ensureAdminAuth, (req, res) => {
 app.post('/offices/restore/:id', ensureAdminAuth, (req, res) => {
     db.query('UPDATE offices SET is_archived = 0 WHERE id = ?', [req.params.id], (err, result) => {
         if (err) { console.error("❌ Error restoring office:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
+        logOfficeStatus(req, req.params.id, 'RESTORE', 'Restored archived');
         res.redirect(officesOk('Office restored successfully.'));
     });
 });
 
 // Permanent delete: tinatanggal talaga sa database ang office record.
 app.post('/offices/permanent-delete/:id', ensureAdminAuth, (req, res) => {
-    db.query('DELETE FROM offices WHERE id = ?', [req.params.id], (err, result) => {
-        if (err) { console.error("❌ Error permanently deleting office:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
-        loadOfficeNameCache();
-        res.redirect(officesOk('Office deleted permanently.'));
+    db.query('SELECT office_name, cluster_name FROM offices WHERE id = ?', [req.params.id], (_selErr, oldRows) => {
+        const old = oldRows && oldRows[0];
+        db.query('DELETE FROM offices WHERE id = ?', [req.params.id], (err, result) => {
+            if (err) { console.error("❌ Error permanently deleting office:", err); return res.redirect(officesErr(GENERIC_SAVE_ERROR)); }
+            loadOfficeNameCache();
+            if (old) logActivity(req, 'DELETE', 'Office', `Permanently deleted office "${old.office_name}" (cluster: "${old.cluster_name}").`);
+            res.redirect(officesOk('Office deleted permanently.'));
+        });
     });
 });
 
@@ -6981,6 +7115,53 @@ app.get('/manage-admins', ensureAdminAuth, ensureSuperAdmin, noCache, (req, res)
     });
 });
 
+// Activity Logs: what each admin created, edited, archived, restored or deleted. Super Admin only.
+const ACTIVITY_ACTIONS = ['CREATE', 'UPDATE', 'ARCHIVE', 'RESTORE', 'DELETE'];
+const ACTIVITY_PAGE_SIZE = 25;
+
+app.get('/activity-logs', ensureAdminAuth, ensureSuperAdmin, noCache, (req, res) => {
+    const action = ACTIVITY_ACTIONS.includes(req.query.action) ? req.query.action : '';
+    const adminFilter = String(req.query.admin || '').trim();
+    const search = String(req.query.q || '').trim().slice(0, 100);
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+
+    const where = [];
+    const params = [];
+    if (action) { where.push('action = ?'); params.push(action); }
+    if (adminFilter) { where.push('admin_username = ?'); params.push(adminFilter); }
+    if (search) {
+        where.push('(description LIKE ? OR module LIKE ? OR admin_fullname LIKE ?)');
+        const like = '%' + search.replace(/[\\%_]/g, '\\$&') + '%';
+        params.push(like, like, like);
+    }
+    const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+    db.query(`SELECT COUNT(*) AS total FROM admin_activity_logs ${whereSql}`, params, (err, countRows) => {
+        if (err) console.error('❌ Error counting activity logs:', err);
+        const total = !err && countRows ? countRows[0].total : 0;
+        const totalPages = Math.max(1, Math.ceil(total / ACTIVITY_PAGE_SIZE));
+        const safePage = Math.min(page, totalPages);
+        db.query(
+            `SELECT id, admin_username, admin_fullname, admin_role, action, module, description,
+                    DATE_FORMAT(created_at, '%b %d, %Y') AS log_date, DATE_FORMAT(created_at, '%h:%i %p') AS log_time
+             FROM admin_activity_logs ${whereSql} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
+            [...params, ACTIVITY_PAGE_SIZE, (safePage - 1) * ACTIVITY_PAGE_SIZE],
+            (err2, logs) => {
+                if (err2) console.error('❌ Error loading activity logs:', err2);
+                db.query('SELECT DISTINCT admin_username, admin_fullname FROM admin_activity_logs ORDER BY admin_username', (err3, adminRows) => {
+                    res.render('activity-logs', {
+                        logs: logs || [],
+                        adminOptions: adminRows || [],
+                        filters: { action, admin: adminFilter, q: search },
+                        actions: ACTIVITY_ACTIONS,
+                        page: safePage, totalPages, total
+                    });
+                });
+            }
+        );
+    });
+});
+
 // Role isn't exposed in the Manage Admins UI, every admin created here defaults to Admin.
 // Promoting someone to Super Admin is a direct database action, not part of the UI.
 function adminsOk(msg) { return '/manage-admins?success=' + encodeURIComponent(msg); }
@@ -6998,6 +7179,7 @@ app.post('/admins/add', ensureAdminAuth, ensureSuperAdmin, async (req, res) => {
             [username.trim(), hashedPassword, fullname.trim(), gender || 'Male', 'Admin'],
             (err) => {
                 if (err) { console.error("❌ Error adding admin:", err); return res.redirect(adminsErr(GENERIC_SAVE_ERROR)); }
+                logActivity(req, 'CREATE', 'Admin Account', `Created admin account "${username.trim()}" (${fullname.trim()}, ${gender || 'Male'}).`);
                 res.redirect(adminsOk('Admin account created successfully.'));
             }
         );
@@ -7015,6 +7197,19 @@ app.post('/admins/edit', ensureAdminAuth, ensureSuperAdmin, async (req, res) => 
 
     // Password is optional on edit, leaves the existing hash alone when blank.
     // Role is never touched here since it isn't part of this form.
+    const oldAdmin = await new Promise(resolve => {
+        db.query('SELECT username, fullname, gender FROM admins WHERE id = ?', [id], (e, rows) => resolve(!e && rows && rows[0] ? rows[0] : null));
+    });
+    const logAdminEdit = (passwordChanged) => {
+        if (!oldAdmin) return;
+        const changes = describeChanges(
+            oldAdmin,
+            { username: username.trim(), fullname: fullname.trim(), gender: gender || 'Male' },
+            [['username', 'Username'], ['fullname', 'Full name'], ['gender', 'Gender']]
+        );
+        if (passwordChanged) changes.push('Password was changed');
+        if (changes.length) logActivity(req, 'UPDATE', 'Admin Account', `Edited admin account "${oldAdmin.username}". ${changes.join('; ')}.`);
+    };
     try {
         if (password && password.trim() !== '') {
             const hashedPassword = await bcrypt.hash(password, 10);
@@ -7023,6 +7218,7 @@ app.post('/admins/edit', ensureAdminAuth, ensureSuperAdmin, async (req, res) => 
                 [username.trim(), hashedPassword, fullname.trim(), gender || 'Male', id],
                 (err) => {
                     if (err) { console.error("❌ Error updating admin:", err); return res.redirect(adminsErr(GENERIC_SAVE_ERROR)); }
+                    logAdminEdit(true);
                     res.redirect(adminsOk('Admin account updated successfully.'));
                 }
             );
@@ -7032,6 +7228,7 @@ app.post('/admins/edit', ensureAdminAuth, ensureSuperAdmin, async (req, res) => 
                 [username.trim(), fullname.trim(), gender || 'Male', id],
                 (err) => {
                     if (err) { console.error("❌ Error updating admin:", err); return res.redirect(adminsErr(GENERIC_SAVE_ERROR)); }
+                    logAdminEdit(false);
                     res.redirect(adminsOk('Admin account updated successfully.'));
                 }
             );
@@ -7049,9 +7246,13 @@ app.post('/admins/delete/:id', ensureAdminAuth, ensureSuperAdmin, (req, res) => 
         // Blocks deleting your own account mid session, which would leave you locked in with no valid admin row.
         return res.redirect(adminsErr('You cannot delete your own account while logged in.'));
     }
-    db.query('DELETE FROM admins WHERE id = ?', [targetId], (err) => {
-        if (err) { console.error("❌ Error deleting admin:", err); return res.redirect(adminsErr(GENERIC_SAVE_ERROR)); }
-        res.redirect(adminsOk('Admin account deleted successfully.'));
+    db.query('SELECT username, fullname FROM admins WHERE id = ?', [targetId], (_selErr, oldRows) => {
+        const old = oldRows && oldRows[0];
+        db.query('DELETE FROM admins WHERE id = ?', [targetId], (err) => {
+            if (err) { console.error("❌ Error deleting admin:", err); return res.redirect(adminsErr(GENERIC_SAVE_ERROR)); }
+            if (old) logActivity(req, 'DELETE', 'Admin Account', `Deleted admin account "${old.username}" (${old.fullname}).`);
+            res.redirect(adminsOk('Admin account deleted successfully.'));
+        });
     });
 });
 
@@ -7071,36 +7272,59 @@ app.get('/survey', ensureAdminAuth, noCache, (req, res) => {
     });
 });
 
+// Plain-English name for a survey_settings row, used in the activity log.
+function settingLabel(category) {
+    if (category === 'sqd') return 'SQD statement';
+    if (category === 'cc') return 'Citizen\'s Charter question';
+    if (category === 'period_covered') return 'period covered option';
+    return 'survey setting';
+}
+
 app.post('/settings/add', ensureAdminAuth, (req, res) => {
     const { category, content } = req.body;
     db.query('INSERT INTO survey_settings (category, content) VALUES (?, ?)', [category, content], (err, result) => {
         if (err) return res.json({ success: false });
+        logActivity(req, 'CREATE', 'Survey Setting', `Added a new ${settingLabel(category)}: "${content}".`);
         res.json({ success: true, insertId: result.insertId });
     });
 });
 
 app.post('/settings/edit', ensureAdminAuth, (req, res) => {
     const { id, content } = req.body;
-    db.query('UPDATE survey_settings SET content = ? WHERE id = ?', [content, id], (err) => {
-        if (err) return res.json({ success: false });
-        res.json({ success: true });
+    db.query('SELECT category, content FROM survey_settings WHERE id = ?', [id], (_selErr, oldRows) => {
+        const old = oldRows && oldRows[0];
+        db.query('UPDATE survey_settings SET content = ? WHERE id = ?', [content, id], (err) => {
+            if (err) return res.json({ success: false });
+            if (old && String(old.content).trim() !== String(content).trim()) {
+                logActivity(req, 'UPDATE', 'Survey Setting', `Edited a ${settingLabel(old.category)}. Before: "${old.content}" → After: "${content}".`);
+            }
+            res.json({ success: true });
+        });
     });
 });
 
 // Soft delete lang, is_archived flag lang ang binabago para hindi mawala ang historical data.
 app.post('/settings/delete', ensureAdminAuth, (req, res) => {
     const { id } = req.body;
-    db.query('UPDATE survey_settings SET is_archived = 1 WHERE id = ?', [id], (err) => {
-        if (err) return res.json({ success: false });
-        res.json({ success: true });
+    db.query('SELECT category, content FROM survey_settings WHERE id = ?', [id], (_selErr, oldRows) => {
+        const old = oldRows && oldRows[0];
+        db.query('UPDATE survey_settings SET is_archived = 1 WHERE id = ?', [id], (err) => {
+            if (err) return res.json({ success: false });
+            if (old) logActivity(req, 'ARCHIVE', 'Survey Setting', `Archived ${settingLabel(old.category)}: "${old.content}".`);
+            res.json({ success: true });
+        });
     });
 });
 
 app.post('/settings/restore', ensureAdminAuth, (req, res) => {
     const { id } = req.body;
-    db.query('UPDATE survey_settings SET is_archived = 0 WHERE id = ?', [id], (err) => {
-        if (err) return res.json({ success: false });
-        res.json({ success: true });
+    db.query('SELECT category, content FROM survey_settings WHERE id = ?', [id], (_selErr, oldRows) => {
+        const old = oldRows && oldRows[0];
+        db.query('UPDATE survey_settings SET is_archived = 0 WHERE id = ?', [id], (err) => {
+            if (err) return res.json({ success: false });
+            if (old) logActivity(req, 'RESTORE', 'Survey Setting', `Restored archived ${settingLabel(old.category)}: "${old.content}".`);
+            res.json({ success: true });
+        });
     });
 });
 
@@ -7118,6 +7342,7 @@ app.post('/period-covered/add', ensureAdminAuth, (req, res) => {
         }
         db.query('INSERT INTO survey_settings (category, content) VALUES (?, ?)', ['period_covered', periodCovered], (err) => {
             if (err) { console.error('❌ Error adding period covered:', err); return res.redirect(periodCoveredErr(GENERIC_SAVE_ERROR)); }
+            logActivity(req, 'CREATE', 'Survey Setting', `Added a new period covered option: "${periodCovered}".`);
             res.redirect(periodCoveredOk('Period covered added successfully.'));
         });
     });
