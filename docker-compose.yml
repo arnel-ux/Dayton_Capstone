@@ -1,0 +1,54 @@
+# Runs the whole CQA system: MySQL + the admin portal (Node and the Python AI
+# model server in one container).
+#
+#   cp .env.example .env     # then fill in the values
+#   docker compose up -d --build
+#
+# The portal listens on http://<host>:${APP_PORT:-3000}. Put the institution's
+# reverse proxy / TLS in front of it (see README-DOCKER.md).
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${DB_NAME:-cqa_db}
+      MYSQL_USER: ${DB_USER:-cqa}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      TZ: Asia/Manila
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  app:
+    build: ./admin-portal
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      PORT: 3000
+      NODE_ENV: ${NODE_ENV:-production}
+      # Overrides whatever .env says: inside compose the database is "db".
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_SSL: "false"
+      # Trust the proxy in front of the container (Docker/private networks).
+      TRUST_PROXY: ${TRUST_PROXY:-loopback, linklocal, uniquelocal}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    volumes:
+      - app_data:/app/data
+      - app_uploads:/app/public/images/uploads
+
+volumes:
+  db_data:
+  app_data:
+  app_uploads:

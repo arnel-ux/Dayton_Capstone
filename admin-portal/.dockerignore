@@ -1,0 +1,11 @@
+.env
+node_modules
+venv
+ai_scripts/venv
+ai_scripts/.venv
+**/__pycache__
+ai_scripts/*.log
+Dockerfile
+.dockerignore
+/cspc-logo.png
+/Org Structure.jpg
