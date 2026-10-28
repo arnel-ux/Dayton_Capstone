@@ -21,6 +21,25 @@
     </script>
     <%- include('layout/header') %>
     <%
+        // Masks a name GCash-receipt style, e.g. "Juan Dela Cruz" -> "J*** D*** C****".
+        // Display only, the stored value is untouched. Same as office-approvals.
+        function maskName(value) {
+            if (!value) return '—';
+            return String(value).trim().split(/\s+/).map(function (part) {
+                var chars = Array.from(part);
+                return chars[0] + '*'.repeat(chars.length - 1);
+            }).join(' ');
+        }
+
+        // Masks only the part before the @, one * per hidden letter, domain stays visible.
+        function maskEmail(value) {
+            if (!value) return '—';
+            var str = String(value).trim();
+            var at = str.lastIndexOf('@');
+            if (at < 1) return maskName(str);
+            var chars = Array.from(str.slice(0, at));
+            return chars[0] + '*'.repeat(chars.length - 1) + str.slice(at);
+        }
     %>
     <style>
         /* ==========================================================
@@ -545,8 +564,8 @@
                                     <td data-label="Respondent" class="col-order-respondent">
                                         <div class="respondent-cell row-summary-toggle" role="button" tabindex="0" aria-expanded="false">
                                             <span class="cell-label-inline">Respondent</span>
-                                            <div class="respondent-name" data-bs-toggle="tooltip" data-bs-placement="top" title="<%= sub.respondentName %>">
-                                                <%= sub.respondentName %>
+                                            <div class="respondent-name" data-bs-toggle="tooltip" data-bs-placement="top" title="<%= maskName(sub.respondentName) %>">
+                                                <%= maskName(sub.respondentName) %>
                                             </div>
                                             <% if (sub.status === 'declined') { %>
                                                 <span class="submission-ref" data-bs-toggle="tooltip" data-bs-placement="top" title="Reference number shown to this client in the decline email they received.">PSS-<%= sub.id %></span>
@@ -579,8 +598,8 @@
                                             <span class="cell-label-inline">Google Account</span>
                                             <i class="fas fa-chevron-down toggle-chevron" aria-hidden="true"></i>
                                         </div>
-                                        <div class="cell-value" data-bs-toggle="tooltip" data-bs-placement="top" title="<%= sub.googleEmail %>">
-                                            <%= sub.googleEmail %>
+                                        <div class="cell-value" data-bs-toggle="tooltip" data-bs-placement="top" title="<%= maskEmail(sub.googleEmail) %>">
+                                            <%= maskEmail(sub.googleEmail) %>
                                         </div>
                                     </td>
                                     <td data-label="Reviewed" class="collapsible-detail col-order-reviewed">

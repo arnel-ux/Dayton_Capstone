@@ -36,6 +36,27 @@
             if (hours12 === 0) hours12 = 12;
             return datePart + ', ' + hours12 + ':' + minutes + ' ' + suffix;
         }
+
+        // Masks a name GCash-receipt style, e.g. "Juan Dela Cruz" -> "J*** D*** C***".
+        // Display only, the stored value is untouched.
+        function maskName(value) {
+            if (!value) return '—';
+            return String(value).trim().split(/\s+/).map(function (part) {
+                var chars = Array.from(part);
+                return chars[0] + '*'.repeat(chars.length - 1);
+            }).join(' ');
+        }
+
+        // Masks only the part before the @, one * per hidden letter, domain stays visible.
+        // e.g. "juandelacruz@gmail.com" -> "j**********@gmail.com".
+        function maskEmail(value) {
+            if (!value) return '—';
+            var str = String(value).trim();
+            var at = str.lastIndexOf('@');
+            if (at < 1) return maskName(str);
+            var chars = Array.from(str.slice(0, at));
+            return chars[0] + '*'.repeat(chars.length - 1) + str.slice(at);
+        }
     %>
     <style>
         /* ==========================================================
@@ -687,8 +708,8 @@
                                             <div class="respondent-cell row-summary-toggle" role="button" tabindex="0" aria-expanded="false">
                                                 <span class="pending-pill"><i class="fas fa-circle"></i> Pending</span>
                                                 <span class="cell-label-inline">Respondent</span>
-                                                <div class="respondent-name" data-bs-toggle="tooltip" data-bs-placement="top" title="<%= sub.respondentName %>">
-                                                    <%= sub.respondentName %>
+                                                <div class="respondent-name" data-bs-toggle="tooltip" data-bs-placement="top" title="<%= maskName(sub.respondentName) %>">
+                                                    <%= maskName(sub.respondentName) %>
                                                 </div>
                                                 <span class="submission-ref" data-bs-toggle="tooltip" data-bs-placement="top" title="Reference number for this submission — the client is shown this same number if you decline it.">PSS-<%= sub.id %></span>
                                             </div>
@@ -712,13 +733,13 @@
                                                 <span class="cell-label-inline">Google Account</span>
                                                 <i class="fas fa-chevron-down toggle-chevron" aria-hidden="true"></i>
                                             </div>
-                                            <div class="cell-value" data-bs-toggle="tooltip" data-bs-placement="top" title="<%= sub.googleEmail %>">
-                                                <%= sub.googleEmail %>
+                                            <div class="cell-value" data-bs-toggle="tooltip" data-bs-placement="top" title="<%= maskEmail(sub.googleEmail) %>">
+                                                <%= maskEmail(sub.googleEmail) %>
                                             </div>
                                         </td>
                                         <td class="no-label collapsible-detail col-order-actions">
                                             <div class="actions-row">
-                                                <form action="/office-approvals/<%= sub.id %>/approve" method="POST" class="m-0 approve-form" data-respondent="<%= sub.respondentName %>">
+                                                <form action="/office-approvals/<%= sub.id %>/approve" method="POST" class="m-0 approve-form" data-respondent="<%= maskName(sub.respondentName) %>">
                                                     <button type="submit" class="btn-approve">
                                                         <i class="fas fa-check"></i> Approve
                                                     </button>
@@ -734,7 +755,7 @@
                                             <div class="collapse" id="declineForm<%= sub.id %>">
                                                 <div class="decline-panel">
                                                     <div class="decline-panel-label"><i class="fas fa-exclamation-circle"></i> Reason for declining (optional)</div>
-                                                    <form action="/office-approvals/<%= sub.id %>/decline" method="POST" class="decline-form-row decline-form" data-respondent="<%= sub.respondentName %>">
+                                                    <form action="/office-approvals/<%= sub.id %>/decline" method="POST" class="decline-form-row decline-form" data-respondent="<%= maskName(sub.respondentName) %>">
                                                         <input type="text" name="decline_reason" class="form-control" placeholder="Enter a reason for declining this submission" maxlength="255" aria-label="Reason for declining">
                                                         <button type="submit" class="btn-confirm-decline">Confirm Decline</button>
                                                     </form>
