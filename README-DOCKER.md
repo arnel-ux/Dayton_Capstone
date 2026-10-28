@@ -1,6 +1,6 @@
 # Running the CQA portal with Docker
 
-Containers: `db` (MySQL 8) and `app` (Node/Express plus the Python AI model server, which Node starts itself).
+Containers: `db` (MariaDB 10.11) and `app` (Node/Express plus the Python AI model server, which Node starts itself).
 
 ## Start
 
@@ -24,7 +24,7 @@ Open `http://<server>:3000` (change with `APP_PORT`). The app creates all tables
 
 | Volume | Holds |
 |---|---|
-| `db_data` | MySQL data |
+| `db_data` | database data |
 | `app_data` | landing-page content (`landing-data.json`) |
 | `app_uploads` | uploaded logos and profile photos |
 
@@ -51,3 +51,7 @@ docker compose down          # keeps data; add -v to DELETE all data
 
 - `.env` holds secrets and is gitignored. Never commit it; this repository is public.
 - The old GitHub Actions workflow (`.github/workflows/deploy.yml`) deploys over SSH to the previous VM with systemd. Disable or remove it once hosting moves, otherwise every push to `main` will still try to deploy there.
+
+## Empty database on first start
+
+A fresh install creates all tables and the default admin accounts, but has **no offices, services or survey data**. To bring over the live data, import a dump from the current database (see "Data and backups"). Offices and services seed data are also in `admin-portal/migrations/` and the old `cqa_db.sql`.
