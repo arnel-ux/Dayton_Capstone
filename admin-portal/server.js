@@ -6239,9 +6239,9 @@ app.post('/api/office-analytics', ensureOfficeAuth, noCache, (req, res) => {
                         // Institution score follows the admin dashboard headline: the plain average of every
                         // surveyed office's own score, so an office with few respondents counts as much as a big one.
                         db.query(
-                            `SELECT o.id, COUNT(s.id) AS respondents, ${sqdScoreExpr(ALL_SQD_COLS)} AS overall ` +
+                            `SELECT o.id, o.cluster_name, COUNT(s.id) AS respondents, ${sqdScoreExpr(ALL_SQD_COLS)} AS overall ` +
                             `FROM offices o LEFT JOIN survey_responses s ON o.id = s.office_id AND s.canonical_status = 'canonical'${periodAnd} ` +
-                            `WHERE o.is_archived = 0 GROUP BY o.id`,
+                            `WHERE o.is_archived = 0 GROUP BY o.id, o.cluster_name`,
                             periodParams,
                             (errD, rowsD) => {
                             if (errD) return fail('institution')(errD);
@@ -6252,6 +6252,19 @@ app.post('/api/office-analytics', ensureOfficeAuth, noCache, (req, res) => {
                                 score: surveyed.length ? surveyed.reduce((sum, r) => sum + parseFloat(r.overall || 0), 0) / surveyed.length : null
                             };
                             if (institutionBench.score !== null) institutionBench.score = Math.round(institutionBench.score * 100) / 100;
+                            // Standing among the surveyed offices of the same cluster. Only a rank and a count
+                            // leave the server, never another office's name.
+                            let clusterRank = null;
+                            const mineRow = (rowsD || []).find(r => Number(r.id) === Number(officeId));
+                            if (mineRow && Number(mineRow.respondents) > 0) {
+                                const peers = surveyed.filter(r => r.cluster_name === mineRow.cluster_name);
+                                const myScore = parseFloat(mineRow.overall || 0);
+                                clusterRank = {
+                                    rank: 1 + peers.filter(r => parseFloat(r.overall || 0) > myScore).length,
+                                    of: peers.length,
+                                    topScore: Math.max(...peers.map(r => parseFloat(r.overall || 0)))
+                                };
+                            }
                             const bench = (r) => {
                                 const row = (r && r[0]) || {};
                                 return {
@@ -6293,6 +6306,7 @@ app.post('/api/office-analytics', ensureOfficeAuth, noCache, (req, res) => {
                                         trend,
                                         cluster: Object.assign({ name: req.officeSession.user.cluster_name || null }, bench(rowsC)),
                                         institution: institutionBench,
+                                        clusterRank,
                                         sentiment: Object.assign({ analyzed: kept.length }, sentiment),
                                         topics
                                     }));

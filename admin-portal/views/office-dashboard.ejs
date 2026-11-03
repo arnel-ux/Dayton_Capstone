@@ -400,19 +400,19 @@
                     <div class="an-sub" id="anOverallSub">Loading…</div>
                 </div>
                 <div class="an-card">
-                    <h4>Vs. your cluster</h4>
+                    <h4 id="anClusterTitle">Vs. your cluster</h4>
                     <div class="an-big" id="anClusterScore">—</div>
                     <div class="an-sub" id="anClusterSub"></div>
                 </div>
                 <div class="an-card">
-                    <h4>Vs. whole institution</h4>
+                    <h4>Overall cluster results</h4>
                     <div class="an-big" id="anInstScore">—</div>
                     <div class="an-sub" id="anInstSub"></div>
                 </div>
                 <div class="an-card">
-                    <h4>Positive feedback</h4>
-                    <div class="an-big" id="anPosPct">—</div>
-                    <div class="an-sub" id="anPosSub"></div>
+                    <h4>Rank in your cluster</h4>
+                    <div class="an-big" id="anFocusName">—</div>
+                    <div class="an-sub" id="anFocusSub"></div>
                 </div>
             </div>
 
@@ -438,7 +438,7 @@
                 </div>
             </div>
 
-            <p class="an-note">Satisfaction score = (Strongly Agree + Agree) ÷ (all answers − N/A) × 100, computed over the eight service quality dimensions. It is the same formula used in the Report page, so the figures match. The cluster score combines all answers of the offices in your cluster. The institution score is the average of every surveyed office's score, the same figure as the admin dashboard's overall score (when the same period is selected). Only counts and scores are shown here, never who answered.</p>
+            <p class="an-note">Satisfaction score = (Strongly Agree + Agree) ÷ (all answers − N/A) × 100, computed over the eight service quality dimensions. It is the same formula used in the Report page, so the figures match. The cluster score combines all answers of the offices in your cluster. The overall cluster results score is the average of every surveyed office's score across all clusters, the same figure as the admin dashboard's overall score (when the same period is selected). Rank in your cluster orders the surveyed offices of your cluster by their score; other offices are never named. Only counts and scores are shown here, never who answered.</p>
         </div>
 
         <div class="privacy-note">
@@ -627,15 +627,24 @@
                 el('anOverall').textContent = pct(d.overall);
                 var chip = el('anRating'); chip.className = 'an-chip an-r-' + r.key; chip.textContent = r.name;
                 el('anOverallSub').textContent = d.respondents + ' respondent' + (d.respondents === 1 ? '' : 's') + (d.answered ? ' · ' + d.answered + ' answers counted' : '');
+                el('anClusterTitle').textContent = d.cluster.name || 'Your cluster';
                 setBench('anClusterScore', 'anClusterSub', d.cluster, d.overall, d.cluster.name ? 'the ' + d.cluster.name : 'your cluster');
-                setBench('anInstScore', 'anInstSub', d.institution, d.overall, 'the institution');
+                setBench('anInstScore', 'anInstSub', d.institution, d.overall, 'the overall cluster results');
 
-                if (d.sentiment.analyzed) {
-                    el('anPosPct').textContent = (d.sentiment.positive / d.sentiment.analyzed * 100).toFixed(1) + '%';
-                    el('anPosSub').textContent = d.sentiment.positive + ' of ' + d.sentiment.analyzed + ' written comments';
+                // Standing among the offices of the same cluster, plus the gap to the best one.
+                var fName = el('anFocusName'), fSub = el('anFocusSub');
+                var rk = d.clusterRank;
+                if (!rk) {
+                    fName.textContent = 'N/A';
+                    fSub.textContent = 'Shown once your office has survey answers in this period.';
                 } else {
-                    el('anPosPct').textContent = 'N/A';
-                    el('anPosSub').textContent = 'No written comments yet.';
+                    var n = rk.rank, sfx = (n % 100 >= 11 && n % 100 <= 13) ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
+                    fName.textContent = n + sfx + ' of ' + rk.of;
+                    var gap = rk.topScore - (d.overall === null ? rk.topScore : d.overall);
+                    fSub.textContent = rk.rank === 1
+                        ? 'Top-scoring office in your cluster.'
+                        : 'surveyed offices in your cluster · ' + gap.toFixed(2) + ' pts behind the top office';
+                    if (rk.rank === 1) fName.textContent = '1st of ' + rk.of;
                 }
 
                 var warn = el('anWarn');
