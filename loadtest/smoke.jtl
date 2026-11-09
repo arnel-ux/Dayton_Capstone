@@ -1,0 +1,7 @@
+timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect
+1794192791195,1118,GET /,200,OK,Visitors 1-1,text,true,,138994,116,2,2,https://cqacapstone.me/,950,0,814
+1794192793631,471,GET /,200,OK,Visitors 1-2,text,true,,138994,116,2,2,https://cqacapstone.me/,325,0,195
+1794192800318,218,GET /login,200,OK,Visitors 1-1,text,true,,47885,121,2,2,https://cqacapstone.me/login,150,0,0
+1794192802103,212,GET /login,200,OK,Visitors 1-2,text,true,,47885,121,2,2,https://cqacapstone.me/login,144,0,0
+1794192808541,79,GET /client-login,200,OK,Visitors 1-1,text,true,,10706,128,2,2,https://cqacapstone.me/client-login,79,0,0
+1794192810323,83,GET /client-login,200,OK,Visitors 1-2,text,true,,10706,128,1,1,https://cqacapstone.me/client-login,83,0,0
