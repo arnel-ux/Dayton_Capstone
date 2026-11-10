@@ -239,6 +239,50 @@
         /* Native option list is drawn by the OS, needs colors spelled out for dark mode. */
         html[data-bs-theme="dark"] .control-select option { background-color: #141d30; color: #cbd5e1; }
 
+        /* Custom batch size box, shown under the Show select only when "Custom" is picked. */
+        .control-number {
+            width: 100%;
+            margin-top: var(--sp-2);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-md);
+            background-color: var(--card-bg);
+            color: var(--text-main);
+            font-size: 0.86rem;
+            font-weight: 600;
+            padding: var(--sp-2) var(--sp-3);
+        }
+        .control-number:focus {
+            outline: none;
+            border-color: var(--primary-indigo);
+            box-shadow: 0 0 0 3px rgba(37, 29, 58, 0.08);
+        }
+
+        /* Page controls under the list. */
+        .accounts-pager {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: var(--sp-3);
+            padding: var(--sp-3) var(--sp-6);
+            border-top: 1px solid var(--border-subtle);
+            background: var(--surface-subtle);
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        .pager-buttons { display: flex; align-items: center; gap: var(--sp-2); }
+        .pager-btn {
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-md);
+            background-color: var(--card-bg);
+            color: var(--text-main);
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: var(--sp-2) var(--sp-3);
+            cursor: pointer;
+        }
+        .pager-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
         /* Column headings use the same grid as the rows. */
         .accounts-head {
             display: grid;
@@ -497,6 +541,20 @@
                                 <option value="personal">Personal accounts</option>
                             </select>
                         </div>
+
+                        <div class="control-field">
+                            <label class="control-label" for="accountPageSize">Show per page</label>
+                            <select class="control-select" id="accountPageSize" title="Accounts shown per page">
+                                <option value="10">10 accounts</option>
+                                <option value="15">15 accounts</option>
+                                <option value="20" selected>20 accounts</option>
+                                <option value="50">50 accounts</option>
+                                <option value="all">All accounts</option>
+                                <option value="custom">Custom...</option>
+                            </select>
+                            <input type="number" class="control-number" id="accountPageCustom" min="1" max="500"
+                                   placeholder="Number per page" title="Custom number of accounts per page" hidden>
+                        </div>
                     </div>
                 </div>
 
@@ -555,6 +613,15 @@
                         <p>Try a different name, email address, or account type.</p>
                     </div>
 
+                    <div class="accounts-pager" id="accountsPager" hidden>
+                        <span id="pagerInfo"></span>
+                        <div class="pager-buttons">
+                            <button type="button" class="pager-btn" id="pagerPrev"><i class="fas fa-chevron-left"></i> Prev</button>
+                            <span id="pagerPage"></span>
+                            <button type="button" class="pager-btn" id="pagerNext">Next <i class="fas fa-chevron-right"></i></button>
+                        </div>
+                    </div>
+
                     <% if (listedCount >= accountLimit) { %>
                         <div class="accounts-foot">
                             Showing the <%= accountLimit %> most recently registered accounts.
@@ -611,19 +678,58 @@
             'name-desc': 'sorted by name (Z–A)'
         };
 
-        function apply() {
+        const pageSizeSelect = document.getElementById('accountPageSize');
+        const pageCustom = document.getElementById('accountPageCustom');
+        const pager = document.getElementById('accountsPager');
+        const pagerInfo = document.getElementById('pagerInfo');
+        const pagerPage = document.getElementById('pagerPage');
+        const pagerPrev = document.getElementById('pagerPrev');
+        const pagerNext = document.getElementById('pagerNext');
+        let currentPage = 1;
+
+        // Rows per page, or Infinity for "All". A custom box that is empty or invalid falls back to 20.
+        function getPageSize() {
+            const choice = pageSizeSelect ? pageSizeSelect.value : '20';
+            if (choice === 'all') return Infinity;
+            if (choice === 'custom') {
+                const n = Math.floor(Number(pageCustom.value));
+                return n >= 1 ? Math.min(n, 500) : 20;
+            }
+            return Number(choice) || 20;
+        }
+
+        // resetPage is true when the filter or batch size changed, so the admin lands back on page 1.
+        function apply(resetPage) {
+            if (resetPage === true) currentPage = 1;
             const query = (search ? search.value : '').trim().toLowerCase();
             const wantedType = typeSelect ? typeSelect.value : 'all';
             const sortKey = (sortSelect && SORTERS[sortSelect.value]) ? sortSelect.value : 'date-desc';
+            const pageSize = getPageSize();
 
-            let visible = 0;
-            entries.forEach(entry => {
+            const matched = entries.filter(entry => {
                 const matchesQuery = !query || entry.search.includes(query);
                 const matchesType = wantedType === 'all' || entry.type === wantedType;
-                const show = matchesQuery && matchesType;
-                entry.row.hidden = !show;
-                if (show) visible++;
+                return matchesQuery && matchesType;
             });
+            const visible = matched.length;
+            const totalPages = pageSize === Infinity ? 1 : Math.max(1, Math.ceil(visible / pageSize));
+            if (currentPage > totalPages) currentPage = totalPages;
+
+            // Only the matched rows inside the current page window are shown.
+            const sortedMatched = matched.slice().sort(SORTERS[sortKey]);
+            const startIdx = pageSize === Infinity ? 0 : (currentPage - 1) * pageSize;
+            const pageRows = new Set(sortedMatched.slice(startIdx, pageSize === Infinity ? undefined : startIdx + pageSize));
+            entries.forEach(entry => { entry.row.hidden = !pageRows.has(entry); });
+
+            if (pager) {
+                pager.hidden = visible === 0 || totalPages <= 1;
+                if (visible > 0) {
+                    pagerInfo.textContent = 'Showing ' + (startIdx + 1) + '–' + (startIdx + pageRows.size) + ' of ' + visible;
+                    pagerPage.textContent = 'Page ' + currentPage + ' of ' + totalPages;
+                    pagerPrev.disabled = currentPage <= 1;
+                    pagerNext.disabled = currentPage >= totalPages;
+                }
+            }
 
             // Reordered in a fragment and reattached in one go, one layout pass instead of many.
             const fragment = document.createDocumentFragment();
@@ -649,9 +755,27 @@
             }, { once: true });
         });
 
-        if (search) search.addEventListener('input', apply);
-        if (sortSelect) sortSelect.addEventListener('change', apply);
-        if (typeSelect) typeSelect.addEventListener('change', apply);
+        if (search) search.addEventListener('input', () => apply(true));
+        if (sortSelect) sortSelect.addEventListener('change', () => apply(true));
+        if (typeSelect) typeSelect.addEventListener('change', () => apply(true));
+        if (pageSizeSelect) pageSizeSelect.addEventListener('change', () => {
+            const isCustom = pageSizeSelect.value === 'custom';
+            pageCustom.hidden = !isCustom;
+            if (isCustom) pageCustom.focus();
+            apply(true);
+        });
+        if (pageCustom) pageCustom.addEventListener('input', () => apply(true));
+        if (pagerPrev) pagerPrev.addEventListener('click', () => { currentPage--; apply(); scrollToListTop(); });
+        if (pagerNext) pagerNext.addEventListener('click', () => { currentPage++; apply(); scrollToListTop(); });
+
+        // Brings the top of the list back into view after a page change.
+        function scrollToListTop() {
+            const top = list.getBoundingClientRect().top + window.scrollY - 140;
+            window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+        }
+
+        // First paint already respects the default batch size.
+        apply(true);
     })();
 </script>
 </body>

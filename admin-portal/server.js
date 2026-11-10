@@ -7617,9 +7617,6 @@ app.get('/api/public-dashboard', (req, res) => {
             delete chartData[p].clusterAgree;
             delete chartData[p].officeAnswerable;
             delete chartData[p].officeAgree;
-            chartData[p].ccOffice = chartData[p].ccOffice.map((awareCount, i) => {
-                return chartData[p].officeResp[i] > 0 ? Math.round((awareCount / chartData[p].officeResp[i]) * 100) : 0;
-            });
             chartData[p].officesEvaluated = chartData[p].officeResp.filter(r => r > 0).length;
         });
 

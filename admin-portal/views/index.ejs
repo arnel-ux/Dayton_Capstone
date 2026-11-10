@@ -1472,7 +1472,7 @@
                 if (progress >= 1) { displayPercent = targetText; }
                 else {
                     var currentNumber = Math.floor(targetNumber * ease);
-                    displayPercent = currentNumber + '%';
+                    displayPercent = isNaN(targetNumber) ? targetText : currentNumber + (String(targetText).endsWith('%') ? '%' : '');
                     requestAnimationFrame(() => chart.draw());
                 }
 
@@ -1701,12 +1701,10 @@
 
                                 if (chartId === 'c1') {
                                     let total = pData.overall[0] + pData.overall[1];
-                                    let pct = Math.round((val / total) * 100) || 0;
-                                    return [`${context.label}: ${pct}%`, `Respondents: ${val}`];
+                                    return [context.label, `Respondents: ${val}`];
                                 }
 
                                 if ((chartId === 'c2' || chartId === 'c3') && context.dataset.label && context.dataset.label.includes('Satisfaction')) {
-                                    // Uses the real percent, not the nudged bar height, so the tooltip reports the true value.
                                     let totalResp, realPercent;
                                     if (chartId === 'c2') {
                                         totalResp = pData.clusterResp[context.dataIndex];
@@ -1716,13 +1714,13 @@
                                         totalResp = pData.officeResp[realIdx];
                                         realPercent = pData.officeSat[realIdx];
                                     }
-                                    if (realPercent === null || realPercent === undefined) return ['No ratings yet', `Respondents: ${totalResp || 0}`];
-                                    let satResp = Math.round((realPercent / 100) * totalResp) || 0;
-                                    return [`Satisfaction: ${realPercent}%`, `Respondents: ${totalResp || 0}`];
+                                    return `Respondents: ${totalResp || 0}`;
                                 }
 
+                                if (chartId === 'c4') return [context.label, `Respondents: ${val}`];
+
                                 let label = context.dataset.label || context.label || '';
-                                return `${label}: ${val}` + (chartId === 'c4' && context.dataset.label ? '%' : '');
+                                return `${label}: ${val}`;
                             }
                         }
                     }
@@ -1735,13 +1733,13 @@
                 if (view === 'main') {
                     return { type: 'pie', data: { labels: ['Satisfied', 'Dissatisfied'], datasets: [{ data: dataP.overall, backgroundColor: ['#4ADE80', '#F87171'], borderWidth: 3, borderColor: isDark ? '#1e293b' : '#ffffff', hoverOffset: 15 }] }, options: baseOptions }
                 } else {
-                    return { type: 'doughnut', data: { labels: ['Satisfied', 'Dissatisfied'], datasets: [{ data: [sat, dissat], backgroundColor: ['#4ADE80', isDark ? '#334155' : '#eef1f6'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: percent + '%', subText: 'Total Overall Rating', subText2: `${sat} / ${total} Satisfied` } } } };
+                    return { type: 'doughnut', data: { labels: ['Satisfied', 'Dissatisfied'], datasets: [{ data: [sat, dissat], backgroundColor: ['#4ADE80', isDark ? '#334155' : '#eef1f6'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: String(total), subText: 'Total Respondents', subText2: `${sat} Satisfied` } } } };
                 }
             }
 
             const barScales = {
                 x: { grid: { display: false }, border: { display: false }, ticks: { color: textColor, font: { family: 'Inter', weight: '600', size: 11.5 } } },
-                y: { min: 0, max: 100, grid: { color: gridColor }, border: { display: false }, ticks: { color: textColor, font: { family: 'Inter', weight: '500', size: 11 }, callback: v => v + '%' } }
+                y: { min: 0, beginAtZero: true, grid: { color: gridColor }, border: { display: false }, ticks: { color: textColor, font: { family: 'Inter', weight: '500', size: 11 }, precision: 0 } }
             };
 
             const noRatingColor = isDark ? 'rgba(148,163,184,0.35)' : 'rgba(148,163,184,0.45)';
@@ -1749,16 +1747,16 @@
 
             if (id === 'c2') {
                 if (view === 'main') {
-                    // Nudges a real 0% up to a visible sliver so it's not confused with no responses. Null gets a gray sliver.
-                    const clusterBarData = dataP.clusterSat.map((v, i) => (v === null || (v <= 0 && dataP.clusterResp[i] > 0)) ? 1.5 : v);
-                    return { type: 'bar', data: { labels: clusterLabels, datasets: [{ label: 'Satisfaction (%)', data: clusterBarData, backgroundColor: (c) => dataP.clusterSat[c.dataIndex] === null ? noRatingColor : barGradient(c, 'rgba(37, 29, 58,0.75)', 'rgba(90,124,214,0.9)'), hoverBackgroundColor: (c) => dataP.clusterSat[c.dataIndex] === null ? noRatingHoverColor : barGradient(c, 'rgba(37, 29, 58,0.9)', 'rgba(90,124,214,1)'), borderRadius: 10, borderSkipped: false, maxBarThickness: 46, categoryPercentage: 0.65, barPercentage: 0.75 }] }, options: { ...baseOptions, scales: barScales } };
+                    // Bars show the number of respondents per cluster.
+                    const clusterBarData = dataP.clusterResp.map(v => v || 0);
+                    return { type: 'bar', data: { labels: clusterLabels, datasets: [{ label: 'Satisfaction (Respondents)', data: clusterBarData, backgroundColor: (c) => dataP.clusterSat[c.dataIndex] === null ? noRatingColor : barGradient(c, 'rgba(37, 29, 58,0.75)', 'rgba(90,124,214,0.9)'), hoverBackgroundColor: (c) => dataP.clusterSat[c.dataIndex] === null ? noRatingHoverColor : barGradient(c, 'rgba(37, 29, 58,0.9)', 'rgba(90,124,214,1)'), borderRadius: 10, borderSkipped: false, maxBarThickness: 46, categoryPercentage: 0.65, barPercentage: 0.75 }] }, options: { ...baseOptions, scales: barScales } };
                 } else {
                     let percent = dataP.clusterSat[index], totalResp = dataP.clusterResp[index] || 0;
                     if (percent === null) {
                         return { type: 'doughnut', data: { labels: ['No Ratings Yet'], datasets: [{ data: [totalResp || 1], backgroundColor: [isDark ? '#334155' : '#eef1f6'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: 'N/A', subText: 'Cluster Rating', subText2: `${totalResp} Respondent(s) — No SQD Ratings` } } } };
                     }
                     let satResp = Math.round((percent / 100) * totalResp) || 0;
-                    return { type: 'doughnut', data: { labels: ['Satisfied', 'Needs Improvement'], datasets: [{ data: [satResp, totalResp - satResp], backgroundColor: ['#4ADE80', isDark ? '#334155' : '#eef1f6'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: percent + '%', subText: 'Cluster Rating', subText2: `${satResp} / ${totalResp} Satisfied` } } } };
+                    return { type: 'doughnut', data: { labels: ['Satisfied', 'Needs Improvement'], datasets: [{ data: [satResp, totalResp - satResp], backgroundColor: ['#4ADE80', isDark ? '#334155' : '#eef1f6'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: String(totalResp), subText: 'Respondents', subText2: `${satResp} Satisfied` } } } };
                 }
             }
 
@@ -1766,13 +1764,9 @@
                 if (view === 'main') {
                     // Every office is listed on the axis, but a bar only draws once it has at least one response.
                     const labels = officeIndexMap.map(i => officeLabels[i] || '');
-                    // Same real 0% nudge as c2 above, applied per visible office.
-                    const data = officeIndexMap.map(i => {
-                        const v = dataP.officeSat[i];
-                        if (!(Number(dataP.officeResp[i]) > 0) || v === undefined) return null;
-                        return (v === null || v <= 0) ? 1.5 : v;
-                    });
-                    const config = { type: 'bar', data: { labels, datasets: [{ label: 'Satisfaction (%)', data, backgroundColor: (c) => dataP.officeSat[officeIndexMap[c.dataIndex]] === null ? noRatingColor : barGradient(c, 'rgba(37, 29, 58,0.75)', 'rgba(90,124,214,0.9)'), hoverBackgroundColor: (c) => dataP.officeSat[officeIndexMap[c.dataIndex]] === null ? noRatingHoverColor : barGradient(c, 'rgba(37, 29, 58,0.9)', 'rgba(90,124,214,1)'), borderRadius: 10, borderSkipped: false, maxBarThickness: 40, categoryPercentage: 0.65, barPercentage: 0.75 }] }, options: { ...baseOptions, scales: barScales } };
+                    // Bars show the number of respondents per office.
+                    const data = officeIndexMap.map(i => Number(dataP.officeResp[i]) > 0 ? dataP.officeResp[i] : null);
+                    const config = { type: 'bar', data: { labels, datasets: [{ label: 'Satisfaction (Respondents)', data, backgroundColor: (c) => dataP.officeSat[officeIndexMap[c.dataIndex]] === null ? noRatingColor : barGradient(c, 'rgba(37, 29, 58,0.75)', 'rgba(90,124,214,0.9)'), hoverBackgroundColor: (c) => dataP.officeSat[officeIndexMap[c.dataIndex]] === null ? noRatingHoverColor : barGradient(c, 'rgba(37, 29, 58,0.9)', 'rgba(90,124,214,1)'), borderRadius: 10, borderSkipped: false, maxBarThickness: 40, categoryPercentage: 0.65, barPercentage: 0.75 }] }, options: { ...baseOptions, scales: barScales } };
                     config._officeIndexMap = officeIndexMap;
                     return config;
                 } else {
@@ -1781,7 +1775,7 @@
                         return { type: 'doughnut', data: { labels: ['No Ratings Yet'], datasets: [{ data: [totalResp || 1], backgroundColor: [isDark ? '#334155' : '#eef1f6'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: 'N/A', subText: 'Office Rating', subText2: `${totalResp} Respondent(s) — No SQD Ratings` } } } };
                     }
                     let satResp = Math.round((percent / 100) * totalResp) || 0;
-                    return { type: 'doughnut', data: { labels: ['Satisfied', 'Needs Improvement'], datasets: [{ data: [satResp, totalResp - satResp], backgroundColor: ['#4ADE80', isDark ? '#334155' : '#eef1f6'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: percent + '%', subText: 'Office Rating', subText2: `${satResp} / ${totalResp} Satisfied` } } } };
+                    return { type: 'doughnut', data: { labels: ['Satisfied', 'Needs Improvement'], datasets: [{ data: [satResp, totalResp - satResp], backgroundColor: ['#4ADE80', isDark ? '#334155' : '#eef1f6'], borderWidth: 0, cutout: '75%', hoverOffset: 8 }] }, options: { ...baseOptions, elements: { center: { text: String(totalResp), subText: 'Respondents', subText2: `${satResp} Satisfied` } } } };
                 }
             }
 
@@ -1800,7 +1794,7 @@
                          type: 'bar',
                          data: {
                              labels: officeLabels,
-                             datasets: [{ label: '% Aware', data: dataP.ccOffice, backgroundColor: (c) => barGradient(c, 'rgba(255, 204, 0,0.65)', 'rgba(251,191,36,0.95)'), hoverBackgroundColor: (c) => barGradient(c, 'rgba(255, 204, 0,0.85)', 'rgba(251,191,36,1)'), borderRadius: 10, borderSkipped: false, maxBarThickness: 40, categoryPercentage: 0.65, barPercentage: 0.75 }]
+                             datasets: [{ label: 'Aware Respondents', data: dataP.ccOffice, backgroundColor: (c) => barGradient(c, 'rgba(255, 204, 0,0.65)', 'rgba(251,191,36,0.95)'), hoverBackgroundColor: (c) => barGradient(c, 'rgba(255, 204, 0,0.85)', 'rgba(251,191,36,1)'), borderRadius: 10, borderSkipped: false, maxBarThickness: 40, categoryPercentage: 0.65, barPercentage: 0.75 }]
                          },
                          options: { ...baseOptions, scales: barScales }
                      }

@@ -832,7 +832,6 @@
             <div class="dash-toolbar">
                 <div class="dash-toolbar-actions">
                     <form action="/dashboard" method="GET" class="filter-bar-v2">
-                        <div class="filter-icon"><i class="fas fa-sliders-h"></i></div>
                         <div class="filter-field">
                             <label for="periodCovered" class="filter-label mb-0">Period</label>
                             <select id="periodCovered" name="periodCovered" class="form-select form-select-sm" title="Filter records by period covered" onchange="handlePeriodSelectChange(this)">
@@ -1183,8 +1182,34 @@
           <div class="modal-body">
             <div class="mb-0">
                 <label class="form-label fw-bold">Period Covered</label>
-                <input type="text" name="periodCovered" class="form-control" placeholder="E.g., Jan to June 2028" required>
-                <div class="form-text">This only adds a new choice to the filter dropdown above — it does not change which period new survey submissions get tagged with.</div>
+                <input type="hidden" name="periodCovered" id="periodCoveredValue" value="Jan to June 2026">
+                <div class="row g-2">
+                    <div class="col-7">
+                        <select id="periodHalfSelect" class="form-select" aria-label="Month range" required>
+                            <option value="Jan to June">January - June</option>
+                            <option value="July to Dec">July - December</option>
+                        </select>
+                    </div>
+                    <div class="col-5">
+                        <select id="periodYearSelect" class="form-select" aria-label="Year" required>
+                            <% for (let y = 2026; y <= 2050; y++) { %>
+                                <option value="<%= y %>"><%= y %></option>
+                            <% } %>
+                        </select>
+                    </div>
+                </div>
+                <script>
+                    (function () {
+                        var half = document.getElementById('periodHalfSelect');
+                        var year = document.getElementById('periodYearSelect');
+                        var hidden = document.getElementById('periodCoveredValue');
+                        function sync() { hidden.value = half.value + ' ' + year.value; }
+                        half.addEventListener('change', sync);
+                        year.addEventListener('change', sync);
+                        sync();
+                    })();
+                </script>
+                <div class="form-text mt-2">This only adds a new choice to the filter dropdown above — it does not change which period new survey submissions get tagged with.</div>
             </div>
           </div>
           <div class="modal-footer">

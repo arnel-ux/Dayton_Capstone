@@ -64,11 +64,9 @@
             justify-content: space-between;
             -webkit-print-color-adjust: exact;
         }
-        .badge-sentiment { padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; text-transform: uppercase; display: inline-block; white-space: nowrap; }
-        .bg-pos { background-color: #dcfce7 !important; color: #166534 !important; -webkit-print-color-adjust: exact; }
-        .bg-neg { background-color: #fee2e2 !important; color: #991b1b !important; -webkit-print-color-adjust: exact; }
-        .bg-neu { background-color: #f1f5f9 !important; color: #334155 !important; -webkit-print-color-adjust: exact; }
-        .topic-pill { display: inline-block; background-color: #e8f0fe !important; color: #0056b3 !important; padding: 4px 8px; margin: 2px 3px 2px 0; border-radius: 12px; font-size: 11px; font-weight: bold; white-space: normal; max-width: 100%; box-sizing: border-box; line-height: 1.3; overflow-wrap: anywhere; text-align: center; -webkit-print-color-adjust: exact; }
+        /* AI topic and sentiment are plain text so they match the rest of the report columns. */
+        .badge-sentiment { display: inline-block; white-space: nowrap; }
+        .topic-pill { display: block; margin: 2px 0; white-space: normal; max-width: 100%; box-sizing: border-box; line-height: 1.3; overflow-wrap: anywhere; text-align: center; }
 
 
         .text-center { text-align: center; }
@@ -131,14 +129,7 @@
         <div class="report-params no-print">
             <h6 class="fw-bold mb-3">Report Parameters</h6>
             <form class="row g-3" id="reportForm" onsubmit="return false;">
-                <div class="col-md-4">
-                    <label class="form-label text-muted" for="selectQuarter">Quarter</label>
-                    <select class="form-select" id="selectQuarter">
-                        <option value="1st Quarter">1st Quarter</option>
-                        <option value="2nd Quarter">2nd Quarter</option>
-                    </select>
-                </div>
-                <div class="col-md-5">
+                <div class="col-md-9">
                     <label class="form-label text-muted" for="selectPeriod">Period Covered</label>
                     <select class="form-select" id="selectPeriod">
                         <option value="">All Periods</option>
@@ -148,7 +139,7 @@
                     </select>
                 </div>
                 <div class="col-md-3 d-flex align-items-end">
-                    <button type="button" class="btn btn-primary w-100" id="btnRefresh"><i class="fas fa-sync-alt me-2"></i> Refresh</button>
+                    <button type="button" class="btn btn-primary w-100" id="btnRefresh"><i class="fas fa-sync-alt me-2"></i> Generate</button>
                 </div>
             </form>
             <div class="live-note mt-2"><span class="live-dot"></span>Updates automatically as new surveys come in. <span id="lastUpdated"></span></div>
@@ -520,10 +511,8 @@
     // Loads the report for the selected period. The office is fixed on the server, so only the period is sent.
     // A silent load (the timer) only repaints when the numbers actually changed.
     async function loadReport(silent) {
-        const selectedQuarter = document.getElementById('selectQuarter').value;
         const periodSelect = document.getElementById('selectPeriod');
-        const selectedPeriodLabel = periodSelect.options[periodSelect.selectedIndex].text;
-        const displayPeriodText = `${selectedQuarter}, ${selectedPeriodLabel}`;
+        const displayPeriodText = periodSelect.options[periodSelect.selectedIndex].text;
 
         try {
             const response = await fetch('/api/office-report-data', {
@@ -557,7 +546,6 @@
 
     document.getElementById('btnRefresh').addEventListener('click', () => loadReport(false));
     document.getElementById('selectPeriod').addEventListener('change', () => loadReport(false));
-    document.getElementById('selectQuarter').addEventListener('change', () => loadReport(true));
 
     // Picks up new surveys on its own. A hidden tab skips the poll and catches up once visible again.
     setInterval(() => { if (document.visibilityState === 'visible' && navigator.onLine) loadReport(true); }, POLL_MS);
