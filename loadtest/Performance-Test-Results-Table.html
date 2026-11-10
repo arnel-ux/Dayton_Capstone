@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Performance Test Results (JMeter) - cqacapstone.me</title>
+<style>
+  @page { size: letter landscape; margin: 0.6in; }
+  body { font-family: "Times New Roman", Times, serif; color: #000; background: #fff; margin: 0; padding: 24px; }
+  .page { max-width: 1000px; margin: 0 auto; }
+  .toolbar { text-align: right; margin-bottom: 16px; font-family: Arial, sans-serif; }
+  .toolbar button { font-size: 14px; padding: 8px 16px; cursor: pointer; }
+  .toolbar span { font-size: 13px; color: #555; margin-right: 10px; }
+  h1 { font-size: 17px; text-align: center; margin: 0 0 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 6px 8px; vertical-align: middle; }
+  thead th { background: #ededed; border-top: 2px solid #000; border-bottom: 2px solid #000; text-align: center; }
+  tbody td { border-bottom: 1px solid #999; }
+  tbody tr:last-child td { border-bottom: 2px solid #000; }
+  td.c { text-align: center; }
+  p.note { font-size: 14px; line-height: 1.55; text-align: justify; margin-top: 16px; }
+  @media print {
+    body { padding: 0; }
+    .toolbar { display: none; }
+    tr { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="toolbar">
+    <span>In the print window, choose "Save as PDF", Landscape.</span>
+    <button onclick="window.print()">Save as PDF</button>
+  </div>
+
+  <h1>Table: Performance Test Results (JMeter)</h1>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:22%">Module / Transaction</th>
+        <th style="width:10%">Requests Executed</th>
+        <th style="width:11%">Avg. Response Time</th>
+        <th style="width:10%">Min Response</th>
+        <th style="width:10%">Max Response</th>
+        <th style="width:27%">Result</th>
+        <th style="width:10%">Remarks</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Admin Login Page</td><td class="c">3</td><td class="c">916 ms</td><td class="c">193 ms</td><td class="c">2,356 ms</td><td>Fast after first load</td><td class="c">Passed</td></tr>
+      <tr><td>Admin Dashboard</td><td class="c">3</td><td class="c">3,792 ms</td><td class="c">3,409 ms</td><td class="c">4,070 ms</td><td>Slowest page; heavy data retrieval (about 317 KB)</td><td class="c">Passed</td></tr>
+      <tr><td>Survey Records (Admin)</td><td class="c">3</td><td class="c">1,831 ms</td><td class="c">1,687 ms</td><td class="c">1,942 ms</td><td>Moderate; large page (about 321 KB)</td><td class="c">Passed</td></tr>
+      <tr><td>User Accounts (Admin)</td><td class="c">3</td><td class="c">1,492 ms</td><td class="c">1,382 ms</td><td class="c">1,596 ms</td><td>Moderate</td><td class="c">Passed</td></tr>
+      <tr><td>Offices Management (Admin)</td><td class="c">3</td><td class="c">1,787 ms</td><td class="c">1,697 ms</td><td class="c">1,927 ms</td><td>Moderate</td><td class="c">Passed</td></tr>
+      <tr><td>Admin Reports</td><td class="c">3</td><td class="c">1,438 ms</td><td class="c">1,361 ms</td><td class="c">1,590 ms</td><td>Moderate</td><td class="c">Passed</td></tr>
+      <tr><td>Office Dashboard</td><td class="c">3</td><td class="c">967 ms</td><td class="c">914 ms</td><td class="c">1,004 ms</td><td>Fast, stable</td><td class="c">Passed</td></tr>
+      <tr><td>Office Approvals</td><td class="c">3</td><td class="c">718 ms</td><td class="c">709 ms</td><td class="c">727 ms</td><td>Fast, stable</td><td class="c">Passed</td></tr>
+      <tr><td>Office Report</td><td class="c">3</td><td class="c">904 ms</td><td class="c">858 ms</td><td class="c">947 ms</td><td>Fast, stable</td><td class="c">Passed</td></tr>
+      <tr><td>Client Login Page</td><td class="c">3</td><td class="c">73 ms</td><td class="c">68 ms</td><td class="c">81 ms</td><td>Consistently fast</td><td class="c">Passed</td></tr>
+      <tr><td>Client Survey Page</td><td class="c">3</td><td class="c">1,504 ms</td><td class="c">1,458 ms</td><td class="c">1,587 ms</td><td>Moderate; large page (about 366 KB)</td><td class="c">Passed</td></tr>
+      <tr><td>Client Profile API</td><td class="c">3</td><td class="c">308 ms</td><td class="c">286 ms</td><td class="c">325 ms</td><td>Fast</td><td class="c">Passed</td></tr>
+      <tr><td>Client History API</td><td class="c">3</td><td class="c">553 ms</td><td class="c">541 ms</td><td class="c">567 ms</td><td>Fast</td><td class="c">Passed</td></tr>
+    </tbody>
+  </table>
+
+  <p class="note">The table shows the results of the performance test of cqacapstone.me, carried out with Apache JMeter 5.6.3 to determine the speed and stability of each module. Each transaction was executed three times by a single user, with a one-second pause between requests. A transaction is marked <b>Passed</b> when all of its requests returned HTTP 200 with the expected page content. Pages behind login were tested using an authenticated session, because the login form is protected by reCAPTCHA; the login pages themselves were measured separately.</p>
+</div>
+</body>
+</html>

@@ -6,3 +6,4 @@ admin-portal/venv/
 
 # JMeter session cookies (secrets)
 loadtest/cookies.properties
+loadtest/jmeter.log
