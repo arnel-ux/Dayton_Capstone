@@ -266,6 +266,7 @@
             gap: var(--sp-3);
             padding: var(--sp-3) var(--sp-6);
             border-top: 1px solid var(--border-subtle);
+            border-bottom: 1px solid var(--border-subtle);
             background: var(--surface-subtle);
             font-size: 0.8rem;
             color: var(--text-muted);
@@ -559,6 +560,15 @@
                 </div>
 
                 <% if (listedCount > 0) { %>
+                    <div class="accounts-pager" id="accountsPager" hidden>
+                        <span id="pagerInfo"></span>
+                        <div class="pager-buttons">
+                            <button type="button" class="pager-btn" id="pagerPrev"><i class="fas fa-chevron-left"></i> Prev</button>
+                            <span id="pagerPage"></span>
+                            <button type="button" class="pager-btn" id="pagerNext">Next <i class="fas fa-chevron-right"></i></button>
+                        </div>
+                    </div>
+
                     <div class="accounts-head">
                         <span>Account</span>
                         <span>Type</span>
@@ -611,15 +621,6 @@
                         <i class="fas fa-search d-block"></i>
                         <h5>No matching account</h5>
                         <p>Try a different name, email address, or account type.</p>
-                    </div>
-
-                    <div class="accounts-pager" id="accountsPager" hidden>
-                        <span id="pagerInfo"></span>
-                        <div class="pager-buttons">
-                            <button type="button" class="pager-btn" id="pagerPrev"><i class="fas fa-chevron-left"></i> Prev</button>
-                            <span id="pagerPage"></span>
-                            <button type="button" class="pager-btn" id="pagerNext">Next <i class="fas fa-chevron-right"></i></button>
-                        </div>
                     </div>
 
                     <% if (listedCount >= accountLimit) { %>
