@@ -3,3 +3,6 @@ node_modules/
 admin-portal/venv/
 **/__pycache__/
 *.pyc
+
+# JMeter session cookies (secrets)
+loadtest/cookies.properties

@@ -1,0 +1,5 @@
+# Copy this file to cookies.properties and paste the cookie VALUES from your browser.
+# Leave a line empty to skip that module (its requests will show as failed).
+admin_sid=
+office_sid=
+client_sid=
