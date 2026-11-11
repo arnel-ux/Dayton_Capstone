@@ -37,6 +37,19 @@
             return datePart + ', ' + hours12 + ':' + minutes + ' ' + suffix;
         }
 
+        // Long form of the visited date and time for the hover tooltip, same style as the Submitted tooltip.
+        function formatVisitedDateTimeFull(value) {
+            if (!value) return null;
+            var match = String(value).trim().match(/^(\d{4}-\d{2}-\d{2})[T ](\d{1,2}):(\d{2})/);
+            if (!match) return null;
+            var hours = parseInt(match[2], 10);
+            if (isNaN(hours)) return null;
+            var datePart = new Date(match[1] + 'T00:00:00').toLocaleDateString('en-PH', { dateStyle: 'full' });
+            var hours12 = hours % 12;
+            if (hours12 === 0) hours12 = 12;
+            return datePart + ' at ' + hours12 + ':' + match[3] + ' ' + (hours >= 12 ? 'PM' : 'AM');
+        }
+
         // Masks a name GCash-receipt style, e.g. "Juan Dela Cruz" -> "J*** D*** C***".
         // Display only, the stored value is untouched.
         function maskName(value) {
@@ -720,7 +733,10 @@
                                             </div>
                                         </td>
                                         <td data-label="Office Visited" class="collapsible-detail col-order-visited">
-                                            <span class="time-pill"><i class="fas fa-clock"></i> <%= officeVisitedDisplay || sub.officeVisitedTime || '—' %></span>
+                                            <div class="cell-value" data-bs-toggle="tooltip" data-bs-placement="top"
+                                                 title="<%= formatVisitedDateTimeFull(sub.officeVisitedTime) || officeVisitedDisplay || sub.officeVisitedTime || '—' %>">
+                                                <%= officeVisitedDisplay || sub.officeVisitedTime || '—' %>
+                                            </div>
                                         </td>
                                         <td data-label="Submitted" class="collapsible-detail col-order-submitted">
                                             <div class="cell-value" data-bs-toggle="tooltip" data-bs-placement="top"

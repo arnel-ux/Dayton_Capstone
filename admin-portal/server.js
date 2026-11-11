@@ -3542,6 +3542,15 @@ app.get('/office-approvals/status', ensureOfficeAuth, noCache, (req, res) => {
     );
 });
 
+// Masks a name the same way the office pages do, e.g. "Juan Dela Cruz" -> "J*** D*** C***".
+// Done here so the full name never reaches the office browser.
+function maskRespondentName(value) {
+    return String(value).trim().split(/\s+/).map(part => {
+        const chars = Array.from(part);
+        return chars[0] + '*'.repeat(chars.length - 1);
+    }).join(' ');
+}
+
 // Feed for the office bell and pending surveys popup. Built straight from the live pending queue.
 app.get('/office-approvals/notifications', ensureOfficeAuth, noCache, (req, res) => {
     const officeId = req.officeSession.user.id;
@@ -3557,7 +3566,7 @@ app.get('/office-approvals/notifications', ensureOfficeAuth, noCache, (req, res)
                 const payload = parsePendingPayload(r.payload); // {} on a corrupt/unusable payload
                 return {
                     id: r.id,
-                    respondent: payload.respondentName || 'Anonymous',
+                    respondent: payload.respondentName ? maskRespondentName(payload.respondentName) : 'Anonymous',
                     service: r.service_availed || '',
                     createdAt: r.created_at
                 };
