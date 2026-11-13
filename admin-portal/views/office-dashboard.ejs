@@ -91,6 +91,7 @@
         .stat-card.is-total .stat-icon { background: rgba(37,84,199,0.12); color: #2554c7; }
         .stat-card.is-pending .stat-icon { background: rgba(217,119,6,0.14); color: #b45309; }
         .stat-card.is-approved .stat-icon { background: rgba(22,163,74,0.14); color: #15803d; }
+        .stat-card.is-satisfaction .stat-icon { background: rgba(124,58,237,0.12); color: #7c3aed; }
         .stat-card.is-declined .stat-icon { background: rgba(220,38,38,0.12); color: #dc2626; }
 
         .section-head {
@@ -350,6 +351,15 @@
                     <div class="stat-hint">This semester. <%= declinedAllTime %> all time.</div>
                 </div>
             </div>
+            <div class="stat-card is-satisfaction">
+                <div class="stat-icon"><i class="fas fa-face-smile"></i></div>
+                <div class="stat-body">
+                    <div class="stat-num"><span id="anOverall">—</span></div>
+                    <div class="stat-label">Overall satisfaction</div>
+                    <div style="margin-top:.35rem"><span class="an-chip an-r-none" id="anRating">No data</span></div>
+                    <div class="stat-hint" id="anOverallSub">Loading…</div>
+                </div>
+            </div>
         </div>
 
         <div class="section-head">
@@ -395,9 +405,9 @@
         <div id="anRoot" aria-live="polite">
             <div class="an-kpis">
                 <div class="an-card">
-                    <h4>Overall satisfaction</h4>
-                    <div class="an-big"><span id="anOverall">—</span><span class="an-chip an-r-none" id="anRating">No data</span></div>
-                    <div class="an-sub" id="anOverallSub">Loading…</div>
+                    <h4>Rank in your cluster</h4>
+                    <div class="an-big" id="anFocusName">—</div>
+                    <div class="an-sub" id="anFocusSub"></div>
                 </div>
                 <div class="an-card">
                     <h4 id="anClusterTitle">Vs. your cluster</h4>
@@ -405,14 +415,9 @@
                     <div class="an-sub" id="anClusterSub"></div>
                 </div>
                 <div class="an-card">
-                    <h4>Overall cluster results</h4>
+                    <h4>CSPC Overall Rating</h4>
                     <div class="an-big" id="anInstScore">—</div>
                     <div class="an-sub" id="anInstSub"></div>
-                </div>
-                <div class="an-card">
-                    <h4>Rank in your cluster</h4>
-                    <div class="an-big" id="anFocusName">—</div>
-                    <div class="an-sub" id="anFocusSub"></div>
                 </div>
             </div>
 
