@@ -1766,7 +1766,7 @@
                     const labels = officeIndexMap.map(i => officeLabels[i] || '');
                     // Bars show the number of respondents per office.
                     const data = officeIndexMap.map(i => Number(dataP.officeResp[i]) > 0 ? dataP.officeResp[i] : null);
-                    const config = { type: 'bar', data: { labels, datasets: [{ label: 'Satisfaction (Respondents)', data, backgroundColor: (c) => dataP.officeSat[officeIndexMap[c.dataIndex]] === null ? noRatingColor : barGradient(c, 'rgba(125,155,245,0.95)', 'rgba(155,185,255,1)'), hoverBackgroundColor: (c) => dataP.officeSat[officeIndexMap[c.dataIndex]] === null ? noRatingHoverColor : barGradient(c, 'rgba(150,180,255,1)', 'rgba(185,208,255,1)'), borderRadius: 10, borderSkipped: false, maxBarThickness: 40, categoryPercentage: 0.65, barPercentage: 0.75 }] }, options: { ...baseOptions, scales: barScales } };
+                    const config = { type: 'bar', data: { labels, datasets: [{ label: 'Satisfaction (Respondents)', data, backgroundColor: (c) => dataP.officeSat[officeIndexMap[c.dataIndex]] === null ? noRatingColor : barGradient(c, 'rgba(125,155,245,0.95)', 'rgba(155,185,255,1)'), hoverBackgroundColor: (c) => dataP.officeSat[officeIndexMap[c.dataIndex]] === null ? noRatingHoverColor : barGradient(c, 'rgba(150,180,255,1)', 'rgba(185,208,255,1)'), borderRadius: { topLeft: 3, topRight: 3, bottomLeft: 0, bottomRight: 0 }, borderSkipped: 'bottom', maxBarThickness: 40, categoryPercentage: 0.65, barPercentage: 0.75 }] }, options: { ...baseOptions, scales: barScales } };
                     config._officeIndexMap = officeIndexMap;
                     return config;
                 } else {
