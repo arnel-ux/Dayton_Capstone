@@ -61,7 +61,7 @@
            where someone has a reason to see it. */
         .stat-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
             gap: 1rem;
         }
         .stat-card {
@@ -324,15 +324,15 @@
                 <div class="stat-body">
                     <div class="stat-num"><%= totalRespondents %></div>
                     <div class="stat-label">Respondents</div>
-                    <div class="stat-hint">This semester. <%= totalRespondentsAllTime %> since this office started.</div>
+                    <div class="stat-hint"><%= totalRespondents %> this semester</div>
                 </div>
             </div>
             <div class="stat-card is-pending">
                 <div class="stat-icon"><i class="fas fa-hourglass-half"></i></div>
                 <div class="stat-body">
-                    <div class="stat-num"><%= pendingCount %></div>
+                    <div class="stat-num"><%= pendingSemesterCount %></div>
                     <div class="stat-label">Pending Approvals</div>
-                    <div class="stat-hint">Waiting for review — including any left from last semester.</div>
+                    <div class="stat-hint">Waiting for review</div>
                 </div>
             </div>
             <div class="stat-card is-approved">
@@ -340,7 +340,7 @@
                 <div class="stat-body">
                     <div class="stat-num"><%= approvedCount %></div>
                     <div class="stat-label">Approved</div>
-                    <div class="stat-hint">This semester. <%= approvedAllTime %> all time.</div>
+                    <div class="stat-hint"><%= approvedCount %> this semester</div>
                 </div>
             </div>
             <div class="stat-card is-declined">
@@ -348,7 +348,7 @@
                 <div class="stat-body">
                     <div class="stat-num"><%= declinedCount %></div>
                     <div class="stat-label">Declined</div>
-                    <div class="stat-hint">This semester. <%= declinedAllTime %> all time.</div>
+                    <div class="stat-hint"><%= declinedCount %> this semester</div>
                 </div>
             </div>
             <div class="stat-card is-satisfaction">
@@ -407,17 +407,14 @@
                 <div class="an-card">
                     <h4>Rank in your cluster</h4>
                     <div class="an-big" id="anFocusName">—</div>
-                    <div class="an-sub" id="anFocusSub"></div>
                 </div>
                 <div class="an-card">
                     <h4 id="anClusterTitle">Vs. your cluster</h4>
                     <div class="an-big" id="anClusterScore">—</div>
-                    <div class="an-sub" id="anClusterSub"></div>
                 </div>
                 <div class="an-card">
                     <h4>CSPC Overall Rating</h4>
                     <div class="an-big" id="anInstScore">—</div>
-                    <div class="an-sub" id="anInstSub"></div>
                 </div>
             </div>
 
@@ -482,17 +479,8 @@
                 return { key: 'poor', name: 'Poor' };
             }
 
-            function setBench(scoreId, subId, bench, mine, label) {
+            function setBench(scoreId, bench) {
                 el(scoreId).textContent = pct(bench.score);
-                var sub = el(subId);
-                clear(sub);
-                if (bench.score === null) { sub.textContent = 'No answers yet for ' + label + '.'; return; }
-                if (mine === null) { sub.textContent = bench.respondents + ' respondents.'; return; }
-                var diff = Math.round((mine - bench.score) * 100) / 100;
-                var d = make('span', 'an-delta ' + (diff > 0 ? 'is-up' : diff < 0 ? 'is-down' : 'is-flat'),
-                    (diff > 0 ? '▲ +' : diff < 0 ? '▼ ' : '= ') + diff.toFixed(2) + ' pts');
-                sub.appendChild(d);
-                sub.appendChild(document.createTextNode(' ' + (diff > 0 ? 'above' : diff < 0 ? 'below' : 'same as') + ' ' + label + ' · ' + bench.respondents + ' respondents'));
             }
 
             function drawDims(dims) {
@@ -632,23 +620,17 @@
                 var chip = el('anRating'); chip.className = 'an-chip an-r-' + r.key; chip.textContent = r.name;
                 el('anOverallSub').textContent = d.respondents + ' respondent' + (d.respondents === 1 ? '' : 's') + (d.answered ? ' · ' + d.answered + ' answers counted' : '');
                 el('anClusterTitle').textContent = d.cluster.name || 'Your cluster';
-                setBench('anClusterScore', 'anClusterSub', d.cluster, d.overall, d.cluster.name ? 'the ' + d.cluster.name : 'your cluster');
-                setBench('anInstScore', 'anInstSub', d.institution, d.overall, 'the overall cluster results');
+                setBench('anClusterScore', d.cluster);
+                setBench('anInstScore', d.institution);
 
-                // Standing among the offices of the same cluster, plus the gap to the best one.
-                var fName = el('anFocusName'), fSub = el('anFocusSub');
+                // Standing among the offices of the same cluster.
+                var fName = el('anFocusName');
                 var rk = d.clusterRank;
                 if (!rk) {
                     fName.textContent = 'N/A';
-                    fSub.textContent = 'Shown once your office has survey answers in this period.';
                 } else {
                     var n = rk.rank, sfx = (n % 100 >= 11 && n % 100 <= 13) ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
                     fName.textContent = n + sfx + ' of ' + rk.of;
-                    var gap = rk.topScore - (d.overall === null ? rk.topScore : d.overall);
-                    fSub.textContent = rk.rank === 1
-                        ? 'Top-scoring office in your cluster.'
-                        : 'surveyed offices in your cluster · ' + gap.toFixed(2) + ' pts behind the top office';
-                    if (rk.rank === 1) fName.textContent = '1st of ' + rk.of;
                 }
 
                 var warn = el('anWarn');

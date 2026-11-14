@@ -3404,6 +3404,7 @@ app.get('/office-dashboard', ensureOfficeAuth, noCache, (req, res) => {
             totalRespondents: 0,
             totalRespondentsAllTime: 0,
             pendingCount: 0,
+            pendingSemesterCount: 0,
             approvedCount: 0,
             approvedAllTime: 0,
             declinedCount: 0,
@@ -3432,6 +3433,7 @@ app.get('/office-dashboard', ensureOfficeAuth, noCache, (req, res) => {
                 [semStart, semEnd, officeId],
                 (errStatus, statusRows) => {
                     let pendingCount = 0;
+                    let pendingSemesterCount = 0;
                     let approvedCount = 0, approvedAllTime = 0;
                     let declinedCount = 0, declinedAllTime = 0;
                     if (!errStatus && statusRows) {
@@ -3439,6 +3441,7 @@ app.get('/office-dashboard', ensureOfficeAuth, noCache, (req, res) => {
                             if (row.status === 'pending') {
                                 // Pending is not semester scoped, it is a live work queue.
                                 pendingCount = Number(row.allTime || 0);
+                                pendingSemesterCount = Number(row.semester || 0);
                             } else if (row.status === 'approved') {
                                 approvedAllTime = Number(row.allTime || 0);
                                 approvedCount = Number(row.semester || 0);
@@ -3466,6 +3469,7 @@ app.get('/office-dashboard', ensureOfficeAuth, noCache, (req, res) => {
                                 totalRespondents,
                                 totalRespondentsAllTime,
                                 pendingCount,
+                                pendingSemesterCount,
                                 approvedCount,
                                 approvedAllTime,
                                 declinedCount,
