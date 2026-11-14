@@ -1700,8 +1700,8 @@
                                 let chartId = context.chart.canvas.id.replace('_clone', '');
 
                                 if (chartId === 'c1') {
-                                    let total = pData.overall[0] + pData.overall[1];
-                                    return [context.label, `Respondents: ${val}`];
+                                    // The tooltip title already names the slice.
+                                    return `Respondents: ${val}`;
                                 }
 
                                 if ((chartId === 'c2' || chartId === 'c3') && context.dataset.label && context.dataset.label.includes('Satisfaction')) {
@@ -1717,7 +1717,7 @@
                                     return `Respondents: ${totalResp || 0}`;
                                 }
 
-                                if (chartId === 'c4') return [context.label, `Respondents: ${val}`];
+                                if (chartId === 'c4') return `Respondents: ${val}`;
 
                                 let label = context.dataset.label || context.label || '';
                                 return `${label}: ${val}`;
