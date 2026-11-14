@@ -2128,7 +2128,7 @@
                     setX(-scrollPos);
                 }
 
-                // The carousel only moves on its own 5s timer, so page scrolling over it just scrolls the page.
+                // The carousel only moves on its own 10s timer, so page scrolling over it just scrolls the page.
 
                 // Pauses advancing while the dashboard is off screen, and only replays a chart's reveal once per card.
                 let dashboardOnScreen = true;
@@ -2137,7 +2137,7 @@
                 }, { threshold: 0 });
                 dashboardVisibilityObserver.observe(viewport);
 
-                // Carousel rests on a card for 5 seconds, then slides one card over through the cloned set.
+                // Carousel rests on a card for 10 seconds, then slides one card over through the cloned set.
                 const cardStep = originalCards.length > 1
                     ? originalCards[1].offsetLeft - originalCards[0].offsetLeft
                     : resetPoint;
@@ -2158,7 +2158,7 @@
                         onComplete: () => { sliding = false; }
                     });
                 }
-                setInterval(slideToNextCard, 5000);
+                setInterval(slideToNextCard, 10000);
 
                 const cardObserver = new IntersectionObserver((entries) => {
                     entries.forEach(entry => {
