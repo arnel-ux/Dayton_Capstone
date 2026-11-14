@@ -91,6 +91,9 @@
         .stat-card.is-total .stat-icon { background: rgba(37,84,199,0.12); color: #2554c7; }
         .stat-card.is-pending .stat-icon { background: rgba(217,119,6,0.14); color: #b45309; }
         .stat-card.is-approved .stat-icon { background: rgba(22,163,74,0.14); color: #15803d; }
+        .stat-card.is-satisfaction { gap: 0.8rem; padding: 1.25rem 1.1rem; }
+        .stat-card.is-satisfaction .stat-num { font-size: 1.7rem; white-space: nowrap; }
+        .stat-card.is-satisfaction .stat-hint { margin-top: 0.5rem; }
         .stat-card.is-satisfaction .stat-icon { background: rgba(124,58,237,0.12); color: #7c3aed; }
         .stat-card.is-declined .stat-icon { background: rgba(220,38,38,0.12); color: #dc2626; }
 
@@ -356,7 +359,6 @@
                 <div class="stat-body">
                     <div class="stat-num"><span id="anOverall">—</span></div>
                     <div class="stat-label">Overall satisfaction</div>
-                    <div style="margin-top:.35rem"><span class="an-chip an-r-none" id="anRating">No data</span></div>
                     <div class="stat-hint" id="anOverallSub">Loading…</div>
                 </div>
             </div>
@@ -615,9 +617,7 @@
             }
 
             function render(d) {
-                var r = rating(d.overall);
                 el('anOverall').textContent = pct(d.overall);
-                var chip = el('anRating'); chip.className = 'an-chip an-r-' + r.key; chip.textContent = r.name;
                 el('anOverallSub').textContent = d.respondents + ' respondent' + (d.respondents === 1 ? '' : 's') + (d.answered ? ' · ' + d.answered + ' answers counted' : '');
                 el('anClusterTitle').textContent = d.cluster.name || 'Your cluster';
                 setBench('anClusterScore', d.cluster);
